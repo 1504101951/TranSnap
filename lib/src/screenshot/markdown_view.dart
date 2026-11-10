@@ -129,6 +129,9 @@ class MarkdownView extends StatelessWidget {
 
   final String source;
 
+  /// 最近一次解析的原文与结果；识别结果弹窗同一时刻只显示一份。
+  static (String, List<MarkdownBlock>)? _parsed;
+
   /// 作用：返回两个相邻块之间的间距。参数 previous、next：相邻块。
   /// 返回：标题之后 8、相邻段落之间 8、其他情况 12（#67 第 2、3、6 条）。
   static double gap(MarkdownBlock previous, MarkdownBlock next) {
@@ -145,7 +148,9 @@ class MarkdownView extends StatelessWidget {
       height: GlassMetrics.bodyLine / GlassMetrics.bodyFont,
       color: colors.onSurface,
     );
-    final blocks = parseMarkdownBlocks(source);
+    // 截图页面重建时同一份识别结果只解析一次。
+    if (_parsed?.$1 != source) _parsed = (source, parseMarkdownBlocks(source));
+    final blocks = _parsed!.$2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

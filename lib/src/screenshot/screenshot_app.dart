@@ -193,7 +193,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   ({String text, List<RecognizedCode> codes})? _recognition;
 
   /// 结果弹窗相对窗口中心的拖动位移。
-  Offset _recognizedOffset = Offset.zero;
+  final ValueNotifier<Offset> _recognizedOffset = ValueNotifier(Offset.zero);
   // 双击位置只用于松开确认后的编辑/复制，第二次按下不能提前导出。
   Offset? _doubleTapPoint;
   Offset? _dragStart;
@@ -1192,7 +1192,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
     setState(() {
       _recognition = recognition;
-      _recognizedOffset = Offset.zero;
+      _recognizedOffset.value = Offset.zero;
     });
   }
 
@@ -2305,6 +2305,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   void dispose() {
     _feedbackTimer?.cancel();
     _picker.dispose();
+    _recognizedOffset.dispose();
     _document.removeListener(_onDocumentChanged);
     _document.dispose();
     _focusNode.dispose();
@@ -2604,8 +2605,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               // 识别结果弹窗浮在截图之上，初始居中，可拖动标题区移动。
               if (_recognition != null)
                 Center(
-                  child: Transform.translate(
-                    offset: _recognizedOffset,
+                  // 拖动只移动弹窗，不重建截图页面与弹窗内容（#68）。
+                  child: ValueListenableBuilder<Offset>(
+                    valueListenable: _recognizedOffset,
+                    builder: (context, offset, child) =>
+                        Transform.translate(offset: offset, child: child),
                     child: SizedBox.fromSize(
                       size: RecognizedTextPanel.size,
                       child: RecognizedTextPanel(
@@ -2617,8 +2621,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                             _copyRecognized(payload, '已复制内容'),
                         onOpenLink: _openLink,
                         onClose: () => setState(() => _recognition = null),
-                        onDrag: (delta) =>
-                            setState(() => _recognizedOffset += delta),
+                        onDrag: (delta) => _recognizedOffset.value += delta,
                       ),
                     ),
                   ),
