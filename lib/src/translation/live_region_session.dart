@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:characters/characters.dart';
+import 'package:flutter/foundation.dart';
 
 import '../common/constants/live_region.dart';
 import '../common/constants/text_limits.dart';
@@ -19,7 +20,9 @@ import 'translation_types.dart';
 /// transientRetryLimit 是同一段落原文在一次会话内临时错误或频率受限后的重试上限。
 /// rateLimitBackoff 是频率受限且服务未给出 Retry-After 时依次等待的时长，超过三次沿用最后一项；
 /// maxRetryAfter 是采用服务给出的 Retry-After 的上限（#118）。
+/// streamPublishInterval 是译文增量期间两次快照发布的最小间隔，其他变化立即发布（#68）。
 abstract final class LiveRegionSchedule {
+  static const streamPublishInterval = Duration(milliseconds: 100);
   static const candidateCoalescingDelay = Duration(milliseconds: 200);
   static const requestStartInterval = Duration(milliseconds: 500);
   static const maxInflightBatches = 3;
@@ -229,6 +232,13 @@ class LiveRegionSession {
   AppSettings? _latestSettings;
   HttpClient? _client;
   var _firstNonEmpty = true;
+
+  /// 最近一次交给 onView 的快照；内容相同的快照不重复发布。
+  LiveRegionView? _sent;
+
+  /// 译文增量的合并发布：计时器未到点期间只记下待发布标记。
+  Timer? _streamTimer;
+  var _streamPending = false;
   DateTime? _lastBatchStart;
 
   /// 频率受限的退避截止时刻与连续受限次数；成功完成一批后次数清零，新会话全部重置（#118）。
@@ -256,6 +266,8 @@ class LiveRegionSession {
     _phase = LiveRegionPhase.running;
     _latestSettings = settings;
     _paragraphs = {};
+    // 新会话的原生盖层是新建的，首个快照必须发布。
+    _sent = null;
     _firstNonEmpty = true;
     _lastBatchStart = null;
     _rateLimitedUntil = null;
@@ -563,6 +575,7 @@ class LiveRegionSession {
           sources[direction.targetLanguage] =
               source == direction.detectedLanguage ? source : null;
         }
+
         /// indexes 为原批次下标；返回只含这些段落、沿用原批次时间的子批次。
         _Batch part(List<int> indexes) => _Batch(
           [for (final index in indexes) batch.texts[index]],
@@ -645,7 +658,8 @@ class LiveRegionSession {
         // 只有仍在画面上的段落块才显示增量。
         if (paragraph == null || paragraph.done) return;
         paragraph.shown = batch.partial[index].toString();
-        _publish();
+        // 增量密集到达时合并发布，避免每个 token 让原生重画全部段落块。
+        _publishStreaming();
       case BatchCompleted():
         _complete(batch);
       case BatchFailure(:final message, :final kind, :final retryAfter):
@@ -819,9 +833,8 @@ class LiveRegionSession {
       _cache.failures(key) > LiveRegionSchedule.transientRetryLimit;
 
   /// text 为段落原文；返回它是否已在某个未取消的在途批次中。
-  bool _sending(String text) => _inflight.any(
-    (batch) => !batch.cancelled && batch.texts.contains(text),
-  );
+  bool _sending(String text) =>
+      _inflight.any((batch) => !batch.cancelled && batch.texts.contains(text));
 
   /// text 为段落原文；返回是否含汉字。
   bool _containsCjk(String text) => RegExp(r'[㐀-鿿]').hasMatch(text);
@@ -890,16 +903,65 @@ class LiveRegionSession {
     return maps;
   }
 
-  /// 无参数；按当前状态生成快照并交给 onView，取走已结束批次的计时，无返回值。
+  /// 无参数；立即按当前状态生成快照并发布，取消尚未到点的增量发布，无返回值。
   void _publish() {
+    _streamTimer?.cancel();
+    _streamTimer = null;
+    _streamPending = false;
+    _send();
+  }
+
+  /// 无参数；译文增量的发布：距上次增量发布已满 streamPublishInterval 时立即发布，
+  /// 否则只更新 view，到点后补发最新快照，无返回值。
+  void _publishStreaming() {
+    if (_streamTimer != null) {
+      _streamPending = true;
+      // view 保持最新但不取走计时，计时随下一次真正发布交出。
+      view = LiveRegionView(
+        phase: _phase,
+        status: _status(),
+        overlays: _overlayMaps(),
+      );
+      return;
+    }
+    _send();
+    _streamTimer = Timer(LiveRegionSchedule.streamPublishInterval, () {
+      _streamTimer = null;
+      if (_streamPending) _publish();
+    });
+  }
+
+  /// 无参数；生成快照并取走已结束批次的计时；阶段、状态、盖层都没变且没有计时时不通知 onView，无返回值。
+  void _send() {
     final metrics = _metrics;
     _metrics = [];
+    final previous = _sent;
     view = LiveRegionView(
       phase: _phase,
       status: _status(),
       overlays: _overlayMaps(),
       metrics: metrics,
     );
+    if (previous != null &&
+        metrics.isEmpty &&
+        previous.phase == view.phase &&
+        previous.status == view.status &&
+        _sameOverlays(previous.overlays, view.overlays)) {
+      return;
+    }
+    _sent = view;
     onView?.call(view);
+  }
+
+  /// a/b 为两份盖层列表；返回文字与矩形是否逐项相同。
+  static bool _sameOverlays(
+    List<Map<String, Object>> a,
+    List<Map<String, Object>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (!mapEquals(a[index], b[index])) return false;
+    }
+    return true;
   }
 }

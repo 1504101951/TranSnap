@@ -3,14 +3,17 @@ import FlutterMacOS
 
 /// 把整段译文缩进段落块矩形并在矩形内换行。字号可以很小，绘制不超出该矩形。
 final class LiveFitTextView: NSView {
-    var text = "" { didSet { needsDisplay = true } }
+    /// 段落译文；内容不变时不重画。
+    var text = "" { didSet { if text != oldValue { needsDisplay = true } } }
+    /// 最近一次适配的结果：同一段文字在同一尺寸下不重复计算字号。
+    private var fitted: (text: String, size: NSSize, font: NSFont)?
 
     /// dirtyRect 为需要重画的区域。白底盖住原文，黑色半粗体缩进框内。
     override func draw(_ dirtyRect: NSRect) {
         NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0xCC / 255).setFill()
         bounds.fill()
         guard !text.isEmpty, bounds.width > 1, bounds.height > 1 else { return }
-        let fitted = fittedFont
+        let fitted = fittedFont()
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byWordWrapping
@@ -35,8 +38,9 @@ final class LiveFitTextView: NSView {
         )
     }
 
-    /// 无参数。返回能把整段留在当前矩形里的最大半粗体字号。
-    private var fittedFont: NSFont {
+    /// 无参数。返回能把整段留在当前矩形里的最大半粗体字号；文字与尺寸都没变时沿用上次结果。
+    private func fittedFont() -> NSFont {
+        if let fitted, fitted.text == text, fitted.size == bounds.size { return fitted.font }
         var low = 1.0
         var high = max(1, bounds.height)
         var best = low
@@ -57,7 +61,9 @@ final class LiveFitTextView: NSView {
                 high = size
             }
         }
-        return NSFont.systemFont(ofSize: best, weight: .semibold)
+        let font = NSFont.systemFont(ofSize: best, weight: .semibold)
+        fitted = (text, bounds.size, font)
+        return font
     }
 }
 
@@ -104,7 +110,8 @@ final class LiveTextOverlay {
                     view.isHidden = true
                     continue
                 }
-                label.frame = items[position].1
+                // 位置与文字没变的段落块不触发重画。
+                if label.frame != items[position].1 { label.frame = items[position].1 }
                 label.text = items[position].0
                 label.isHidden = false
             }

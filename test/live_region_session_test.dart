@@ -754,6 +754,40 @@ void main() {
     expect(session.view.metrics, isEmpty);
   });
 
+  test('内容不变的画面不重复通知；译文增量在间隔内合并，到点补发最新内容', () async {
+    // 作用：原生盖层只在快照变化时重画（#68）。
+    // 边界：同一帧重复识别不产生新通知；连续三段增量中首段立即通知，后两段在 100ms 间隔内合并为一次补发。
+    final provider = ScriptedProvider();
+    final views = <LiveRegionView>[];
+    final session = LiveRegionSession(
+      providerFor: (_) => provider,
+      detectLanguage: (_) async => 'en',
+      clock: ManualClock(),
+      onView: views.add,
+    );
+    session.start(_settings(), 1);
+    await session.onOcr(_frame(1, ['Abc']));
+    final afterFirst = views.length;
+    await session.onOcr(_frame(1, ['Abc']));
+    expect(views.length, afterFirst);
+
+    provider.controllers[0].add(const BatchItemUpdate(0, '甲'));
+    await _delivered(session);
+    final afterToken = views.length;
+    expect(views.last.overlays.single['text'], '甲');
+    provider.controllers[0].add(const BatchItemUpdate(0, '乙'));
+    provider.controllers[0].add(const BatchItemUpdate(0, '丙'));
+    await _delivered(session);
+    expect(views.length, afterToken);
+    expect(session.view.overlays.single['text'], '甲乙丙');
+    await Future<void>.delayed(
+      LiveRegionSchedule.streamPublishInterval + const Duration(milliseconds: 50),
+    );
+    expect(views.length, afterToken + 1);
+    expect(views.last.overlays.single['text'], '甲乙丙');
+    session.end(1);
+  });
+
   test('新会话不接收上一次代次的 OCR', () async {
     // 作用：迟到的识别结果不能进入新会话。
     // 边界：代次 1 的结果在代次 2 的会话中被忽略。
