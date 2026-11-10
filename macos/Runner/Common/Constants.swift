@@ -159,6 +159,9 @@ enum AppConstants {
     static let shortcutRequiredModifiers = UInt32(cmdKey | optionKey | controlKey)
     /// 全局快捷键允许出现的全部修饰键（Carbon 修饰键位）。
     static let shortcutAllowedModifiers = shortcutRequiredModifiers | UInt32(shiftKey)
+    /// 文本编辑组合的主键键码（kVK_ANSI_A/Z/X/C/V）：仅 Command 或 Command+Shift 搭配时为全选、撤销/重做、剪切、复制、粘贴（含粘贴并匹配样式），
+    /// 独占注册会让所有应用失去这些操作，不能作为全局快捷键。
+    static let textEditingKeyCodes: Set<UInt32> = [0, 6, 7, 8, 9]
     /// Return 键的硬件键码（kVK_Return）。
     static let returnKeyCode: UInt16 = 36
     /// 小键盘 Enter 键的硬件键码（kVK_ANSI_KeypadEnter）。
@@ -497,6 +500,15 @@ enum GlobalHotKey: CaseIterable {
         case .translate: AppConstants.shortcutModifiersKey
         case .input: AppConstants.inputShortcutModifiersKey
         case .screenshot: AppConstants.screenshotShortcutModifiersKey
+        }
+    }
+
+    /// 无参数；返回该用途在设置页中的名称，用于说明哪一个快捷键注册失败。
+    var title: String {
+        switch self {
+        case .translate: "全局翻译快捷键"
+        case .input: "输入翻译快捷键"
+        case .screenshot: "区域截图快捷键"
         }
     }
 

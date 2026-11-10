@@ -1216,6 +1216,25 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(none, [])
     }
 
+    /// 无参数；全局快捷键不能绑定全选、撤销、剪切、复制、粘贴组合（#1）。
+    /// 边界：⌘C 与 ⇧⌘V 分别为仅 Command、Command+Shift 搭配编辑主键，均拒绝；⌥⌘C 多了 Option，不是编辑组合，
+    /// 不因本规则拒绝（是否被系统快捷键占用取决于本机设置，只断言错误不是编辑组合错误）。
+    func testShortcutRejectsTextEditingCombinations() {
+        let command: UInt32 = 256, shift: UInt32 = 512, option: UInt32 = 2048
+        let editingMessage = "这个组合是全选、撤销、剪切、复制或粘贴快捷键，请换一个组合。"
+        XCTAssertThrowsError(try SelectionMonitor.validateShortcut(keyCode: 8, modifiers: command)) {
+            XCTAssertEqual($0.localizedDescription, editingMessage)
+        }
+        XCTAssertThrowsError(try SelectionMonitor.validateShortcut(keyCode: 9, modifiers: command | shift)) {
+            XCTAssertEqual($0.localizedDescription, editingMessage)
+        }
+        do {
+            try SelectionMonitor.validateShortcut(keyCode: 8, modifiers: command | option)
+        } catch {
+            XCTAssertNotEqual(error.localizedDescription, editingMessage)
+        }
+    }
+
     /// 无参数；语言识别低置信度时取用户语言，中文按字形取用户的简繁写法（#1）。
     /// 边界：hello 首位 en 仅 0.13 但在前 3 名且为用户语言；ok 前 3 名都不是用户语言，按唯一的拉丁文字语言 en；
     /// 你好被识别为繁体 0.80，转换为简体不变，按用户简体；含繁体独有字的句子保持繁体；首位达 0.5 直接采用。

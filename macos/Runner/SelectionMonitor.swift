@@ -43,8 +43,16 @@ final class SelectionMonitor {
         guard Set(GlobalHotKey.allCases) == Set(shortcuts.keys) else {
             throw NSError(domain: AppConstants.errorDomain, code: 4, userInfo: [NSLocalizedDescriptionKey: "全局快捷键配置不完整。"])
         }
-        for binding in shortcuts.values {
-            try Self.validateShortcut(keyCode: binding.keyCode, modifiers: binding.modifiers)
+        // 已保存的组合不符合规则时说明是哪一个用途。
+        for purpose in GlobalHotKey.allCases {
+            let binding = shortcuts[purpose]!
+            do {
+                try Self.validateShortcut(keyCode: binding.keyCode, modifiers: binding.modifiers)
+            } catch {
+                throw NSError(domain: AppConstants.errorDomain, code: (error as NSError).code, userInfo: [
+                    NSLocalizedDescriptionKey: "「\(purpose.title)」\(error.localizedDescription)",
+                ])
+            }
         }
         guard Set(shortcuts.values).count == shortcuts.count else {
             throw NSError(domain: AppConstants.errorDomain, code: 3, userInfo: [NSLocalizedDescriptionKey: "翻译、输入翻译与截图快捷键不能相同。"])
@@ -95,7 +103,8 @@ final class SelectionMonitor {
                 nextHotKeyId += 1
                 let status = RegisterEventHotKey(binding.keyCode, binding.modifiers, EventHotKeyID(signature: 0x5452414E, id: id), GetEventDispatcherTarget(), OptionBits(kEventHotKeyExclusive), &reference)
                 guard status == noErr, let reference else {
-                    throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [NSLocalizedDescriptionKey: "快捷键已被占用，请换一个组合。"])
+                    // 说明被占用的是哪一个用途，用户无需逐个排查。
+                    throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [NSLocalizedDescriptionKey: "「\(purpose.title)」已被其他应用占用，请换一个组合。"])
                 }
                 created.append(reference)
                 replacements[purpose] = RegisteredHotKey(id: id, binding: binding, reference: reference)
@@ -118,13 +127,20 @@ final class SelectionMonitor {
         MacPlatformBridge.Shared.instance?.invalidateSelection()
     }
 
-    /// keyCode/modifiers 为待注册组合；拒绝普通输入与已启用的系统保留键，成功无返回值。
+    /// keyCode/modifiers 为待注册组合；拒绝普通输入、文本编辑组合与已启用的系统保留键，成功无返回值。
     static func validateShortcut(keyCode: UInt32, modifiers: UInt32) throws {
         guard keyCode <= 127, keyCode != UInt32(AppConstants.escapeKeyCode),
               modifiers & AppConstants.shortcutRequiredModifiers != 0,
               modifiers & ~AppConstants.shortcutAllowedModifiers == 0 else {
             throw NSError(domain: AppConstants.errorDomain, code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "快捷键至少需要 Control、Option 或 Command，并搭配一个非 Esc 按键。",
+            ])
+        }
+        // 仅 Command 或 Command+Shift 搭配编辑主键时是全选、撤销、剪切、复制、粘贴，独占注册会让所有应用失去这些操作。
+        let commandOnly = modifiers & ~UInt32(shiftKey) == UInt32(cmdKey)
+        guard !(commandOnly && AppConstants.textEditingKeyCodes.contains(keyCode)) else {
+            throw NSError(domain: AppConstants.errorDomain, code: 5, userInfo: [
+                NSLocalizedDescriptionKey: "这个组合是全选、撤销、剪切、复制或粘贴快捷键，请换一个组合。",
             ])
         }
         var shortcuts: Unmanaged<CFArray>?
