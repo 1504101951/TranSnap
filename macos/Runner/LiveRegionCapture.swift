@@ -57,6 +57,10 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
     private var slot = LiveOcrSlot()
     private var streams: [SCStream] = []
     private var frames: [ObjectIdentifier: CMSampleBuffer] = [:]
+    /// 上次识别后收到新帧的流；只有这些流需要重新识别（#68）。
+    private var changed: Set<ObjectIdentifier> = []
+    /// 各流最近一次识别出的段落块；画面未变的流直接沿用。
+    private var recognized: [ObjectIdentifier: [[String: Any]]] = [:]
     private var frameBounds: [ObjectIdentifier: NSRect] = [:]
     private var running = false
     private var targetDisplayID: CGDirectDisplayID?
@@ -76,6 +80,8 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
         await stopStreams()
         slot.adopt(generation)
         frames.removeAll()
+        changed.removeAll()
+        recognized.removeAll()
         frameBounds.removeAll()
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         guard let kind = source["kind"] as? String else {
@@ -102,6 +108,8 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
         slot.adopt(generation)
         running = false
         frames.removeAll()
+        changed.removeAll()
+        recognized.removeAll()
         frameBounds.removeAll()
         await stopStreams()
     }
@@ -116,6 +124,8 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
         running = false
         slot.adopt(slot.acceptedGeneration + 1)
         frames.removeAll()
+        changed.removeAll()
+        recognized.removeAll()
         frameBounds.removeAll()
         await stopStreams()
         removeObservers()
@@ -152,6 +162,7 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
     private func receive(_ identity: ObjectIdentifier, sample: CMSampleBuffer) {
         guard running else { return }
         frames[identity] = sample
+        changed.insert(identity)
         guard slot.offer(generation: slot.acceptedGeneration) else { return }
         recognize(slot.acceptedGeneration)
     }
@@ -160,14 +171,29 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
     private func recognize(_ generation: Int) {
         let batch = frames.map { ($0.key, $0.value) }
         let bounds = frameBounds
+        // 取走本轮有新帧的流；其余流沿用上次的识别结果，不重复识别未变化的屏幕。
+        let fresh = changed
+        changed = []
+        let cached = recognized
         // 识别在主线程之外执行；单槽保证同一时刻只有这一个任务。
         Task.detached {
             let started = ContinuousClock.now
             var pixels = 0.0
-            let outcome: Result<[[String: Any]], Error>
+            let outcome: Result<(blocks: [[String: Any]], perStream: [ObjectIdentifier: [[String: Any]]]), Error>
             do {
                 var blocks: [[String: Any]] = []
+                var latest: [ObjectIdentifier: [[String: Any]]] = [:]
                 for (identity, sample) in batch {
+                    if !fresh.contains(identity), let previous = cached[identity] {
+                        latest[identity] = previous
+                        blocks.append(contentsOf: previous)
+                        continue
+                    }
+                    var streamBlocks: [[String: Any]] = []
+                    defer {
+                        latest[identity] = streamBlocks
+                        blocks.append(contentsOf: streamBlocks)
+                    }
                     guard let buffer = CMSampleBufferGetImageBuffer(sample),
                           let imageBounds = bounds[identity] else { continue }
                     // recognizeParagraphs 返回该帧的段落块，折行文字已合成一段。
@@ -189,7 +215,7 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
                             width: width / pixelWidth * imageBounds.width,
                             height: height / pixelHeight * imageBounds.height
                         )
-                        blocks.append([
+                        streamBlocks.append([
                             "text": text,
                             "x": rect.minX,
                             "y": rect.minY,
@@ -210,7 +236,7 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
                 let elapsed = started.duration(to: .now).components
                 let milliseconds = Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15
                 LiveRegionLog.note("ocr ms=\(Int(milliseconds)) pixels=\(Int(pixels)) paragraphs=\(blocks.count)")
-                outcome = .success(blocks)
+                outcome = .success((blocks, latest))
             } catch {
                 outcome = .failure(error)
             }
@@ -218,9 +244,12 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
                 let follow = self.slot.finish()
                 if generation == self.slot.acceptedGeneration, self.running {
                     switch outcome {
-                    case let .success(blocks):
-                        self.onRecognized?(generation, blocks, nil)
+                    case let .success(result):
+                        self.recognized = result.perStream
+                        self.onRecognized?(generation, result.blocks, nil)
                     case let .failure(error):
+                        // 本轮没有得到结果，这些流下一轮仍要重新识别。
+                        self.changed.formUnion(fresh)
                         self.onRecognized?(generation, nil, error.localizedDescription)
                     }
                 }
