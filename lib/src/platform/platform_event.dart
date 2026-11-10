@@ -19,6 +19,7 @@ sealed class PlatformEvent {
           sessionId: sessionId,
           text: map['text'] as String,
           gesture: map['gesture'] as String,
+          readFailure: map['readFailure'] as String?,
           sourceAppName: map['sourceAppName'] as String?,
           x: (map['x'] as num).toDouble(),
           y: (map['y'] as num).toDouble(),
@@ -35,11 +36,13 @@ sealed class PlatformEvent {
 
 /// 已捕获选区事件；携带原文、手势、来源和锚点，供会话创建或替换。
 final class SelectionCaptured extends PlatformEvent {
-  /// sessionId标识选区，text为原文，gesture为触发方式，x/y为锚点，sourceAppName为可选来源；构造不可变事件。
+  /// sessionId标识选区，text为原文，gesture为触发方式，readFailure为读不到文字的原因，x/y为锚点，
+  /// sourceAppName为可选来源；构造不可变事件。
   const SelectionCaptured({
     required super.sessionId,
     required this.text,
     required this.gesture,
+    this.readFailure,
     required this.x,
     required this.y,
     this.sourceAppName,
@@ -47,6 +50,9 @@ final class SelectionCaptured extends PlatformEvent {
 
   final String text;
   final String gesture;
+
+  /// 明确热键读不到文字的原因（SelectionReadFailures）；读到文字或没有可说明的原因时为 null。
+  final String? readFailure;
   final double x;
   final double y;
 

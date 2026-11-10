@@ -232,6 +232,12 @@ enum AccessibilitySelection {
         return roles
     }
 
+    /// sourcePID 为来源进程；返回其焦点节点是否为密码框，用于说明明确热键读不到文字的原因。
+    /// 声明为 async：从主线程调用时在后台执行，来源应用响应慢不阻塞主线程（#68）。
+    static func focusIsSecure(sourcePID: pid_t) async -> Bool {
+        isSecure(focusedElement(from: AXUIElementCreateApplication(sourcePID)))
+    }
+
     /// element为可选AX节点；返回其角色或子角色是否表示安全文本控件。
     private static func isSecure(_ element: AXUIElement?) -> Bool {
         guard let element else { return false }

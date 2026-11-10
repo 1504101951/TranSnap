@@ -82,6 +82,7 @@ class _TranslateAppState extends State<TranslateApp> {
         :final sessionId,
         :final text,
         :final gesture,
+        :final readFailure,
         :final sourceAppName,
         :final x,
         :final y,
@@ -106,6 +107,7 @@ class _TranslateAppState extends State<TranslateApp> {
           sessionId: sessionId,
           text: text,
           input: gesture == SelectionGestureTypes.inputHotkey,
+          readFailure: readFailure,
           awaitSelection:
               gesture == SelectionGestureTypes.selectAll ||
               gesture == SelectionGestureTypes.keyboard ||

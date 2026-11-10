@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
 
+import '../common/constants/selection_gesture_types.dart';
 import '../common/constants/text_limits.dart';
 import '../common/constants/text_mode.dart';
 import '../settings/service_config.dart';
@@ -59,6 +60,9 @@ class SelectionSession extends ChangeNotifier {
 
   /// 当前会话是否由输入翻译快捷键发起；激活时据此选择语言方向（#99）。
   bool _input = false;
+
+  /// 本会话读不到文字的原因（SelectionReadFailures）；null 表示没有可说明的原因。
+  String? _readFailure;
   final Future<String?> Function(String text) detectLanguage;
 
   /// 查询 macOS 词典释义；查不到返回 null。
@@ -161,15 +165,18 @@ class SelectionSession extends ChangeNotifier {
   Completer<void>? _completion;
 
   /// sessionId 标识选区，text 为已读原文；awaitSelection 允许键盘手势先显示按钮，点击后补读；
-  /// input 表示由输入翻译快捷键发起，激活时使用输入翻译的语言方向（#99）。
+  /// input 表示由输入翻译快捷键发起，激活时使用输入翻译的语言方向（#99）；
+  /// readFailure 为原生说明的读不到文字原因（SelectionReadFailures），决定空原文的失败说明。
   void begin({
     required String sessionId,
     required String? text,
     bool awaitSelection = false,
     bool input = false,
+    String? readFailure,
   }) {
     this.sessionId = sessionId;
     _input = input;
+    _readFailure = readFailure;
     // 新选区结束旧请求，避免后台继续消耗连接；模式回到翻译。
     _cancelTranslation();
     mode = TextMode.translate;
@@ -287,7 +294,10 @@ class SelectionSession extends ChangeNotifier {
     if (source.trim().isEmpty) {
       snapshot = snapshot.copyWith(
         phase: TranslationPhase.failed,
-        message: '未读取到选中文字，请重新选择后使用翻译快捷键。',
+        // 焦点为密码框时说明不读取密码，其余情况提示重新选择（#1）。
+        message: _readFailure == SelectionReadFailures.secureField
+            ? '密码框中的文字不会被读取。'
+            : '未读取到选中文字，请重新选择后使用翻译快捷键。',
       );
       notifyListeners();
       return;

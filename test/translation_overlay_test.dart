@@ -177,6 +177,20 @@ void main() {
     await tester.tap(find.byTooltip('关闭'));
     await tester.pumpAndSettle();
     expect(session.snapshot.phase, TranslationPhase.idle);
+
+    // 原生说明焦点为密码框是空读取的另一边界：失败卡片说明不读取密码，而不是提示重新选择。
+    await send({
+      'type': BridgeEventTypes.selectionCaptured,
+      'sessionId': 'secure-hotkey',
+      'gesture': SelectionGestureTypes.hotkey,
+      'readFailure': SelectionReadFailures.secureField,
+      'text': '',
+      'x': 0,
+      'y': 0,
+    });
+    await tester.pumpAndSettle();
+    expect(session.snapshot.phase, TranslationPhase.failed);
+    expect(find.text('密码框中的文字不会被读取。'), findsOneWidget);
   });
 
   testWidgets(

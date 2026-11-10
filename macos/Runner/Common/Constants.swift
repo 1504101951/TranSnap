@@ -446,6 +446,12 @@ enum AppConstants {
     static let mcpCaptureIndicatorMinimum = Duration.milliseconds(1000)
 }
 
+/// 明确热键读不到文字的原因；rawValue与Dart SelectionReadFailures保持一致，没有可说明的原因时不发送。
+enum SelectionReadFailure: String {
+    /// 焦点为密码框：安全文本控件不读取。
+    case secureField
+}
+
 /// 跨端选区手势；rawValue与Dart SelectionGestureTypes保持一致。
 enum SelectionGesture: String {
     case drag

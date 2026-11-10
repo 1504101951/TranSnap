@@ -748,7 +748,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     }
 
     /// text 为选中文字，gesture 为手势，x/y 为屏幕锚点，sourcePID 为来源进程、sourceAppName为采集时冻结的应用名；发送新会话，无返回值。
-    func emitSelectionCaptured(text: String, gesture: String, x: CGFloat, y: CGFloat, sourcePID: pid_t, sourceAppName: String?,
+    func emitSelectionCaptured(text: String, gesture: String, readFailure: SelectionReadFailure? = nil, x: CGFloat, y: CGFloat, sourcePID: pid_t, sourceAppName: String?,
                                inputAnchor: InputAnchor? = nil, inputSelection: AXUIElement? = nil) {
         guard !retainsResult || SelectionGesture(rawValue: gesture)?.isExplicit == true else { return }
         // 只有显式热键可以替换保留的结果；被动手势不打断阅读或正在进行的翻译。
@@ -771,6 +771,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             "sessionId": sessionId,
             "text": text,
             "gesture": gesture,
+            // 明确热键读不到文字的原因；读到文字或没有可说明的原因时为 null（#1）。
+            "readFailure": (readFailure?.rawValue as Any?) ?? NSNull(),
             // 此刻的来源进程才对应原文；不保存 PID、窗口或选区坐标到历史。
             "sourceAppName": (sourceAppName as Any?) ?? NSNull(),
             "x": x,

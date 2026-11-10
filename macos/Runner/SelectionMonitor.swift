@@ -299,6 +299,12 @@ final class SelectionMonitor {
             guard self?.isCapturingScreenshot != true, !Task.isCancelled, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
                   gesture.isExplicit || MacPlatformBridge.Shared.instance?.retainsResult != true else { return }
             let text = selection.text ?? ""
+            // 明确热键读不到文字时说明原因：焦点为密码框时失败提示据此说明不读取密码（#1）。
+            var readFailure: SelectionReadFailure?
+            if gesture.isExplicit, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               await AccessibilitySelection.focusIsSecure(sourcePID: pid) {
+                readFailure = .secureField
+            }
             // permitsKeyboardTrigger 在后台读取焦点节点，返回后重新确认本次读取仍有效。
             let keyboardCandidate = gesture == .selectAll || gesture == .keyboard
                 ? await AccessibilitySelection.permitsKeyboardTrigger(sourcePID: pid) : false
@@ -311,7 +317,7 @@ final class SelectionMonitor {
             // 异步读取完成后以最新鼠标位置定位新会话；输入翻译另按持有选区的节点取锚点（含来源窗口矩形）作为浮标与失败气泡定位依据（#99）。
             let anchor = NSEvent.mouseLocation
             MacPlatformBridge.Shared.instance?.emitSelectionCaptured(
-                text: text, gesture: gesture.rawValue, x: anchor.x, y: anchor.y, sourcePID: pid, sourceAppName: sourceAppName,
+                text: text, gesture: gesture.rawValue, readFailure: readFailure, x: anchor.x, y: anchor.y, sourcePID: pid, sourceAppName: sourceAppName,
                 inputAnchor: gesture == .inputHotkey ? AccessibilitySelection.inputAnchor(sourcePID: pid, selectionElement: selection.element) : nil,
                 inputSelection: gesture == .inputHotkey ? selection.element : nil
             )

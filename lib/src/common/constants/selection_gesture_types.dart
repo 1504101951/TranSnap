@@ -15,3 +15,9 @@ abstract final class SelectionGestureTypes {
   /// inputHotkey 为输入翻译快捷键；翻译完成后用译文替换来源应用中的原文。
   static const inputHotkey = 'inputHotkey';
 }
+
+/// 明确热键读不到文字的原因协议值；与Swift SelectionReadFailure.rawValue一致。
+abstract final class SelectionReadFailures {
+  /// secureField 表示焦点为密码框，安全文本控件不读取。
+  static const secureField = 'secureField';
+}
