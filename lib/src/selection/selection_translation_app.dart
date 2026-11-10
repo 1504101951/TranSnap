@@ -49,6 +49,9 @@ class _TranslateAppState extends State<TranslateApp> {
   static const _resultSize = Size(720, 420);
   late final StreamSubscription<PlatformEvent> _bridgeSubscription;
 
+  /// 最近一次请求原生设置的浮层会话与尺寸。
+  (String, Size)? _sizedOverlay;
+
   /// 来源在接受选区时冻结，不读取翻译完成后的前台应用。
   String? _sourceAppName;
 
@@ -150,18 +153,14 @@ class _TranslateAppState extends State<TranslateApp> {
       widget.overlay.hideOverlay(sessionId: id);
       return;
     }
-    if (phase == TranslationPhase.trigger) {
-      widget.overlay.setOverlaySize(
-        sessionId: id,
-        width: _triggerSize.width,
-        height: _triggerSize.height,
-      );
-      return;
-    }
+    final size = phase == TranslationPhase.trigger ? _triggerSize : _resultSize;
+    // 译文增量期间会话频繁通知；同一会话尺寸没变时不重复请求原生。
+    if (_sizedOverlay == (id, size)) return;
+    _sizedOverlay = (id, size);
     widget.overlay.setOverlaySize(
       sessionId: id,
-      width: _resultSize.width,
-      height: _resultSize.height,
+      width: size.width,
+      height: size.height,
     );
   }
 

@@ -114,6 +114,9 @@ class DictionaryDefinitionView extends StatelessWidget {
   const DictionaryDefinitionView({super.key, required this.definition});
   final String definition;
 
+  /// 最近一次解析的释义原文与结果；一张卡片同一时刻只有一段释义。
+  static (String, List<DefinitionLine>)? _parsed;
+
   /// context 提供主题颜色；返回按行种类排版的释义列。
   @override
   Widget build(BuildContext context) {
@@ -132,8 +135,11 @@ class DictionaryDefinitionView extends StatelessWidget {
       fontWeight: weight,
     );
 
-    // parseDefinition 把整段纯文本拆成词条、词性、义项、例句与未识别行。
-    final lines = parseDefinition(definition);
+    // parseDefinition 把整段纯文本拆成词条、词性、义项、例句与未识别行；卡片在译文增量期间反复重建，同一释义只解析一次。
+    if (_parsed?.$1 != definition) {
+      _parsed = (definition, parseDefinition(definition));
+    }
+    final lines = _parsed!.$2;
     return SelectionArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

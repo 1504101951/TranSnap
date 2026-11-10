@@ -124,7 +124,8 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   session.serviceProviderFor = (serviceId, mode) => mode == TextMode.translate
       ? providerForService(settings.current, bridge, serviceId)
       : assistProviderForService(settings.current, bridge, mode, serviceId);
-  session.serviceChoices = () => serviceChoices(settings.current);
+  // 首次提交设置前使用启动快照；每次读取 settings.current 都会深拷贝全部设置。
+  session.serviceChoices = () => serviceChoices(initial);
 
   // 唯一截图编辑器对应一份可取消翻译；捕获 ID 防止旧窗口的结束事件取消新任务。
   ({String id, Completer<void> cancellation})? screenshotRequest;
