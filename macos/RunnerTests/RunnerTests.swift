@@ -1217,20 +1217,23 @@ class RunnerTests: XCTestCase {
     }
 
     /// 无参数；语言识别低置信度时取用户语言，中文按字形取用户的简繁写法（#1）。
-    /// 边界：hello 首位 en 仅 0.13 但在前 3 名且为用户语言；ok 前 3 名都不是用户语言返回 nil；
+    /// 边界：hello 首位 en 仅 0.13 但在前 3 名且为用户语言；ok 前 3 名都不是用户语言，按唯一的拉丁文字语言 en；
     /// 你好被识别为繁体 0.80，转换为简体不变，按用户简体；含繁体独有字的句子保持繁体；首位达 0.5 直接采用。
     func testLanguageDetectionPrefersUserLanguages() {
         let user = ["zh-CN", "en"]
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("en", 0.13), ("nl", 0.11), ("id", 0.10)], text: "hello", preferred: user), "en")
-        XCTAssertNil(LanguageDetection.resolve(
-            hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user))
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("zh-Hant", 0.80), ("zh-Hans", 0.20)], text: "你好", preferred: user), "zh-Hans")
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("zh-Hant", 0.99)], text: "這是繁體中文", preferred: user), "zh-Hant")
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("fr", 0.90)], text: "Bonjour", preferred: user), "fr")
+        // 纯 ASCII 文本且用户只有一种拉丁文字语言时按该语言；用户有两种拉丁文字语言时无法取舍，仍为 nil。
+        XCTAssertEqual(LanguageDetection.resolve(
+            hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user), "en")
+        XCTAssertNil(LanguageDetection.resolve(
+            hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: ["en", "fr"]))
     }
 
     /// 无参数；只有带主机名的 http/https 内容可交给浏览器，协议大小写不敏感，其他协议与无协议文字返回 nil（#108）。

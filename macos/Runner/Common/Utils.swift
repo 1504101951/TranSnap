@@ -97,7 +97,8 @@ enum LanguageDetection {
     }
 
     /// hypotheses 为识别器的前几名（语言码与置信度），text 为原文，preferred 为用户设置的语言码（如 zh-CN、en）；
-    /// 返回语言码：首位置信度达标时取首位，否则取前几名中属于用户语言、置信度最高的一个，都没有时为 nil；
+    /// 返回语言码：首位置信度达标时取首位，否则取前几名中属于用户语言、置信度最高的一个；
+    /// 仍没有且原文为纯 ASCII、用户只有一种拉丁文字语言时取该语言（短词如 ok），否则为 nil；
     /// 结果为中文且原文按用户的中文字形转换后不变时，改为用户的简繁写法。
     static func resolve(hypotheses: [(code: String, confidence: Double)], text: String, preferred: [String]) -> String? {
         let bases = Set(preferred.compactMap { Locale.Language(identifier: $0).languageCode?.identifier })
@@ -106,11 +107,22 @@ enum LanguageDetection {
         let chosen = top.confidence >= AppConstants.languageDetectionConfidence
             ? top.code
             : ranked.first { Locale.Language(identifier: $0.code).languageCode.map { bases.contains($0.identifier) } == true }?.code
+                ?? latinFallback(text: text, preferred: preferred)
         guard let chosen, Locale.Language(identifier: chosen).languageCode?.identifier == "zh" else { return chosen }
         // 简繁共用的字形无法区分写法；原文转换到用户的写法后不变，说明没有另一写法独有的字。
         guard let script = preferred.lazy.compactMap(chineseScript).first else { return chosen }
         let transform = StringTransform(script == "Hans" ? "Hant-Hans" : "Hans-Hant")
         return text.applyingTransform(transform, reverse: false) == text ? "zh-\(script)" : chosen
+    }
+
+    /// text 为原文，preferred 为用户语言码；原文只含 ASCII 且至少一个字母、用户恰有一种拉丁文字语言时返回该语言码，否则为 nil。
+    private static func latinFallback(text: String, preferred: [String]) -> String? {
+        guard text.unicodeScalars.allSatisfy(\.isASCII), text.contains(where: \.isLetter) else { return nil }
+        let latin = Set(preferred.compactMap { code -> String? in
+            let language = Locale.Language(identifier: code)
+            return language.maximalIdentifier.contains("Latn") ? language.languageCode?.identifier : nil
+        })
+        return latin.count == 1 ? latin.first : nil
     }
 
     /// code 为用户语言码；返回中文对应的字形（Hans 或 Hant），非中文为 nil。
