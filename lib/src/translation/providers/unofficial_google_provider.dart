@@ -110,6 +110,14 @@ class UnofficialGoogleProvider implements BatchTranslationProvider {
             TranslationFailureKind.transient,
           ),
         );
+      } on SocketException {
+        // 断网或无法解析域名时说明连接失败，可重试。
+        emit(
+          const BatchFailure(
+            'Unofficial Google Provider 无法连接，请检查网络。',
+            TranslationFailureKind.transient,
+          ),
+        );
       } on FormatException {
         emit(
           const BatchFailure(

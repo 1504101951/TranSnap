@@ -83,6 +83,30 @@ void main() {
     );
   });
 
+  test('无法连接时说明检查网络', () async {
+    // 刚关闭的本机端口拒绝连接，等同断网时的 SocketException 边界；失败须说明连接问题而不是笼统的请求失败。
+    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = closed.port;
+    await closed.close();
+    final events =
+        await UnofficialGoogleProvider(
+              endpoint: 'http://127.0.0.1:$port/translate',
+            )
+            .translate(
+              const TranslationRequest(
+                sourceText: 'Hello',
+                detectedLanguage: 'en',
+                targetLanguage: 'zh-CN',
+              ),
+            )
+            .toList()
+            .timeout(const Duration(seconds: 5));
+    expect(
+      (events.single as TranslationFailure).message,
+      'Unofficial Google Provider 无法连接，请检查网络。',
+    );
+  });
+
   test('parses single sentence fixture', () {
     const body = r'''[[["你好","Hello",null,null,10]],null,"en"]''';
     expect(UnofficialGoogleProvider.parseTranslatedText(body), '你好');
