@@ -65,6 +65,10 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var streams: [ObjectIdentifier: CGDirectDisplayID] = [:]
     private var frames: [CGDirectDisplayID: CIImage] = [:]
+    /// 上一次合成的画布；写入后不再修改，没有新帧时原样再次追加。
+    private var composed: CVPixelBuffer?
+    /// 上次合成后是否有显示器送来新帧；画面不变时 SCStream 只发空闲状态，不会置位（#68）。
+    private var changed = false
     private var timer: DispatchSourceTimer?
     private var epoch: CMTime?
     // 有效时间只代表成功写入的帧，启动会话与编码背压都不能提前进入可保留状态。
@@ -85,7 +89,7 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
             AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_IEC_sRGB,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2],
-            AVVideoCompressionPropertiesKey: [AVVideoExpectedSourceFrameRateKey: 30]]
+            AVVideoCompressionPropertiesKey: [AVVideoExpectedSourceFrameRateKey: AppConstants.recordingFramesPerSecond]]
         guard writer.canApply(outputSettings: settings, forMediaType: .video) else {
             throw GIFExporter.ExportError(message: "编码器不支持当前显示器联合画布尺寸，请调整显示器布局后重试。")
         }
@@ -144,11 +148,12 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         dispatchPrecondition(condition: .onQueue(queue))
         guard !finishing, failure == nil, canvas.displays.contains(where: { $0.id == display }) else { return }
         frames[display] = image
+        changed = true
         guard epoch == nil, frames.count == canvas.displays.count else { return }
         writer.startSession(atSourceTime: .zero)
         epoch = CMClockGetTime(CMClockGetHostTimeClock())
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .nanoseconds(1_000_000_000 / 30))
+        timer.schedule(deadline: .now(), repeating: .nanoseconds(1_000_000_000 / Int(AppConstants.recordingFramesPerSecond)))
         timer.setEventHandler { [weak self] in self?.appendFrame() }
         self.timer = timer
         timer.resume()
@@ -156,20 +161,30 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         appendFrame()
     }
 
-    /// 无参数/返回值；合成当前每屏帧，首帧从零开始，后续时间量化到轨道刻度且严格递增。
+    /// 无参数/返回值；有新帧时合成当前每屏帧，否则沿用上一张合成画布，按固定帧率追加；
+    /// 首帧从零开始，后续时间量化到轨道刻度且严格递增。
     private func appendFrame() {
         guard !finishing, failure == nil, let epoch else { return }
         guard input.isReadyForMoreMediaData else {
             if writer.status == .failed { report(writer.error ?? GIFExporter.ExportError(message: "应用录制编码失败。")) }
             return
         }
-        var buffer: CVPixelBuffer?
-        guard let pool = adaptor.pixelBufferPool,
-              CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess,
-              let buffer else { report(GIFExporter.ExportError(message: "联合画布无法分配像素缓冲，请缩小显示器布局。")); return }
-        // composite唯一负责桌面坐标映射；输出始终覆盖完整黑色底画布。
-        context.render(canvas.composite(frames), to: buffer, bounds: CGRect(origin: .zero, size: canvas.size),
-                       colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+        // 画面不变时不重新合成与渲染，仍按固定帧率追加同一画布，时间轴与段长不变（#68）。
+        let buffer: CVPixelBuffer
+        if let composed, !changed {
+            buffer = composed
+        } else {
+            var created: CVPixelBuffer?
+            guard let pool = adaptor.pixelBufferPool,
+                  CVPixelBufferPoolCreatePixelBuffer(nil, pool, &created) == kCVReturnSuccess,
+                  let created else { report(GIFExporter.ExportError(message: "联合画布无法分配像素缓冲，请缩小显示器布局。")); return }
+            // composite唯一负责桌面坐标映射；输出始终覆盖完整黑色底画布。
+            context.render(canvas.composite(frames), to: created, bounds: CGRect(origin: .zero, size: canvas.size),
+                           colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+            composed = created
+            changed = false
+            buffer = created
+        }
         // 首帧固定为零；后续保留主机经过时间，略过量化后不能推进轨道时间的紧邻回调。
         let elapsed = CMTimeSubtract(CMClockGetTime(CMClockGetHostTimeClock()), epoch)
         let time = lastTime.isValid ? CMTimeConvertScale(elapsed, timescale: Self.mediaTimeScale, method: .roundTowardZero) : .zero
@@ -203,6 +218,7 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
                 self.ready?.resume(throwing: CancellationError())
                 self.ready = nil
                 self.frames = [:]
+                self.composed = nil
                 // 放弃及无有效帧都取消写入，不向AVAssetWriter提交无效的结束时间。
                 if discard || !self.lastTime.isValid {
                     self.writer.cancelWriting()
@@ -210,7 +226,7 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
                     else { continuation.resume(throwing: self.failure ?? GIFExporter.ExportError(message: "没有可保留的应用录制画面。")) }
                     return
                 }
-                self.writer.endSession(atSourceTime: CMTimeAdd(self.lastTime, CMTime(value: 1, timescale: 30)))
+                self.writer.endSession(atSourceTime: CMTimeAdd(self.lastTime, CMTime(value: 1, timescale: AppConstants.recordingFramesPerSecond)))
                 self.input.markAsFinished()
                 self.writer.finishWriting {
                     if self.writer.status == .completed { continuation.resume() }
@@ -271,7 +287,7 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
             let config = SCStreamConfiguration()
             config.width = Int((display.frame.width * CGFloat(filter.pointPixelScale)).rounded())
             config.height = Int((display.frame.height * CGFloat(filter.pointPixelScale)).rounded())
-            config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+            config.minimumFrameInterval = CMTime(value: 1, timescale: AppConstants.recordingFramesPerSecond)
             config.pixelFormat = kCVPixelFormatType_32BGRA
             config.colorSpaceName = CGColorSpace.sRGB
             config.backgroundColor = background
