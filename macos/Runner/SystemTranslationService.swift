@@ -12,14 +12,38 @@ final class SystemTranslationService {
     struct IncompleteResponse: Error {}
 
     /// requestId 定位会话，texts 为待译段落，source/target 为语言码（如 zh-CN、en），strategy 为策略协议值。
-    /// 返回与 texts 下标一一对应的译文；语言包未安装、语言对不支持或框架失败时抛出错误。
+    /// 返回与 texts 下标一一对应的译文；语言包未安装、语言对不支持或框架失败时抛出错误，
+    /// 等待重试期间请求被取消时抛出 CancellationError。
     func translate(
+        requestId: String, texts: [String], source: String, target: String, strategy: String
+    ) async throws -> [String] {
+        defer { sessions[requestId] = nil }
+        do {
+            // run 新建会话并翻译整批段落。
+            return try await run(requestId: requestId, texts: texts, source: source, target: target, strategy: strategy)
+        } catch {
+            guard case TranslationError.notInstalled = error else { throw error }
+            // 系统翻译后台进程 translationd 空闲退出后冷启动时，框架在语言包状态加载完成前就报告未安装
+            // （日志为 TranslationErrorDomain Code=16，语言状态未知），稍后同一请求可正常翻译。
+            // 适用条件：查询到该语言对已安装才重试一次；Apple 修复该竞态，或 LanguageAvailability 冷启动时同样误报时重新评估（#1）。
+            let status = await LanguageAvailability().status(
+                from: Locale.Language(identifier: source), to: Locale.Language(identifier: target)
+            )
+            guard status == .installed else { throw error }
+            // cancel 在查询期间移除了本请求的会话：Dart 已放弃该请求，不再重试。
+            guard sessions[requestId] != nil else { throw CancellationError() }
+            return try await run(requestId: requestId, texts: texts, source: source, target: target, strategy: strategy)
+        }
+    }
+
+    /// 参数同 translate；新建会话并登记到 sessions 以便取消，返回与 texts 下标一一对应的译文；
+    /// 框架失败或未返回某段译文时抛出错误。会话由 translate 在结束时移除。
+    private func run(
         requestId: String, texts: [String], source: String, target: String, strategy: String
     ) async throws -> [String] {
         // makeSession 按系统版本决定是否带策略参数。
         let session = Self.makeSession(source: source, target: target, strategy: strategy)
         sessions[requestId] = session
-        defer { sessions[requestId] = nil }
         // clientIdentifier 为段落下标，响应据此对回原段，不依赖返回顺序。
         let requests = texts.indices.map {
             TranslationSession.Request(sourceText: texts[$0], clientIdentifier: String($0))
