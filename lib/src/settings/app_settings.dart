@@ -272,8 +272,11 @@ class AppSettings {
       service.validate();
     }
     if (services.map((e) => e.id).toSet().length != services.length ||
-        defaultServiceId != ServiceConfig.builtinId &&
-            !services.any((e) => e.id == defaultServiceId)) {
+        !{
+              ServiceConfig.builtinId,
+              ServiceConfig.systemId,
+              ...services.map((e) => e.id),
+            }.contains(defaultServiceId)) {
       throw const FormatException('默认翻译服务不存在或配置标识重复。');
     }
     // 全局翻译与输入翻译两组语言各自满足同一规则（#99）。

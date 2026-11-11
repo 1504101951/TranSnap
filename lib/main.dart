@@ -139,6 +139,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.saveRecordingOptions:
       case MethodNames.toggleAutomatic:
       case MethodNames.testService:
+      case MethodNames.checkSystemTranslation:
         // handle拥有唯一设置队列，校验和系统事务成功后才发布新修订。
         return settings.handle(call);
       case MethodNames.historyPage:

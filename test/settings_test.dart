@@ -214,17 +214,31 @@ void main() {
     }
   });
 
-  test('Apple 系统翻译无端点、无凭据即为完整配置，同样为空的远程服务仍被拒绝', () async {
-    // 边界：地址与凭据都为空；系统翻译必须通过，远程服务的地址校验与 Google 的凭据校验必须失败，
-    // 证明地址与凭据的豁免只作用于系统类型（模型服务凭据可留空见 #123 用例）。
+  test('Apple 系统翻译是内置默认服务：可作默认并往返，未知 ID 与 apple 类型的配置服务被拒绝', () {
+    // 边界：systemId 无需出现在 services 中即为合法默认服务；不在内置与已配置之列的 ID 被拒绝；
+    // 'apple' 不再是可配置的服务类型，即使地址与名称合法也被拒绝；空地址的远程服务仍被拒绝。
+    final settings = AppSettings(
+      primaryLanguage: 'zh-CN',
+      defaultServiceId: ServiceConfig.systemId,
+    );
+    expect(settings.validate, returnsNormally);
+    final restored = AppSettings.fromMap(settings.toMap());
+    expect(restored.defaultServiceId, ServiceConfig.systemId);
+    expect(restored.services, isEmpty);
+    expect(
+      AppSettings(
+        primaryLanguage: 'zh-CN',
+        defaultServiceId: 'apple-missing',
+      ).validate,
+      throwsFormatException,
+    );
     const apple = ServiceConfig(
       id: 'apple-local',
       kind: 'apple',
       name: 'Apple 系统翻译',
-      baseUrl: '',
+      baseUrl: 'https://example.com',
     );
-    expect(apple.validate, returnsNormally);
-    expect(() => apple.validateCredentials(const {}), returnsNormally);
+    expect(apple.validate, throwsFormatException);
     const remote = ServiceConfig(
       id: 'remote',
       kind: 'openai',
@@ -233,21 +247,6 @@ void main() {
       model: 'gpt-test',
     );
     expect(remote.validate, throwsFormatException);
-    const google = ServiceConfig(
-      id: 'google',
-      kind: 'google',
-      name: 'Google',
-      baseUrl: 'https://translation.googleapis.com',
-    );
-    expect(() => google.validateCredentials(const {}), throwsFormatException);
-    // 新增系统翻译不产生钥匙串变更；读取钥匙串即视为错误。
-    final changes = await prepareCredentialChanges(
-      previous: const [],
-      current: const [apple],
-      drafts: const {},
-      readCredentials: (_) async => throw StateError('系统翻译不得读取钥匙串'),
-    );
-    expect(changes, isEmpty);
   });
 
   test('模型服务允许 API Key 留空，Google 与百度仍须填写（#123）', () {

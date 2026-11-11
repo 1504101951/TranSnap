@@ -16,11 +16,10 @@ import '../translation_types.dart';
 /// Apple 系统翻译：经 Swift 调用 macOS Translation 框架在本机翻译。
 /// 本类负责段落切分、编号配对、取消与错误分类；Swift 只按语言对翻译一组段落并按下标返回译文。
 class AppleTranslationProvider implements BatchTranslationProvider {
-  /// config 为系统翻译服务配置；channel 为主引擎平台通道，省略时使用 macOS 默认通道。
-  AppleTranslationProvider({required this.config, MethodChannel? channel})
+  /// channel 为主引擎平台通道，省略时使用 macOS 默认通道。
+  AppleTranslationProvider({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel(ChannelNames.platform);
 
-  final ServiceConfig config;
   final MethodChannel _channel;
 
   /// 主引擎内递增的请求序号；作为原生按请求取消的定位键。
@@ -30,7 +29,7 @@ class AppleTranslationProvider implements BatchTranslationProvider {
   static const downloadHint = '请到「系统设置 → 通用 → 语言与地区 → 翻译语言」下载。';
 
   @override
-  String get id => config.id;
+  String get id => ServiceConfig.systemId;
 
   /// 系统翻译逐片独立翻译，不携带前片上下文。
   @override

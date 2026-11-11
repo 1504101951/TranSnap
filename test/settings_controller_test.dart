@@ -9,7 +9,6 @@ import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/platform/settings_platform.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/service_config.dart';
 import 'package:translate_app/src/settings/settings_controller.dart';
 
 /// 无参数；验证唯一设置队列的状态提交、真实存储失败、修订冲突与系统翻译的测试连接，无返回值。
@@ -203,14 +202,8 @@ void main() {
     expect(controller.current.gifFramesPerSecond, 30);
   });
 
-  group('Apple 系统翻译测试连接', () {
+  group('Apple 系统翻译语言包检查', () {
     const methods = MethodChannel(ChannelNames.platform);
-    const apple = ServiceConfig(
-      id: 'apple-local',
-      kind: 'apple',
-      name: 'Apple 系统翻译',
-      baseUrl: '',
-    );
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
@@ -225,7 +218,7 @@ void main() {
       });
     }
 
-    /// primary/secondary 为已提交的主次语言；返回测试连接结果，失败时抛出 PlatformException。
+    /// primary/secondary 为已提交的主次语言；返回语言包检查结果，失败时抛出 PlatformException。
     Future<Object?> testApple(String primary, [String? secondary]) =>
         SettingsController(
           initial: AppSettings(
@@ -234,12 +227,7 @@ void main() {
           ),
           platform: _FileSettingsPlatform(saved),
           onSaved: (_) {},
-        ).handle(
-          MethodCall(MethodNames.testService, {
-            'config': apple.toMap(),
-            'credentials': <String, String>{},
-          }),
-        );
+        ).handle(const MethodCall(MethodNames.checkSystemTranslation));
 
     tearDown(() => messenger.setMockMethodCallHandler(methods, null));
 

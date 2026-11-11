@@ -131,6 +131,9 @@ class SettingsController {
         case MethodNames.testService:
           // _testService负责完整连接测试；队列仅等待结果，不持有流式响应处理。
           return _testService(call.arguments);
+        case MethodNames.checkSystemTranslation:
+          // _checkSystemTranslation 只查询语言包状态，不发起翻译。
+          return _checkSystemTranslation();
         default:
           throw MissingPluginException('未知设置操作：${call.method}');
       }
@@ -149,8 +152,6 @@ class SettingsController {
     final config = ServiceConfig.fromMap(
       Map<Object?, Object?>.from(map['config'] as Map),
     );
-    // 系统翻译没有凭据与网络端点，只检查语言包，不访问钥匙串。
-    if (config.isSystem) return _testSystemTranslation(config);
     final credentials = {
       ...await platform.readCredentials(config.id),
       ...Map<String, String>.from(map['credentials'] as Map),
@@ -195,9 +196,9 @@ class SettingsController {
     return result.toString();
   }
 
-  /// config 为系统翻译配置；按已提交的主次语言查询语言包安装状态，不发起翻译。
+  /// 无参数；按已提交的主次语言查询 Apple 系统翻译语言包安装状态，不发起翻译。
   /// 返回已安装语言对的说明；有不支持或未安装的语言对时抛出带下载位置的测试失败。
-  Future<String> _testSystemTranslation(ServiceConfig config) async {
+  Future<String> _checkSystemTranslation() async {
     final direction = _current.direction;
     final primary = direction.primaryCode;
     final secondary = direction.secondaryCode;
@@ -208,8 +209,7 @@ class SettingsController {
     ];
     if (pairs.isEmpty) return '主要语言为英文且未设置次要语言，翻译时按原文语言检查语言包。';
     // statuses 只查询系统语言包状态，不触发下载。
-    final statuses = await AppleTranslationProvider(config: config)
-        .statuses(pairs);
+    final statuses = await AppleTranslationProvider().statuses(pairs);
     final labels = [
       for (final (source, target) in pairs)
         AppleTranslationProvider.pairLabel(source, target),

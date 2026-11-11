@@ -268,6 +268,9 @@ abstract final class MethodNames {
 
   static const testService = 'testService';
 
+  /// 设置窗口查询 Apple 系统翻译语言包状态；返回已安装说明，缺少或不支持时为测试失败错误（#1）。
+  static const checkSystemTranslation = 'checkSystemTranslation';
+
   static const toggleAutomatic = 'toggleAutomatic';
 
   static const translatePlainText = 'translatePlainText';

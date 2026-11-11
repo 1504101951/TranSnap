@@ -13,19 +13,24 @@ class ServiceConfig {
 
   /// 内置谷歌翻译在设置页与卡片服务菜单中的名称（#100）。
   static const builtinName = '谷歌翻译';
+
+  /// 内置 Apple 系统翻译的服务 ID；本机翻译无端点、无凭据，不进入服务列表（#1）。
+  static const systemId = 'apple-system';
+
+  /// 内置 Apple 系统翻译在设置页与卡片服务菜单中的名称。
+  static const systemName = 'Apple 系统翻译';
   static const kinds = {
     'baidu': '百度翻译',
     'google': '谷歌翻译',
     'openai': 'OpenAI',
     'deepseek': 'DeepSeek',
     'anthropic': 'Anthropic',
-    'apple': 'Apple 系统翻译',
   };
 
-  /// 新建服务展示的五类；既有协议ID仍用于原请求与凭据账户，不迁移用户配置。
+  /// 新建服务展示的四类；既有协议ID仍用于原请求与凭据账户，不迁移用户配置。
   /// 显示名取自 kinds，此处只决定展示顺序（#131）。
   static final selectableKinds = {
-    for (final kind in ['google', 'baidu', 'openai', 'anthropic', 'apple'])
+    for (final kind in ['google', 'baidu', 'openai', 'anthropic'])
       kind: kinds[kind]!,
   };
 
@@ -41,8 +46,6 @@ class ServiceConfig {
     'openai': 'https://api.openai.com/v1',
     'deepseek': 'https://api.deepseek.com',
     'anthropic': 'https://api.anthropic.com/v1',
-    // 系统翻译在本机完成，没有服务端点；编辑窗口切换类型时按此清空地址。
-    'apple': '',
   };
   final String id;
   final String kind;
@@ -56,12 +59,6 @@ class ServiceConfig {
   /// kind 为服务协议 ID；返回是否为模型服务（OpenAI、DeepSeek、Anthropic 协议）（#131）。
   static bool isModelKind(String kind) =>
       kind == 'openai' || kind == 'deepseek' || kind == 'anthropic';
-
-  /// 无参数；返回是否为 Apple 系统翻译。系统翻译无服务端点、无凭据，不读写 Keychain。
-  bool get isSystem => isSystemKind(kind);
-
-  /// kind 为服务类型 ID；返回该类型是否为系统翻译，供只持有类型的编辑表单判断字段显隐。
-  static bool isSystemKind(String kind) => kind == 'apple';
 
   /// map 为无凭据的设置字典；返回一个翻译服务配置。
   factory ServiceConfig.fromMap(Map<Object?, Object?> map) => ServiceConfig(
@@ -90,8 +87,6 @@ class ServiceConfig {
     if (id.isEmpty || name.trim().isEmpty || !kinds.containsKey(kind)) {
       throw const FormatException('请选择服务类型并填写名称。');
     }
-    // 系统翻译不发送网络请求，没有需要校验的端点。
-    if (isSystem) return;
     final uri = Uri.tryParse(baseUrl);
     if (uri == null ||
         uri.host.isEmpty ||
@@ -116,8 +111,8 @@ class ServiceConfig {
   /// credentials 为从钥匙串读取的凭据字典；缺少协议必需字段时抛用户可读错误。
   /// 模型服务的 API Key 可留空（本机服务等不校验密钥），Google 与百度仍须填写（#123）。
   void validateCredentials(Map<String, String> credentials) {
-    // 系统翻译不使用凭据，空凭据即为完整配置；模型服务留空时请求不带认证头。
-    if (isSystem || isModel) return;
+    // 模型服务留空时请求不带认证头。
+    if (isModel) return;
     if ((credentials['apiKey'] ?? '').trim().isEmpty ||
         kind == 'baidu' && (credentials['appId'] ?? '').trim().isEmpty) {
       throw const FormatException('请填写 API Key／密钥，百度翻译还需要 App ID。');

@@ -12,6 +12,7 @@ import 'package:translate_app/src/translation/glossary.dart';
 import 'package:translate_app/src/translation/model_result.dart';
 import 'package:translate_app/src/translation/provider_selection.dart';
 import 'package:translate_app/src/translation/providers/api_translation_provider.dart';
+import 'package:translate_app/src/translation/providers/apple_translation_provider.dart';
 import 'package:translate_app/src/translation/translation_types.dart';
 
 /// 无参数；用真实本地 HTTP 验证协议、流完整性及取消，不调用付费服务。
@@ -907,6 +908,61 @@ void main() {
     expect(batchInput['glossary'], [
       {'term': 'Kubernetes', 'translation': 'Kubernetes'},
     ]);
+  });
+
+  test('内置服务：菜单先列谷歌翻译与 Apple 系统翻译，Apple 对应本机 Provider 且不是模型服务', () {
+    // 边界：默认服务设为 Apple 时只有 Apple 项为默认；已配置的 OpenAI 服务排在两个内置项之后；
+    // Apple 的 Provider id 为内置 ID，润色、纠错、解释没有模型 Provider。
+    const openai = ServiceConfig(
+      id: 'saved',
+      kind: 'openai',
+      name: 'OpenAI',
+      baseUrl: 'https://api.openai.com',
+      model: 'gpt-test',
+    );
+    final settings = AppSettings(
+      primaryLanguage: 'zh-CN',
+      services: [openai],
+      defaultServiceId: ServiceConfig.systemId,
+    );
+    final platform = _SecretPlatform();
+    expect(serviceChoices(settings), [
+      (
+        id: ServiceConfig.builtinId,
+        name: '谷歌翻译',
+        isModel: false,
+        isDefault: false,
+      ),
+      (
+        id: ServiceConfig.systemId,
+        name: 'Apple 系统翻译',
+        isModel: false,
+        isDefault: true,
+      ),
+      (id: 'saved', name: 'OpenAI', isModel: true, isDefault: false),
+    ]);
+    final provider = providerForService(
+      settings,
+      platform,
+      ServiceConfig.systemId,
+    );
+    expect(provider, isA<AppleTranslationProvider>());
+    expect(provider.id, ServiceConfig.systemId);
+    expect(
+      providerForSettings(settings, platform),
+      isA<AppleTranslationProvider>(),
+    );
+    for (final mode in [TextMode.polish, TextMode.correct, TextMode.explain]) {
+      expect(
+        assistProviderForService(
+          settings,
+          platform,
+          mode,
+          ServiceConfig.systemId,
+        ),
+        isNull,
+      );
+    }
   });
 }
 

@@ -137,7 +137,9 @@ class SelectionSession extends ChangeNotifier {
   String? dismissIfServiceRemoved(Set<String> serviceIds) {
     if (!isExpanded) return null;
     final selected = serviceOverride ?? activeProvider.id;
-    if (selected == ServiceConfig.builtinId || serviceIds.contains(selected)) {
+    if (selected == ServiceConfig.builtinId ||
+        selected == ServiceConfig.systemId ||
+        serviceIds.contains(selected)) {
       return null;
     }
     final closedId = sessionId;

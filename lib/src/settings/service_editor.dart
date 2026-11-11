@@ -77,8 +77,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
     );
     // 配置校验在窗口中给出具体提示，网络测试不替代格式校验。
     config.validate();
-    // 系统翻译不保存凭据；切换类型前输入过的密钥也不写入钥匙串。
-    if (config.isSystem) return (config: config, credentials: const {});
     final credentials = <String, String>{
       if (_key.text.trim().isNotEmpty) 'apiKey': _key.text.trim(),
       if (_kind == 'baidu' && _appId.text.trim().isNotEmpty)
@@ -126,8 +124,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
   @override
   Widget build(BuildContext context) {
     final isModel = ServiceConfig.isModelKind(_kind);
-    // 系统翻译在本机完成，不显示服务地址与凭据字段。
-    final isSystem = ServiceConfig.isSystemKind(_kind);
     return PopScope(
       canPop: !_testing,
       child: NativeGlassDialog(
@@ -163,7 +159,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
                     decoration: InputDecoration(),
                   ),
                 ),
-                if (!isSystem)
                   NativeGlassField(
                     label: 'API Base URL',
                     helper: '填写服务根地址；模型接口通常以 /v1 结尾。',
@@ -198,7 +193,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
                       decoration: InputDecoration(),
                     ),
                   ),
-                if (!isSystem)
                   NativeGlassField(
                     label: _kind == 'baidu' ? '百度密钥' : 'API Key',
                     // 模型服务的 API Key 可留空（#123）。

@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/error_codes.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/settings/service_config.dart';
 import 'package:translate_app/src/translation/providers/apple_translation_provider.dart';
 import 'package:translate_app/src/translation/translation_types.dart';
 
@@ -14,12 +13,6 @@ import 'package:translate_app/src/translation/translation_types.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const methods = MethodChannel(ChannelNames.platform);
-  const config = ServiceConfig(
-    id: 'apple-local',
-    kind: 'apple',
-    name: 'Apple 系统翻译',
-    baseUrl: '',
-  );
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late AppleTranslationProvider provider;
@@ -33,7 +26,7 @@ void main() {
     });
   }
 
-  setUp(() => provider = AppleTranslationProvider(config: config));
+  setUp(() => provider = AppleTranslationProvider());
   tearDown(() => messenger.setMockMethodCallHandler(methods, null));
 
   test('多段原文按下标配对，译文保留原文的空行与首尾空白', () async {
