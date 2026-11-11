@@ -67,11 +67,13 @@ enum WebMExporter {
             try Task.checkCancellation()
             // 区间起点之前开始显示、跨过起点的首帧从 0 计时。
             let timestamp = max(0, microseconds(next.time - window.start))
+            // 页面编码本帧期间在后台读取下一帧；读帧仍逐帧串行，同一时刻最多多持有一帧（#68）。
+            async let upcoming = frames.next()
             // encode 把本帧交给页面编码，返回此前已产出的编码帧。
             for frame in try await session.encode(next.pixels, timestamp: timestamp) { try writer.append(frame) }
             count += 1
             progress(Double(timestamp) / Double(duration))
-            guard let frame = try await frames.next() else { break }
+            guard let frame = try await upcoming else { break }
             next = frame
         }
         for frame in try await session.finish() { try writer.append(frame) }
@@ -157,7 +159,8 @@ enum WebMExporter {
     """
 }
 
-/// 按区间顺序读取录制帧并转为 BT.601 矩阵的紧密 NV12 像素（#110）；`next` 在调用方 actor 之外执行解码、转换与拷贝。
+/// 按区间顺序读取录制帧并转为 BT.601 矩阵的紧密 NV12 像素（#110）；`next` 在调用方 actor 之外执行解码、转换与拷贝，
+/// 调用方须等上一次 `next` 返回后再调用，转换目标 `converted` 在两次调用间复用。
 private final class FrameSource {
     private let reader: AVAssetReader
     private let output: AVAssetReaderTrackOutput
