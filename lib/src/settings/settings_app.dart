@@ -732,27 +732,7 @@ class _SettingsPageState extends State<_SettingsPage>
                             const Text('更改后自动保存并应用到所有窗口；系统“减少透明度”开启时保持材料不透明。'),
                           ],
                         ),
-                        NativeGlassGroup(
-                          children: [
-                            NativeGlassSwitchTile(
-                              title: '登录时启动',
-                              value: settings.launchAtLogin,
-                              onChanged: (v) =>
-                                  _edit(() => settings.launchAtLogin = v),
-                            ),
-                            if (_status['loginNeedsApproval'] == true)
-                              NativeGlassSurface(
-                                material: true,
-                                child: TextButton(
-                                  onPressed: () => _channel.invokeMethod<void>(
-                                    MethodNames.openLoginItems,
-                                  ),
-                                  child: const Text('在系统设置中允许登录项'),
-                                ),
-                              ),
-                          ],
-                        ),
-                        // 系统权限集中在一张卡片，登录启动单独成组。
+                        // 系统权限与 Apple 离线翻译语言包集中在一张卡片，登录启动单独成组放在最下方（#67）。
                         NativeGlassGroup(
                           children: [
                             ListTile(
@@ -814,24 +794,18 @@ class _SettingsPageState extends State<_SettingsPage>
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                        // Apple 系统翻译的离线语言包由系统下载，按钮只打开对应设置页（#98）。
-                        NativeGlassGroup(
-                          children: [
-                            // 双行 ListTile 不应用 minTileHeight；外层保证行高不小于 56pt 并垂直居中（#98）。
+                            // Apple 系统翻译的离线语言包由系统下载，按钮只打开对应设置页（#98）。
+                            // 双行 ListTile 不应用 minTileHeight；外层保证行高不小于 56pt 并垂直居中。
                             ConstrainedBox(
                               key: const ValueKey('离线翻译语言'),
                               constraints: const BoxConstraints(minHeight: 56),
                               child: Center(
                                 child: ListTile(
                                   contentPadding: EdgeInsets.zero,
+                                  title: const Text('安装 Apple 离线翻译语言包'),
                                   // 打开通用页时查询的语言包状态；查询完成前显示检查中。
-                                  title: Text(
-                                    _languagePackStatus ?? '正在检查语言包…',
-                                  ),
                                   subtitle: Text(
-                                    '在打开的页面点“翻译语言…”下载',
+                                    _languagePackStatus ?? '正在检查语言包…',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall,
@@ -844,12 +818,32 @@ class _SettingsPageState extends State<_SettingsPage>
                                             MethodNames
                                                 .openTranslationLanguages,
                                           ),
-                                      child: const Text('下载离线翻译语言…'),
+                                      child: const Text('下载翻译包'),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
+                          ],
+                        ),
+                        NativeGlassGroup(
+                          children: [
+                            NativeGlassSwitchTile(
+                              title: '登录时启动',
+                              value: settings.launchAtLogin,
+                              onChanged: (v) =>
+                                  _edit(() => settings.launchAtLogin = v),
+                            ),
+                            if (_status['loginNeedsApproval'] == true)
+                              NativeGlassSurface(
+                                material: true,
+                                child: TextButton(
+                                  onPressed: () => _channel.invokeMethod<void>(
+                                    MethodNames.openLoginItems,
+                                  ),
+                                  child: const Text('在系统设置中允许登录项'),
+                                ),
+                              ),
                           ],
                         ),
                       ] else if (_page == SettingsPage.languages) ...[

@@ -60,23 +60,23 @@ void main() {
       find.descendant(of: accessibilityGroup, matching: find.text('登录时启动')),
       findsNothing,
     );
-    // 边界：「下载离线翻译语言…」不在权限卡片内，而是卡片下方间距 20pt 的独立组，行高不小于 56pt（#98）；
-    // 该行带语言包状态与下载提示两行文字，56pt 下限不能因双行而失效。
+    // 边界：「安装 Apple 离线翻译语言包」是权限卡片的第三行，位于屏幕录制权限之下，行高不小于 56pt（#67、#98）；
+    // 该行带标题与语言包状态两行文字，56pt 下限不能因双行而失效。
     final languagesRow = find.byKey(const ValueKey('离线翻译语言'));
     expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(56));
     expect(
-      find.descendant(of: accessibilityGroup, matching: find.text('下载离线翻译语言…')),
-      findsNothing,
+      find.descendant(of: accessibilityGroup, matching: find.text('下载翻译包')),
+      findsOneWidget,
     );
-    final languagesGroup = find.ancestor(
-      of: languagesRow,
-      matching: find.byType(NativeGlassGroup),
+    expect(
+      tester.getRect(languagesRow).top,
+      greaterThanOrEqualTo(tester.getRect(find.text('屏幕录制权限')).bottom),
     );
-    // 分组外框含 20pt 底部间距，按分组内的材料背景测量两卡片间距。
-    Rect card(Finder group) => tester.getRect(
-      find.descendant(of: group, matching: find.byType(Material)).first,
+    // 边界：登录时启动是通用页最下方的分组，位于权限卡片之后。
+    expect(
+      tester.getRect(find.text('登录时启动').first).top,
+      greaterThan(tester.getRect(languagesRow).bottom),
     );
-    expect(card(languagesGroup).top - card(accessibilityGroup).bottom, 20);
 
     await openSettingsPage(tester, '操作');
     expect(find.text('屏幕录制权限'), findsNothing);

@@ -962,7 +962,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('正在检查语言包…'), findsOneWidget);
-    expect(find.text('在打开的页面点“翻译语言…”下载'), findsOneWidget);
+    expect(find.text('安装 Apple 离线翻译语言包'), findsOneWidget);
+    expect(find.text('下载翻译包'), findsOneWidget);
 
     reply.complete('语言包已安装：English → 简体中文');
     await tester.pumpAndSettle();
