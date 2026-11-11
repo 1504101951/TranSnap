@@ -789,6 +789,131 @@ class NativeGlassSegments<T> extends StatelessWidget {
   }
 }
 
+/// 侧边栏一级分组：title/icon 为分组标题与图标；value 非空时分组本身可选中（无子页），
+/// 否则 children 为按顺序排列的子页值与名称，分组只作标签。
+typedef NativeGlassSidebarSection<T> = ({
+  String title,
+  IconData icon,
+  T? value,
+  Map<T, String> children,
+});
+
+/// 设置窗口左侧两级导航（#67）：玻璃材料、固定宽度，不随正文滚动；一级分组始终展开。
+class NativeGlassSidebar<T> extends StatelessWidget {
+  /// value 为当前子页，sections 为一级分组，onChanged 接收被点选的子页。
+  const NativeGlassSidebar({
+    super.key,
+    required this.value,
+    required this.sections,
+    required this.onChanged,
+  });
+  final T value;
+  final List<NativeGlassSidebarSection<T>> sections;
+  final ValueChanged<T> onChanged;
+
+  /// context 提供主题；返回固定宽度的导航列，内容超出窗口高度时在侧边栏内滚动。
+  @override
+  Widget build(BuildContext context) => NativeGlassSurface(
+    material: true,
+    radius: 0,
+    child: SizedBox(
+      width: GlassMetrics.sidebarWidth,
+      height: double.infinity,
+      child: ListView(
+        padding: const EdgeInsets.all(GlassMetrics.sidebarPadding),
+        children: [
+          for (final section in sections) ...[
+            // 一级行：可选中的分组直接是子页，其余只作标签。
+            _row(
+              context,
+              height: GlassMetrics.sidebarSectionHeight,
+              indent: 0,
+              icon: section.icon,
+              label: section.title,
+              bold: true,
+              target: section.value,
+            ),
+            for (final child in section.children.entries)
+              _row(
+                context,
+                height: GlassMetrics.sidebarItemHeight,
+                indent: GlassMetrics.sidebarItemIndent,
+                label: child.value,
+                target: child.key,
+              ),
+          ],
+        ],
+      ),
+    ),
+  );
+
+  /// height/indent 为行高与左缩进，icon/label/bold 为行内容，target 为点选后切换到的子页；
+  /// target 为空时返回不可点选的标签行，否则返回带选中蓝底与按下反馈的按钮行。
+  Widget _row(
+    BuildContext context, {
+    required double height,
+    required double indent,
+    required String label,
+    IconData? icon,
+    bool bold = false,
+    T? target,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final selected = target != null && target == value;
+    final content = Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: GlassMetrics.icon),
+          const SizedBox(width: GlassMetrics.iconGap),
+        ],
+        Expanded(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: bold ? const TextStyle(fontWeight: FontWeight.w600) : null,
+          ),
+        ),
+      ],
+    );
+    if (target == null) {
+      return SizedBox(
+        height: height,
+        child: Padding(
+          padding: EdgeInsets.only(left: indent + GlassMetrics.iconGap),
+          child: content,
+        ),
+      );
+    }
+    return Semantics(
+      selected: selected,
+      child: _GlassButtonFeedback(
+        radius: GlassMetrics.controlRadius,
+        enabled: true,
+        // 导航与分段一致：悬停不着色，按下浅色8%、深色10%。
+        hoverFeedback: false,
+        child: TextButton(
+          onPressed: () => onChanged(target),
+          style: TextButton.styleFrom(
+            overlayColor: Colors.transparent,
+            minimumSize: Size.fromHeight(height),
+            fixedSize: Size.fromHeight(height),
+            padding: EdgeInsets.only(left: indent + GlassMetrics.iconGap),
+            alignment: Alignment.centerLeft,
+            foregroundColor: selected ? Colors.white : colors.onSurface,
+            backgroundColor: selected
+                ? NativeGlassTheme.selectionBlue
+                : Colors.transparent,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+            ),
+          ),
+          child: content,
+        ),
+      ),
+    );
+  }
+}
+
 /// 固定36×20轨道和16×16滑块；系统Switch没有这些几何尺寸的公开配置。
 class NativeGlassSwitch extends StatefulWidget {
   /// value 为当前开关值，onChanged为空时禁用；label提供可访问名称。

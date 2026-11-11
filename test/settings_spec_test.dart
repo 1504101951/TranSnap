@@ -11,10 +11,12 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 import 'package:translate_app/src/settings/service_config.dart';
 
-/// 验证设置窗口的导航、权限位置、服务类型、分段、开关与布局等可见行为，边界为520×500最小设置窗口与滚动后导航可达。
+import 'support/settings_pages.dart';
+
+/// 验证设置窗口的侧边栏、权限位置、服务类型、分段、开关与布局等可见行为，边界为760×640默认窗口内容区（含200宽侧边栏）与滚动后侧边栏仍固定。
 void main() {
-  testWidgets('导航滚动后仍固定，权限仅在通用，新建服务为五类', (tester) async {
-    tester.view.physicalSize = const Size(520, 500);
+  testWidgets('侧边栏滚动后仍固定，权限仅在通用，新建服务为四类且不含 Apple', (tester) async {
+    tester.view.physicalSize = const Size(760, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -23,6 +25,9 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == MethodNames.getSettings) return {'revision': 0};
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true, 'screenAccess': true};
       }
@@ -31,11 +36,12 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    final navigation = find.byKey(const ValueKey('settings-fixed-navigation'));
-    final before = tester.getRect(navigation);
-    await tester.drag(find.byType(ListView), const Offset(0, -800));
+    final sidebar = find.byKey(const ValueKey('settings-sidebar'));
+    final before = tester.getRect(sidebar);
+    expect(before.width, 200);
+    await tester.drag(settingsContentList(), const Offset(0, -800));
     await tester.pumpAndSettle();
-    expect(tester.getRect(navigation), before);
+    expect(tester.getRect(sidebar), before);
     expect(find.text('辅助功能权限'), findsOneWidget);
     expect(find.text('所有支持读取选区的应用均可翻译。'), findsNothing);
     expect(find.text('已授权，可截取屏幕'), findsNothing);
@@ -54,16 +60,14 @@ void main() {
       find.descendant(of: accessibilityGroup, matching: find.text('登录时启动')),
       findsNothing,
     );
-    // 边界：「下载离线翻译语言…」不在权限卡片内，而是卡片下方间距 20pt 的独立组，行高不小于 56pt（#98）。
+    // 边界：「下载离线翻译语言…」不在权限卡片内，而是卡片下方间距 20pt 的独立组，行高不小于 56pt（#98）；
+    // 该行带语言包状态与下载提示两行文字，56pt 下限不能因双行而失效。
     final languagesRow = find.byKey(const ValueKey('离线翻译语言'));
+    expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(56));
     expect(
-      find.descendant(
-        of: accessibilityGroup,
-        matching: find.text('下载离线翻译语言…'),
-      ),
+      find.descendant(of: accessibilityGroup, matching: find.text('下载离线翻译语言…')),
       findsNothing,
     );
-    expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(56));
     final languagesGroup = find.ancestor(
       of: languagesRow,
       matching: find.byType(NativeGlassGroup),
@@ -74,8 +78,7 @@ void main() {
     );
     expect(card(languagesGroup).top - card(accessibilityGroup).bottom, 20);
 
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '操作');
     expect(find.text('屏幕录制权限'), findsNothing);
     final shortcutLabel = find.text('区域截图快捷键');
     final shortcutButton = find.byKey(const ValueKey('区域截图快捷键'));
@@ -85,9 +88,7 @@ void main() {
       lessThanOrEqualTo(1),
     );
     expect(find.textContaining('点击录制；录制完成'), findsNothing);
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('添加服务'), 150);
+    await openSettingsPage(tester, '服务列表');
     await tester.tap(find.text('添加服务'));
     await tester.pumpAndSettle();
     final selector = find.descendant(
@@ -98,11 +99,12 @@ void main() {
     );
     await tester.tap(selector);
     await tester.pumpAndSettle();
-    // 规格 #1：新建服务类型为谷歌翻译、百度翻译、OpenAI、Anthropic、Apple 系统翻译五类。
-    expect(find.byType(MenuItemButton), findsNWidgets(5));
-    for (final label in ['谷歌翻译', '百度翻译', 'OpenAI', 'Anthropic', 'Apple 系统翻译']) {
+    // 规格 #1：新建服务类型为谷歌翻译、百度翻译、OpenAI、Anthropic四类；Apple 系统翻译是内置服务，不可新建。
+    expect(find.byType(MenuItemButton), findsNWidgets(4));
+    for (final label in ['谷歌翻译', '百度翻译', 'OpenAI', 'Anthropic']) {
       expect(find.widgetWithText(MenuItemButton, label), findsOneWidget);
     }
+    expect(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -214,9 +216,9 @@ void main() {
     expect(enabled, isTrue);
   });
 
-  testWidgets('默认窗口单服务无需滚动且服务操作之间保留8pt空白', (tester) async {
-    // 560×720为原生默认内容尺寸，单服务是常见设置路径；更多服务允许滚动。
-    tester.view.physicalSize = const Size(560, 720);
+  testWidgets('默认窗口单服务时除列表子页外的子页无需滚动，服务操作之间保留8pt空白', (tester) async {
+    // 760×640为原生默认窗口内容区（含200宽侧边栏），单服务是常见设置路径；更多服务允许滚动。
+    tester.view.physicalSize = const Size(760, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -225,6 +227,9 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == MethodNames.systemStatus) return <String, Object?>{};
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.getSettings) {
         return {
           'revision': 0,
@@ -244,8 +249,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '服务列表');
     final edit = tester.getRect(
       find.widgetWithIcon(IconButton, Icons.edit_outlined),
     );
@@ -254,16 +258,23 @@ void main() {
     );
     expect(edit.size, const Size(32, 32));
     expect(delete.left - edit.right, 8);
+    double maxScroll() => tester
+        .state<ScrollableState>(settingsContentScrollable())
+        .position
+        .maxScrollExtent;
+    expect(maxScroll(), 0);
+    await openSettingsPage(tester, '语言与服务');
     expect(find.text('当翻译文本识别为主要语言时，会自动翻译成次要语言'), findsOneWidget);
+    expect(maxScroll(), 0);
+    await openSettingsPage(tester, '快捷键');
     expect(find.text('点击录制；录制完成后自动保存；检查系统保留组合和可识别的全局占用。'), findsNothing);
     expect(find.byKey(const ValueKey('全局翻译快捷键')).hitTestable(), findsOneWidget);
-    final scroll = tester.state<ScrollableState>(
-      find.descendant(
-        of: find.byType(ListView),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    expect(scroll.position.maxScrollExtent, 0);
+    expect(maxScroll(), 0);
+    // 除四个列表子页外，其余子页在默认窗口同样一屏完整展示（#67）。
+    for (final page in ['通用', '保存与导出', '录制', '操作']) {
+      await openSettingsPage(tester, page);
+      expect(maxScroll(), 0, reason: page);
+    }
   });
 
   test('展示名称调整不改写持久化配置或自定义名称', () {

@@ -10,6 +10,8 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/mcp_platforms.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 
+import 'support/settings_pages.dart';
+
 /// 内存中的平台服务：替代真实 CLI 与配置文件，只用于驱动界面状态；
 /// 平台服务自身的命令与文件行为由 mcp_platforms_test.dart 用真实进程验证。
 class _FakeMcpService extends McpPlatformService {
@@ -41,15 +43,15 @@ class _FakeMcpService extends McpPlatformService {
   }
 }
 
-/// 验证设置窗口的 MCP 页（#96「设置」、#67「设置 MCP 页（#96）」）：MCP 导航段、开关自动保存、
+/// 验证设置窗口的 MCP 页（#96「设置」、#67「设置 MCP 页（#96）」）：MCP 侧边栏行、开关自动保存、
 /// helper 路径与配置复制、按注册表渲染的平台状态与按钮可用性、安装失败原文、删除二次确认。
 void main() {
   const helperPath =
       '/Applications/TranslateApp.app/Contents/MacOS/translateapp-mcp';
   const channel = MethodChannel(ChannelNames.settings);
 
-  /// 作用：挂载设置窗口并切到指定分段。
-  /// 参数 tester：测试驱动；section：分段标题；saved：收集 saveSettings 草稿；clipboard：收集剪贴板文本；
+  /// 作用：挂载设置窗口并切到侧边栏指定子页。
+  /// 参数 tester：测试驱动；section：侧边栏行文字；saved：收集 saveSettings 草稿；clipboard：收集剪贴板文本；
   /// service：平台服务。
   Future<void> open(
     WidgetTester tester, {
@@ -62,6 +64,9 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var revision = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       switch (call.method) {
         case MethodNames.systemStatus:
           return {'accessibility': true};
@@ -94,8 +99,7 @@ void main() {
       SettingsApp(createMcpService: (path) => service ?? _FakeMcpService(path)),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text(section));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, section);
   }
 
   Finder mcpSwitch() => find.descendant(
@@ -114,13 +118,12 @@ void main() {
     matching: find.text(text),
   );
 
-  testWidgets('MCP 与通用、翻译、截图平级，截图页不包含 MCP 内容', (tester) async {
-    await open(tester, section: '截图');
+  testWidgets('MCP 是侧边栏的一级子页，保存与导出子页不包含 MCP 内容', (tester) async {
+    await open(tester, section: '保存与导出');
     expect(find.text('MCP 接口'), findsNothing);
     expect(find.text('允许 agent 截图'), findsNothing);
 
-    await tester.tap(find.text('MCP'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, 'MCP');
     expect(find.text('MCP 接口'), findsOneWidget);
     expect(find.text('接入平台'), findsOneWidget);
     expect(find.text('截图目录'), findsNothing);

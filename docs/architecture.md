@@ -67,7 +67,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 - `ServiceConfig` 保存服务类型、名称、Base URL、模型、独立提示词及语义对照选项；凭据独立传给 Swift，按配置 ID 存入用户 Keychain。
 - 打开设置仅查询 Keychain 凭据存在状态，禁止查询触发授权 UI。保存普通配置不读取密钥；有凭据变更时 Swift 才读取对应账户的回滚快照。凭据、登录项与快捷键配置成功后才保存普通偏好；同一服务 ID 不可更换协议。
 - 默认服务支持非官方 Google、Google Cloud v2、百度通用翻译、OpenAI-compatible Chat Completions、DeepSeek、Anthropic Messages 与 Apple 系统翻译。协议、百度签名、SSE 解析均由 Dart 实现。各模式的提示词与思考开关在 `AppSettings.prompts`、`AppSettings.thinking`（偏好 `PreferenceKeys.prompts`、`PreferenceKeys.thinking`），全部模型服务共用，缺省提示词为 `defaultPrompts`、思考缺省关闭；`ApiTranslationProvider` 由构造参数接收本模式的 `prompt` 与 `thinking`。DeepSeek 类型及官方域名按开关发送 `thinking.type=enabled/disabled`，Anthropic 开启时发送 `thinking`（`budget_tokens` 为 `NetworkLimits.anthropicThinkingBudget`，最大输出不大于预算时连接前报错），OpenAI 官方与其他兼容端点不发送思考参数；段落模式另向 DeepSeek 发送 `response_format.type=json_object`。
-- Apple 系统翻译（`ServiceConfig.isSystem`）无端点、无凭据。`AppleTranslationProvider` 把每个分片的非空段落一次交给 `SystemTranslationService`，以下标对应原段并由 `pairParagraph` 套回原文分隔；Swift 按语言对创建只用已安装语言包的无界面 `TranslationSession`，单篇翻译传高保真策略、实时翻译传低延迟策略（macOS 26.4 以下不传）。取消按请求 ID 停止原生会话；语言包未安装与语言对不支持为服务级失败，原文语言未知为单段失败。测试连接只查询主次语言双向的安装状态。
+- Apple 系统翻译为内置服务（`ServiceConfig.systemId`），无端点、无凭据，不进入服务列表。`AppleTranslationProvider` 把每个分片的非空段落一次交给 `SystemTranslationService`，以下标对应原段并由 `pairParagraph` 套回原文分隔；Swift 按语言对创建只用已安装语言包的无界面 `TranslationSession`，单篇翻译传高保真策略、实时翻译传低延迟策略（macOS 26.4 以下不传）。取消按请求 ID 停止原生会话；语言包未安装与语言对不支持为服务级失败，原文语言未知为单段失败。设置窗口打开通用页时经 `checkSystemTranslation` 查询主次语言双向的安装状态。
 - 翻译请求共用应用级 `translationHttpClient`（`lib/src/translation/translation_http.dart`，连接超时 `NetworkLimits.connectionTimeout`、空闲保持 `NetworkLimits.idleTimeout`），同一服务的连续请求复用连接；取消只中止本次请求并停止读取响应，不关闭该客户端；请求不跟随重定向，失败信息不回显响应正文或密钥，也不自动切换服务。
 - 模型段落对照一次接收全文上下文：本地按非空行分段并给出连续编号，模型仅返回各编号与完整译文。编号数量、顺序、整数类型和非空译文均需通过校验，再与本地原文配对；不使用模型回传的原文，不接受整篇高亮兜底。损坏 JSON、流中断和长度截断不算成功。
 - 卡片按 `SelectionSession.definition` 与 `sourceIsTarget`（翻译模式下识别语言等于输出语言）在词典、同语言单栏与普通双栏三种布局间选择；正文区填充主题 `cardTheme.color` 阅读底色，不随玻璃透明度变化。
@@ -150,7 +150,7 @@ TranslationProgress 只保存已完成分片、配对和上一片双尾；Select
 
 ### 设置自动保存
 
-设置页对离散选择立即提交，对连续透明度调整在结束时提交。服务编辑器只在确认完整有效表单后提交配置与凭据。设置页保留当前草稿及编辑序号，通过现有主引擎版本事务串行保存；请求期间的后续编辑在上一事务完成后继续提交，旧回包和旧加载快照不覆盖最新草稿。失败保留编辑、显示重试，外部版本冲突要求显式重新加载。设置窗口使用正文之外的固定顶部导航、外置字段标题和共享连续圆角，控件材料不延伸到空白行。
+设置页对离散选择立即提交，对连续透明度调整在结束时提交。服务编辑器只在确认完整有效表单后提交配置与凭据。设置页保留当前草稿及编辑序号，通过现有主引擎版本事务串行保存；请求期间的后续编辑在上一事务完成后继续提交，旧回包和旧加载快照不覆盖最新草稿。失败保留编辑、显示重试，外部版本冲突要求显式重新加载。设置窗口左侧为正文之外的固定两级侧边栏（`NativeGlassSidebar`），右侧显示所选子页及其标题；使用外置字段标题和共享连续圆角，控件材料不延伸到空白行。
 
 正常保存不显示进度或成功文字，不改变页面高度。截图工具栏的功能登记在 `ScreenshotActions.composable`（各项声明能否作为父级），默认结构为“截图”下挂“录制”“滚动长截图”，其余为一级；用户可在设置中排序、隐藏、绑定快捷键并拼成最多两级的父子结构。顺序、父子关系、显隐与快捷键由 `ScreenshotToolbarPreferences` 校验完整排列、冲突和保留组合，随普通偏好事务提交；Swift 只广播工具配置，截图引擎保留图像、选区和标注。非激活截图面板在原生会话按键路由匹配已保存组合，消费命中事件并派发携带captureId的语义动作；方向键（不含 ⌘/⌃）同样由原生消费，经 `nudgeScreenshotCrop` 携带方向与 ⇧/⌥ 状态交给截图引擎微调选区；文字输入状态通知也绑定captureId。按钮与键盘共用动作映射，隐藏只影响按钮展示；上下文动作保持固定位置且不响应自定义快捷键。光标工具优先命中文字，再处理截图区域；两者共用八点、边线与内部移动命中规则，拖动只更新当前对象。
 

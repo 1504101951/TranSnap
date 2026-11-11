@@ -6,6 +6,8 @@ import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 
+import 'support/settings_pages.dart';
+
 /// 核验广播到真实设置页面的主题/材料更新与草稿保留，不测方法被调用次数。
 void main() {
   testWidgets('透明度两端经过表单校验后成功保存并重新加载', (tester) async {
@@ -15,6 +17,9 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var saved = <String, Object?>{'revision': 0};
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -48,7 +53,11 @@ void main() {
       // 成功仅体现为持久化结果，不显示成功/进行中反馈或改变布局。
       expect(find.text('已自动保存'), findsNothing);
       expect(find.text('正在自动保存…'), findsNothing);
-      await tester.scrollUntilVisible(slider, -200);
+      await tester.scrollUntilVisible(
+        slider,
+        -200,
+        scrollable: settingsContentScrollable(),
+      );
       await tester.pumpAndSettle();
       expect(
         find.text('玻璃透明度 ${(transparency * 100).round()}%'),
@@ -64,6 +73,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }

@@ -12,6 +12,9 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 import 'package:translate_app/src/settings/glossary_editor.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
+
+import 'support/settings_pages.dart';
+
 import 'package:translate_app/src/translation/glossary.dart';
 import 'package:translate_app/src/translation/glossary_file.dart';
 
@@ -157,6 +160,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -195,8 +201,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     await tester.ensureVisible(find.text('管理术语（0）'));
     await tester.tap(find.text('管理术语（0）'));
     await tester.pumpAndSettle();
@@ -229,6 +234,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -266,8 +274,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     await tester.ensureVisible(find.text('管理术语（0）'));
     await tester.tap(find.text('管理术语（0）'));
     await tester.pumpAndSettle();
@@ -288,7 +295,7 @@ void main() {
     expect(find.text('暂无术语'), findsOneWidget);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, 1200));
+    await tester.drag(settingsContentList(), const Offset(0, 1200));
     await tester.pumpAndSettle();
     final primary = find.descendant(
       of: find.byWidgetPredicate(
@@ -325,6 +332,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method != MethodNames.saveTextFile) return null;
       final arguments = Map<String, String>.from(call.arguments as Map);
       final file = File('${directory.path}/${arguments['suggestedName']}');

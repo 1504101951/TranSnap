@@ -10,6 +10,8 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 
+import 'support/settings_pages.dart';
+
 /// 无参数；验证真实编辑得到的持久化状态、并发边界及本地校验失败后的修正。
 void main() {
   testWidgets('保存期间继续修改时，旧回包不覆盖新选择', (tester) async {
@@ -21,6 +23,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -76,6 +81,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -91,8 +99,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     final primary = find.descendant(
       of: find.byWidgetPredicate(
         (w) => w is NativeGlassDropdown<String> && w.label == '主要语言',
@@ -103,7 +110,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'English'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('重试自动保存'), 200);
+    await tester.scrollUntilVisible(
+      find.text('重试自动保存'),
+      200,
+      scrollable: settingsContentScrollable(),
+    );
     await tester.tap(find.text('重试自动保存'));
     await tester.pumpAndSettle();
     expect(find.text('主要语言和次要语言必须不同。'), findsOneWidget);
@@ -114,7 +125,7 @@ void main() {
       ),
       matching: find.byType(TextButton),
     );
-    await tester.drag(find.byType(ListView), const Offset(0, 1200));
+    await tester.drag(settingsContentList(), const Offset(0, 1200));
     await tester.pumpAndSettle();
     await tester.ensureVisible(secondary);
     await tester.pumpAndSettle();
@@ -135,6 +146,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         if (delayStatus) {
           delayStatus = false;

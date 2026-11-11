@@ -44,8 +44,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 self.channel = started.channel
                 // makeWindow 建出普通窗口；设置窗关闭后保留引擎以便快速重开。
                 let window = WindowEngine.makeWindow(
-                    flutter: started.flutter, title: "TranslateApp 设置", size: NSSize(width: 560, height: 720),
-                    minSize: NSSize(width: 520, height: 500), delegate: self)
+                    flutter: started.flutter, title: "TranslateApp 设置", size: NSSize(width: 760, height: 640),
+                    minSize: NSSize(width: 680, height: 480), delegate: self)
                 self.window = window
                 // present 激活并前置已经就绪的设置窗口。
                 WindowEngine.present(window)

@@ -10,9 +10,12 @@ import 'package:translate_app/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translate_app/src/settings/service_config.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 import 'package:translate_app/src/settings/sticker_upload_dialog.dart';
 import 'package:flutter/gestures.dart';
+
+import 'support/settings_pages.dart';
 
 /// 无参数；验证真实表单在菜单刷新时保留草稿，并阻止过期设置覆盖。
 void main() {
@@ -24,6 +27,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -50,8 +56,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '快捷键');
     await tester.tap(
       find.descendant(
         of: find.byWidgetPredicate(
@@ -70,22 +75,28 @@ void main() {
     );
     await tester.pumpAndSettle();
     // 草稿仍保留中文和开启的仅快捷键开关，不用检查通道调用次数代替用户结果。
-    expect(find.text('简体中文'), findsOneWidget);
     expect(
       tester
           .widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch).first)
           .value,
       isTrue,
     );
-    await tester.scrollUntilVisible(find.text('重新加载设置'), 300);
+    await openSettingsPage(tester, '语言与服务');
+    expect(find.text('简体中文'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('重新加载设置'),
+      300,
+      scrollable: settingsContentScrollable(),
+    );
     await tester.pumpAndSettle();
     expect(find.text('保存设置'), findsNothing);
     expect(find.text('重试自动保存'), findsNothing);
     await tester.tap(find.text('重新加载设置'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, 1800));
+    await tester.drag(settingsContentList(), const Offset(0, 1800));
     await tester.pumpAndSettle();
     expect(find.text('日本語'), findsOneWidget);
+    await openSettingsPage(tester, '快捷键');
     expect(
       tester
           .widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch).first)
@@ -100,6 +111,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -116,10 +130,13 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
-    // 分段导航后热键更靠下；先滚入视口再录制，避免点到不可命中区域。
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('全局翻译快捷键')), 300);
+    await openSettingsPage(tester, '快捷键');
+    // 先滚入视口再录制，避免点到不可命中区域。
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('全局翻译快捷键')),
+      300,
+      scrollable: settingsContentScrollable(),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('全局翻译快捷键')));
     await tester.pumpAndSettle();
@@ -136,6 +153,9 @@ void main() {
     var state = <String, Object?>{'revision': 0};
     var credentialIds = <String>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -169,8 +189,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '服务列表');
     await tester.tap(find.text('添加服务'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('测试连接'));
@@ -184,6 +203,7 @@ void main() {
     await tester.tap(find.text('确定'));
     await tester.pumpAndSettle();
     expect(find.text('百度翻译'), findsWidgets);
+    await openSettingsPage(tester, '语言与服务');
     final selector = find.descendant(
       of: find.byWidgetPredicate(
         (w) => w is NativeGlassDropdown<String> && w.label == '默认翻译服务',
@@ -194,7 +214,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, '百度翻译'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('仅使用快捷键'), 250);
+    await openSettingsPage(tester, '快捷键');
     await tester.tap(
       find.descendant(
         of: find.byWidgetPredicate(
@@ -207,9 +227,7 @@ void main() {
     expect(state[PreferenceKeys.defaultServiceId], credentialIds.single);
     expect(state[PreferenceKeys.automatic], false);
     expect(find.text('已自动保存'), findsNothing);
-    // 保存后视口在底部；向上拖回服务列表再删，避免 scrollUntilVisible 在边界抛错。
-    await tester.drag(find.byType(ListView), const Offset(0, 1200));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '服务列表');
     await tester.ensureVisible(find.byTooltip('删除 百度翻译'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('删除 百度翻译'), warnIfMissed: false);
@@ -218,11 +236,16 @@ void main() {
     expect(state[PreferenceKeys.defaultServiceId], 'unofficial-google');
   });
 
-  testWidgets('设置分段：截图与翻译控件互斥，切换保留草稿', (tester) async {
+  testWidgets('侧边栏：点选二级行切换子页并显示标题，一级标签不切换，切换保留未保存草稿', (tester) async {
+    // 边界：「翻译」「截图」是只作标签的一级行，点击后仍停在当前子页；「通用」「MCP」本身是子页；
+    // 标题与侧边栏同名，所以可见文字出现 2 次；快捷键页开启的开关在往返其他子页后仍为开启。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true, 'loginItems': 'enabled'};
       }
@@ -248,24 +271,45 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
 
-    // 默认通用段：登录/排除可见，翻译与截图控件不可见。
-    expect(find.text('通用'), findsOneWidget);
-    expect(find.text('翻译'), findsOneWidget);
-    expect(find.text('截图'), findsOneWidget);
-    expect(find.text('排除应用'), findsOneWidget);
+    // 默认通用子页：侧边栏行与标题各一处；登录与权限可见，其他子页内容不可见。
+    expect(find.text('通用'), findsNWidgets(2));
     expect(find.text('登录时启动'), findsOneWidget);
     expect(find.text('屏幕录制权限'), findsOneWidget);
     expect(find.text('翻译语言'), findsNothing);
     expect(find.text('截图目录'), findsNothing);
+    for (final label in [
+      '通用',
+      '翻译',
+      '语言与服务',
+      '服务列表',
+      '快捷键',
+      '排除应用',
+      '截图',
+      '保存与导出',
+      '录制',
+      '操作',
+      '贴纸',
+      '工具栏',
+      'MCP',
+    ]) {
+      expect(settingsSidebarRow(label), findsOneWidget);
+    }
 
-    await tester.tap(find.text('翻译'));
+    // 一级标签不可点：停留在通用子页。
+    await tester.tap(settingsSidebarRow('翻译'));
     await tester.pumpAndSettle();
-    expect(find.text('翻译语言'), findsOneWidget);
+    await tester.tap(settingsSidebarRow('截图'));
+    await tester.pumpAndSettle();
+    expect(find.text('登录时启动'), findsOneWidget);
+    expect(find.text('翻译'), findsOneWidget);
+    expect(find.text('截图'), findsOneWidget);
+
+    await openSettingsPage(tester, '快捷键');
+    expect(find.text('快捷键'), findsNWidgets(2));
+    expect(find.text('登录时启动'), findsNothing);
     expect(find.text('仅使用快捷键'), findsOneWidget);
     expect(find.byKey(const ValueKey('全局翻译快捷键')), findsOneWidget);
-    expect(find.text('截图目录'), findsNothing);
-    expect(find.text('排除应用'), findsNothing);
-
+    expect(find.text('翻译语言'), findsNothing);
     await tester.tap(
       find.descendant(
         of: find.byWidgetPredicate(
@@ -275,41 +319,32 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
+
+    // 在翻译一级行上点击仍停留在快捷键子页。
+    await tester.tap(settingsSidebarRow('翻译'));
     await tester.pumpAndSettle();
+    expect(find.text('仅使用快捷键'), findsOneWidget);
+
+    await openSettingsPage(tester, '保存与导出');
+    expect(find.text('保存与导出'), findsNWidgets(2));
     expect(find.text('截图目录'), findsOneWidget);
     expect(find.text('/tmp/shots'), findsOneWidget);
-    expect(find.byKey(const ValueKey('区域截图快捷键')), findsOneWidget);
-    expect(find.text('屏幕录制权限'), findsNothing);
-    expect(find.text('翻译语言'), findsNothing);
     expect(find.text('仅使用快捷键'), findsNothing);
-    expect(find.text('排除应用'), findsNothing);
-
     await tester.tap(find.text('选择…'));
     await tester.pumpAndSettle();
     expect(find.text('/tmp/chosen'), findsOneWidget);
 
-    // 配置入口在截图页底部默认收起；展开后仍在当前页，且只包含顶层工具。
-    final section = find.byKey(const ValueKey('screenshot-toolbar-section'));
-    expect(find.text('设置快捷键'), findsNothing);
-    // 截图页高于窗口，列表按需构建；先滚到底部入口再比较两者位置。
-    await tester.scrollUntilVisible(
-      section,
-      150,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(section).dy,
-      greaterThan(tester.getTopLeft(find.byKey(const ValueKey('区域截图快捷键'))).dy),
-    );
-    await tester.tap(find.text('截图工具栏'));
-    await tester.pumpAndSettle();
+    // 录制子页放置三个录制相关开关，不含截图目录。
+    await openSettingsPage(tester, '录制');
+    expect(find.text('实时翻译时同时录制'), findsOneWidget);
+    expect(find.text('截图目录'), findsNothing);
+
+    // 操作子页放置区域截图快捷键。
+    await openSettingsPage(tester, '操作');
+    expect(find.byKey(const ValueKey('区域截图快捷键')), findsOneWidget);
+
+    // 工具栏子页直接展示编辑器，无需展开，也不弹出对话框，且只含顶层工具。
+    await openSettingsPage(tester, '工具栏');
     expect(find.byType(Dialog), findsNothing);
     expect(
       find.byKey(const ValueKey('toolbar-row-screenshot-tool-cursor')),
@@ -317,26 +352,29 @@ void main() {
     );
     expect(find.text('增大字号'), findsNothing);
     expect(find.text('在 Finder 中显示'), findsNothing);
-    await tester.tap(find.text('截图工具栏'));
-    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
-    expect(find.text('翻译语言'), findsOneWidget);
+    await openSettingsPage(tester, '快捷键');
     expect(
       tester
           .widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch).first)
           .value,
       isTrue,
     );
+    await openSettingsPage(tester, '语言与服务');
+    expect(find.text('翻译语言'), findsOneWidget);
+    expect(find.text('简体中文'), findsOneWidget);
   });
-  testWidgets('截图页保存GIF帧率与最大宽度，留空恢复原宽且非法值不保存', (tester) async {
+
+  testWidgets('截图子页保存GIF帧率与最大宽度，留空恢复原宽且非法值不保存', (tester) async {
     // 600是有效压缩上限；0非法、空值是不限制，保存后的重新加载必须保留用户选择。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var settings = <String, Object?>{'revision': 0};
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -353,8 +391,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '保存与导出');
     expect(find.text('默认截图存放路径'), findsOneWidget);
     expect(find.text('每次询问'), findsNothing);
     expect(find.text('10 fps'), findsOneWidget);
@@ -363,7 +400,7 @@ void main() {
     await tester.enterText(width, '600');
     await tester.pumpAndSettle();
     expect(settings[PreferenceKeys.gifMaximumWidth], 600);
-    // 输入框滚动后帧率下拉可能位于固定导航下方，点击前先滚入可见区域。
+    // 输入框滚动后帧率下拉可能离开视口，点击前先滚入可见区域。
     await tester.ensureVisible(find.text('10 fps'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 fps'));
@@ -378,24 +415,14 @@ void main() {
     await tester.scrollUntilVisible(
       find.textContaining('最大宽度须为正整数'),
       150,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+      scrollable: settingsContentScrollable(),
     );
     expect(find.textContaining('最大宽度须为正整数'), findsOneWidget);
     // 滚到底部提示后输入框可能已移出按需构建范围，反向滚回。
     await tester.scrollUntilVisible(
       width,
       -150,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+      scrollable: settingsContentScrollable(),
     );
     await tester.enterText(width, '');
     await tester.pumpAndSettle();
@@ -403,8 +430,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '保存与导出');
     expect(find.text('15 fps'), findsOneWidget);
     expect(tester.widget<TextField>(width).controller!.text, isEmpty);
     expect(tester.takeException(), isNull);
@@ -426,6 +452,9 @@ void main() {
     final saved = <String>[];
     final deleted = <String>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       switch (call.method) {
         case MethodNames.systemStatus:
           return {'accessibility': true};
@@ -454,8 +483,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '贴纸');
     expect(find.text('还没有贴纸'), findsOneWidget);
     await tester.ensureVisible(find.text('添加图片…'));
     await tester.tap(find.text('添加图片…'));
@@ -503,6 +531,9 @@ void main() {
       PreferenceKeys.secondaryLanguage: 'en',
     };
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -518,8 +549,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译').first);
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     await tester.tap(find.text('输入翻译').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('English').first);
@@ -543,6 +573,9 @@ void main() {
       PreferenceKeys.prompts[TextMode.polish]!: '自定义润色',
     };
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -562,8 +595,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     await tester.ensureVisible(find.text('编辑提示词…'));
     await tester.tap(find.text('编辑提示词…'));
     await tester.pumpAndSettle();
@@ -612,13 +644,16 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图页确认动作：下拉只提供复制图片与复制并保存，选择后自动保存（#111）', (tester) async {
+  testWidgets('截图子页确认动作：下拉只提供复制图片与复制并保存，选择后自动保存（#111）', (tester) async {
     // 边界：缺省为复制图片；下拉恰好两项，选「复制并保存」后提交的偏好值为 copyAndSave。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var settings = <String, Object?>{'revision': 0};
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -634,14 +669,8 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
-    final scrollable = find
-        .descendant(
-          of: find.byType(ListView),
-          matching: find.byType(Scrollable),
-        )
-        .first;
+    await openSettingsPage(tester, '操作');
+    final scrollable = settingsContentScrollable();
     await tester.scrollUntilVisible(
       find.text('复制图片'),
       150,
@@ -667,6 +696,9 @@ void main() {
       PreferenceKeys.primaryLanguage: 'zh-CN',
     };
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -684,8 +716,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('翻译'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '语言与服务');
     await tester.tap(find.text('管理术语（0）'));
     await tester.pumpAndSettle();
     expect(find.text('暂无术语'), findsOneWidget);
@@ -744,13 +775,16 @@ void main() {
     expect(find.text('管理术语（1）'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图页「长截图 → 滚动方式」默认手动滚动，选自动滚动后自动保存到偏好（#112）', (tester) async {
+  testWidgets('截图子页「长截图 → 滚动方式」默认手动滚动，选自动滚动后自动保存到偏好（#112）', (tester) async {
     // 边界：偏好缺省时显示「手动滚动」；选「自动滚动」后偏好值为 automatic。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var state = <String, Object?>{'revision': 0};
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -768,17 +802,11 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '操作');
     await tester.scrollUntilVisible(
       find.text('手动滚动'),
       150,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+      scrollable: settingsContentScrollable(),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('手动滚动'));
@@ -788,13 +816,16 @@ void main() {
     expect(state[PreferenceKeys.scrollCaptureMode], 'automatic');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图页「截图包含鼠标指针」「录制时显示鼠标点击」默认关闭，打开后自动保存到偏好', (tester) async {
+  testWidgets('截图子页「截图包含鼠标指针」「录制时显示鼠标点击」默认关闭，打开后自动保存到偏好', (tester) async {
     // 边界：偏好缺省为关闭；开关只在按钮上响应，打开后偏好值为 true（#105、#110）。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var state = <String, Object?>{'revision': 0};
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.checkSystemTranslation) {
+        return languagePackInstalledStatus;
+      }
       if (call.method == MethodNames.systemStatus) {
         return {'accessibility': true};
       }
@@ -812,8 +843,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('截图'));
-    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '录制');
     for (final (title, key) in [
       ('截图包含鼠标指针', PreferenceKeys.screenshotIncludesCursor),
       ('录制时显示鼠标点击', PreferenceKeys.recordingShowsClicks),
@@ -824,12 +854,7 @@ void main() {
       await tester.scrollUntilVisible(
         tile,
         200,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView),
-              matching: find.byType(Scrollable),
-            )
-            .first,
+        scrollable: settingsContentScrollable(),
       );
       expect(tester.widget<NativeGlassSwitchTile>(tile).value, isFalse);
       await tester.tap(
@@ -838,5 +863,125 @@ void main() {
       await tester.pumpAndSettle();
       expect(state[key], isTrue);
     }
+  });
+
+  testWidgets('默认翻译服务下拉固定先列谷歌翻译与 Apple 系统翻译，选中 Apple 保存内置 ID，服务列表不出现 Apple', (
+    tester,
+  ) async {
+    // 边界：已配置一个 OpenAI 服务；下拉恰为谷歌、Apple、OpenAI 三项且内置项在前；
+    // 选 Apple 后偏好为 apple-system；服务列表只含已配置服务，不含 Apple。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var state = <String, Object?>{
+      'revision': 0,
+      PreferenceKeys.services: [
+        const ServiceConfig(
+          id: 'saved',
+          kind: 'openai',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com',
+          model: 'gpt-test',
+        ).toMap(),
+      ],
+    };
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true};
+        case MethodNames.getSettings:
+          return {
+            ...state,
+            MethodNames.credentialIds: <String>['saved'],
+          };
+        case MethodNames.saveSettings:
+          final draft = Map<String, Object?>.from(call.arguments as Map)
+            ..remove('credentials');
+          state = {...draft, 'revision': (state['revision'] as int) + 1};
+          return {
+            ...state,
+            MethodNames.credentialIds: <String>['saved'],
+          };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+
+    await openSettingsPage(tester, '语言与服务');
+    final selector = find.descendant(
+      of: find.byWidgetPredicate(
+        (w) => w is NativeGlassDropdown<String> && w.label == '默认翻译服务',
+      ),
+      matching: find.byType(TextButton),
+    );
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+    final items = find.byType(MenuItemButton);
+    expect(items, findsNWidgets(3));
+    double top(String label) =>
+        tester.getTopLeft(find.widgetWithText(MenuItemButton, label)).dy;
+    expect(top('谷歌翻译'), lessThan(top('Apple 系统翻译')));
+    expect(top('Apple 系统翻译'), lessThan(top('OpenAI')));
+    expect(find.widgetWithText(MenuItemButton, '谷歌翻译'), findsOneWidget);
+    expect(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'), findsOneWidget);
+    expect(find.widgetWithText(MenuItemButton, 'OpenAI'), findsOneWidget);
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'));
+    await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.defaultServiceId], ServiceConfig.systemId);
+
+    await openSettingsPage(tester, '服务列表');
+    expect(find.byTooltip('编辑 OpenAI'), findsOneWidget);
+    expect(find.textContaining('Apple'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('通用子页显示语言包状态：查询中为检查中，成功显示说明，失败显示异常说明', (tester) async {
+    // 边界：通道未返回前显示「正在检查语言包…」；返回字符串时原样显示；
+    // 抛 PlatformException 时显示其 message，不显示检查中。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var reply = Completer<String>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return reply.future;
+        case MethodNames.systemStatus:
+          return {'accessibility': true};
+        case MethodNames.getSettings:
+          return {'revision': 0};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('正在检查语言包…'), findsOneWidget);
+    expect(find.text('在打开的页面点“翻译语言…”下载'), findsOneWidget);
+
+    reply.complete('语言包已安装：English → 简体中文');
+    await tester.pumpAndSettle();
+    expect(find.text('语言包已安装：English → 简体中文'), findsOneWidget);
+    expect(find.text('正在检查语言包…'), findsNothing);
+
+    // 离开再回到通用子页会重新查询；这次以异常返回。
+    reply = Completer<String>();
+    await openSettingsPage(tester, '快捷键');
+    await openSettingsPage(tester, '通用');
+    expect(find.text('正在检查语言包…'), findsOneWidget);
+    reply.completeError(
+      PlatformException(
+        code: ErrorCodes.testFailed,
+        message: '日语 → 简体中文 语言包未安装',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('日语 → 简体中文 语言包未安装'), findsOneWidget);
+    expect(find.text('正在检查语言包…'), findsNothing);
   });
 }

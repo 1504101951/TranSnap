@@ -23,6 +23,14 @@ abstract final class GlassMetrics {
   static const menuMaxWidth = 320.0;
   static const appearanceSegmentWidth = 76.0;
   static const navigationWidth = 72.0;
+  // 设置窗口左侧两级导航（#67）：宽度、内边距、一级与二级行高、二级缩进。
+  static const sidebarWidth = 200.0;
+  static const sidebarPadding = 12.0;
+  static const sidebarSectionHeight = 32.0;
+  static const sidebarItemHeight = 28.0;
+  static const sidebarItemIndent = 28.0;
+  // 设置子页标题字号。
+  static const pageTitleFont = 20.0;
   static const switchWidth = 36.0;
   static const switchHeight = 20.0;
   static const switchThumb = 16.0;
