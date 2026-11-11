@@ -187,9 +187,6 @@ Map<String, int> stepNumbers(Iterable<EditAnnotation> annotations) {
 
 /// 截图编辑文档：持有源图、裁剪框与平铺标注，并合成导出位图。
 class EditDocument extends ChangeNotifier {
-  /// 拖动预览标注共用的临时 id，提交时由文档分配正式 id。
-  static const _previewAnnotationId = 'preview';
-
   /// 源图；编辑画面、马赛克与取色预览、导出合成共用同一张图，由文档负责释放（#68 批次 A）。
   ui.Image? _source;
   int _width = 0;
@@ -518,16 +515,15 @@ class EditDocument extends ChangeNotifier {
         (a.bottom - b.bottom).abs() < 0.5;
   }
 
-  /// 已提交马赛克标注的栅格图，随标注保存。
-  /// 已知限制：删除的标注要等垃圾回收才释放图片；单次编辑出现明显内存增长时改为文档持有并显式释放。
-  static final Expando<ui.Image> _mosaicTiles = Expando();
+  /// 整张源图按马赛克网格栅格化后的图片，随源图保存；预览与已提交标注都从中裁剪绘制（#68）。
+  /// 已知限制：源图释放后要等垃圾回收才释放该图片；连续截图出现明显内存增长时改为文档持有并显式释放。
+  static final Expando<ui.Image> _mosaicImages = Expando();
 
-  /// canvas为源图坐标目标，source 为源图，annotation 为所属标注；clip为需要遮蔽的源图轨迹，bounds 为其外接矩形；
-  /// 按固定12px网格采样，区域外像素不变，无返回值。已提交标注只栅格化一次，重绘与导出直接绘制缓存图（#68）。
+  /// canvas为源图坐标目标，source 为源图；clip为需要遮蔽的源图轨迹，bounds 为其外接矩形；
+  /// 按固定12px网格采样，区域外像素不变，无返回值。每张源图只栅格化一次，拖动预览、重绘与导出直接裁剪缓存图（#68）。
   static void _paintMosaic(
     Canvas canvas,
     ui.Image source,
-    EditAnnotation annotation,
     Path clip,
     Rect bounds,
   ) {
@@ -547,23 +543,19 @@ class EditDocument extends ChangeNotifier {
       math.min((area.right / block).ceil() * block, sourceRect.right),
       math.min((area.bottom / block).ceil() * block, sourceRect.bottom),
     );
-    // 拖动预览每帧都是新标注，不缓存，绘制后释放。
-    final preview = annotation.id == _previewAnnotationId;
-    // _rasterMosaic 栅格化该区域。
-    final tiles = preview
-        ? _rasterMosaic(source, region, block)
-        : _mosaicTiles[annotation] ??= _rasterMosaic(source, region, block);
+    // _rasterMosaic 栅格化整张源图；网格从源图原点对齐、右下边缘截到源图，任一区域的块与按该区域单独栅格化相同。
+    final tiles = _mosaicImages[source] ??= _rasterMosaic(source, sourceRect, block);
     canvas.save();
     canvas.clipPath(clip);
-    canvas.drawImage(
+    canvas.drawImageRect(
       tiles,
-      region.topLeft,
+      region,
+      region,
       Paint()
         ..filterQuality = FilterQuality.none
         ..isAntiAlias = false,
     );
     canvas.restore();
-    if (preview) tiles.dispose();
   }
 
   /// source 为源图，region 为网格对齐的源图区域，block 为块边长；每块取块中心像素铺满整块，返回与 region 等大的图片。
@@ -685,7 +677,6 @@ class EditDocument extends ChangeNotifier {
           _paintMosaic(
             canvas,
             sourceImage,
-            annotation,
             Path()..addRect(annotation.bounds),
             annotation.bounds,
           );
@@ -742,7 +733,7 @@ class EditDocument extends ChangeNotifier {
               b + normal,
             ], true);
           }
-          _paintMosaic(canvas, sourceImage, annotation, clip, clip.getBounds());
+          _paintMosaic(canvas, sourceImage, clip, clip.getBounds());
           return;
         }
         // 荧光笔整条轨迹一次绘制半透明颜色，同一笔内重叠处不叠加加深（#107）。

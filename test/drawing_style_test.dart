@@ -214,6 +214,37 @@ void main() {
     expect(await rgba(await doc.renderPng()), output);
   });
 
+  test('源图边长不是12的倍数时，右下边缘的不完整块取该块自身中心', () async {
+    // 作用：马赛克按整张源图栅格化一次后裁剪绘制（#68），边缘块必须与按区域栅格化时相同。
+    // 边界：50px 源图最后一块只有 48–49 两列，块中心为第 49 列；48 是整块边界，第 47 列仍属前一整块（中心第 42 列）。
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    for (var x = 0; x < 50; x++) {
+      canvas.drawRect(
+        Rect.fromLTWH(x.toDouble(), 0, 1, 50),
+        Paint()..color = Color.fromARGB(255, x * 5, 30, 200),
+      );
+    }
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(50, 50);
+    picture.dispose();
+    final doc = EditDocument()..loadCapture(image);
+    doc.addAnnotation(
+      EditAnnotation(
+        id: '',
+        kind: AnnotationKind.mask,
+        bounds: const Rect.fromLTWH(40, 40, 10, 10),
+        shapeMode: ShapeMode.mosaic,
+      ),
+    );
+    final output = await rgba(await doc.renderPng());
+    List<int> pixel(int x, int y) =>
+        output.sublist((y * 50 + x) * 4, (y * 50 + x) * 4 + 4);
+    expect(pixel(48, 48), [49 * 5, 30, 200, 255]);
+    expect(pixel(49, 49), [49 * 5, 30, 200, 255]);
+    expect(pixel(47, 47), [42 * 5, 30, 200, 255]);
+  });
+
   test('马赛克缓存跟随源图：同一区域换一张源图后按新图采样', () async {
     // 作用：马赛克按区域栅格化后缓存（#68），换图后不能沿用上一张图的缓存。
     // 边界：两张源图的马赛克区域完全相同，只有颜色不同；第二张图的输出必须等于第二张图块中心的颜色。
@@ -708,4 +739,3 @@ void main() {
     expect(restored.styleFor(ScreenshotTool.text).gradient, isNull);
   });
 }
-
