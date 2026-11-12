@@ -2,7 +2,7 @@
 
 Dart业务逻辑和Flutter界面行为回归测试。
 
-1. [api_translation_provider_test.dart](api_translation_provider_test.dart)：验证官方翻译服务和模型适配的请求与响应契约、模型服务未填 API Key 时不带认证头，术语表命中与未命中时的请求内容，以及按思考开关的请求体：DeepSeek 发送 enabled 或 disabled、Anthropic 发送 2048 预算且最大输出不大于预算时连接前失败、OpenAI 官方不发送思考参数，以及服务菜单先列谷歌翻译与Apple系统翻译、Apple对应本机Provider且无润色Provider。
+1. [api_translation_provider_test.dart](api_translation_provider_test.dart)：验证官方翻译服务和模型适配的请求与响应契约、模型服务未填 API Key 时不带认证头，术语表命中与未命中时的请求内容，以及按思考开关的请求体：DeepSeek 发送 enabled 或 disabled、Anthropic 发送 2048 预算且最大输出不大于预算时连接前失败、OpenAI 官方不发送思考参数，以及服务菜单先列谷歌翻译与Apple系统翻译、Apple对应本机Provider且无润色Provider，以及预热地址跟随默认服务、Apple不预热。
 2. [flutter_test_config.dart](flutter_test_config.dart)：统一初始化Flutter测试所需的运行配置。
 3. [glass_appearance_test.dart](glass_appearance_test.dart)：验证玻璃主题和跨窗口外观设置。
 4. [history_app_test.dart](history_app_test.dart)：验证历史筛选、单条删除与清空、期限确认及刷新/分页失败后的重试。
@@ -53,3 +53,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 48. [date_text_test.dart](date_text_test.dart)：验证历史与生词本日期文本的补零。
 
 49. [glossary_import_test.dart](glossary_import_test.dart)：验证术语文件预览、重复处理、整批拒绝、导出、串行保存与失败后取消不污染设置。
+50. [translation_http_test.dart](translation_http_test.dart)：验证连接预热发送不含原文的 HEAD、后续翻译请求复用同一条连接，以及预热失败不抛出。

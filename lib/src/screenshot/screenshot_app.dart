@@ -1270,6 +1270,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _message = null;
       _failed = false;
     });
+    // 识别期间请主引擎预热翻译连接，握手与本地识别并行；不等待结果（#68）。
+    unawaited(widget.channel.invokeMethod<void>(MethodNames.prewarmTranslation));
     try {
       // 识别图只含裁剪区域；记下裁剪框左上角，快照坐标据此换算回源图像素。
       final origin = _document.cropRect.topLeft;

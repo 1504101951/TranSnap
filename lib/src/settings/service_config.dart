@@ -11,6 +11,10 @@ class ServiceConfig {
   });
   static const builtinId = 'unofficial-google';
 
+  /// 内置谷歌翻译的接口地址；翻译请求与连接预热共用（#68）。
+  static const builtinEndpoint =
+      'https://translate.googleapis.com/translate_a/single';
+
   /// 内置谷歌翻译在设置页与卡片服务菜单中的名称（#100）。
   static const builtinName = '谷歌翻译';
 

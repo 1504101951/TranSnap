@@ -964,6 +964,32 @@ void main() {
       );
     }
   });
+
+  test('预热地址跟随默认服务：内置谷歌为接口地址，配置型服务为 API 地址，Apple 不预热（#68）', () {
+    // 作用：连接预热只连接默认服务实际请求的主机，换默认服务后预热目标随之切换。
+    // 边界：三类默认服务各取一次；Apple 系统翻译在本机运行没有地址，返回 null。
+    final service = ServiceConfig(
+      id: 'deepseek',
+      kind: 'openai',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+    );
+    AppSettings withDefault(String id) => AppSettings(
+      primaryLanguage: 'zh-CN',
+      defaultServiceId: id,
+      services: [service],
+    );
+    expect(
+      translationOrigin(withDefault(ServiceConfig.builtinId)),
+      Uri.parse(ServiceConfig.builtinEndpoint),
+    );
+    expect(
+      translationOrigin(withDefault('deepseek')),
+      Uri.parse('https://api.deepseek.com'),
+    );
+    expect(translationOrigin(withDefault(ServiceConfig.systemId)), isNull);
+  });
 }
 
 /// 只提供固定凭据的设置平台，供 Provider 选择测试读取密钥；不保存任何设置。

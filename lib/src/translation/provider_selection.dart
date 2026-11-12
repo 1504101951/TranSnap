@@ -14,6 +14,21 @@ BatchTranslationProvider providerForSettings(
   SettingsPlatform platform,
 ) => providerForService(settings, platform, settings.defaultServiceId);
 
+/// settings 为当前配置；返回默认翻译服务需要预热连接的地址（#68）。
+/// 内置谷歌翻译为其接口地址，配置型服务为其 API 地址；Apple 系统翻译在本机运行，返回 null。
+Uri? translationOrigin(AppSettings settings) {
+  final serviceId = settings.defaultServiceId;
+  if (serviceId == ServiceConfig.systemId) return null;
+  if (serviceId == ServiceConfig.builtinId) {
+    return Uri.parse(ServiceConfig.builtinEndpoint);
+  }
+  // 默认服务 id 已由设置校验保证存在于服务列表。
+  final config = settings.services.singleWhere(
+    (service) => service.id == serviceId,
+  );
+  return Uri.parse(config.baseUrl);
+}
+
 /// settings 与 platform 同上；返回输入翻译使用的默认服务 Provider。
 /// 输入翻译只需要替换文本，固定不使用双语段落对照，即使该服务在设置中开启了对照。
 BatchTranslationProvider providerForInput(

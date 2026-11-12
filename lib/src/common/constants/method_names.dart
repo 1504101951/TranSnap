@@ -274,6 +274,9 @@ abstract final class MethodNames {
   /// 截图引擎把段落块交主引擎分块翻译；参数 id 为捕获身份，blocks 为 {text, x, y, width, height} 列表（#138）。
   static const translateScreenshotBlocks = 'translateScreenshotBlocks';
 
+  /// 截图引擎开始识别文字时请求主引擎预热默认翻译服务的连接；无参数（#68）。
+  static const prewarmTranslation = 'prewarmTranslation';
+
   /// 主引擎截图翻译快照，经原生转给截图引擎；参数为 id 加 LiveRegionView.toMap 的字段（#138）。
   static const publishScreenshotTranslation = 'publishScreenshotTranslation';
 

@@ -12,7 +12,7 @@ class UnofficialGoogleProvider implements BatchTranslationProvider {
   /// endpoint 为翻译接口 URL，requestTimeout 为单篇与批量请求共用的整次时限（默认 30 秒，#114）；
   /// 构造可取消的 Google Provider。
   UnofficialGoogleProvider({
-    this.endpoint = 'https://translate.googleapis.com/translate_a/single',
+    this.endpoint = ServiceConfig.builtinEndpoint,
     this.requestTimeout = const Duration(seconds: 30),
   });
 

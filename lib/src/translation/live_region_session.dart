@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +8,7 @@ import '../common/constants/text_limits.dart';
 import '../settings/app_settings.dart';
 import 'language_direction.dart';
 import 'live_block_cache.dart';
+import 'translation_http.dart';
 import 'translation_types.dart';
 
 /// 已批准的实时翻译调度值。
@@ -240,7 +240,6 @@ class LiveRegionSession {
   // 最近一次段落级或临时错误的提示。
   String? _lastError;
   AppSettings? _latestSettings;
-  HttpClient? _client;
   var _firstNonEmpty = true;
 
   /// 最近一次交给 onView 的快照；内容相同的快照不重复发布。
@@ -269,9 +268,8 @@ class LiveRegionSession {
       if (!waiter.isCompleted) waiter.complete();
     }
     _waiters.clear();
-    // 旧批次、连接和缓存全部作废，迟到增量不能写入新代次。
+    // 旧批次和缓存全部作废，迟到增量不能写入新代次；连接属于共享客户端，新会话直接复用（#68）。
     _release();
-    _client = HttpClient();
     _generation = generation;
     _phase = LiveRegionPhase.running;
     _latestSettings = settings;
@@ -642,7 +640,8 @@ class LiveRegionSession {
               detectedLanguage: detected,
               targetLanguage: target,
             ),
-            client: _client!,
+            // translationHttpClient 为应用共享客户端，复用已建立的 TCP/TLS 连接（#68）。
+            client: translationHttpClient,
           )
           .listen(
             (event) => _onEvent(batch, event),
@@ -788,7 +787,8 @@ class LiveRegionSession {
     }
   }
 
-  /// 无参数。会话结束时释放全部工作：停止计时、取消批次、关闭连接并清空缓存。
+  /// 无参数。会话结束时释放全部工作：停止计时、取消批次并清空缓存。
+  /// 取消订阅即由服务中止各自的请求；共享客户端不关闭，空闲连接留给之后的翻译复用（#68）。
   void _release() {
     clock.cancelSchedule();
     for (final batch in _inflight) {
@@ -796,8 +796,6 @@ class LiveRegionSession {
       unawaited(batch.subscription?.cancel());
     }
     _inflight.clear();
-    _client?.close(force: true);
-    _client = null;
     _cache.clear();
   }
 

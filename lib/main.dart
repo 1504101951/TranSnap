@@ -24,6 +24,7 @@ import 'src/settings/settings_app.dart';
 import 'src/settings/settings_controller.dart';
 import 'src/translation/live_region_session.dart';
 import 'src/translation/provider_selection.dart';
+import 'src/translation/translation_http.dart';
 import 'src/common/constants/text_mode.dart';
 
 /// 无参数；启动主引擎，初始化失败时让原生弹出实际错误后再抛出，返回启动完成的 Future（#126）。
@@ -126,6 +127,12 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   // 首次提交设置前使用启动快照；每次读取 settings.current 都会深拷贝全部设置。
   session.serviceChoices = () => serviceChoices(initial);
 
+  // prewarm 按当前默认服务预热共享连接，让握手与本地识别并行；Apple 系统翻译没有地址，不预热（#68）。
+  void prewarm() {
+    final origin = translationOrigin(settings.current);
+    if (origin != null) unawaited(prewarmTranslationConnection(origin));
+  }
+
   // 截图翻译复用实时翻译的段落会话，单独一个实例，与实时区域翻译互不打断（#138）。
   // screenshotCapture 为当前翻译所属的捕获身份；为 null 时不再推送快照。
   // screenshotGeneration 为截图会话代次，每次开始或结束递增，旧代次的迟到事件被会话丢弃。
@@ -194,6 +201,8 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         );
         switch (action) {
           case LiveRegionAction.start:
+            // 开始后首帧识别期间同时完成连接握手。
+            prewarm();
             live.start(settings.current, generation);
           case LiveRegionAction.pause:
             live.pause(generation);
@@ -229,6 +238,9 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         screenshotCapture = null;
         screenshotGeneration += 1;
         screenshotTranslation.end(screenshotGeneration);
+        return null;
+      case MethodNames.prewarmTranslation:
+        prewarm();
         return null;
       case MethodNames.translateScreenshotBlocks:
         final map = Map<Object?, Object?>.from(call.arguments as Map);

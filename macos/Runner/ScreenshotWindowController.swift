@@ -648,6 +648,11 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             result(nil)
+        case AppConstants.prewarmTranslationMethod:
+            // 预热不含原文与截图数据，直接交主引擎（#68）。
+            MacPlatformBridge.Shared.instance?.requestApplication(
+                AppConstants.prewarmTranslationMethod, arguments: nil, result: result
+            )
         case AppConstants.translateScreenshotBlocksMethod:
             guard let id = args["id"] as? String, id == captureId else {
                 result(Self.staleCaptureFailure); return

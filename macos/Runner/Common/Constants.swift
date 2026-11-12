@@ -351,6 +351,8 @@ enum AppConstants {
     static let toggleAutomaticMethod = "toggleAutomatic"
     /// translateScreenshotBlocks 协议值；截图引擎把段落块经原生交主引擎分块翻译（#138），与Dart常量同步。
     static let translateScreenshotBlocksMethod = "translateScreenshotBlocks"
+    /// prewarmTranslation 协议值；截图开始识别文字时请求主引擎预热翻译连接（#68），与Dart常量同步。
+    static let prewarmTranslationMethod = "prewarmTranslation"
     /// publishScreenshotTranslation 协议值；主引擎截图翻译快照经原生转给截图引擎（#138），与Dart常量同步。
     static let publishScreenshotTranslationMethod = "publishScreenshotTranslation"
     /// translate_failed 协议值；与Dart常量同步。
