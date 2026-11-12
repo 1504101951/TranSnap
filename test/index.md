@@ -17,40 +17,39 @@ Dart业务逻辑和Flutter界面行为回归测试。
 13. [screenshot_app_test.dart](screenshot_app_test.dart)：验证无屏幕权限的导入图片编辑、OCR/翻译及屏幕采集禁用，截图标注、导出与识别结果中的二维码、条码及链接打开行为，以及美化行背景调色盘、「无背景」与下拉可用状态，贴纸下拉框的 Emoji 段放置、两段「管理贴纸…」与下拉框高度不变，贴纸经美化子级放置、导出与 Delete 删除。
 14. [screenshot_controls_test.dart](screenshot_controls_test.dart)：验证截图工具快捷键、选择、拉伸、方向键微调、固定比例及确认行为。
 15. [screenshot_toolbar_preferences_test.dart](screenshot_toolbar_preferences_test.dart)：验证工具排序、显隐、快捷键录制和配置校验。
-16. [screenshot_translation_test.dart](screenshot_translation_test.dart)：验证截图文本翻译、静默分片取消、迟到识别和捕获失效不写历史、新请求独立完成。
-17. [selection_history_test.dart](selection_history_test.dart)：验证选区翻译成功、失败和取消时的历史记录边界，以及输入翻译不显示卡片、替换成功结束会话与未替换原因交给失败气泡。
-18. [selection_session_test.dart](selection_session_test.dart)：验证选区翻译生命周期、取消和状态变化，以及卡片服务菜单只影响本卡片、非模型服务的润色失败、输入翻译使用独立语言方向。
-19. [settings_app_test.dart](settings_app_test.dart)：验证设置页面侧边栏切换子页与保留草稿、默认翻译服务含Apple系统翻译、通用页语言包状态、服务显示、术语表增删改、提示词弹窗的四个字段、恢复默认与空值校验、思考开关随提示词保存、翻译语言分段只改输入翻译一组、贴纸添加与删除、确认截图动作、长截图滚动方式及配置更新。
-20. [settings_autosave_test.dart](settings_autosave_test.dart)：验证后台自动保存的串行、冲突和失败处理。
-21. [settings_spec_test.dart](settings_spec_test.dart)：验证设置界面是否符合数值、密度与交互规格，含侧边栏固定、权限卡片下方的离线翻译语言入口和新建服务四类且不含Apple。
-22. [settings_test.dart](settings_test.dart)：验证设置数据往返与配置校验，含模型服务 API Key 可留空、四种模式提示词的默认值和空值拒绝、思考开关缺省全关与往返，以及输入翻译语言的复制、隔离与往返，以及Apple系统翻译作为内置默认服务的校验。
-23. [translation_history_test.dart](translation_history_test.dart)：验证翻译历史组合查询、时间边界、游标分页、期限确认与清理事务、删除及记录开关。
-24. [translation_overlay_test.dart](translation_overlay_test.dart)：验证翻译按钮、双语结果与失败界面行为，以及服务菜单在润色模式只列模型服务。
-25. [translation_resume_test.dart](translation_resume_test.dart)：验证分片失败恢复、进度保留及取消边界。
-26. [unofficial_google_provider_test.dart](unofficial_google_provider_test.dart)：验证零配置Google翻译的解析、失败处理（含限流可重试）与单篇请求超时。
+16. [selection_history_test.dart](selection_history_test.dart)：验证选区翻译成功、失败和取消时的历史记录边界，以及输入翻译不显示卡片、替换成功结束会话与未替换原因交给失败气泡。
+17. [selection_session_test.dart](selection_session_test.dart)：验证选区翻译生命周期、取消和状态变化，以及卡片服务菜单只影响本卡片、非模型服务的润色失败、输入翻译使用独立语言方向。
+18. [settings_app_test.dart](settings_app_test.dart)：验证设置页面侧边栏切换子页与保留草稿、默认翻译服务含Apple系统翻译、通用页语言包状态、服务显示、术语表增删改、提示词弹窗的四个字段、恢复默认与空值校验、思考开关随提示词保存、翻译语言分段只改输入翻译一组、贴纸添加与删除、确认截图动作、长截图滚动方式及配置更新。
+19. [settings_autosave_test.dart](settings_autosave_test.dart)：验证后台自动保存的串行、冲突和失败处理。
+20. [settings_spec_test.dart](settings_spec_test.dart)：验证设置界面是否符合数值、密度与交互规格，含侧边栏固定、权限卡片下方的离线翻译语言入口和新建服务四类且不含Apple。
+21. [settings_test.dart](settings_test.dart)：验证设置数据往返与配置校验，含模型服务 API Key 可留空、四种模式提示词的默认值和空值拒绝、思考开关缺省全关与往返，以及输入翻译语言的复制、隔离与往返，以及Apple系统翻译作为内置默认服务的校验。
+22. [translation_history_test.dart](translation_history_test.dart)：验证翻译历史组合查询、时间边界、游标分页、期限确认与清理事务、删除及记录开关。
+23. [translation_overlay_test.dart](translation_overlay_test.dart)：验证翻译按钮、双语结果与失败界面行为，以及服务菜单在润色模式只列模型服务。
+24. [translation_resume_test.dart](translation_resume_test.dart)：验证分片失败恢复、进度保留及取消边界。
+25. [unofficial_google_provider_test.dart](unofficial_google_provider_test.dart)：验证零配置Google翻译的解析、失败处理（含限流可重试）与单篇请求超时。
 
-27. [drawing_style_test.dart](drawing_style_test.dart)：验证马赛克像素、样式隔离、撤销及调色盘与粗细的提交边界，以及调色盘渐变页签、渐变像素与渐变偏好往返。
-28. [capture_app_test.dart](capture_app_test.dart)：验证录制目标与应用图标动态行、录制选项的保存与延时提交、倒计时状态气泡、安全区域布局和选择状态、长截图直启选区、四气泡暂停恢复与立即放弃、长图等比预览和原尺寸导出、视频内容区六个操作的布局、裁剪等待、GIF/APNG导出与按类型取消转换及工具栏外的一秒响应。
-29. [settings_controller_test.dart](settings_controller_test.dart)：验证配置快照隔离、设置提交顺序、真实文件存储失败恢复、过期修订拒绝、录制选项保存与延时校验和Apple系统翻译语言包检查。
-30. [live_region_session_test.dart](live_region_session_test.dart)：验证实时翻译的段落块缓存、批次调度、四类失败（含频率受限退避）、暂停恢复和迟到事件。
-31. [live_block_cache_test.dart](live_block_cache_test.dart)：验证段落块缓存的预算淘汰、最近使用顺序和失败记录。
-32. [numbered_batch_test.dart](numbered_batch_test.dart)：验证批次编号文本与流式输出按编号归属的边界。
-33. [mcp_settings_page_test.dart](mcp_settings_page_test.dart)：验证设置 MCP 页的侧边栏行、开关自动保存、helper 路径与配置复制、平台状态与按钮可用性、安装失败原文及删除二次确认。
-34. [mcp_platforms_test.dart](mcp_platforms_test.dart)：用模拟 CLI 与临时主目录验证接入平台的检测、安装、重复安装、路径变化、删除、配置备份与隔离属性清除。
-35. [markdown_view_test.dart](markdown_view_test.dart)：验证识别结果 Markdown 的块拆分、表格分隔行与转义竖线、块间距及宽表格横向滚动。
-36. [apple_translation_provider_test.dart](apple_translation_provider_test.dart)：用假原生通道验证Apple系统翻译的段落配对、错误文案与类别及取消后的输出。
-37. [vocabulary_test.dart](vocabulary_test.dart)：验证生词本的增改删、排序、CSV 转义与查词判定边界。
-38. [vocabulary_page_test.dart](vocabulary_page_test.dart)：验证生词本分段的展示、删除、导出反馈与空列表状态。
-39. [beautify_test.dart](beautify_test.dart)：按像素验证截图美化的导出尺寸、背景、圆角与阴影，以及不美化时与原图一致。
-40. [screenshot_history_test.dart](screenshot_history_test.dart)：用内存SQLite与临时目录验证截图历史的默认关闭、同截图覆盖、100条与30天清理、缺失文件及拼接拆分结果的入库顺序。
-41. [screenshot_history_page_test.dart](screenshot_history_page_test.dart)：验证截图历史分段的缺失文件只能删除、清空后的空状态、关闭记录提示，以及勾选决定拼接、拆分、比较可用性与结果反馈。
-42. [glossary_test.dart](glossary_test.dart)：验证术语的整词与子串匹配、目标语言筛选、保留原文输出及偏好往返与重复校验。
-43. [step_highlighter_test.dart](step_highlighter_test.dart)：验证步骤编号的顺序推导、撤销重做、数字颜色与缩小、连续单击放置，以及荧光笔的半透明叠加与默认样式。
-44. [screenshot_measure_confirm_test.dart](screenshot_measure_confirm_test.dart)：验证截图编辑器取色复制源像素色值、标尺测量与不进入导出，以及确认截图动作。
-45. [dictionary_definition_test.dart](dictionary_definition_test.dart)：验证词典释义按词条与音标、词性、义项、例句及分节标题拆行，汉语词典与未识别格式保留原文。
-46. [box_transform_test.dart](box_transform_test.dart)：验证可拖动矩形的命中优先级、旋转后命中、移动限制、自由与比例拉伸、旋转吸附与旋转后拉伸保持对角。
-47. [sticker_test.dart](sticker_test.dart)：按像素验证贴纸位图按范围绘制、旋转后的占位，开启美化时可画在背景留白区、不美化时裁到截图范围，以及贴纸默认大小的计算、往返与校验。
-48. [support/](support/index.md)：测试共用夹具，提供测试图片解码与截图快照 BGRA 像素转换。
-49. [date_text_test.dart](date_text_test.dart)：验证历史与生词本日期文本的补零。
+26. [drawing_style_test.dart](drawing_style_test.dart)：验证马赛克像素、样式隔离、撤销及调色盘与粗细的提交边界，以及调色盘渐变页签、渐变像素与渐变偏好往返。
+27. [capture_app_test.dart](capture_app_test.dart)：验证录制目标与应用图标动态行、录制选项的保存与延时提交、倒计时状态气泡、安全区域布局和选择状态、长截图直启选区、四气泡暂停恢复与立即放弃、长图等比预览和原尺寸导出、视频内容区六个操作的布局、裁剪等待、GIF/APNG导出与按类型取消转换及工具栏外的一秒响应。
+28. [settings_controller_test.dart](settings_controller_test.dart)：验证配置快照隔离、设置提交顺序、真实文件存储失败恢复、过期修订拒绝、录制选项保存与延时校验和Apple系统翻译语言包检查。
+29. [live_region_session_test.dart](live_region_session_test.dart)：验证实时翻译的段落块缓存、批次调度、四类失败（含频率受限退避）、暂停恢复和迟到事件。
+30. [live_block_cache_test.dart](live_block_cache_test.dart)：验证段落块缓存的预算淘汰、最近使用顺序和失败记录。
+31. [numbered_batch_test.dart](numbered_batch_test.dart)：验证批次编号文本与流式输出按编号归属的边界。
+32. [mcp_settings_page_test.dart](mcp_settings_page_test.dart)：验证设置 MCP 页的侧边栏行、开关自动保存、helper 路径与配置复制、平台状态与按钮可用性、安装失败原文及删除二次确认。
+33. [mcp_platforms_test.dart](mcp_platforms_test.dart)：用模拟 CLI 与临时主目录验证接入平台的检测、安装、重复安装、路径变化、删除、配置备份与隔离属性清除。
+34. [markdown_view_test.dart](markdown_view_test.dart)：验证识别结果 Markdown 的块拆分、表格分隔行与转义竖线、块间距及宽表格横向滚动。
+35. [apple_translation_provider_test.dart](apple_translation_provider_test.dart)：用假原生通道验证Apple系统翻译的段落配对、错误文案与类别及取消后的输出。
+36. [vocabulary_test.dart](vocabulary_test.dart)：验证生词本的增改删、排序、CSV 转义与查词判定边界。
+37. [vocabulary_page_test.dart](vocabulary_page_test.dart)：验证生词本分段的展示、删除、导出反馈与空列表状态。
+38. [beautify_test.dart](beautify_test.dart)：按像素验证截图美化的导出尺寸、背景、圆角与阴影，以及不美化时与原图一致。
+39. [screenshot_history_test.dart](screenshot_history_test.dart)：用内存SQLite与临时目录验证截图历史的默认关闭、同截图覆盖、100条与30天清理、缺失文件及拼接拆分结果的入库顺序。
+40. [screenshot_history_page_test.dart](screenshot_history_page_test.dart)：验证截图历史分段的缺失文件只能删除、清空后的空状态、关闭记录提示，以及勾选决定拼接、拆分、比较可用性与结果反馈。
+41. [glossary_test.dart](glossary_test.dart)：验证术语的整词与子串匹配、目标语言筛选、保留原文输出及偏好往返与重复校验。
+42. [step_highlighter_test.dart](step_highlighter_test.dart)：验证步骤编号的顺序推导、撤销重做、数字颜色与缩小、连续单击放置，以及荧光笔的半透明叠加与默认样式。
+43. [screenshot_measure_confirm_test.dart](screenshot_measure_confirm_test.dart)：验证截图编辑器取色复制源像素色值、标尺测量与不进入导出，以及确认截图动作。
+44. [dictionary_definition_test.dart](dictionary_definition_test.dart)：验证词典释义按词条与音标、词性、义项、例句及分节标题拆行，汉语词典与未识别格式保留原文。
+45. [box_transform_test.dart](box_transform_test.dart)：验证可拖动矩形的命中优先级、旋转后命中、移动限制、自由与比例拉伸、旋转吸附与旋转后拉伸保持对角。
+46. [sticker_test.dart](sticker_test.dart)：按像素验证贴纸位图按范围绘制、旋转后的占位，开启美化时可画在背景留白区、不美化时裁到截图范围，以及贴纸默认大小的计算、往返与校验。
+47. [support/](support/index.md)：测试共用夹具，提供测试图片解码与截图快照 BGRA 像素转换。
+48. [date_text_test.dart](date_text_test.dart)：验证历史与生词本日期文本的补零。
 
-50. [glossary_import_test.dart](glossary_import_test.dart)：验证术语文件预览、重复处理、整批拒绝、导出、串行保存与失败后取消不污染设置。
+49. [glossary_import_test.dart](glossary_import_test.dart)：验证术语文件预览、重复处理、整批拒绝、导出、串行保存与失败后取消不污染设置。

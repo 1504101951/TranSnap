@@ -1160,7 +1160,8 @@ class RunnerTests: XCTestCase {
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         let recognized = try await ScreenCaptureService.recognizeText(image: ScreenCaptureService.decodeImage(png: png))
         XCTAssertTrue(recognized.contains("HelloOCR"), recognized)
-        let blocks = try ScreenCaptureService.recognizeBlocks(png: png)
+        // recognizeBlocks 按段落识别，结构与实时翻译的段落块相同（#138）。
+        let blocks = try await ScreenCaptureService.recognizeBlocks(png: png)
         XCTAssertFalse(blocks.isEmpty)
         XCTAssertTrue((blocks[0]["text"] as? String)?.contains("HelloOCR") == true, String(describing: blocks))
         XCTAssertGreaterThan((blocks[0]["width"] as? Double) ?? 0, 0)

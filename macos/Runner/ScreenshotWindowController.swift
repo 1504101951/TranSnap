@@ -349,6 +349,13 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         channel?.invokeMethod(AppConstants.screenshotChangedMethod, arguments: snapshot())
     }
 
+    /// state 为主引擎截图翻译快照：id 为捕获身份，其余为 LiveRegionView.toMap 的字段（#138）。
+    /// 只转发当前截图的快照；截图已关闭或被替换时丢弃迟到快照。无返回值。
+    func publishTranslation(_ state: [String: Any]) {
+        guard let id = state["id"] as? String, id == captureId else { return }
+        channel?.invokeMethod(AppConstants.publishScreenshotTranslationMethod, arguments: state)
+    }
+
     /// 无参数；关闭编辑窗并关闭引擎，保留已创建的贴图。
     func shutdown() {
         cancelCapture()
@@ -363,7 +370,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         pins.closeAll()
     }
 
-    /// id 为翻译启动时的捕获身份；返回截图是否仍存在且未被替换。
+    /// id 为捕获身份；返回截图是否仍存在且未被替换。
     func isCurrentCapture(_ id: String) -> Bool {
         captureId == id
     }
@@ -585,10 +592,10 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
                 result(FlutterError(code: AppConstants.badArgsError, message: "缺少识别图片。", details: nil))
                 return
             }
-            // recognizeBlocks 是同步的 Vision 调用，放到后台任务执行，识别期间主线程不阻塞（#115）。
+            // recognizeBlocks 在后台任务解码与识别段落，识别期间主线程不阻塞（#115、#138）。
             Task { @MainActor in
                 do {
-                    let blocks = try await Task.detached { try ScreenCaptureService.recognizeBlocks(png: payload) }.value
+                    let blocks = try await Task.detached { try await ScreenCaptureService.recognizeBlocks(png: payload) }.value
                     // 识别期间截图可能被关闭或替换，迟到结果按过期处理。
                     guard id == self.captureId else {
                         result(Self.staleCaptureFailure)
@@ -641,18 +648,18 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             result(nil)
-        case AppConstants.translatePlainTextMethod:
+        case AppConstants.translateScreenshotBlocksMethod:
             guard let id = args["id"] as? String, id == captureId else {
                 result(Self.staleCaptureFailure); return
             }
-            guard let text = args["text"] as? String, !text.isEmpty else {
-                result(FlutterError(code: AppConstants.ocrEmptyError, message: "没有可翻译的文字。", details: nil))
+            guard let blocks = args["blocks"] as? [[String: Any]] else {
+                result(FlutterError(code: AppConstants.badArgsError, message: "缺少识别段落。", details: nil))
                 return
             }
+            // 段落块原样转交主引擎；主引擎开始会话后立即返回，译文经 publishTranslation 推回（#138）。
             MacPlatformBridge.Shared.instance?.requestApplication(
-                AppConstants.translatePlainTextMethod,
-                // 保留捕获身份，主 Dart 引擎在翻译完成后再次核对再写历史。
-                arguments: ["text": text, "id": id],
+                AppConstants.translateScreenshotBlocksMethod,
+                arguments: ["id": id, "blocks": blocks],
                 result: result
             )
         case AppConstants.closeScreenshotMethod:

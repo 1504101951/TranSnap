@@ -360,30 +360,17 @@ enum ScreenCaptureService {
         return ["text": text, "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
     }
 
-    /// png 为截图像素；返回带像素框的 OCR 块，坐标原点在左上。
-    static func recognizeBlocks(png: Data) throws -> [[String: Any]] {
-        guard let image = NSBitmapImageRep(data: png)?.cgImage else {
-            throw NSError(
-                domain: AppConstants.errorDomain,
-                code: 13,
-                userInfo: [NSLocalizedDescriptionKey: "无法读取截图以识别文字。"]
-            )
-        }
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
-        request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
-        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
-        return blocks(from: request, width: Double(image.width), height: Double(image.height))
-    }
-
-    /// request 为已执行的识别，width/height 为图像像素。返回左上原点的文字块。
-    private static func blocks(from request: VNRecognizeTextRequest, width: Double, height: Double) -> [[String: Any]] {
-        (request.results ?? []).compactMap { observation in
-            guard let text = observation.topCandidates(1).first?.string, !text.isEmpty else {
-                return nil
-            }
-            return textBlock(text, box: observation.boundingBox, width: width, height: height)
-        }
+    /// png 为截图引擎合成的 PNG；返回段落块，结构与 recognizeParagraphs 相同：
+    /// text 为整段原文（折行已合成一段），x/y/width/height 为图像像素框，坐标原点在左上（#138）。
+    static func recognizeBlocks(png: Data) async throws -> [[String: Any]] {
+        // decodeImage 解码失败时抛出「无法读取截图以识别文字。」。
+        let image = try decodeImage(png: png)
+        // 与实时翻译使用同一段落识别配置，截图翻译与实时翻译的分块一致。
+        let observations = try await paragraphRequest().perform(on: image)
+        return paragraphBlocks(
+            observations.flatMap { $0.document.paragraphs },
+            width: Double(image.width),
+            height: Double(image.height)
+        )
     }
 }

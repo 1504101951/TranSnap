@@ -18,7 +18,6 @@ import 'package:translate_app/src/screenshot/edit_document.dart';
 import 'package:translate_app/src/screenshot/recognized_text_panel.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
 import 'package:translate_app/src/screenshot/sticker_panel.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 
 import 'support/capture_pixels.dart';
@@ -384,10 +383,8 @@ void main() {
           return null;
         case MethodNames.recognizeBlocks:
           return [
-            {'text': 'Imported text', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
+            {'text': 'Imported text', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
           ];
-        case MethodNames.translatePlainText:
-          return '导入图片译文';
         default:
           return null;
       }
@@ -429,10 +426,19 @@ void main() {
     });
     await tester.tap(find.byTooltip('关闭').last);
     await tester.pump();
-    // _tapExport 复用图上翻译入口，导入图片同样在识别位置显示译文。
+    // _tapExport 复用图上翻译入口；_publishTranslation 模拟主引擎会话推回译文快照。
     await _tapExport(tester, const Key(ScreenshotActions.ocrTranslate));
+    await _publishTranslation(tester, channel, {
+      'id': 'imported-image',
+      'phase': 'running',
+      'status': '已完成',
+      'overlays': [
+        {'text': '导入图片译文', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
+      ],
+      'metrics': <Object>[],
+    });
     expect(find.text('导入图片译文'), findsOneWidget);
-    expect(find.text('已在图上显示译文'), findsOneWidget);
+    expect(find.text('已完成'), findsOneWidget);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
     expect(find.text('申请屏幕录制权限'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -605,8 +611,10 @@ void main() {
     expect(find.text('识别结果'), findsNothing);
   });
 
-  testWidgets('截图翻译完成后在识别位置显示译文', (tester) async {
-    // 有字块时显示译文与成功反馈；历史提交由主引擎完成，另有真实数据库测试。
+  testWidgets('截图翻译把段落块交主引擎，并按快照逐段覆盖译文（#138）', (tester) async {
+    // 作用：识别出的段落块连同捕获身份原样交主引擎会话；每份快照到达即按段更新浮层与状态提示。
+    // 边界：第一份快照只含一段译文（另一段仍在翻译），未进入快照的段落不覆盖；
+    // 第二份快照另含宽为 0 的段落，宽或高不超过 1pt 的浮层只画底色、不画文字（#67）。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -616,6 +624,12 @@ void main() {
     const channel = MethodChannel('test/screenshot-ocr-overlay');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const blocks = [
+      {'text': 'Hello', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
+      {'text': 'World', 'x': 0, 'y': 4, 'width': 8, 'height': 4},
+    ];
+    // 模拟主引擎收到的翻译请求参数。
+    Map<Object?, Object?>? sent;
     messenger.setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
         case MethodNames.getScreenshot:
@@ -628,11 +642,10 @@ void main() {
             'directory': '',
           };
         case MethodNames.recognizeBlocks:
-          return [
-            {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
-          ];
-        case MethodNames.translatePlainText:
-          return '你好';
+          return blocks;
+        case MethodNames.translateScreenshotBlocks:
+          sent = call.arguments as Map<Object?, Object?>;
+          return null;
         default:
           return null;
       }
@@ -644,55 +657,76 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await _tapExport(tester, const Key('screenshot-ocr-translate'));
+    expect(sent, {'id': 'shot-ocr-overlay', 'blocks': blocks});
+
+    await _publishTranslation(tester, channel, {
+      'id': 'shot-ocr-overlay',
+      'phase': 'running',
+      'status': '正在翻译',
+      'overlays': [
+        {'text': '你好', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
+      ],
+      'metrics': <Object>[],
+    });
     expect(find.text('你好'), findsOneWidget);
-    expect(find.text('已在图上显示译文'), findsOneWidget);
+    expect(find.text('世界'), findsNothing);
+    expect(find.text('正在翻译'), findsOneWidget);
+
+    await _publishTranslation(tester, channel, {
+      'id': 'shot-ocr-overlay',
+      'phase': 'running',
+      'status': '已完成',
+      'overlays': [
+        {'text': '你好', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
+        {'text': '世界', 'x': 0, 'y': 4, 'width': 8, 'height': 4},
+        {'text': '零宽', 'x': 0, 'y': 4, 'width': 0, 'height': 4},
+      ],
+      'metrics': <Object>[],
+    });
+    expect(find.text('你好'), findsOneWidget);
+    expect(find.text('世界'), findsOneWidget);
+    expect(find.text('零宽'), findsNothing);
+    expect(find.text('已完成'), findsOneWidget);
   });
 
-  testWidgets('截图翻译返回的行数少于识别块时整次失败，不用原文充当译文（#132）', (tester) async {
-    // 作用：识别块与译文逐行对应，服务少返回一行时显示失败原因，图上不出现任何译文覆盖。
-    // 边界：两个识别块只收到一行译文，是行数不符的最小情形。
-    tester.view.physicalSize = const Size(960, 740);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final bytes = await tester.runAsync(_pngCheckerboard);
-    final capture = await tester.runAsync(() => capturePixels(bytes!));
-    const channel = MethodChannel('test/screenshot-ocr-mismatch');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case MethodNames.getScreenshot:
-          return {
-            'id': 'shot-ocr-mismatch',
-            ...capture!,
-            'capturedAt': 1788662400000,
-            'width': 8,
-            'height': 8,
-            'directory': '',
-          };
-        case MethodNames.recognizeBlocks:
-          return [
-            {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
-            {'text': 'World', 'x': 0, 'y': 4, 'width': 4, 'height': 2},
-          ];
-        case MethodNames.translatePlainText:
-          return '你好';
-        default:
-          return null;
-      }
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test('译文浮层字号取能放进矩形的最大值，下限为 1（#67 截图译文浮层）', () {
+    // 作用：二分查找得到的字号排版后不超出矩形高度，且再大 1 即超出，说明取到的是最大值。
+    // 边界：查找精度 0.5，故以 +1 验证最大性；高 1 的矩形落在下限 1；单字在宽矩形中受矩形高度限制。
+    const style = TextStyle(fontWeight: FontWeight.w600);
+    // height 按浮层同样的居中换行规则排版，返回文字总高。
+    double height(String text, double fontSize, double width) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: style.copyWith(fontSize: fontSize),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: width);
+      final result = painter.height;
+      painter.dispose();
+      return result;
+    }
 
-    await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
-    await awaitCaptureSource(tester);
-    await tester.pump();
-    await _tapExport(tester, const Key('screenshot-ocr-translate'));
-    expect(find.text(paragraphCountMismatchMessage), findsOneWidget);
-    expect(find.text('你好'), findsNothing);
-    expect(find.text('World'), findsNothing);
-    expect(find.text('已在图上显示译文'), findsNothing);
+    const text = 'Hello world translated paragraph';
+    const box = Size(120, 40);
+    final fitted = fitOverlayFontSize(text: text, box: box, style: style);
+    expect(
+      height(text, fitted, box.width),
+      lessThanOrEqualTo(box.height + 0.5),
+    );
+    expect(height(text, fitted + 1, box.width), greaterThan(box.height + 0.5));
+    expect(
+      fitOverlayFontSize(text: text, box: const Size(120, 1), style: style),
+      1,
+    );
+    final single = fitOverlayFontSize(
+      text: 'A',
+      box: const Size(400, 30),
+      style: style,
+    );
+    expect(single, lessThanOrEqualTo(30));
+    expect(height('A', single + 1, 400), greaterThan(30.5));
   });
 
   testWidgets('截图翻译的迟到识别结果不发起翻译且不在替换后的截图上显示（#115）', (tester) async {
@@ -718,8 +752,8 @@ void main() {
     };
     final requested = Completer<void>();
     final reply = Completer<List<Object?>>();
-    // 模拟主引擎收到的原文状态，不以界面隐藏代替没有翻译请求。
-    String? translatedSource;
+    // 模拟主引擎收到的段落块，不以界面隐藏代替没有翻译请求。
+    Object? translatedBlocks;
     messenger.setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
         case MethodNames.getScreenshot:
@@ -727,9 +761,9 @@ void main() {
         case MethodNames.recognizeBlocks:
           requested.complete();
           return reply.future;
-        case MethodNames.translatePlainText:
-          translatedSource = (call.arguments as Map)['text'] as String;
-          return '你好';
+        case MethodNames.translateScreenshotBlocks:
+          translatedBlocks = (call.arguments as Map)['blocks'];
+          return null;
         default:
           return null;
       }
@@ -774,10 +808,20 @@ void main() {
       {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
     ]);
     await tester.pumpAndSettle();
-    expect(translatedSource, isNull);
+    expect(translatedBlocks, isNull);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
+    // 旧截图会话排队中的快照晚于换图到达，也不能覆盖新截图（#138）。
+    await _publishTranslation(tester, channel, {
+      'id': 'first',
+      'phase': 'running',
+      'status': '已完成',
+      'overlays': [
+        {'text': '你好', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
+      ],
+      'metrics': <Object>[],
+    });
     expect(find.text('你好'), findsNothing);
-    expect(find.text('已在图上显示译文'), findsNothing);
+    expect(find.text('已完成'), findsNothing);
   });
 
   testWidgets('Esc 关闭会话不复制；文字输入按 Esc 写入标注', (tester) async {
@@ -1518,6 +1562,24 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 400));
   });
+}
+
+/// tester 驱动帧，channel 为截图引擎通道，state 为主引擎截图翻译快照（id 加 LiveRegionView.toMap 字段）；
+/// 模拟原生转发一次 publishScreenshotTranslation 并推进一帧，无返回值（#138）。
+Future<void> _publishTranslation(
+  WidgetTester tester,
+  MethodChannel channel,
+  Map<String, Object?> state,
+) async {
+  await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(MethodNames.publishScreenshotTranslation, state),
+        ),
+        (_) {},
+      );
+  await tester.pump();
 }
 
 /// tester 点击导出按钮；key 为 copy/save/pin。导出含 toImage，需真实异步。

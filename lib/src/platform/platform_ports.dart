@@ -55,6 +55,10 @@ abstract interface class OverlayHost {
 
   /// state 为实时翻译快照；交给原生盖层绘制，返回接收完成的 Future。
   Future<void> publishLiveRegion(Map<String, Object?> state);
+
+  /// state 为截图翻译快照：id 为捕获身份，其余为 LiveRegionView.toMap 的字段；
+  /// 经原生转给截图引擎绘制浮层，返回接收完成的 Future（#138）。
+  Future<void> publishScreenshotTranslation(Map<String, Object?> state);
 }
 
 /// 系统离线朗读。
@@ -97,9 +101,6 @@ abstract interface class AppHost {
 
   /// handler 处理附属窗口经原生转发的业务请求，返回值即回复；无返回值。
   void handleApplicationRequests(Future<Object?> Function(MethodCall) handler);
-
-  /// captureId 为截图身份；返回原生截图是否仍存在且未被替换。
-  Future<bool> isCurrentScreenshot(String captureId);
 
   /// 无参数；通知已打开的历史窗口重新读取，返回转发完成的 Future。
   Future<void> notifyHistoryChanged();

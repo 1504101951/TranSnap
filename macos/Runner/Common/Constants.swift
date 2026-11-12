@@ -217,7 +217,6 @@ enum AppConstants {
     static let glassOpacityKey = "glassOpacity"
     static let hideOverlayMethod = "hideOverlay"
     static let historyEntrypoint = "historyMain"
-    static let isCurrentScreenshotMethod = "isCurrentScreenshot"
     static let keychainFailedError = "keychain_failed"
     /// 凭据在钥匙串中的服务名；凭据列举、读取与写入共用，改动会使已存凭据读不到（#122）。
     static let credentialsKeychainService = "com.coolyang.translateApp.credentials"
@@ -350,7 +349,10 @@ enum AppConstants {
     /// 系统翻译高保真策略；与Dart SystemTranslationStrategy同步，其余值按低延迟处理。
     static let systemTranslationHighFidelity = "highFidelity"
     static let toggleAutomaticMethod = "toggleAutomatic"
-    static let translatePlainTextMethod = "translatePlainText"
+    /// translateScreenshotBlocks 协议值；截图引擎把段落块经原生交主引擎分块翻译（#138），与Dart常量同步。
+    static let translateScreenshotBlocksMethod = "translateScreenshotBlocks"
+    /// publishScreenshotTranslation 协议值；主引擎截图翻译快照经原生转给截图引擎（#138），与Dart常量同步。
+    static let publishScreenshotTranslationMethod = "publishScreenshotTranslation"
     /// translate_failed 协议值；与Dart常量同步。
     static let translateFailedError = "translate_failed"
     /// translation_not_installed 协议值；系统翻译语言包未下载，与Dart常量同步。

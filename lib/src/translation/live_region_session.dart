@@ -73,7 +73,8 @@ final class SystemLiveRegionClock implements LiveRegionClock {
   }
 }
 
-/// 一个段落块。坐标是屏幕点、左下原点；没有坐标时只参与翻译，不画盖层。
+/// 一个段落块。坐标系由调用方决定：实时区域翻译为屏幕点、左下原点，截图翻译为图像像素、左上原点（#138）；
+/// 会话不换算坐标，原样写入盖层。没有坐标时只参与翻译，不画盖层。
 class LiveTextBlock {
   /// text 为该段原文。x/y/width/height 为段落外接矩形，缺任一坐标则不覆盖。
   const LiveTextBlock({
@@ -83,6 +84,15 @@ class LiveTextBlock {
     this.width,
     this.height,
   });
+
+  /// map 为原生段落块 {text, x, y, width, height}；返回段落块，缺少的坐标为 null。
+  factory LiveTextBlock.fromMap(Map<Object?, Object?> map) => LiveTextBlock(
+    text: '${map['text'] ?? ''}',
+    x: (map['x'] as num?)?.toDouble(),
+    y: (map['y'] as num?)?.toDouble(),
+    width: (map['width'] as num?)?.toDouble(),
+    height: (map['height'] as num?)?.toDouble(),
+  );
 
   final String text;
   final double? x;
@@ -132,7 +142,7 @@ class LiveRegionView {
   final LiveRegionPhase phase;
   final String status;
 
-  /// 只包含已经能归属到段落块的译文。坐标为屏幕点。
+  /// 只包含已经能归属到段落块的译文。坐标与输入段落块相同。
   final List<Map<String, Object>> overlays;
 
   /// 自上一次快照以来结束的批次计时，每个批次只出现一次；只含数量、毫秒数与结果，不含文字。
@@ -190,7 +200,7 @@ class _Batch {
   var cancelled = false;
 }
 
-/// 主引擎的实时区域翻译会话。
+/// 主引擎的实时区域翻译会话。实时区域翻译与截图翻译各持有一个实例，截图识别结果作为单个样本交给会话（#138）。
 ///
 /// 翻译单元是段落块。每帧识别结果逐块查段落块缓存，未命中的段落块合并为批次发送。
 /// 只保存本次会话的缓存、调度和拒绝迟到事件所需的内存状态，不写历史。

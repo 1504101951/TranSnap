@@ -41,8 +41,6 @@ void main() {
         case MethodNames.detectLanguage:
           started.complete();
           return detection.future;
-        case MethodNames.isCurrentScreenshot:
-          return false;
         default:
           return null;
       }
@@ -83,14 +81,13 @@ void main() {
       return result.future;
     }
 
-    final translating = request(MethodNames.translatePlainText, {
-      'text': 'Hello',
+    // 截图翻译会话在逐段识别语言期间保持未完成，作为挂起的跨引擎请求（#138）。
+    final translating = request(MethodNames.translateScreenshotBlocks, {
       'id': 'closed-shot',
+      'blocks': [
+        {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
+      ],
     });
-    final cancelled = expectLater(
-      translating,
-      throwsA(isA<PlatformException>()),
-    );
     await started.future;
     // 同时挂起真实主引擎的设置提交；历史开关属于独立业务，不能排在设置队列后。
     holdSettings = true;
@@ -145,9 +142,12 @@ void main() {
     expect(saving.isCompleted, isFalse);
     saving.complete();
     await updating;
-    // 截图已经关闭，释放设备识别后应取消请求，不访问远程服务或新增历史。
+    // 截图关闭后结束会话；释放设备识别后批次已取消，不访问远程服务，截图翻译也不写历史。
+    await request(MethodNames.cancelScreenshotTranslation, {
+      'id': 'closed-shot',
+    });
     detection.complete('en');
-    await cancelled;
+    await translating;
     expect(history.page(), isEmpty);
   });
 }

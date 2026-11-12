@@ -16,7 +16,6 @@ import 'src/history/translation_history.dart';
 import 'src/history/vocabulary.dart';
 import 'src/platform/channel_platform_bridge.dart';
 import 'src/screenshot/screenshot_app.dart';
-import 'src/screenshot/screenshot_translation.dart';
 import 'src/selection/selection_session.dart';
 import 'src/selection/selection_translation_app.dart';
 import 'src/settings/app_settings.dart';
@@ -127,8 +126,24 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   // 首次提交设置前使用启动快照；每次读取 settings.current 都会深拷贝全部设置。
   session.serviceChoices = () => serviceChoices(initial);
 
-  // 唯一截图编辑器对应一份可取消翻译；捕获 ID 防止旧窗口的结束事件取消新任务。
-  ({String id, Completer<void> cancellation})? screenshotRequest;
+  // 截图翻译复用实时翻译的段落会话，单独一个实例，与实时区域翻译互不打断（#138）。
+  // screenshotCapture 为当前翻译所属的捕获身份；为 null 时不再推送快照。
+  // screenshotGeneration 为截图会话代次，每次开始或结束递增，旧代次的迟到事件被会话丢弃。
+  String? screenshotCapture;
+  var screenshotGeneration = 0;
+  final screenshotTranslation = LiveRegionSession(
+    providerFor: (settings) => providerForSettings(settings, bridge),
+    detectLanguage: bridge.detectLanguage,
+    clock: SystemLiveRegionClock(),
+    onView: (view) {
+      final id = screenshotCapture;
+      if (id == null) return;
+      // 快照带上捕获身份，原生只转给仍是该截图的编辑引擎。
+      unawaited(
+        bridge.publishScreenshotTranslation({'id': id, ...view.toMap()}),
+      );
+    },
+  );
 
   // handleApplicationRequests只路由跨引擎请求；同引擎直接调用所属模块，不绕回原生通道。
   bridge.handleApplicationRequests((call) async {
@@ -196,14 +211,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         final sample = Map<Object?, Object?>.from(call.arguments as Map);
         final blocks = <LiveTextBlock>[
           for (final item in sample['blocks'] as List? ?? const [])
-            if (item is Map)
-              LiveTextBlock(
-                text: '${item['text'] ?? ''}',
-                x: (item['x'] as num?)?.toDouble(),
-                y: (item['y'] as num?)?.toDouble(),
-                width: (item['width'] as num?)?.toDouble(),
-                height: (item['height'] as num?)?.toDouble(),
-              ),
+            if (item is Map) LiveTextBlock.fromMap(item),
         ];
         await live.onOcr(
           LiveOcrSample(
@@ -216,43 +224,30 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         return null;
       case MethodNames.cancelScreenshotTranslation:
         final map = Map<Object?, Object?>.from(call.arguments as Map);
-        final request = screenshotRequest;
-        if (request != null && request.id == map['id']) {
-          if (!request.cancellation.isCompleted) {
-            request.cancellation.complete();
-          }
-          screenshotRequest = null;
-        }
+        // 只结束仍属于该截图的会话；旧窗口的结束事件不影响新截图的翻译。
+        if (screenshotCapture != map['id']) return null;
+        screenshotCapture = null;
+        screenshotGeneration += 1;
+        screenshotTranslation.end(screenshotGeneration);
         return null;
-      case MethodNames.translatePlainText:
+      case MethodNames.translateScreenshotBlocks:
         final map = Map<Object?, Object?>.from(call.arguments as Map);
-        final captureId = map['id'] as String;
-        final previous = screenshotRequest?.cancellation;
-        if (previous != null && !previous.isCompleted) previous.complete();
-        final cancellation = Completer<void>();
-        screenshotRequest = (id: captureId, cancellation: cancellation);
-        // providerForSettings冻结本次截图翻译配置，设置后续修改不影响当前请求。
-        final configuration = settings.current;
-        final provider = providerForSettings(configuration, bridge);
-        // translateScreenshotText校验截图身份，只在完整成功且仍有效时写入历史。
-        try {
-          return await translateScreenshotText(
-            text: map['text'] as String,
-            provider: provider,
-            model: translationHistoryModel(provider),
-            language: configuration.direction,
-            detectLanguage: bridge.detectLanguage,
-            isCurrent: () => bridge.isCurrentScreenshot(captureId),
-            cancelled: cancellation.future,
-            history: history,
-          );
-        } finally {
-          // 释放完成任务的取消等待；旧请求不能清空随后开始的新任务。
-          if (!cancellation.isCompleted) cancellation.complete();
-          if (identical(screenshotRequest?.cancellation, cancellation)) {
-            screenshotRequest = null;
-          }
-        }
+        // 每次点击「翻译文字」开始新代次：旧批次、缓存与迟到增量全部作废。
+        // 设置在开始时冻结，会话不接收之后的设置变化。
+        screenshotCapture = map['id'] as String;
+        screenshotGeneration += 1;
+        screenshotTranslation.start(settings.current, screenshotGeneration);
+        // 截图识别结果作为单个样本交给会话；首个非空样本立即分批发送，返回后译文经快照推送。
+        await screenshotTranslation.onOcr(
+          LiveOcrSample(
+            generation: screenshotGeneration,
+            blocks: [
+              for (final item in map['blocks'] as List)
+                LiveTextBlock.fromMap(item as Map),
+            ],
+          ),
+        );
+        return null;
       default:
         throw MissingPluginException('未知应用操作：${call.method}');
     }

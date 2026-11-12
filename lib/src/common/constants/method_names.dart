@@ -107,8 +107,6 @@ abstract final class MethodNames {
 
   static const historyRecording = 'historyRecording';
 
-  static const isCurrentScreenshot = 'isCurrentScreenshot';
-
   static const loadSettings = 'loadSettings';
 
   static const openAccessibility = 'openAccessibility';
@@ -273,7 +271,11 @@ abstract final class MethodNames {
 
   static const toggleAutomatic = 'toggleAutomatic';
 
-  static const translatePlainText = 'translatePlainText';
+  /// 截图引擎把段落块交主引擎分块翻译；参数 id 为捕获身份，blocks 为 {text, x, y, width, height} 列表（#138）。
+  static const translateScreenshotBlocks = 'translateScreenshotBlocks';
+
+  /// 主引擎截图翻译快照，经原生转给截图引擎；参数为 id 加 LiveRegionView.toMap 的字段（#138）。
+  static const publishScreenshotTranslation = 'publishScreenshotTranslation';
 
   /// 原生截图关闭或替换时取消对应翻译；参数 id 为捕获身份。
   static const cancelScreenshotTranslation = 'cancelScreenshotTranslation';

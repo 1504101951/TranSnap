@@ -43,6 +43,14 @@ class ChannelPlatformBridge
   Future<void> publishLiveRegion(Map<String, Object?> state) =>
       _methods.invokeMethod<void>(MethodNames.publishLiveRegion, state);
 
+  /// state 为带捕获身份的截图翻译快照。转发给原生，由截图控制器核对身份后交截图引擎（#138）。
+  @override
+  Future<void> publishScreenshotTranslation(Map<String, Object?> state) =>
+      _methods.invokeMethod<void>(
+        MethodNames.publishScreenshotTranslation,
+        state,
+      );
+
   /// sessionId绑定会话，x/y为屏幕锚点，width/height为逻辑尺寸；请求显示定位，返回操作完成的Future。
   @override
   Future<void> showOverlay({
@@ -154,11 +162,6 @@ class ChannelPlatformBridge
   @override
   Future<String> applicationSupportPath() async => (await _methods
       .invokeMethod<String>(MethodNames.applicationSupportPath))!;
-
-  /// captureId 为 OCR 发起时的截图 ID；返回原生截图是否仍存在且未被替换。
-  @override
-  Future<bool> isCurrentScreenshot(String captureId) async => (await _methods
-      .invokeMethod<bool>(MethodNames.isCurrentScreenshot, {'id': captureId}))!;
 
   /// settings 为经 Dart 校验的偏好字典；成功保存并应用系统能力后完成。
   @override

@@ -20,7 +20,7 @@
 
 设置模块接收初始配置、公开当前配置和发送提交通知时使用独立副本；协议快照复制可变排除项字典，外部草稿修改不能绕过提交队列。连接测试由设置模块内的独立流程处理，队列只等待其结果。采集启动、暂停、停止、取消和失败清理在异步等待后核对会话或分段资源身份；旧请求不清理新会话或恢复后的新流。
 
-Swift附属窗口由 `WindowEngine.start` 统一装配引擎（建引擎与通道、运行入口、注册插件与原生玻璃），设置、权限向导与历史窗口经 `WindowEngine.makeWindow` 建窗口，启动失败统一提示；历史窗口在新记录写入和重开时经 `refreshMethod` 刷新，通过`MacPlatformBridge.routeWindowRequest`统一路由：先交本进程的系统能力处理，本地未实现的方法再转主引擎，跨引擎业务方法表只在 `lib/main.dart` 维护一份；设置窗口只额外处理快捷键录制。截图窗口先验证捕获身份，再转发截图翻译；绘图偏好与录制选项使用相同的主引擎设置队列。窗口不另建业务状态或复制通用转发表。`DockPresence` 是激活策略的唯一写入方：设置、翻译历史、权限向导在 `WindowEngine.present` 登记、`windowWillClose` 撤销，采集结果窗口以采集控制器登记，屏幕录制授权与采集失败提示临时登记；有登记时 App 出现在 Dock 与 ⌘Tab，全部撤销后回到仅菜单栏图标。主引擎 `main` 的初始化（读取设置、打开数据库、组装会话与请求入口）失败时，经 `appStartFailed` 把错误文本交给 `MacPlatformBridge` 弹出「TranslateApp 无法启动」并退出，再原样抛出异常，窗口不会因主通道没有处理器而无限等待。
+Swift附属窗口由 `WindowEngine.start` 统一装配引擎（建引擎与通道、运行入口、注册插件与原生玻璃），设置、权限向导与历史窗口经 `WindowEngine.makeWindow` 建窗口，启动失败统一提示；历史窗口在新记录写入和重开时经 `refreshMethod` 刷新，通过`MacPlatformBridge.routeWindowRequest`统一路由：先交本进程的系统能力处理，本地未实现的方法再转主引擎，跨引擎业务方法表只在 `lib/main.dart` 维护一份；设置窗口只额外处理快捷键录制。截图窗口先验证捕获身份，再把截图翻译的段落块转发给主引擎；绘图偏好与录制选项使用相同的主引擎设置队列。窗口不另建业务状态或复制通用转发表。`DockPresence` 是激活策略的唯一写入方：设置、翻译历史、权限向导在 `WindowEngine.present` 登记、`windowWillClose` 撤销，采集结果窗口以采集控制器登记，屏幕录制授权与采集失败提示临时登记；有登记时 App 出现在 Dock 与 ⌘Tab，全部撤销后回到仅菜单栏图标。主引擎 `main` 的初始化（读取设置、打开数据库、组装会话与请求入口）失败时，经 `appStartFailed` 把错误文本交给 `MacPlatformBridge` 弹出「TranslateApp 无法启动」并退出，再原样抛出异常，窗口不会因主通道没有处理器而无限等待。
 
 附属窗口由 `WindowEngine.start` 返回可取消的启动句柄，调用方必须持有至完成，忽略返回值会产生编译警告。原生先注册 `windowStartup` 通道，Dart 五个入口在初始化绑定并提交根组件后发送 `windowReady`；收到确认后才交付引擎与控制器，不等待首帧或业务加载。五秒内未确认或运行失败时解除处理器并停止引擎；预算的测量条件和适用范围见 #120。各窗口合并重复打开，关闭或退出取消待启动任务，迟到确认不能打开旧窗口；采集界面启动失败同时释放采集资源。截图窗口启动失败先清空草稿与采集身份，再显示失败提示。
 
@@ -90,7 +90,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 
 术语文件由 `glossary_file.dart` 解析为预览行并按既有术语键合并，CSV 与 JSON 使用同一字段契约。原生桥负责文件选择与保存；确认导入后通过设置页的串行事务提交，失败仅在预览中保留文件草稿和错误，取消不把未保存术语带入后续自动保存。
 
-文件与剪贴板图片经 `ScreenshotWindowController` 在后台解码为首帧、方向归正的 sRGB BGRA，复用截图引擎和编辑文档。普通图片窗口登记 `DockPresence`，关闭时撤销；图片不具有屏幕采集能力。主引擎按捕获 ID 持有截图翻译取消信号，原生关闭/替换先使旧身份失效并取消 Provider 流，完成后再次核对身份，阻止旧结果写入历史。
+文件与剪贴板图片经 `ScreenshotWindowController` 在后台解码为首帧、方向归正的 sRGB BGRA，复用截图引擎和编辑文档。普通图片窗口登记 `DockPresence`，关闭时撤销；图片不具有屏幕采集能力。截图翻译复用实时翻译的段落会话：主引擎为截图持有独立的 `LiveRegionSession` 实例，`translateScreenshotBlocks` 把识别出的段落块作为单个样本开始一次会话，快照经 `publishScreenshotTranslation` 带捕获 ID 推回，`ScreenshotWindowController.publishTranslation` 只转给仍是该截图的编辑引擎。原生关闭/替换经 `cancelScreenshotTranslation` 结束会话并取消在途批次。截图翻译不写翻译历史。
 
 `TranslationHistoryStore` 统一处理原文/译文关键词、来源、完成时间范围和稳定游标；日期由窗口按本地日历转换为左闭右开的毫秒范围。保留期限与确认状态存于 `history_meta`，默认 30 天，可选 90/365/永久；首次存在过期记录时等用户确认，确认后在启动、写入和设置期限时删除过期记录，列表与来源查询只按期限下界过滤、不写库；改期限时先按原期限删除，再应用新期限。期限提交与清理在同一事务中，单条删除及清空仅操作翻译历史。刷新/分页失败保留各自重试语义和可见记录。
 
@@ -128,7 +128,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 
 `ScreenshotWindowController.capture(_:)` 接收 `ScreenshotTarget`：指针所在屏以前台窗口为建议选区（只有该模式枚举窗口列表），指定显示器选中整屏并经快照 `cropSelected` 让 Dart 直接进入选中状态。`capture(_:)` 入口经 `CaptureWindowController.cancelCountdown` 结束未到时的录制倒计时，被替换的截图草稿不再恢复。冻结帧是否包含指针取偏好字典 `screenshotIncludesCursor`，`captureDisplayImage` 显式接收该选项，MCP 固定不含指针。
 
-截图取帧时暂停文本手势采集，翻译浮层保持显示并进入冻结帧；冻结编辑层显示期间（`onFrozenEditorVisibleChanged`）收起实时浮层，编辑层撤下或草稿结束后只恢复仍有效的浮层。截图的复制与保存不经过翻译层；“识别文字”“翻译文字”（`ScreenshotActions.ocrTranslate`，`_translateOcr`）经本地 OCR 取得文字后，由 `translateScreenshotText` 进入同一翻译层。
+截图取帧时暂停文本手势采集，翻译浮层保持显示并进入冻结帧；冻结编辑层显示期间（`onFrozenEditorVisibleChanged`）收起实时浮层，编辑层撤下或草稿结束后只恢复仍有效的浮层。截图的复制与保存不经过翻译层；“翻译文字”（`ScreenshotActions.ocrTranslate`，`_translateOcr`）经 `recognizeBlocks` 按段落识别后，交主引擎的截图翻译会话分批翻译；浮层由 `_FitText` 按 `fitOverlayFontSize` 取能放进段落矩形的最大字号。
 
 ## MCP 截图接口
 

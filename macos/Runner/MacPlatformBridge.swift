@@ -234,13 +234,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 MainActor.assumeIsolated { InputStatusBubble.shared.showFailure(message, anchor: inputAnchor) }
             }
             result(nil)
-        case AppConstants.isCurrentScreenshotMethod:
-            guard let id = args["id"] as? String else {
-                result(Self.badArguments("核对截图需要 id")); return
-            }
-            // 翻译结果落库前核对原生生命周期，关闭的截图不得产生历史。
-            // 只查询捕获身份，不向主引擎传输第二份截图数据。
-            result(screenshot.isCurrentCapture(id))
         case AppConstants.loadSettingsMethod:
             var settings = AppPreferences.current
             settings["systemLanguage"] = Locale.preferredLanguages.first ?? "en"
@@ -524,6 +517,13 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             let state = call.arguments as! [String: Any]
             Task { @MainActor in
                 self.live.publish(state)
+                result(nil)
+            }
+        case AppConstants.publishScreenshotTranslationMethod:
+            // 截图翻译快照由截图控制器核对捕获身份后转给截图引擎（#138）。
+            let state = call.arguments as! [String: Any]
+            Task { @MainActor in
+                self.screenshot.publishTranslation(state)
                 result(nil)
             }
         case AppConstants.requestScreenAccessMethod:

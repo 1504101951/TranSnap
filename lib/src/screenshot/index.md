@@ -6,16 +6,15 @@
 2. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 3. [screenshot_app.dart](screenshot_app.dart)：实现截图画布、采集工具组、文字编辑和导出操作。
 4. [screenshot_editor_layout.dart](screenshot_editor_layout.dart)：计算工具栏避让布局并保持截图画布位置与比例。
-5. [screenshot_translation.dart](screenshot_translation.dart)：编排截图与图片 OCR 文本的语言识别、可取消分片翻译及有效完整结果的历史写入。
 
-6. [drawing_style.dart](drawing_style.dart)：定义不可变共享绘制样式与工具能力。
-7. [drawing_controls.dart](drawing_controls.dart)：提供带应用和取消语义的独立调色盘与粗细选择控件。
+5. [drawing_style.dart](drawing_style.dart)：定义不可变共享绘制样式与工具能力。
+6. [drawing_controls.dart](drawing_controls.dart)：提供带应用和取消语义的独立调色盘与粗细选择控件。
 
-8. [drawing_preferences.dart](drawing_preferences.dart)：定义按工具独立保存的绘图属性及其持久化格式。
-9. [recognized_text_panel.dart](recognized_text_panel.dart)：显示“识别文字”结果的可拖动弹窗，列出二维码与条码并可复制或打开 http/https 链接，渲染 Markdown 并支持选中复制与复制全部原文。
-10. [markdown_view.dart](markdown_view.dart)：把识别结果 Markdown 解析为标题、段落、列表与表格并渲染，宽表格横向滚动。
-11. [beautify.dart](beautify.dart)：定义截图美化参数，并提供预览与导出共用的背景、阴影与圆角绘制。
-12. [measure_layer.dart](measure_layer.dart)：显示取色标签与标尺测量线，并提供色值与测量文字格式化；不进入导出与撤销。
-13. [box_transform.dart](box_transform.dart)：可拖动矩形的控制点命中与移动、拉伸、比例、旋转变换，裁剪框、文字框与贴纸共用。
-14. [stickers.dart](stickers.dart)：我的贴纸条目（id 与默认大小）及按原图比例计算初始默认大小。
-15. [sticker_panel.dart](sticker_panel.dart)：截图贴纸下拉框（Emoji 与我的贴纸两段）及其按「贴纸」按钮定位的布局，返回选中的表情、贴纸或管理入口。
+7. [drawing_preferences.dart](drawing_preferences.dart)：定义按工具独立保存的绘图属性及其持久化格式。
+8. [recognized_text_panel.dart](recognized_text_panel.dart)：显示“识别文字”结果的可拖动弹窗，列出二维码与条码并可复制或打开 http/https 链接，渲染 Markdown 并支持选中复制与复制全部原文。
+9. [markdown_view.dart](markdown_view.dart)：把识别结果 Markdown 解析为标题、段落、列表与表格并渲染，宽表格横向滚动。
+10. [beautify.dart](beautify.dart)：定义截图美化参数，并提供预览与导出共用的背景、阴影与圆角绘制。
+11. [measure_layer.dart](measure_layer.dart)：显示取色标签与标尺测量线，并提供色值与测量文字格式化；不进入导出与撤销。
+12. [box_transform.dart](box_transform.dart)：可拖动矩形的控制点命中与移动、拉伸、比例、旋转变换，裁剪框、文字框与贴纸共用。
+13. [stickers.dart](stickers.dart)：我的贴纸条目（id 与默认大小）及按原图比例计算初始默认大小。
+14. [sticker_panel.dart](sticker_panel.dart)：截图贴纸下拉框（Emoji 与我的贴纸两段）及其按「贴纸」按钮定位的布局，返回选中的表情、贴纸或管理入口。

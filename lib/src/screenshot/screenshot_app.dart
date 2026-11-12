@@ -35,7 +35,6 @@ import 'recognized_text_panel.dart';
 import 'screenshot_editor_layout.dart';
 import '../settings/screenshot_toolbar_preferences.dart';
 import '../common/constants/screenshot_actions.dart';
-import '../translation/translation_types.dart';
 
 /// handle 为控制点方向，plusWhenIdle控制空白十字；channel为截图引擎，返回系统或原生对角光标。
 MouseCursor cursorForEditHandle(
@@ -189,6 +188,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   String? _savedPath;
   List<_OcrOverlay> _ocrOverlays = [];
 
+  /// 发起截图翻译时裁剪框在源图中的左上角；段落块坐标相对识别用的裁剪图，加上它换算为源图像素（#138）。
+  Offset _translationOrigin = Offset.zero;
+
   /// “识别文字”得到的文字 Markdown 与二维码/条码；非空时显示结果弹窗（#108）。
   ({String text, List<RecognizedCode> codes})? _recognition;
 
@@ -292,6 +294,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         }
       } else if (call.method == MethodNames.screenshotChanged) {
         _replace(Map<Object?, Object?>.from(call.arguments as Map));
+      } else if (call.method == MethodNames.publishScreenshotTranslation) {
+        final map = Map<Object?, Object?>.from(call.arguments as Map);
+        // 原生已按捕获身份转发；换图后排队的旧快照不能覆盖新截图（#138）。
+        if (!mounted || map['id'] != _capture['id']) return;
+        final status = map['status'] as String;
+        setState(() {
+          // 快照只含已有译文的段落；未完成或不再发送的段落不覆盖，原图可见。
+          _ocrOverlays = [
+            for (final item in map['overlays'] as List)
+              _OcrOverlay.fromMap(item as Map, _translationOrigin),
+          ];
+          // 会话状态（正在翻译、等待翻译、已完成或错误原因）统一以普通样式提示。
+          _message = status.isEmpty ? null : status;
+          _failed = false;
+        });
       } else if (call.method == MethodNames.screenshotToolbarAction) {
         final args = call.arguments as Map;
         // 原生语义动作只操作当前捕获；排队中的旧动作不能切走文字输入。
@@ -1242,7 +1259,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；识别文字后把译文浮在原位置；由主引擎在完整成功时记录截图来源历史。
+  /// 无参数；识别当前合成图的段落后交主引擎分块翻译，无返回值（#138）。
+  /// 译文经 publishScreenshotTranslation 快照逐段浮在原位置；只在识别期间置忙，
+  /// 再次点击重新识别并开始新一次翻译。截图翻译不写翻译历史。
   Future<void> _translateOcr() async {
     final id = _capture['id'];
     if (id == null || !_document.hasImage || _busy) return;
@@ -1252,28 +1271,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _failed = false;
     });
     try {
+      // 识别图只含裁剪区域；记下裁剪框左上角，快照坐标据此换算回源图像素。
+      final origin = _document.cropRect.topLeft;
       final bytes = await _document.renderPng();
-      final raw = await widget.channel.invokeListMethod(
+      final blocks = await widget.channel.invokeListMethod<Object?>(
         MethodNames.recognizeBlocks,
         {'id': id, 'bytes': bytes},
       );
-      // OCR 等待期间可能关闭或替换截图，迟到的识别结果不生成覆盖层、不开始翻译（#115）。
+      // OCR 等待期间可能关闭或替换截图，迟到的识别结果不开始翻译（#115）。
       if (!mounted || _capture['id'] != id) return;
-      final blocks = [
-        for (final item in raw ?? const [])
-          if (item is Map)
-            _OcrOverlay(
-              source: '${item['text'] ?? ''}',
-              rect: Rect.fromLTWH(
-                _document.cropRect.left +
-                    ((item['x'] as num?)?.toDouble() ?? 0),
-                _document.cropRect.top + ((item['y'] as num?)?.toDouble() ?? 0),
-                (item['width'] as num?)?.toDouble() ?? 0,
-                (item['height'] as num?)?.toDouble() ?? 0,
-              ),
-            ),
-      ].where((item) => item.source.trim().isNotEmpty).toList();
-      if (blocks.isEmpty) {
+      if (blocks!.isEmpty) {
         setState(() {
           _ocrOverlays = [];
           _message = '画面中没有可识别的文字';
@@ -1281,36 +1288,15 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         });
         return;
       }
-      final joined = blocks.map((item) => item.source).join('\n');
-      final translated = await widget.channel.invokeMethod<String>(
-        MethodNames.translatePlainText,
-        {'text': joined, 'id': id},
+      setState(() {
+        _ocrOverlays = [];
+        _translationOrigin = origin;
+      });
+      // 主引擎开始会话后立即返回；分批、重试与退避都由会话负责。
+      await widget.channel.invokeMethod<void>(
+        MethodNames.translateScreenshotBlocks,
+        {'id': id, 'blocks': blocks},
       );
-      // 识别块各占一行发送，译文须逐行对应；行数不符即整次失败，不用原文充当译文（#132）。
-      final lines = translated!.split('\n');
-      if (lines.length != blocks.length) {
-        if (mounted && _capture['id'] == id) {
-          setState(() {
-            _message = paragraphCountMismatchMessage;
-            _failed = true;
-          });
-        }
-        return;
-      }
-      final overlays = <_OcrOverlay>[
-        for (var i = 0; i < blocks.length; i++)
-          _OcrOverlay(
-            source: blocks[i].source,
-            translation: lines[i],
-            rect: blocks[i].rect,
-          ),
-      ];
-      if (mounted && _capture['id'] == id) {
-        setState(() {
-          _ocrOverlays = overlays;
-          _message = '已在图上显示译文';
-        });
-      }
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
         setState(() {
@@ -3533,18 +3519,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         child: IgnorePointer(
                           child: ColoredBox(
                             color: const Color(0xCCFFFFFF),
-                            child: FittedBox(
-                              fit: BoxFit.contain,
-                              child: Text(
-                                overlay.translation.isEmpty
-                                    ? overlay.source
-                                    : overlay.translation,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                            // _FitText 把整段译文换行缩进浮层矩形（#67 截图译文浮层）。
+                            child: _FitText(overlay.text),
                           ),
                         ),
                       ),
@@ -4130,15 +4106,89 @@ class _OverlayPainter extends CustomPainter {
   }
 }
 
-/// 一块 OCR 译文浮层；rect 为源图像素，translation 为空时显示原文。
+/// 一块截图译文浮层；text 为段落译文，rect 为该段在源图中的像素矩形（#138）。
 class _OcrOverlay {
-  const _OcrOverlay({
-    required this.source,
-    this.translation = '',
-    required this.rect,
-  });
+  const _OcrOverlay({required this.text, required this.rect});
 
-  final String source;
-  final String translation;
+  /// map 为会话快照的盖层 {text, x, y, width, height}，坐标相对识别用的裁剪图；
+  /// origin 为发起翻译时的裁剪框左上角。返回换算到源图像素的浮层。
+  factory _OcrOverlay.fromMap(Map<Object?, Object?> map, Offset origin) =>
+      _OcrOverlay(
+        text: map['text'] as String,
+        rect: Rect.fromLTWH(
+          origin.dx + (map['x'] as num).toDouble(),
+          origin.dy + (map['y'] as num).toDouble(),
+          (map['width'] as num).toDouble(),
+          (map['height'] as num).toDouble(),
+        ),
+      );
+
+  final String text;
   final Rect rect;
+}
+
+/// 截图译文浮层的文字样式：黑色半粗体，字号由 fitOverlayFontSize 决定（#67 截图译文浮层）。
+const _overlayTextStyle = TextStyle(
+  color: Colors.black,
+  fontWeight: FontWeight.w600,
+);
+
+/// text 为段落译文，box 为浮层矩形（逻辑像素），style 为不含字号的文字样式。
+/// 返回整段水平居中、按词换行后高度不超过矩形的最大字号：在 1 至矩形高度之间二分查找，精度 0.5（#67）。
+double fitOverlayFontSize({
+  required String text,
+  required Size box,
+  required TextStyle style,
+}) {
+  var low = 1.0;
+  var high = math.max(1.0, box.height);
+  var best = low;
+  final painter = TextPainter(
+    textAlign: TextAlign.center,
+    textDirection: TextDirection.ltr,
+  );
+  while (high - low > 0.5) {
+    final size = (low + high) / 2;
+    painter
+      ..text = TextSpan(text: text, style: style.copyWith(fontSize: size))
+      ..layout(maxWidth: box.width);
+    // 超长单词按字符折行，宽度不会超出矩形，只需比较高度。
+    if (painter.height <= box.height + 0.5) {
+      best = size;
+      low = size;
+    } else {
+      high = size;
+    }
+  }
+  painter.dispose();
+  return best;
+}
+
+/// 浮层内的整段译文：水平居中、按词换行、整体垂直居中，字号取能放进浮层的最大值（#67 截图译文浮层）。
+class _FitText extends StatelessWidget {
+  const _FitText(this.text);
+
+  /// 段落译文。
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final box = constraints.biggest;
+      // 宽或高不超过 1pt 时只画底色。
+      if (box.width <= 1 || box.height <= 1) return const SizedBox.shrink();
+      // 测量与绘制使用同一合并样式，字体族与 Text 实际渲染一致。
+      final style = DefaultTextStyle.of(context).style.merge(_overlayTextStyle);
+      return Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          textScaler: TextScaler.noScaling,
+          style: style.copyWith(
+            fontSize: fitOverlayFontSize(text: text, box: box, style: style),
+          ),
+        ),
+      );
+    },
+  );
 }
