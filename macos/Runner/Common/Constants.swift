@@ -478,6 +478,55 @@ enum AppConstants {
     static func mcpStaleRefMessage(_ ref: String) -> String { "Ref \(ref) is stale; call snapshot or find again." }
     /// 同时给出互斥的目标参数时的错误。
     static let mcpTargetConflictMessage = "Pass only one of app, window_id or root."
+    /// 操作目标既不是 ref 也不是完整坐标、或两者都给出时的错误。
+    static let mcpPointTargetMessage = "Pass ref, or display_index with x and y, not both."
+    /// click 的 count 超出 1–2 时的错误。
+    static let mcpClickCountMessage = "count must be 1 or 2"
+    /// drag 的终点超出参考截图范围时的错误。
+    static let mcpDragTargetMessage = "drag needs display_index, x, y, to_x and to_y within the capture_screen image."
+    /// 目标为密码框时的错误。
+    static let mcpSecureFieldMessage = "Typing into password fields is refused."
+    /// 按键组合无法解析时的错误。
+    static func mcpInvalidKeysMessage(_ keys: String) -> String {
+        "Cannot parse keys \(keys); use forms like cmd+s, return, shift+tab, f5."
+    }
+    /// 退出、注销、锁屏与强制退出类快捷键被拒绝时的错误。
+    static func mcpForbiddenKeysMessage(_ keys: String) -> String { "\(keys) is refused: quit, log-out and force-quit shortcuts are blocked." }
+    /// 用户拒绝或未在时限内允许操作某应用时的错误。
+    static func mcpDeniedMessage(_ app: String) -> String { "The user did not allow control of \(app) in this session." }
+    /// 上一个操作仍在执行（含等待授权）时的错误。
+    static let mcpControlBusyMessage = "Another control action is still running; wait for its result."
+    /// 用户持续操作电脑、等待超时时的错误。
+    static let mcpUserBusyMessage = "The user is using the computer; retry shortly."
+    /// 操作中途被用户的真实输入打断时的错误。
+    static let mcpInterruptedMessage = "Interrupted by the user's input; observe again before retrying."
+    /// 坐标处没有可操作窗口时的错误。
+    static let mcpNoWindowAtPointMessage = "No app window at that point."
+    /// 操作已执行但附带截图失败时追加的说明。
+    static let mcpScreenshotUnavailableMessage = "Screenshot unavailable: grant Screen Recording permission."
+    /// 操控会话的时长上限与空闲上限，单位秒（#140：30 分钟、5 分钟）。
+    static let controlSessionLimit: TimeInterval = 30 * 60
+    static let controlIdleLimit: TimeInterval = 5 * 60
+    /// 用户最近一次真实输入后需要静止的时长；未静止时不借用前台，单位秒。
+    static let controlUserIdleInterval: TimeInterval = 1
+    /// 等待用户静止的最长时长，超过返回用户忙，单位秒。
+    static let controlUserWaitLimit: TimeInterval = 10
+    /// 授权面板等待用户回应的时长，超时按拒绝处理，单位秒（#140）。
+    static let controlApprovalTimeout: TimeInterval = 30
+    /// 激活目标应用后等待其成为前台的时长、操作后附带截图前等待界面更新的时长，单位秒。
+    static let controlActivationDelay: TimeInterval = 0.15
+    static let controlSettleDelay: TimeInterval = 0.3
+    /// 操控边框宽度（pt）与颜色 #FF9500（#67「电脑操控提示」）。
+    static let controlBorderWidth: CGFloat = 3
+    static let controlBorderColor = NSColor(srgbRed: 1, green: 0x95 / 255.0, blue: 0, alpha: 1)
+    /// 操控期间菜单栏图标。
+    static let controlSymbol = "cursorarrow.rays"
+    /// 授权面板宽度、内边距与距可见区域顶部的距离，单位 pt（#67「电脑操控提示」）。
+    static let controlPanelWidth: CGFloat = 360
+    static let controlPanelPadding: CGFloat = 16
+    static let controlPanelTopInset: CGFloat = 48
+    /// 本地操作日志文件名，位于 Application Support 数据目录；只记录时间、应用、动作与目标，不记录输入文字。
+    static let controlLogFileName = "control.log"
     /// find 未给出任何筛选条件时的错误。
     static let mcpFindFilterMessage = "Pass role, text or both."
     /// 操控禁止的应用包标识（#140 安全基线）：系统设置、钥匙串访问、密码、1Password、Bitwarden；另合并用户的「排除应用」。
@@ -587,14 +636,29 @@ enum MCPTool: String, CaseIterable {
     case captureWindow = "capture_window"
     case snapshot
     case find
+    case click
+    case typeText = "type_text"
+    case pressKey = "press_key"
+    case scroll
+    case drag
 
     /// 无参数；返回是否为「允许操控电脑」开启后才提供的工具（#140）。
     var isControl: Bool {
         switch self {
         case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
-        case .snapshot, .find: true
+        case .snapshot, .find, .click, .typeText, .pressKey, .scroll, .drag: true
         }
     }
+}
+
+/// click 的鼠标键；rawValue 为协议取值，缺省为 left（#140）。
+enum MCPMouseButton: String, Codable, CaseIterable {
+    case left, right
+}
+
+/// scroll 的方向；rawValue 为协议取值（#140）。
+enum MCPScrollDirection: String, Codable, CaseIterable {
+    case up, down, left, right
 }
 
 /// MCP 截图工具的 output 参数；rawValue 为协议取值，缺省为 image。

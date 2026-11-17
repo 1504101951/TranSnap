@@ -20,12 +20,17 @@ enum MCPToolRunner {
             case .captureScreen(let index, let options):
                 guard let id = displayID(index) else { return displayOutOfRange(index) }
                 return try await capture {
-                    try await MCPImageOutput.reply(ScreenCaptureService.captureDisplayImage(displayID: id, showsCursor: false).image, options: options)
+                    // 截图排除操控边框（#67「电脑操控提示」）。
+                    try await MCPImageOutput.reply(ScreenCaptureService.captureDisplayImage(
+                        displayID: id, showsCursor: false, excludingWindowIDs: Set(MCPControl.shared.indicatorWindowIDs)
+                    ).image, options: options)
                 }
             case .captureRect(let index, let x, let y, let width, let height, let reference, let options):
                 guard let id = displayID(index) else { return displayOutOfRange(index) }
                 return try await capture {
-                    let image = try await ScreenCaptureService.captureDisplayImage(displayID: id, showsCursor: false).image
+                    let image = try await ScreenCaptureService.captureDisplayImage(
+                        displayID: id, showsCursor: false, excludingWindowIDs: Set(MCPControl.shared.indicatorWindowIDs)
+                    ).image
                     // sourceRect 把 reference 清晰度下 capture_screen 输出图的坐标换算回原始像素。
                     guard let rect = MCPImageOutput.sourceRect(
                         x: x, y: y, width: width, height: height, detail: reference,
@@ -50,6 +55,9 @@ enum MCPToolRunner {
                 )
             case .find(let target, let role, let text):
                 return await MCPAccessibility.find(target: target, role: role, text: text, displays: displays())
+            case .click, .typeText, .pressKey, .scroll, .drag:
+                // MCPControl 管理操控会话、授权与执行分档。
+                return await MCPControl.shared.perform(request)
             }
         } catch {
             return .failed(message: AppConstants.mcpCaptureFailedMessage(error.localizedDescription))
@@ -111,6 +119,20 @@ enum MCPToolRunner {
                 title: window.title ?? ""
             )
         }
+    }
+
+    /// 作用：把截图像素坐标换成全局点坐标（操作工具的坐标目标，#140）。
+    /// 参数 x、y：reference 清晰度下 capture_screen 输出图的像素；reference：参考清晰度；display：所在显示器几何。
+    /// 返回：该像素中心对应的全局点；坐标超出输出图时为 nil。
+    static func globalPoint(x: Int, y: Int, reference: MCPDetail, display: Display) -> CGPoint? {
+        let width = reference == .standard ? display.info.standardWidth : display.info.lowWidth
+        let height = reference == .standard ? display.info.standardHeight : display.info.lowHeight
+        guard x < width, y < height else { return nil }
+        // 取像素中心，再按点尺寸与输出图尺寸之比换回该显示器内的点，加上显示器原点。
+        return CGPoint(
+            x: display.bounds.minX + (Double(x) + 0.5) * display.bounds.width / Double(width),
+            y: display.bounds.minY + (Double(y) + 0.5) * display.bounds.height / Double(height)
+        )
     }
 
     /// 作用：把全局点坐标矩形换成显示器 standard 输出图像素（窗口与无障碍元素共用，#140）。

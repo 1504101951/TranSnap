@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Darwin
 import XCTest
 
@@ -202,7 +203,7 @@ final class MCPTests: XCTestCase {
             ((output.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]).map { $0["name"] as! String }
         }
         XCTAssertEqual(names(hidden), ["list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window"])
-        XCTAssertEqual(names(shown), names(hidden) + ["snapshot", "find"])
+        XCTAssertEqual(names(shown), names(hidden) + ["snapshot", "find", "click", "type_text", "press_key", "scroll", "drag"])
 
         var executed = false
         startServer(control: false) { _ in
@@ -236,6 +237,97 @@ final class MCPTests: XCTestCase {
             XCTAssertEqual($0 as? MCPRequestError, .invalidArgument(AppConstants.mcpFindFilterMessage))
         }
         XCTAssertThrowsError(try MCPProtocol.toolRequest(params: ["name": "find", "arguments": ["root": "@s1:e1", "text": "OK"]]))
+    }
+
+    /// 作用：操作工具的目标与参数转换（#140）。
+    /// 边界依据：ref 与坐标二选一，坐标须同时有 display_index、x、y；count 只能为 1 或 2；drag 只接受坐标；
+    /// type_text 可无目标（输入到前台焦点）且保留文字首尾空白。
+    func testControlToolArguments() throws {
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "click", "arguments": ["ref": "@s1:e2"]]),
+            .click(target: .ref("@s1:e2"), button: .left, count: 1, screenshot: false)
+        )
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "click", "arguments": [
+                "display_index": 1, "x": 5, "y": 6, "reference_detail": "low", "button": "right", "count": 2, "return_screenshot": true,
+            ]]),
+            .click(target: .point(displayIndex: 1, x: 5, y: 6, reference: .low), button: .right, count: 2, screenshot: true)
+        )
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "type_text", "arguments": ["text": " hi "]]),
+            .typeText(text: " hi ", target: nil, screenshot: false)
+        )
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "drag", "arguments": ["display_index": 0, "x": 1, "y": 2, "to_x": 3, "to_y": 4]]),
+            .drag(from: .point(displayIndex: 0, x: 1, y: 2, reference: .standard), toX: 3, toY: 4, screenshot: false)
+        )
+        let invalid: [[String: Any]] = [
+            ["name": "click", "arguments": ["ref": "@s1:e2", "x": 1]],
+            ["name": "click", "arguments": ["display_index": 0, "x": 1]],
+            ["name": "click"],
+            ["name": "click", "arguments": ["ref": "@s1:e2", "count": 3]],
+            ["name": "scroll", "arguments": ["ref": "@s1:e2"]],
+            ["name": "type_text", "arguments": ["text": ""]],
+        ]
+        for params in invalid {
+            XCTAssertThrowsError(try MCPProtocol.toolRequest(params: params), "\(params)")
+        }
+    }
+
+    /// 作用：按键组合解析与禁止组合（#140 安全基线）。
+    /// 边界依据：Command+Q 系列覆盖退出、注销与锁屏，Command+Option+Esc 为强制退出；不带 Command 的 Q 与 Esc 照常允许；
+    /// 多个主键、未知名称或只有修饰键都不能解析。
+    func testKeyComboParsingAndForbiddenShortcuts() throws {
+        let save = try XCTUnwrap(MCPKeyCombo("Cmd+Shift+S"))
+        XCTAssertEqual(save.keyCode, CGKeyCode(kVK_ANSI_S))
+        XCTAssertEqual(save.flags, [.maskCommand, .maskShift])
+        XCTAssertEqual(MCPKeyCombo("f5")?.keyCode, CGKeyCode(kVK_F5))
+        XCTAssertEqual(MCPKeyCombo("return")?.flags, [])
+        for forbidden in ["cmd+q", "cmd+shift+q", "ctrl+cmd+q", "cmd+opt+esc"] {
+            XCTAssertTrue(try XCTUnwrap(MCPKeyCombo(forbidden)).isForbidden, forbidden)
+        }
+        for allowed in ["q", "esc", "opt+esc", "cmd+w"] {
+            XCTAssertFalse(try XCTUnwrap(MCPKeyCombo(allowed)).isForbidden, allowed)
+        }
+        for invalid in ["cmd", "a+b", "cmd+hyper", ""] {
+            XCTAssertNil(MCPKeyCombo(invalid), invalid)
+        }
+        // 合成按键都带本应用标记。
+        XCTAssertTrue(save.events().allSatisfy { $0.getIntegerValueField(.eventSourceUserData) == AppConstants.syntheticEventTag })
+    }
+
+    /// 作用：会话时限（#140：最长 30 分钟、空闲 5 分钟）。
+    /// 边界依据：恰好到达上限即结束，差一秒不结束。
+    func testControlSessionLimits() {
+        let start = Date(timeIntervalSince1970: 0)
+        XCTAssertFalse(MCPControlLimits.expired(startedAt: start, lastActionAt: start, now: start.addingTimeInterval(299)))
+        XCTAssertTrue(MCPControlLimits.expired(startedAt: start, lastActionAt: start, now: start.addingTimeInterval(300)))
+        let active = start.addingTimeInterval(1500)
+        XCTAssertFalse(MCPControlLimits.expired(startedAt: start, lastActionAt: active, now: start.addingTimeInterval(1799)))
+        XCTAssertTrue(MCPControlLimits.expired(startedAt: start, lastActionAt: active, now: start.addingTimeInterval(1800)))
+    }
+
+    /// 作用：截图像素坐标换成全局点（#140）。
+    /// 边界依据：取像素中心；副显示器原点为负；坐标等于输出图宽或高即越界。
+    @MainActor
+    func testGlobalPointMapsImagePixelsToScreenPoints() {
+        let left = MCPToolRunner.Display(
+            info: MCPDisplayInfo(displayIndex: 1, standardWidth: 500, standardHeight: 500, lowWidth: 250, lowHeight: 250),
+            bounds: CGRect(x: -1000, y: 0, width: 1000, height: 1000), pixelWidth: 1000, pixelHeight: 1000
+        )
+        XCTAssertEqual(MCPToolRunner.globalPoint(x: 0, y: 0, reference: .standard, display: left), CGPoint(x: -999, y: 1))
+        XCTAssertEqual(MCPToolRunner.globalPoint(x: 249, y: 0, reference: .low, display: left), CGPoint(x: -2, y: 2))
+        XCTAssertNil(MCPToolRunner.globalPoint(x: 500, y: 0, reference: .standard, display: left))
+        XCTAssertNil(MCPToolRunner.globalPoint(x: 0, y: 250, reference: .low, display: left))
+    }
+
+    /// 作用：操作结果为说明文字在前、可选截图在后（#140）。边界依据：未请求截图时只有文字块。
+    func testDoneReplyBecomesTextThenImage() {
+        let plain = MCPProtocol.toolResult(.done(message: "Clicked.", png: nil))["content"] as! [[String: Any]]
+        XCTAssertEqual(plain.count, 1)
+        XCTAssertEqual(plain[0]["text"] as? String, "Clicked.")
+        let shot = MCPProtocol.toolResult(.done(message: "Clicked.", png: Data([1, 2])))["content"] as! [[String: Any]]
+        XCTAssertEqual(shot.map { $0["type"] as? String }, ["text", "image"])
     }
 
     /// 作用：元素清单输出为表格文本；不在屏上的元素坐标为空，不完整时首行提示展开局部（#140）。

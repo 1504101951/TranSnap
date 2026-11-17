@@ -643,6 +643,10 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             screenshot.toolbarPreferencesChanged()
             // 菜单由主执行器管理，偏好事务完成后在其执行器上刷新可见状态。
             DispatchQueue.main.async { StatusBarController.shared.updateAutomatic(automatic) }
+            // 关闭 MCP 或「允许操控电脑」时立即结束进行中的操控会话，撤下边框（#140）。
+            let controlEnabled = settings[AppConstants.mcpEnabledKey] as? Bool == true
+                && settings[AppConstants.mcpControlEnabledKey] as? Bool == true
+            if !controlEnabled { Task { @MainActor in MCPControl.shared.endSession() } }
             result(nil)
         } catch {
             let originalError = error

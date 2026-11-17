@@ -18,6 +18,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var liveAbort = false
     /// 执行中或仍在最短保持时间内的 MCP 截图数；大于 0 时显示采集图标。
     private var mcpCaptures = 0
+    /// MCP 操控会话进行中时的终止回调；非 nil 时显示操控图标，菜单首项为「停止操控」（#140）。
+    private var stopControl: (() -> Void)?
     private var abortLiveTranslation: (() -> Void)?
     var showSettings: (() -> Void)?
     var refreshSettings: (() -> Void)?
@@ -49,6 +51,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
+        if stopControl != nil {
+            // 操控期间菜单首项为「停止操控」（#67「电脑操控提示」）。
+            let stop = NSMenuItem(title: "停止操控", action: #selector(stopComputerControl), keyEquivalent: "")
+            stop.target = self
+            menu.addItem(stop)
+            menu.addItem(.separator())
+        }
         let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -138,20 +147,34 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
+    /// active 为 MCP 操控会话是否进行中，stop 为「停止操控」执行的终止；更新图标与菜单，无返回值（#140）。
+    func setControlActive(_ active: Bool, stop: (() -> Void)?) {
+        stopControl = active ? stop : nil
+        updateMCPIcon()
+        reloadMenu()
+    }
+
+    @objc private func stopComputerControl() {
+        stopControl?()
+    }
+
     /// 无参数；按 MCP 截图计数设置非实时翻译状态下的图标，无返回值。
     private func updateMCPIcon() {
         guard !liveAbort else { return }
         statusItem?.button?.image = idleImage()
     }
 
-    /// 无参数；返回非实时翻译状态的模板图标：录制倒计时为剩余秒数，MCP 截图进行中为采集图标，否则为翻译图标。
+    /// 无参数；返回非实时翻译状态的模板图标：录制倒计时为剩余秒数，操控会话中为操控图标，MCP 截图进行中为采集图标，否则为翻译图标。
     private func idleImage() -> NSImage? {
         if let countdown {
             let image = NSImage(systemSymbolName: "\(countdown).circle", accessibilityDescription: "\(countdown) 秒后开始录制")
             image?.isTemplate = true
             return image
         }
-        let image = mcpCaptures > 0
+        // 操控会话优先于 MCP 截图：截图是操控过程的一部分（#140）。
+        let image = stopControl != nil
+            ? NSImage(systemSymbolName: AppConstants.controlSymbol, accessibilityDescription: "模型操控中")
+            : mcpCaptures > 0
             ? NSImage(systemSymbolName: AppConstants.mcpCaptureSymbol, accessibilityDescription: "agent 截图中")
             : NSImage(systemSymbolName: "translate", accessibilityDescription: "选区翻译")
                 ?? NSImage(systemSymbolName: "globe", accessibilityDescription: "选区翻译")

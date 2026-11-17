@@ -69,6 +69,7 @@
 		A96M0000000000000000001B /* MCPCaptureServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000001A /* MCPCaptureServer.swift */; };
 		A96M0000000000000000001D /* MCPImageOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000001C /* MCPImageOutput.swift */; };
 		A140000000000000000000A2 /* MCPAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A140000000000000000000A1 /* MCPAccessibility.swift */; };
+		A140000000000000000000A4 /* MCPControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A140000000000000000000A3 /* MCPControl.swift */; };
 		A96M0000000000000000001F /* MCPToolRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000001E /* MCPToolRunner.swift */; };
 /* End PBXBuildFile section */
 
@@ -178,6 +179,7 @@
 		A96M0000000000000000001A /* MCPCaptureServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPCaptureServer.swift; sourceTree = "<group>"; };
 		A96M0000000000000000001C /* MCPImageOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPImageOutput.swift; sourceTree = "<group>"; };
 		A140000000000000000000A1 /* MCPAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPAccessibility.swift; sourceTree = "<group>"; };
+		A140000000000000000000A3 /* MCPControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPControl.swift; sourceTree = "<group>"; };
 		A96M0000000000000000001E /* MCPToolRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPToolRunner.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -339,6 +341,7 @@
 				A96M00000000000000000003 /* MCPProtocol.swift */,
 				A96M00000000000000000001 /* MCPSocket.swift */,
 				A96M0000000000000000001E /* MCPToolRunner.swift */,
+				A140000000000000000000A3 /* MCPControl.swift */,
 				A140000000000000000000A1 /* MCPAccessibility.swift */,
 			);
 			path = MCP;
@@ -572,6 +575,7 @@
 				A96M0000000000000000001B /* MCPCaptureServer.swift in Sources */,
 				A96M0000000000000000001D /* MCPImageOutput.swift in Sources */,
 				A96M0000000000000000001F /* MCPToolRunner.swift in Sources */,
+				A140000000000000000000A4 /* MCPControl.swift in Sources */,
 				A140000000000000000000A2 /* MCPAccessibility.swift in Sources */,
 				A17C00000000000000000002 /* AuxiliaryWindowController.swift in Sources */,
 				A13A00000000000000000004 /* MacPlatformBridge.swift in Sources */,

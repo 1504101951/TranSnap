@@ -27,14 +27,28 @@ enum MCPToolRequest: Codable, Equatable {
     case snapshot(target: MCPAppTarget, interactiveOnly: Bool, maxDepth: Int)
     /// 按角色和/或文字查找元素（#140）；role、text 至少一个非 nil。
     case find(target: MCPAppTarget, role: String?, text: String?)
+    /// 操作类请求（#140）：screenshot 为操作后是否附带所在显示器的 standard 截图。
+    /// click 的 count 为 1 或 2；typeText 的 target 为 nil 时输入到前台应用的焦点元素；
+    /// pressKey 的 keys 形如 cmd+s，app 为 nil 时发给前台应用；drag 的 from 只能是坐标，终点与起点同一参考截图。
+    case click(target: MCPPointTarget, button: MCPMouseButton, count: Int, screenshot: Bool)
+    case typeText(text: String, target: MCPPointTarget?, screenshot: Bool)
+    case pressKey(keys: String, app: String?, screenshot: Bool)
+    case scroll(target: MCPPointTarget, direction: MCPScrollDirection, amount: Int, screenshot: Bool)
+    case drag(from: MCPPointTarget, toX: Int, toY: Int, screenshot: Bool)
 
     /// 无参数；返回是否为「允许操控电脑」开启后才可执行的请求。
     var isControl: Bool {
         switch self {
         case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
-        case .snapshot, .find: true
+        case .snapshot, .find, .click, .typeText, .pressKey, .scroll, .drag: true
         }
     }
+}
+
+/// 操作目标（#140）：snapshot/find 的 ref，或某显示器在 reference 清晰度下 capture_screen 输出图的像素坐标。
+enum MCPPointTarget: Codable, Equatable {
+    case ref(String)
+    case point(displayIndex: Int, x: Int, y: Int, reference: MCPDetail)
 }
 
 /// 无障碍工具的读取对象（#140）：前台应用、按名称或包标识指定的应用、list_windows 的窗口，或上次快照的 ref。
@@ -91,6 +105,8 @@ enum MCPToolReply: Codable, Equatable {
     case image(png: Data?, markdown: String?)
     /// 无障碍元素清单：snapshot 为快照编号（如 @s3），complete 为是否完整读取（超时或超量时为 false）。
     case elements(snapshot: String, complete: Bool, items: [MCPElementInfo])
+    /// 操作完成：message 说明执行方式与目标，png 为请求附带的操作后截图。
+    case done(message: String, png: Data?)
     case failed(message: String)
 }
 
@@ -219,6 +235,23 @@ enum MCPProtocol {
                 description: "Applies when output includes text. Adds an [x,y,w,h] line before each block, in returned image pixels"
             ),
         ]
+        let referenceDetail = MCPParameter(
+            name: "reference_detail", type: "string", values: MCPDetail.allCases.map(\.rawValue),
+            defaultValue: .string(MCPDetail.standard.rawValue),
+            description: "Detail of the capture_screen image the coordinates come from"
+        )
+        // 操作目标：ref，或 display_index 加 x、y 的截图坐标，二选一。
+        let pointTarget = [
+            MCPParameter(name: "ref", type: "string", description: "From snapshot or find; instead of a point"),
+            displayIndex(nil),
+            MCPParameter(name: "x", type: "integer", minimum: 0, description: "x < image width of reference_detail in list_displays"),
+            MCPParameter(name: "y", type: "integer", minimum: 0, description: "y < image height of reference_detail in list_displays"),
+            referenceDetail,
+        ]
+        let returnScreenshot = MCPParameter(
+            name: "return_screenshot", type: "boolean", defaultValue: .boolean(false),
+            description: "Attach a standard capture of the display after the action"
+        )
         // 无障碍工具的读取对象参数；都缺省时读取前台应用。
         let appTarget = [
             MCPParameter(name: "app", type: "string", description: "App name or bundle id; default the frontmost app"),
@@ -283,6 +316,61 @@ enum MCPProtocol {
                         ),
                     ],
                     required: []
+                )
+            case .click:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Click an element by ref (from snapshot or find), or a point in a capture_screen image. Refs act in the background when possible; points briefly bring the app to the front, then restore the previous app and pointer.",
+                    parameters: pointTarget + [
+                        MCPParameter(name: "button", type: "string", values: MCPMouseButton.allCases.map(\.rawValue), defaultValue: .string(MCPMouseButton.left.rawValue)),
+                        MCPParameter(name: "count", type: "integer", minimum: 1, defaultValue: .integer(1), description: "1 or 2"),
+                        returnScreenshot,
+                    ],
+                    required: []
+                )
+            case .typeText:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Type text into the element given by ref or point, or into the focused element of the frontmost app when neither is given. Password fields are refused.",
+                    parameters: [MCPParameter(name: "text", type: "string")] + pointTarget + [returnScreenshot],
+                    required: ["text"]
+                )
+            case .pressKey:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Press a key combination such as cmd+s, return, shift+tab or f5, sent to app or to the frontmost app. Quit, log-out and force-quit shortcuts are refused.",
+                    parameters: [
+                        MCPParameter(name: "keys", type: "string", description: "Modifiers cmd, shift, opt, ctrl joined with +"),
+                        MCPParameter(name: "app", type: "string", description: "App name or bundle id; default the frontmost app"),
+                        returnScreenshot,
+                    ],
+                    required: ["keys"]
+                )
+            case .scroll:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Scroll at an element by ref or at a point in a capture_screen image.",
+                    parameters: pointTarget + [
+                        MCPParameter(name: "direction", type: "string", values: MCPScrollDirection.allCases.map(\.rawValue)),
+                        MCPParameter(name: "amount", type: "integer", minimum: 1, defaultValue: .integer(3), description: "Lines"),
+                        returnScreenshot,
+                    ],
+                    required: ["direction"]
+                )
+            case .drag:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Drag with the left button from (x, y) to (to_x, to_y) in one capture_screen image; briefly takes over the pointer.",
+                    parameters: [
+                        displayIndex(nil),
+                        MCPParameter(name: "x", type: "integer", minimum: 0),
+                        MCPParameter(name: "y", type: "integer", minimum: 0),
+                        MCPParameter(name: "to_x", type: "integer", minimum: 0),
+                        MCPParameter(name: "to_y", type: "integer", minimum: 0),
+                        referenceDetail,
+                        returnScreenshot,
+                    ],
+                    required: ["display_index", "x", "y", "to_x", "to_y"]
                 )
             case .find:
                 return MCPToolDefinition(
@@ -352,6 +440,40 @@ enum MCPProtocol {
                     try integer(arguments, "max_depth", minimum: 1) ?? AppConstants.mcpSnapshotDefaultDepth
                 )
             )
+        case .click:
+            let count = try integer(arguments, "count", minimum: 1) ?? 1
+            guard count <= 2 else { throw .invalidArgument(AppConstants.mcpClickCountMessage) }
+            guard let target = try pointTarget(arguments) else { throw .invalidArgument(AppConstants.mcpPointTargetMessage) }
+            return .click(
+                target: target, button: try choice(arguments, "button", default: MCPMouseButton.left),
+                count: count, screenshot: try boolean(arguments, "return_screenshot") ?? false
+            )
+        case .typeText:
+            // 文字原样输入，不去掉首尾空白。
+            guard let text = arguments["text"] as? String, !text.isEmpty else {
+                throw .invalidArgument(AppConstants.mcpMissingArgumentMessage("text"))
+            }
+            return .typeText(text: text, target: try pointTarget(arguments), screenshot: try boolean(arguments, "return_screenshot") ?? false)
+        case .pressKey:
+            guard let keys = try string(arguments, "keys") else { throw .invalidArgument(AppConstants.mcpMissingArgumentMessage("keys")) }
+            return .pressKey(keys: keys, app: try string(arguments, "app"), screenshot: try boolean(arguments, "return_screenshot") ?? false)
+        case .scroll:
+            guard arguments["direction"] != nil else { throw .invalidArgument(AppConstants.mcpMissingArgumentMessage("direction")) }
+            guard let target = try pointTarget(arguments) else { throw .invalidArgument(AppConstants.mcpPointTargetMessage) }
+            return .scroll(
+                target: target, direction: try choice(arguments, "direction", default: MCPScrollDirection.down),
+                amount: try integer(arguments, "amount", minimum: 1) ?? 3,
+                screenshot: try boolean(arguments, "return_screenshot") ?? false
+            )
+        case .drag:
+            guard case .point(let index, let x, let y, let reference) = try pointTarget(arguments) else {
+                throw .invalidArgument(AppConstants.mcpDragTargetMessage)
+            }
+            return .drag(
+                from: .point(displayIndex: index, x: x, y: y, reference: reference),
+                toX: try required(arguments, "to_x", minimum: 0), toY: try required(arguments, "to_y", minimum: 0),
+                screenshot: try boolean(arguments, "return_screenshot") ?? false
+            )
         case .find:
             let role = try string(arguments, "role")
             let text = try string(arguments, "text")
@@ -375,6 +497,23 @@ enum MCPProtocol {
         }
         if let root { return .ref(root) }
         return .frontmost
+    }
+
+    /// 作用：读取操作目标。参数 arguments：工具参数。
+    /// 返回：ref 或完整坐标；都缺省为 nil；同时给出、或坐标不完整时抛 invalidArgument。
+    private static func pointTarget(_ arguments: [String: Any]) throws(MCPRequestError) -> MCPPointTarget? {
+        let ref = try string(arguments, "ref")
+        let index = try integer(arguments, "display_index", minimum: 0)
+        let x = try integer(arguments, "x", minimum: 0)
+        let y = try integer(arguments, "y", minimum: 0)
+        let pointKeys = [index, x, y].compactMap { $0 }.count
+        if let ref {
+            guard pointKeys == 0, arguments["reference_detail"] == nil else { throw .invalidArgument(AppConstants.mcpPointTargetMessage) }
+            return .ref(ref)
+        }
+        guard pointKeys > 0 else { return nil }
+        guard let index, let x, let y else { throw .invalidArgument(AppConstants.mcpPointTargetMessage) }
+        return .point(displayIndex: index, x: x, y: y, reference: try choice(arguments, "reference_detail", default: MCPDetail.standard))
     }
 
     /// 作用：读取可选字符串参数。参数 arguments：工具参数；key：字段名。
@@ -420,6 +559,10 @@ enum MCPProtocol {
             let status = complete ? "complete" : "incomplete; expand a ref with root or narrow the target"
             let table = ["snapshot \(snapshot) \(status)", "ref\tdepth\trole\tname\tvalue\tenabled\tdisplay_index\tx\ty\twidth\theight"] + rows
             return ["content": [textContent(table.joined(separator: "\n"))], "isError": false]
+        case .done(let message, let png):
+            var content = [textContent(message)]
+            if let png { content.append(["type": "image", "data": png.base64EncodedString(), "mimeType": "image/png"]) }
+            return ["content": content, "isError": false]
         }
     }
 

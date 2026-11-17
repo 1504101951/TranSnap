@@ -87,7 +87,7 @@ enum ScreenCaptureService {
         }
         // 取帧与前台窗口建议选区分别计时（#68「性能测量边界」）。
         let captureStart = ContinuousClock.now
-        let (image, scale) = try await captureDisplayImage(displayID: screenNumber, showsCursor: showsCursor)
+        let (image, scale) = try await captureDisplayImage(displayID: screenNumber, showsCursor: showsCursor, excludingWindowIDs: [])
         PerformanceLog.record("screenshot-capture-image", since: captureStart)
         // 截图引擎按 BGRA 原始字节建图；配置已要求 32BGRA，格式不符说明系统输出变化，直接报错。
         let order = image.bitmapInfo.intersection(.byteOrderMask)
@@ -121,9 +121,12 @@ enum ScreenCaptureService {
         )
     }
 
-    /// displayID 为目标显示器，showsCursor 为是否绘制鼠标指针（区域截图按设置，MCP 不绘制）。
+    /// displayID 为目标显示器，showsCursor 为是否绘制鼠标指针（区域截图按设置，MCP 不绘制）；
+    /// excludingWindowIDs 为不进入画面的窗口（MCP 排除操控边框，区域截图为空）。
     /// 返回该显示器物理像素的图像与点到像素比例；显示器不在可捕获列表时抛错。
-    static func captureDisplayImage(displayID: CGDirectDisplayID, showsCursor: Bool) async throws -> (image: CGImage, scale: CGFloat) {
+    static func captureDisplayImage(
+        displayID: CGDirectDisplayID, showsCursor: Bool, excludingWindowIDs: Set<CGWindowID>
+    ) async throws -> (image: CGImage, scale: CGFloat) {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
             throw NSError(
@@ -132,7 +135,9 @@ enum ScreenCaptureService {
                 userInfo: [NSLocalizedDescriptionKey: displayUnreadableMessage]
             )
         }
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let filter = SCContentFilter(
+            display: display, excludingWindows: content.windows.filter { excludingWindowIDs.contains($0.windowID) }
+        )
         // contentRect 是点，必须乘 pointPixelScale 才是物理像素；用 1x 缓冲再拉伸会整屏发糊。
         let scale = CGFloat(filter.pointPixelScale)
         let configuration = imageConfiguration(

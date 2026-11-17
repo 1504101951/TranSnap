@@ -288,6 +288,21 @@ enum AXWalk {
         return (node, children)
     }
 
+    /// 作用：读取元素属性。参数 element：元素；name：属性名。返回：元素，缺失时为 nil。
+    static func element(_ element: AXUIElement, _ name: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
+    }
+
+    /// 作用：读取字符串属性。参数 element：元素；name：属性名。返回：字符串，缺失或不是字符串时为 nil。
+    static func string(_ element: AXUIElement, _ name: String) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
     /// 作用：读取元素数组属性。参数 element：元素；name：属性名。返回：元素数组，缺失时为空。
     static func elements(_ element: AXUIElement, _ name: String) -> [AXUIElement] {
         var value: CFTypeRef?
