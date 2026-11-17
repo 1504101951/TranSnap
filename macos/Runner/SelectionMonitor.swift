@@ -162,7 +162,9 @@ final class SelectionMonitor {
         // 系统级元素上设置的超时作用于本进程全部辅助功能调用：来源应用无响应时单次调用最多等待该时长（#68）。
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), AppConstants.axMessagingTimeout)
         let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        // 三个监听都先忽略本应用合成的事件（SyntheticEvent），MCP 操控与自身按键不触发选区手势（#140）。
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseMask) { [weak self] event in
+            guard !SyntheticEvent.isMarked(event) else { return event }
             let type = event.type
             // 仅使用快捷键时拖动与抬起只服务自动划词，直接放行原事件，不切到主线程处理（#68）。
             guard self?.automatic == true || type == .leftMouseDown else { return event }
@@ -175,6 +177,7 @@ final class SelectionMonitor {
             return event
         }
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseMask) { [weak self] event in
+            guard !SyntheticEvent.isMarked(event) else { return }
             let type = event.type
             guard self?.automatic == true || type == .leftMouseDown else { return }
             let clickCount = event.clickCount
@@ -184,6 +187,7 @@ final class SelectionMonitor {
             }
         }
         keyboardMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard !SyntheticEvent.isMarked(event) else { return }
             let type = event.type
             let keyCode = event.keyCode
             let modifiers = event.modifierFlags

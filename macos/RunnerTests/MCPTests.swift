@@ -57,8 +57,9 @@ final class MCPTests: XCTestCase {
     /// 作用：在临时 socket 上启动真实 App 侧服务。
     /// 参数 enabled：MCP 开关；run：工具执行方，替代需要真实屏幕的 MCPToolRunner。
     @MainActor
+    /// 测试进程不是 helper，其余用例放行对端以验证协议；对端校验另有用例。
     private func startServer(enabled: Bool = true, run: @escaping MCPCaptureServer.Run) {
-        let server = MCPCaptureServer(isEnabled: { enabled }, run: run)
+        let server = MCPCaptureServer(isEnabled: { enabled }, run: run, isTrustedPeer: { _ in true })
         server.start(path: socketPath)
         self.server = server
     }
@@ -261,6 +262,33 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: socketPath))
         let stale = await exchange([call], count: 1)
         XCTAssertEqual(toolResult(stale[0]).content.first?["text"] as? String, AppConstants.mcpNotRunningMessage)
+    }
+
+    /// 作用：非本 App helper 的连接被拒绝且不执行工具（#140）。
+    /// 边界依据：测试进程与 App 同一用户、socket 权限 0600 允许连接，正是对端签名校验要拦截的情形。
+    @MainActor
+    func testUntrustedPeerIsRefusedBeforeExecution() async {
+        var executed = false
+        let server = MCPCaptureServer(isEnabled: { true }, run: { _ in
+            executed = true
+            return .displays([])
+        }, isTrustedPeer: MCPPeer.isTrustedHelper)
+        server.start(path: socketPath)
+        self.server = server
+        let messages = await exchange([#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_displays"}}"#], count: 1)
+        XCTAssertTrue(toolResult(messages[0]).isError)
+        XCTAssertEqual(toolResult(messages[0]).content.first?["text"] as? String, AppConstants.mcpUntrustedPeerMessage)
+        XCTAssertFalse(executed)
+    }
+
+    /// 作用：本应用合成事件带标记、可被监听识别，普通事件不带（#140）。
+    /// 边界依据：同一键码的事件只差标记一项，标记是选区监听区分自身注入与用户输入的唯一依据。
+    func testSyntheticEventMarkIsReadableFromNSEvent() throws {
+        let marked = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true))
+        SyntheticEvent.mark(marked)
+        let plain = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true))
+        XCTAssertTrue(SyntheticEvent.isMarked(try XCTUnwrap(NSEvent(cgEvent: marked))))
+        XCTAssertFalse(SyntheticEvent.isMarked(try XCTUnwrap(NSEvent(cgEvent: plain))))
     }
 
     /// 开关关闭时 App 返回开关关闭错误，不执行工具。

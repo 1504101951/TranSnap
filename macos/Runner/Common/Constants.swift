@@ -155,6 +155,8 @@ enum AppConstants {
     static let gifMaximumWidthKey = "gifMaximumWidth"
     /// Escape 键的硬件键码（kVK_Escape）。
     static let escapeKeyCode: UInt16 = 53
+    /// 本应用合成键鼠事件写入 eventSourceUserData 的标记（ASCII「TRAN」）；选区监听据此忽略自身注入的事件（#140）。
+    static let syntheticEventTag: Int64 = 0x5452_414E
     /// 全局快捷键必须包含其中至少一个修饰键（Carbon 修饰键位）。
     static let shortcutRequiredModifiers = UInt32(cmdKey | optionKey | controlKey)
     /// 全局快捷键允许出现的全部修饰键（Carbon 修饰键位）。
@@ -400,6 +402,10 @@ enum AppConstants {
     static let mcpTokenPatch = 28
     /// 连接不到 App 时返回给 agent 的错误。
     static let mcpNotRunningMessage = "TranslateApp is not running."
+    /// MCP helper 的代码签名标识符；App 只接受该标识符且与本 App 同证书签名的 socket 对端（#140）。
+    static let mcpHelperIdentifier = "com.coolyang.translateApp.mcp"
+    /// socket 对端不是本 App 签名的 helper 时返回的错误。
+    static let mcpUntrustedPeerMessage = "Connection refused: the caller is not the TranslateApp MCP helper."
     /// 设置中 MCP 开关关闭时返回给 agent 的错误。
     static let mcpDisabledMessage = "MCP is disabled in TranslateApp settings."
     /// 屏幕录制授权被拒绝时返回给 agent 的错误。

@@ -31,7 +31,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             let preferences = AppPreferences.current
             return preferences[AppConstants.mcpEnabledKey] as? Bool == true
         },
-        run: MCPToolRunner.run
+        run: MCPToolRunner.run,
+        isTrustedPeer: MCPPeer.isTrustedHelper
     )
     /// 译文卡片朗读；只持有当前朗读的文字。
     private let speech = SpeechService()

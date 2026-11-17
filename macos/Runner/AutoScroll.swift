@@ -152,6 +152,9 @@ struct AutoScrollKeys {
         for _ in 0..<count {
             guard let down = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: true),
                   let up = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false) else { return false }
+            // 与本应用其他合成事件统一标记（#140）。
+            SyntheticEvent.mark(down)
+            SyntheticEvent.mark(up)
             down.postToPid(pid)
             up.postToPid(pid)
         }

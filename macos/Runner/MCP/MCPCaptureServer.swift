@@ -1,6 +1,8 @@
+import CryptoKit
 import Darwin
 import Foundation
 import OSLog
+import Security
 
 /// App 侧 MCP 请求入口（#68「MCP 接口边界」）：在 0600 Unix socket 上接受 helper 连接，
 /// 校验开关后交给工具执行方，并把结果写回同一连接。
@@ -14,12 +16,16 @@ final class MCPCaptureServer {
     private static let log = Logger(subsystem: "TranslateApp", category: "MCP")
     private let isEnabled: () -> Bool
     private let run: Run
+    /// 在接受连接的后台线程调用，判断对端是否允许使用 MCP。
+    nonisolated private let isTrustedPeer: @Sendable (Int32) -> Bool
     private var listener: DispatchSourceRead?
 
-    /// 参数 isEnabled：读取设置中「允许 agent 截图」开关；run：按工具执行并生成结果。
-    init(isEnabled: @escaping () -> Bool, run: @escaping Run) {
+    /// 参数 isEnabled：读取设置中「允许 agent 截图」开关；run：按工具执行并生成结果；
+    /// isTrustedPeer：参数为已接受的 socket，返回对端是否可信，App 传入 MCPPeer.isTrustedHelper（#140）。
+    init(isEnabled: @escaping () -> Bool, run: @escaping Run, isTrustedPeer: @escaping @Sendable (Int32) -> Bool) {
         self.isEnabled = isEnabled
         self.run = run
+        self.isTrustedPeer = isTrustedPeer
     }
 
     /// 作用：在 path 上开始监听；失败只记录日志，App 其他功能照常可用，helper 会得到「未运行」。
@@ -36,6 +42,16 @@ final class MCPCaptureServer {
                 guard connection >= 0 else { return }
                 var on: Int32 = 1
                 setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+                // 核对对端为本 App 签名的 helper；同一用户下的其他进程不能借本 App 的权限截图或操控（#140）。
+                guard isTrustedPeer(connection) else {
+                    Self.log.error("MCP 拒绝非本 App helper 的连接")
+                    try? MCPSocket.writeLine(
+                        JSONEncoder().encode(MCPToolReply.failed(message: AppConstants.mcpUntrustedPeerMessage)),
+                        to: connection
+                    )
+                    close(connection)
+                    return
+                }
                 DispatchQueue.global(qos: .userInitiated).async { Self.serve(connection, server: self) }
             }
             source.setCancelHandler { close(fd) }
@@ -99,5 +115,60 @@ final class MCPCaptureServer {
                 close(connection)
             }
         }
+    }
+}
+
+/// socket 对端校验（#140）：只接受本 App 包内、签名有效的 helper 可执行文件；本 App 有签名证书时，
+/// 另要求 helper 标识符为 com.coolyang.translateApp.mcp 且叶证书与本 App 相同。
+/// 适用条件：Release 包由安装脚本以同一证书签名 App 与 helper。Debug 构建为临时签名、没有证书，
+/// helper 标识符由 Xcode 生成，此时只校验签名有效与路径；若改为分发给他人或更换签名方式，需重新评估该校验强度。
+enum MCPPeer {
+    /// helper 在本 App 包内的路径；对端可执行文件必须正好是它。
+    private static let helperURL = Bundle.main.bundleURL
+        .appendingPathComponent("Contents/MacOS", isDirectory: true)
+        .appendingPathComponent(AppConstants.mcpHelperName)
+        .standardizedFileURL
+
+    /// 本 App 自身签名推导出的校验规则：readable 为能否读取本 App 签名（不能时拒绝全部连接）；
+    /// requirement 为有证书时的 helper 签名要求，临时签名时为 nil。
+    private static let rule: (readable: Bool, requirement: SecRequirement?) = {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess,
+              let staticCode else { return (false, nil) }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information
+        ) == errSecSuccess else { return (false, nil) }
+        let certificates = (information as? [String: Any])?[kSecCodeInfoCertificates as String] as? [SecCertificate]
+        guard let leaf = certificates?.first else { return (true, nil) }
+        // 叶证书 DER 的 SHA-1 是代码签名要求语言 certificate leaf = H"…" 的格式，不用于安全散列。
+        let digest = Insecure.SHA1.hash(data: SecCertificateCopyData(leaf) as Data)
+        let text = "identifier \"\(AppConstants.mcpHelperIdentifier)\" and certificate leaf = "
+            + "H\"\(digest.map { String(format: "%02X", $0) }.joined())\""
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(text as CFString, [], &requirement) == errSecSuccess else {
+            return (false, nil)
+        }
+        return (true, requirement)
+    }()
+
+    /// connection 为已接受的 socket；返回对端是否为本 App 签名的 helper。
+    static func isTrustedHelper(_ connection: Int32) -> Bool {
+        guard rule.readable else { return false }
+        // 用审计令牌而非进程号定位对端，避免进程号复用时校验到另一个进程。
+        var token = audit_token_t()
+        var length = socklen_t(MemoryLayout<audit_token_t>.size)
+        guard getsockopt(connection, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &length) == 0 else { return false }
+        var code: SecCode?
+        let audit = withUnsafeBytes(of: &token) { Data($0) }
+        let attributes = [kSecGuestAttributeAudit: audit] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else { return false }
+        // 校验运行中代码的签名有效（有证书时同时满足签名要求），再核对可执行文件就是本 App 包内的 helper。
+        guard SecCodeCheckValidity(code, [], rule.requirement) == errSecSuccess else { return false }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return false }
+        var path: CFURL?
+        guard SecCodeCopyPath(staticCode, [], &path) == errSecSuccess, let path else { return false }
+        return (path as URL).standardizedFileURL == helperURL
     }
 }

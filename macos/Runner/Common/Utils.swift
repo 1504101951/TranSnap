@@ -224,6 +224,20 @@ enum PNGPasteboard {
 }
 
 /// 窗口列表与显示器坐标换算；截图默认选区用。
+/// 本应用合成的键鼠事件标记（#140）：写入 eventSourceUserData，监听方读取后忽略，
+/// 避免本应用发出的复制、全选、粘贴与 MCP 操控事件被当作用户手势。
+enum SyntheticEvent {
+    /// event 为即将发送的合成事件；写入本应用标记，无返回值。
+    static func mark(_ event: CGEvent) {
+        event.setIntegerValueField(.eventSourceUserData, value: AppConstants.syntheticEventTag)
+    }
+
+    /// event 为监听收到的事件；返回是否带本应用标记。
+    static func isMarked(_ event: NSEvent) -> Bool {
+        event.cgEvent?.getIntegerValueField(.eventSourceUserData) == AppConstants.syntheticEventTag
+    }
+}
+
 enum CaptureGeometry {
     /// 无参数；返回坐标原点在 (0,0) 的主显示器，找不到时退回 NSScreen.main，坐标换算以其高度为基准。
     private static var primaryScreen: NSScreen? {

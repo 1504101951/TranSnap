@@ -442,6 +442,9 @@ enum AccessibilitySelection {
         let up = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: false)
         down?.flags = .maskCommand
         up?.flags = .maskCommand
+        // 标记为本应用合成，选区监听不把自身发出的 Command-A 等识别为用户手势（#140）。
+        down.map(SyntheticEvent.mark)
+        up.map(SyntheticEvent.mark)
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
     }
