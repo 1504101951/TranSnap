@@ -57,9 +57,11 @@ final class MCPTests: XCTestCase {
     /// 作用：在临时 socket 上启动真实 App 侧服务。
     /// 参数 enabled：MCP 开关；run：工具执行方，替代需要真实屏幕的 MCPToolRunner。
     @MainActor
-    /// 测试进程不是 helper，其余用例放行对端以验证协议；对端校验另有用例。
-    private func startServer(enabled: Bool = true, run: @escaping MCPCaptureServer.Run) {
-        let server = MCPCaptureServer(isEnabled: { enabled }, run: run, isTrustedPeer: { _ in true })
+    /// 测试进程不是 helper，其余用例放行对端以验证协议；对端校验另有用例。control 为「允许操控电脑」开关。
+    private func startServer(enabled: Bool = true, control: Bool = true, run: @escaping MCPCaptureServer.Run) {
+        let server = MCPCaptureServer(
+            isEnabled: { enabled }, isControlEnabled: { control }, run: run, isTrustedPeer: { _ in true }
+        )
         server.start(path: socketPath)
         self.server = server
     }
@@ -71,13 +73,14 @@ final class MCPTests: XCTestCase {
         await exchangeOutput(lines, count: count).all
     }
 
-    /// 作用：同 exchange，返回收集器以便读取原始行。参数 lines、count：同 exchange。返回：输出收集器。
-    private func exchangeOutput(_ lines: [String], count: Int) async -> Output {
+    /// 作用：同 exchange，返回收集器以便读取原始行。参数 lines、count：同 exchange；control：helper 读到的操控开关。
+    /// 返回：输出收集器。
+    private func exchangeOutput(_ lines: [String], count: Int, control: Bool = false) async -> Output {
         let output = Output()
         let done = expectation(description: "收到 \(count) 条输出")
         output.expectation = done
         output.expectedCount = count
-        let session = MCPHelperSession(socketPath: socketPath, version: "test") { output.append($0) }
+        let session = MCPHelperSession(socketPath: socketPath, version: "test", controlEnabled: { control }) { output.append($0) }
         lines.forEach { session.receive(Data($0.utf8)) }
         await fulfillment(of: [done], timeout: 10)
         return output
@@ -189,6 +192,88 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(positions, positions.sorted())
     }
 
+    /// 作用：「允许操控电脑」决定 tools/list 是否列出无障碍工具，App 执行前再校验（#140）。
+    /// 边界依据：开关关闭时只有五个截图工具；开启后 snapshot、find 依声明顺序排在其后；关闭时直接调用也不执行。
+    @MainActor
+    func testControlSwitchGatesListingAndExecution() async {
+        let hidden = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1, control: false)
+        let shown = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1, control: true)
+        let names = { (output: Output) in
+            ((output.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]).map { $0["name"] as! String }
+        }
+        XCTAssertEqual(names(hidden), ["list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window"])
+        XCTAssertEqual(names(shown), names(hidden) + ["snapshot", "find"])
+
+        var executed = false
+        startServer(control: false) { _ in
+            executed = true
+            return .displays([])
+        }
+        let messages = await exchange([#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"snapshot"}}"#], count: 1)
+        XCTAssertEqual(toolResult(messages[0]).content.first?["text"] as? String, AppConstants.mcpControlDisabledMessage)
+        XCTAssertFalse(executed)
+    }
+
+    /// 作用：snapshot 与 find 的参数转换（#140）。
+    /// 边界依据：都缺省时读取前台应用；max_depth 超过上限按上限处理；app、window_id、root 互斥；find 至少要一个筛选条件。
+    func testAccessibilityToolArguments() throws {
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "snapshot"]),
+            .snapshot(target: .frontmost, interactiveOnly: true, maxDepth: AppConstants.mcpSnapshotDefaultDepth)
+        )
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "snapshot", "arguments": ["root": "@s2:e5", "max_depth": 99, "interactive_only": false]]),
+            .snapshot(target: .ref("@s2:e5"), interactiveOnly: false, maxDepth: AppConstants.mcpSnapshotMaxDepth)
+        )
+        XCTAssertEqual(
+            try MCPProtocol.toolRequest(params: ["name": "find", "arguments": ["app": "Safari", "role": "button"]]),
+            .find(target: .app("Safari"), role: "button", text: nil)
+        )
+        XCTAssertThrowsError(try MCPProtocol.toolRequest(params: ["name": "snapshot", "arguments": ["app": "Safari", "window_id": 3]])) {
+            XCTAssertEqual($0 as? MCPRequestError, .invalidArgument(AppConstants.mcpTargetConflictMessage))
+        }
+        XCTAssertThrowsError(try MCPProtocol.toolRequest(params: ["name": "find", "arguments": ["app": "Safari"]])) {
+            XCTAssertEqual($0 as? MCPRequestError, .invalidArgument(AppConstants.mcpFindFilterMessage))
+        }
+        XCTAssertThrowsError(try MCPProtocol.toolRequest(params: ["name": "find", "arguments": ["root": "@s1:e1", "text": "OK"]]))
+    }
+
+    /// 作用：元素清单输出为表格文本；不在屏上的元素坐标为空，不完整时首行提示展开局部（#140）。
+    /// 边界依据：displayIndex 为 nil 表示元素不与任何显示器相交；名称中的制表符会打乱表格，须替换为空格。
+    func testElementsReplyBecomesTable() {
+        let items = [
+            MCPElementInfo(ref: "@s1:e1", depth: 0, role: "button", name: "Send\tNow", value: "", enabled: true,
+                           displayIndex: 0, x: 10, y: 20, width: 30, height: 40),
+            MCPElementInfo(ref: "@s1:e2", depth: 1, role: "textfield", name: "Search", value: "abc", enabled: false,
+                           displayIndex: nil, x: 0, y: 0, width: 0, height: 0),
+        ]
+        let text = MCPProtocol.toolResult(.elements(snapshot: "@s1", complete: false, items: items))["content"] as! [[String: Any]]
+        let lines = (text[0]["text"] as! String).components(separatedBy: "\n")
+        XCTAssertTrue(lines[0].hasPrefix("snapshot @s1 incomplete"))
+        XCTAssertEqual(lines[2], "@s1:e1\t0\tbutton\tSend Now\t\ttrue\t0\t10\t20\t30\t40")
+        XCTAssertEqual(lines[3], "@s1:e2\t1\ttextfield\tSearch\tabc\tfalse\t\t\t\t\t")
+    }
+
+    /// 作用：全局点坐标换成显示器 standard 输出图像素（窗口与元素共用，#140）。
+    /// 边界依据：副显示器原点为负；跨出显示器的部分裁掉；与任何显示器都不相交时为 nil。
+    @MainActor
+    func testStandardRectMapsGlobalPointsToDisplayImage() {
+        let main = MCPToolRunner.Display(
+            info: MCPDisplayInfo(displayIndex: 0, standardWidth: 1000, standardHeight: 500, lowWidth: 500, lowHeight: 250),
+            bounds: CGRect(x: 0, y: 0, width: 2000, height: 1000), pixelWidth: 4000, pixelHeight: 2000
+        )
+        let left = MCPToolRunner.Display(
+            info: MCPDisplayInfo(displayIndex: 1, standardWidth: 500, standardHeight: 500, lowWidth: 250, lowHeight: 250),
+            bounds: CGRect(x: -1000, y: 0, width: 1000, height: 1000), pixelWidth: 1000, pixelHeight: 1000
+        )
+        let displays = [main, left]
+        XCTAssertTrue(MCPToolRunner.standardRect(CGRect(x: 200, y: 100, width: 400, height: 200), displays: displays)!
+            == (0, 100, 50, 200, 100))
+        XCTAssertTrue(MCPToolRunner.standardRect(CGRect(x: -900, y: 900, width: 200, height: 400), displays: displays)!
+            == (1, 50, 450, 100, 50))
+        XCTAssertNil(MCPToolRunner.standardRect(CGRect(x: 5000, y: 0, width: 10, height: 10), displays: displays))
+    }
+
     /// 参数转换：缺省值、必填、取值范围与未声明参数。
     /// 边界依据：display_index 与 x、y 下界为 0，width、height、window_id 下界为 1；布尔与小数不得被当作整数；
     /// window_id 上界为 CGWindowID（UInt32）最大值；schema 声明 additionalProperties: false。
@@ -269,7 +354,7 @@ final class MCPTests: XCTestCase {
     @MainActor
     func testUntrustedPeerIsRefusedBeforeExecution() async {
         var executed = false
-        let server = MCPCaptureServer(isEnabled: { true }, run: { _ in
+        let server = MCPCaptureServer(isEnabled: { true }, isControlEnabled: { true }, run: { _ in
             executed = true
             return .displays([])
         }, isTrustedPeer: MCPPeer.isTrustedHelper)
@@ -367,7 +452,7 @@ final class MCPTests: XCTestCase {
             return .displays([])
         }
         let output = Output()
-        let session = MCPHelperSession(socketPath: socketPath, version: "test") { output.append($0) }
+        let session = MCPHelperSession(socketPath: socketPath, version: "test", controlEnabled: { false }) { output.append($0) }
         session.receive(Data(#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_windows"}}"#.utf8))
         await fulfillment(of: [started], timeout: 5)
         session.receive(Data(#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":7}}"#.utf8))

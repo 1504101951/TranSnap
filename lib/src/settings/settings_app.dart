@@ -1317,6 +1317,9 @@ class _SettingsPageState extends State<_SettingsPage>
                           enabled: settings.mcpEnabled,
                           onChanged: (v) =>
                               _edit(() => settings.mcpEnabled = v),
+                          controlEnabled: settings.mcpControlEnabled,
+                          onControlChanged: (v) =>
+                              _edit(() => settings.mcpControlEnabled = v),
                           channel: _channel,
                           createService: widget.createMcpService,
                         ),

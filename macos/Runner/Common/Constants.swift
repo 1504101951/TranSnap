@@ -452,6 +452,52 @@ enum AppConstants {
     static let mcpScaleFailedMessage = "Unable to scale screenshot."
     /// 设置中「允许 agent 截图」开关的偏好键；与 Dart PreferenceKeys.mcpEnabled 一致。
     static let mcpEnabledKey = "mcpEnabled"
+    /// 偏好字典中「允许操控电脑」开关的键，与 Dart PreferenceKeys.mcpControlEnabled 一致（#140）。
+    static let mcpControlEnabledKey = "mcpControlEnabled"
+    /// App 的包标识；helper 据此读取 App 偏好判断 tools/list 是否列出操控类工具（#140）。
+    static let appBundleIdentifier = "com.coolyang.translateApp"
+    /// 「允许操控电脑」关闭时调用操控类工具返回的错误。
+    static let mcpControlDisabledMessage = "Computer control is disabled in TranslateApp settings."
+    /// 辅助功能未授权时操控类工具返回的错误。
+    static let mcpAccessibilityPermissionMessage = "TranslateApp lacks Accessibility permission. Allow it in System Settings > Privacy & Security > Accessibility, then retry."
+    /// 目标应用禁止读取或操作时的错误；name 为应用显示名。
+    static func mcpBlockedAppMessage(_ name: String) -> String { "\(name) is blocked from computer control." }
+    /// 按名称或包标识找不到运行中应用时的错误。
+    static func mcpAppNotRunningMessage(_ name: String) -> String { "App \(name) is not running; check list_windows." }
+    /// 名称对应多个运行中应用时的错误；candidates 为可用的包标识。
+    static func mcpAmbiguousAppMessage(_ name: String, candidates: [String]) -> String {
+        "App \(name) is ambiguous; pass one bundle id: \(candidates.joined(separator: ", "))"
+    }
+    /// window_id 对应窗口不在无障碍树中时的错误。
+    static func mcpWindowNotInTreeMessage(windowID: UInt32) -> String {
+        "window_id \(windowID) has no accessibility information; use capture_window and pixel coordinates."
+    }
+    /// ref 格式不合法时的错误。
+    static func mcpInvalidRefMessage(_ ref: String) -> String { "Invalid ref \(ref); refs look like @s3:e12." }
+    /// ref 对应快照已淘汰或元素已消失时的错误。
+    static func mcpStaleRefMessage(_ ref: String) -> String { "Ref \(ref) is stale; call snapshot or find again." }
+    /// 同时给出互斥的目标参数时的错误。
+    static let mcpTargetConflictMessage = "Pass only one of app, window_id or root."
+    /// find 未给出任何筛选条件时的错误。
+    static let mcpFindFilterMessage = "Pass role, text or both."
+    /// 操控禁止的应用包标识（#140 安全基线）：系统设置、钥匙串访问、密码、1Password、Bitwarden；另合并用户的「排除应用」。
+    static let controlBlockedBundleIDs: Set<String> = [
+        "com.apple.systempreferences", "com.apple.keychainaccess", "com.apple.Passwords",
+        "com.1password.1password", "com.bitwarden.desktop",
+    ]
+    /// 一次快照遍历的时间预算，单位秒；超时返回已读部分并标为不完整。
+    static let mcpSnapshotBudget: TimeInterval = 2
+    /// 一次快照最多输出的元素数；超过时标为不完整，模型可用 root 展开局部。
+    static let mcpSnapshotElementLimit = 400
+    /// find 最多返回的匹配数。
+    static let mcpFindLimit = 50
+    /// 快照默认与最大遍历深度。
+    static let mcpSnapshotDefaultDepth = 10
+    static let mcpSnapshotMaxDepth = 50
+    /// 内存中保留的快照数；更早快照的 ref 视为失效。
+    static let mcpRefSnapshotLimit = 8
+    /// 元素值输出的最大字符数，超出截断。
+    static let mcpElementValueLimit = 120
     /// 设置页读取 helper 完整路径的方法；与 Dart MethodNames.mcpHelperPath 一致。
     static let mcpHelperPathMethod = "mcpHelperPath"
     /// 截图类工具执行期间的菜单栏图标与最短保持时间（#96 待确认的界面数值）。
@@ -532,13 +578,23 @@ enum GlobalHotKey: CaseIterable {
     }
 }
 
-/// MCP 工具；rawValue 为协议工具名（#96），均无需用户操作。
+/// MCP 工具；rawValue 为协议工具名（#96、#140），均无需用户逐次操作。
 enum MCPTool: String, CaseIterable {
     case listDisplays = "list_displays"
     case listWindows = "list_windows"
     case captureScreen = "capture_screen"
     case captureRect = "capture_rect"
     case captureWindow = "capture_window"
+    case snapshot
+    case find
+
+    /// 无参数；返回是否为「允许操控电脑」开启后才提供的工具（#140）。
+    var isControl: Bool {
+        switch self {
+        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
+        case .snapshot, .find: true
+        }
+    }
 }
 
 /// MCP 截图工具的 output 参数；rawValue 为协议取值，缺省为 image。

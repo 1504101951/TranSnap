@@ -31,6 +31,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             let preferences = AppPreferences.current
             return preferences[AppConstants.mcpEnabledKey] as? Bool == true
         },
+        isControlEnabled: { AppPreferences.current[AppConstants.mcpControlEnabledKey] as? Bool == true },
         run: MCPToolRunner.run,
         isTrustedPeer: MCPPeer.isTrustedHelper
     )

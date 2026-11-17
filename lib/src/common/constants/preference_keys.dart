@@ -74,6 +74,9 @@ abstract final class PreferenceKeys {
   /// 是否允许本机 MCP 客户端截图（#96）；与原生 AppConstants.mcpEnabledKey 一致。
   static const mcpEnabled = 'mcpEnabled';
 
+  /// 是否允许本机 MCP 客户端操控电脑（#140）；与原生 AppConstants.mcpControlEnabledKey 一致。
+  static const mcpControlEnabled = 'mcpControlEnabled';
+
   /// GIF最大像素宽度；省略表示不限制，输出仍不会放大原视频。
   static const gifMaximumWidth = 'gifMaximumWidth';
 

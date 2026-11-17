@@ -12,8 +12,18 @@ func enclosingAppVersion() -> String {
     return Bundle(url: app)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
 }
 
+/// 作用：读取 App 偏好中的「允许操控电脑」开关（#140）。
+/// 返回：开关是否开启；App 从未写入偏好时为 false。App 执行操控类工具时会再次校验。
+/// 已知限制：开关切换后，客户端重新连接才会拿到新的 tools/list。
+func controlEnabled() -> Bool {
+    let preferences = UserDefaults(suiteName: AppConstants.appBundleIdentifier)?.dictionary(forKey: AppConstants.preferencesKey)
+    return preferences?[AppConstants.mcpControlEnabledKey] as? Bool == true
+}
+
 let stdout = FileHandle.standardOutput
-let session = MCPHelperSession(socketPath: MCPSocket.defaultURL.path, version: enclosingAppVersion()) { message in
+let session = MCPHelperSession(
+    socketPath: MCPSocket.defaultURL.path, version: enclosingAppVersion(), controlEnabled: controlEnabled
+) { message in
     stdout.write(message + Data([0x0A]))
 }
 // stdin 关闭表示客户端退出；进程结束会断开进行中的连接，App 据此关闭对应会话。

@@ -15,15 +15,20 @@ final class MCPCaptureServer {
 
     private static let log = Logger(subsystem: "TranslateApp", category: "MCP")
     private let isEnabled: () -> Bool
+    private let isControlEnabled: () -> Bool
     private let run: Run
     /// 在接受连接的后台线程调用，判断对端是否允许使用 MCP。
     nonisolated private let isTrustedPeer: @Sendable (Int32) -> Bool
     private var listener: DispatchSourceRead?
 
-    /// 参数 isEnabled：读取设置中「允许 agent 截图」开关；run：按工具执行并生成结果；
-    /// isTrustedPeer：参数为已接受的 socket，返回对端是否可信，App 传入 MCPPeer.isTrustedHelper（#140）。
-    init(isEnabled: @escaping () -> Bool, run: @escaping Run, isTrustedPeer: @escaping @Sendable (Int32) -> Bool) {
+    /// 参数 isEnabled：读取设置中「允许 agent 截图」开关；isControlEnabled：读取「允许操控电脑」开关（#140）；
+    /// run：按工具执行并生成结果；isTrustedPeer：参数为已接受的 socket，返回对端是否可信，App 传入 MCPPeer.isTrustedHelper（#140）。
+    init(
+        isEnabled: @escaping () -> Bool, isControlEnabled: @escaping () -> Bool, run: @escaping Run,
+        isTrustedPeer: @escaping @Sendable (Int32) -> Bool
+    ) {
         self.isEnabled = isEnabled
+        self.isControlEnabled = isControlEnabled
         self.run = run
         self.isTrustedPeer = isTrustedPeer
     }
@@ -70,9 +75,11 @@ final class MCPCaptureServer {
 
     /// 作用：按开关受理一次请求。
     /// 参数 request：helper 转来的工具请求。
-    /// 返回：开关关闭为「MCP 未开启」，否则为执行结果。
+    /// 返回：开关关闭为「MCP 未开启」；操控类请求在「允许操控电脑」关闭时为对应错误；否则为执行结果。
     func handle(_ request: MCPToolRequest) async -> MCPToolReply {
         guard isEnabled() else { return .failed(message: AppConstants.mcpDisabledMessage) }
+        // helper 的 tools/list 已按开关隐藏操控类工具，这里是执行前的权威校验（#140）。
+        guard !request.isControl || isControlEnabled() else { return .failed(message: AppConstants.mcpControlDisabledMessage) }
         return await run(request)
     }
 

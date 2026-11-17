@@ -129,6 +129,30 @@ void main() {
     expect(find.text('截图目录'), findsNothing);
   });
 
+  testWidgets('「允许操控电脑」默认关闭，「允许 agent 截图」关闭时不可切换，开启后经自动保存提交（#140）', (
+    tester,
+  ) async {
+    // 作用：操控开关依赖 MCP 接口开关，且与它分开持久化。
+    // 边界：MCP 关闭时操控开关禁用；打开 MCP 后才能打开操控，保存值为 true。
+    final saved = <Map<String, Object?>>[];
+    await open(tester, saved: saved);
+    final control = find.descendant(
+      of: find.byWidgetPredicate(
+        (w) => w is NativeGlassSwitchTile && w.title == '允许操控电脑',
+      ),
+      matching: find.byType(NativeGlassSwitch),
+    );
+    expect(tester.widget<NativeGlassSwitch>(control).value, isFalse);
+    expect(tester.widget<NativeGlassSwitch>(control).onChanged, isNull);
+
+    await tester.tap(mcpSwitch());
+    await tester.pumpAndSettle();
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    expect(saved.last[PreferenceKeys.mcpControlEnabled], isTrue);
+    expect(saved.last[PreferenceKeys.mcpEnabled], isTrue);
+  });
+
   testWidgets('开关默认关闭并经自动保存提交', (tester) async {
     final saved = <Map<String, Object?>>[];
     await open(tester, saved: saved);

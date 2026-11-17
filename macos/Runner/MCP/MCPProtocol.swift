@@ -22,6 +22,43 @@ enum MCPToolRequest: Codable, Equatable {
         referenceDetail: MCPDetail, options: MCPCaptureOptions
     )
     case captureWindow(windowID: UInt32, options: MCPCaptureOptions)
+    /// 无障碍快照（#140）：target 为读取对象（为 ref 时只展开该元素），interactiveOnly 为只输出可交互元素，
+    /// maxDepth 为遍历深度。
+    case snapshot(target: MCPAppTarget, interactiveOnly: Bool, maxDepth: Int)
+    /// 按角色和/或文字查找元素（#140）；role、text 至少一个非 nil。
+    case find(target: MCPAppTarget, role: String?, text: String?)
+
+    /// 无参数；返回是否为「允许操控电脑」开启后才可执行的请求。
+    var isControl: Bool {
+        switch self {
+        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
+        case .snapshot, .find: true
+        }
+    }
+}
+
+/// 无障碍工具的读取对象（#140）：前台应用、按名称或包标识指定的应用、list_windows 的窗口，或上次快照的 ref。
+enum MCPAppTarget: Codable, Equatable {
+    case frontmost
+    case app(String)
+    case window(UInt32)
+    case ref(String)
+}
+
+/// 无障碍元素一行：ref 供操作工具使用；depth 为相对读取根的层级；role 为去掉 AX 前缀的小写角色；
+/// displayIndex 与 x/y/width/height 为元素在该显示器 standard capture_screen 输出图中的像素范围，不在屏上时 displayIndex 为 nil。
+struct MCPElementInfo: Codable, Equatable {
+    let ref: String
+    let depth: Int
+    let role: String
+    let name: String
+    let value: String
+    let enabled: Bool
+    let displayIndex: Int?
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
 }
 
 /// 显示器一行：两种清晰度下 capture_screen 输出图的像素尺寸。
@@ -52,6 +89,8 @@ enum MCPToolReply: Codable, Equatable {
     case displays([MCPDisplayInfo])
     case windows([MCPWindowInfo])
     case image(png: Data?, markdown: String?)
+    /// 无障碍元素清单：snapshot 为快照编号（如 @s3），complete 为是否完整读取（超时或超量时为 false）。
+    case elements(snapshot: String, complete: Bool, items: [MCPElementInfo])
     case failed(message: String)
 }
 
@@ -180,6 +219,11 @@ enum MCPProtocol {
                 description: "Applies when output includes text. Adds an [x,y,w,h] line before each block, in returned image pixels"
             ),
         ]
+        // 无障碍工具的读取对象参数；都缺省时读取前台应用。
+        let appTarget = [
+            MCPParameter(name: "app", type: "string", description: "App name or bundle id; default the frontmost app"),
+            MCPParameter(name: "window_id", type: "integer", minimum: 1, description: "From list_windows; instead of app"),
+        ]
         return MCPTool.allCases.map { tool in
             switch tool {
             case .listDisplays:
@@ -225,14 +269,41 @@ enum MCPProtocol {
                     parameters: [MCPParameter(name: "window_id", type: "integer", minimum: 1, description: "From list_windows")] + capture,
                     required: ["window_id"]
                 )
+            case .snapshot:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "List an app's UI elements from the accessibility tree. Each row has a ref for actions and its rectangle in the standard capture_screen image of display_index. Use first to operate an app; if it returns few or no elements, use capture_screen and pixel coordinates instead.",
+                    parameters: appTarget + [
+                        MCPParameter(name: "root", type: "string", description: "A ref from an earlier snapshot; expands only that element"),
+                        MCPParameter(name: "interactive_only", type: "boolean", defaultValue: .boolean(true)),
+                        MCPParameter(
+                            name: "max_depth", type: "integer", minimum: 1,
+                            defaultValue: .integer(AppConstants.mcpSnapshotDefaultDepth),
+                            description: "≤ \(AppConstants.mcpSnapshotMaxDepth)"
+                        ),
+                    ],
+                    required: []
+                )
+            case .find:
+                return MCPToolDefinition(
+                    name: tool.rawValue,
+                    description: "Find UI elements by role and/or text in the accessibility tree, returning refs and rectangles like snapshot. Use when you know what the element says or is.",
+                    parameters: appTarget + [
+                        MCPParameter(name: "role", type: "string", description: "e.g. button, textfield, link, menuitem"),
+                        MCPParameter(name: "text", type: "string", description: "Case-insensitive substring of the name or value"),
+                    ],
+                    required: []
+                )
             }
         }
     }
 
     /// 作用：生成 tools/list 结果的 JSON。
+    /// 参数 includeControl：「允许操控电脑」是否开启；关闭时不列出操控类工具（#140）。
     /// 返回：{"tools": [...]} 的 UTF-8 数据，参数按声明顺序排列。
-    static func toolsListResult() -> Data {
-        MCPOrderedJSON.object([("tools", .array(toolDefinitions().map(\.json)))]).data
+    static func toolsListResult(includeControl: Bool) -> Data {
+        let tools = toolDefinitions().filter { includeControl || !MCPTool(rawValue: $0.name)!.isControl }
+        return MCPOrderedJSON.object([("tools", .array(tools.map(\.json)))]).data
     }
 
     /// 作用：把 tools/call 参数转换为工具请求。
@@ -272,7 +343,48 @@ enum MCPProtocol {
             let id = try required(arguments, "window_id", minimum: 1)
             guard id <= Int(UInt32.max) else { throw .invalidArgument("window_id \(id) not found; call list_windows again.") }
             return .captureWindow(windowID: UInt32(id), options: try options(arguments))
+        case .snapshot:
+            return .snapshot(
+                target: try appTarget(arguments, allowsRoot: true),
+                interactiveOnly: try boolean(arguments, "interactive_only") ?? true,
+                maxDepth: min(
+                    AppConstants.mcpSnapshotMaxDepth,
+                    try integer(arguments, "max_depth", minimum: 1) ?? AppConstants.mcpSnapshotDefaultDepth
+                )
+            )
+        case .find:
+            let role = try string(arguments, "role")
+            let text = try string(arguments, "text")
+            guard role != nil || text != nil else { throw .invalidArgument(AppConstants.mcpFindFilterMessage) }
+            return .find(target: try appTarget(arguments, allowsRoot: false), role: role, text: text)
         }
+    }
+
+    /// 作用：读取无障碍工具的读取对象。参数 arguments：工具参数；allowsRoot：是否接受 root。
+    /// 返回：app、window_id、root 三者至多一个，都缺省为前台应用；同时给出多个时抛 invalidArgument。
+    private static func appTarget(_ arguments: [String: Any], allowsRoot: Bool) throws(MCPRequestError) -> MCPAppTarget {
+        let app = try string(arguments, "app")
+        let window = try integer(arguments, "window_id", minimum: 1)
+        let root = allowsRoot ? try string(arguments, "root") : nil
+        let given = [app != nil, window != nil, root != nil].filter { $0 }.count
+        guard given <= 1 else { throw .invalidArgument(AppConstants.mcpTargetConflictMessage) }
+        if let app { return .app(app) }
+        if let window {
+            guard window <= Int(UInt32.max) else { throw .invalidArgument("window_id \(window) not found; call list_windows again.") }
+            return .window(UInt32(window))
+        }
+        if let root { return .ref(root) }
+        return .frontmost
+    }
+
+    /// 作用：读取可选字符串参数。参数 arguments：工具参数；key：字段名。
+    /// 返回：去掉首尾空白的取值，缺失为 nil；不是非空字符串时抛 invalidArgument。
+    private static func string(_ arguments: [String: Any], _ key: String) throws(MCPRequestError) -> String? {
+        guard let raw = arguments[key] else { return nil }
+        guard let value = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            throw .invalidArgument("\(key) must be a non-empty string")
+        }
+        return value
     }
 
     /// 作用：把 App 结果转换为 MCP CallToolResult。
@@ -299,6 +411,15 @@ enum MCPProtocol {
             if let png { content.append(["type": "image", "data": png.base64EncodedString(), "mimeType": "image/png"]) }
             if let markdown { content.append(textContent(markdown)) }
             return ["content": content, "isError": false]
+        case .elements(let snapshot, let complete, let items):
+            // 不在屏上的元素坐标列留空；不完整时首行提示用 root 展开局部或缩小范围。
+            let rows = items.map { item in
+                let place = item.displayIndex.map { "\($0)\t\(item.x)\t\(item.y)\t\(item.width)\t\(item.height)" } ?? "\t\t\t\t"
+                return "\(item.ref)\t\(item.depth)\t\(item.role)\t\(cell(item.name))\t\(cell(item.value))\t\(item.enabled)\t\(place)"
+            }
+            let status = complete ? "complete" : "incomplete; expand a ref with root or narrow the target"
+            let table = ["snapshot \(snapshot) \(status)", "ref\tdepth\trole\tname\tvalue\tenabled\tdisplay_index\tx\ty\twidth\theight"] + rows
+            return ["content": [textContent(table.joined(separator: "\n"))], "isError": false]
         }
     }
 
@@ -485,16 +606,19 @@ final class MCPForwardCall {
 final class MCPHelperSession {
     private let socketPath: String
     private let version: String
+    private let controlEnabled: () -> Bool
     private let write: (Data) -> Void
     private let lock = NSLock()
     /// 进行中的 tools/call，键为类型前缀加 id 文本，区分数字 1 与字符串 "1"。
     private var calls: [String: MCPForwardCall] = [:]
 
     /// 参数 socketPath：App socket 路径；version：serverInfo.version；
+    /// controlEnabled：返回「允许操控电脑」是否开启，决定 tools/list 是否列出操控类工具（#140）；
     /// write：接收一条不含换行的 JSON 消息并写到 stdout，由会话串行调用。
-    init(socketPath: String, version: String, write: @escaping (Data) -> Void) {
+    init(socketPath: String, version: String, controlEnabled: @escaping () -> Bool, write: @escaping (Data) -> Void) {
         self.socketPath = socketPath
         self.version = version
+        self.controlEnabled = controlEnabled
         self.write = write
     }
 
@@ -521,7 +645,7 @@ final class MCPHelperSession {
         case "ping":
             emit(MCPProtocol.response(id: id, result: [:]))
         case "tools/list":
-            emitRaw(id: id, result: MCPProtocol.toolsListResult())
+            emitRaw(id: id, result: MCPProtocol.toolsListResult(includeControl: controlEnabled()))
         case "tools/call":
             call(id: id, key: key, params: params)
         default:

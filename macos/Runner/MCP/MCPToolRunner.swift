@@ -43,6 +43,13 @@ enum MCPToolRunner {
                     }
                     return try await MCPImageOutput.reply(ScreenCaptureService.captureWindowImage(window), options: options)
                 }
+            case .snapshot(let target, let interactiveOnly, let maxDepth):
+                // MCPAccessibility 遍历无障碍树并保存 ref；坐标换成各显示器 standard 输出图像素。
+                return await MCPAccessibility.snapshot(
+                    target: target, interactiveOnly: interactiveOnly, maxDepth: maxDepth, displays: displays()
+                )
+            case .find(let target, let role, let text):
+                return await MCPAccessibility.find(target: target, role: role, text: text, displays: displays())
             }
         } catch {
             return .failed(message: AppConstants.mcpCaptureFailedMessage(error.localizedDescription))
@@ -63,7 +70,7 @@ enum MCPToolRunner {
     }
 
     /// 一块显示器的几何：bounds 为全局点坐标（原点主显示器左上角），pixelWidth/Height 为物理像素尺寸。
-    private struct Display {
+    struct Display {
         let info: MCPDisplayInfo
         let bounds: CGRect
         let pixelWidth: Int
@@ -71,7 +78,7 @@ enum MCPToolRunner {
     }
 
     /// 作用：列出显示器。返回：按 NSScreen.screens 顺序的显示器，0 为主显示器。
-    private static func displays() -> [Display] {
+    static func displays() -> [Display] {
         NSScreen.screens.enumerated().compactMap { index, screen in
             guard let id = screen.displayID else { return nil }
             let bounds = CGDisplayBounds(id)
@@ -95,29 +102,39 @@ enum MCPToolRunner {
     private static func windows() async throws -> [MCPWindowInfo] {
         let displays = displays()
         return try await ScreenCaptureService.visibleWindows().compactMap { window in
-            let areas = displays.map { display -> CGFloat in
-                let overlap = display.bounds.intersection(window.frame)
-                return overlap.isNull ? 0 : overlap.width * overlap.height
-            }
-            guard let best = areas.indices.max(by: { areas[$0] < areas[$1] }), areas[best] > 0 else { return nil }
-            let display = displays[best]
-            let visible = display.bounds.intersection(window.frame)
-            // 全局点坐标先换成该显示器内的相对点，再按 standard 输出图与点尺寸之比换成输出图像素。
-            let scaleX = Double(display.info.standardWidth) / display.bounds.width
-            let scaleY = Double(display.info.standardHeight) / display.bounds.height
-            let left = Int(((visible.minX - display.bounds.minX) * scaleX).rounded(.down))
-            let top = Int(((visible.minY - display.bounds.minY) * scaleY).rounded(.down))
-            let right = min(display.info.standardWidth, Int(((visible.maxX - display.bounds.minX) * scaleX).rounded(.up)))
-            let bottom = min(display.info.standardHeight, Int(((visible.maxY - display.bounds.minY) * scaleY).rounded(.up)))
-            guard right > left, bottom > top else { return nil }
+            guard let place = standardRect(window.frame, displays: displays) else { return nil }
             return MCPWindowInfo(
                 windowID: window.windowID,
-                displayIndex: display.info.displayIndex,
-                x: left, y: top, width: right - left, height: bottom - top,
+                displayIndex: place.displayIndex,
+                x: place.x, y: place.y, width: place.width, height: place.height,
                 app: window.owningApplication?.applicationName ?? "",
                 title: window.title ?? ""
             )
         }
+    }
+
+    /// 作用：把全局点坐标矩形换成显示器 standard 输出图像素（窗口与无障碍元素共用，#140）。
+    /// 参数 frame：全局点坐标矩形（原点主显示器左上角）；displays：当前显示器几何。
+    /// 返回：相交面积最大的显示器序号与裁到图内的像素范围；不与任何显示器相交或裁剪后为空时为 nil。
+    static func standardRect(
+        _ frame: CGRect, displays: [Display]
+    ) -> (displayIndex: Int, x: Int, y: Int, width: Int, height: Int)? {
+        let areas = displays.map { display -> CGFloat in
+            let overlap = display.bounds.intersection(frame)
+            return overlap.isNull ? 0 : overlap.width * overlap.height
+        }
+        guard let best = areas.indices.max(by: { areas[$0] < areas[$1] }), areas[best] > 0 else { return nil }
+        let display = displays[best]
+        let visible = display.bounds.intersection(frame)
+        // 全局点坐标先换成该显示器内的相对点，再按 standard 输出图与点尺寸之比换成输出图像素。
+        let scaleX = Double(display.info.standardWidth) / display.bounds.width
+        let scaleY = Double(display.info.standardHeight) / display.bounds.height
+        let left = Int(((visible.minX - display.bounds.minX) * scaleX).rounded(.down))
+        let top = Int(((visible.minY - display.bounds.minY) * scaleY).rounded(.down))
+        let right = min(display.info.standardWidth, Int(((visible.maxX - display.bounds.minX) * scaleX).rounded(.up)))
+        let bottom = min(display.info.standardHeight, Int(((visible.maxY - display.bounds.minY) * scaleY).rounded(.up)))
+        guard right > left, bottom > top else { return nil }
+        return (display.info.displayIndex, left, top, right - left, bottom - top)
     }
 
     /// 作用：把显示器序号转换为 CGDirectDisplayID。参数 index：0 起序号。返回：越界时为 nil。

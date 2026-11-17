@@ -11,22 +11,27 @@ import '../common/widgets/native_glass.dart';
 import 'mcp_platforms.dart';
 
 /// 设置窗口的 MCP 页（#96「设置」、#67「设置 MCP 页（#96）」）。
-/// 第一组为 MCP 开关、helper 路径与客户端配置复制；第二组按 [mcpPlatforms] 注册表列出接入平台，
+/// 第一组为 MCP 开关、「允许操控电脑」开关（#140）、helper 路径与客户端配置复制；第二组按 [mcpPlatforms] 注册表列出接入平台，
 /// 提供检测、安装与删除。开关只回报新值，由设置页经主引擎提交队列持久化；
 /// helper 路径向原生读取 App 包内实际位置。
 class McpSettingsPage extends StatefulWidget {
-  /// enabled 为已加载草稿中的开关值；onChanged 接收用户切换后的新值；channel 为设置窗口通道；
+  /// enabled 为已加载草稿中的开关值；onChanged 接收用户切换后的新值；
+  /// controlEnabled、onControlChanged 为「允许操控电脑」的值与切换回调（#140）；channel 为设置窗口通道；
   /// createService 按 helper 路径创建平台服务，缺省使用真实 CLI 与用户主目录。
   const McpSettingsPage({
     super.key,
     required this.enabled,
     required this.onChanged,
+    required this.controlEnabled,
+    required this.onControlChanged,
     required this.channel,
     this.createService = defaultService,
   });
 
   final bool enabled;
   final ValueChanged<bool> onChanged;
+  final bool controlEnabled;
+  final ValueChanged<bool> onControlChanged;
   final MethodChannel channel;
   final McpPlatformService Function(String helperPath) createService;
 
@@ -263,6 +268,12 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
               title: '允许 agent 截图',
               value: widget.enabled,
               onChanged: widget.onChanged,
+            ),
+            // 操控依赖 MCP 接口；「允许 agent 截图」关闭时该行禁用（#67「设置 MCP 页」）。
+            NativeGlassSwitchTile(
+              title: '允许操控电脑',
+              value: widget.controlEnabled,
+              onChanged: widget.enabled ? widget.onControlChanged : null,
             ),
             const SizedBox(height: 8),
             const Text('helper 路径'),
