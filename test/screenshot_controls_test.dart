@@ -713,6 +713,65 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('网格工具栏：隐藏工具留空位，整列隐藏不显示，按钮标注键位（#141）', (tester) async {
+    // 作用：位置与快捷键对应关系在截图编辑器中保持不变。
+    // 边界：⌘ 列第 2 格隐藏时，第 1 格与第 3 格相隔两格（72pt）；⌥ 列全部隐藏时该列不显示；
+    // 裸数字列按钮标注「1」，⌘ 列第 3 格标注「⌘3」。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    final defaults = ScreenshotToolbarPreferences();
+    final preferences = defaults.copyWith(
+      hidden: {
+        defaults.columns[1].slots[1]!,
+        ...defaults.columns[2].slots.whereType<String>(),
+      },
+    );
+    const channel = MethodChannel('test/toolbar-grid');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'grid',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          ...preferences.toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    final first = defaults.columns[1].slots[0]!;
+    final third = defaults.columns[1].slots[2]!;
+    expect(
+      tester.getTopLeft(find.byKey(Key(third))).dy -
+          tester.getTopLeft(find.byKey(Key(first))).dy,
+      72,
+    );
+    expect(find.byKey(const Key('screenshot-grid-column-1')), findsOneWidget);
+    expect(find.byKey(const Key('screenshot-grid-column-2')), findsNothing);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('toolbar-badge-${ScreenshotActions.cursor}')),
+          )
+          .data,
+      '1',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(Key('toolbar-badge-$third'))).data,
+      '⌘3',
+    );
+  });
+
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
@@ -1003,7 +1062,7 @@ void main() {
       'capturedAt': 0,
       'cropX': 0,
       'cropY': 0,
-      'cropWidth': 270,
+      'cropWidth': 160,
       'cropHeight': 240,
     };
     Uint8List? clipboard;
@@ -1019,8 +1078,9 @@ void main() {
     // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    // 占满纵向，仅左右留白的两个选区，必须实际切换为竖向工具栏。
-    for (final x in [0, 50]) {
+    // 占满纵向、只在左或右留白的两个选区，必须实际切换为竖向工具栏，分别放在右侧与左侧。
+    // 边界：竖向网格厚 228pt（6 格），选区宽为截图一半，留白足以放下（#141）。
+    for (final x in [0, 160]) {
       await messenger.handlePlatformMessage(
         channel.name,
         codec.encodeMethodCall(
@@ -1033,14 +1093,22 @@ void main() {
       await tester.pumpAndSettle();
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
       final crop = mapRectToFitted(
-        Rect.fromLTWH(x.toDouble(), 0, 270, 240),
+        Rect.fromLTWH(x.toDouble(), 0, 160, 240),
         const Size(320, 240),
         canvas,
       );
       final toolbar = tester.getRect(
         find.byKey(const Key('screenshot-toolbar')),
       );
-      expect(toolbar.height, greaterThan(toolbar.width));
+      // 竖向工具栏：网格沿纵向排列各列（#141）。
+      expect(
+        tester
+            .widget<SingleChildScrollView>(
+              find.byKey(const Key('screenshot-tools-grid')),
+            )
+            .scrollDirection,
+        Axis.vertical,
+      );
       expect(toolbar.overlaps(crop), isFalse);
       expect(toolbar.left > crop.right || toolbar.right < crop.left, isTrue);
       await tester.ensureVisible(find.byKey(const Key('screenshot-copy')));
@@ -1067,7 +1135,7 @@ void main() {
         decoder.dispose();
         return size;
       });
-      expect(size, const Size(270, 240));
+      expect(size, const Size(160, 240));
     }
     // 拖动期间只改变预览，不移动/缩放已建立的画布坐标系。
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));

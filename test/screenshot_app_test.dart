@@ -1298,15 +1298,17 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
-    // 背景与贴纸在同一行（子级行），不另起美化行。
-    final attributesRow = find.byKey(const Key('screenshot-attributes-row'));
+    // 贴纸作为美化的子级插列；背景、内边距与圆角在网格下方的美化行（#141）。
     expect(
-      find.descendant(of: attributesRow, matching: find.byTooltip('背景')),
+      find.descendant(
+        of: find.byKey(const Key('screenshot-beautify-row')),
+        matching: find.byTooltip('背景'),
+      ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: attributesRow,
+        of: find.byKey(const Key('screenshot-children-column-0')),
         matching: find.byKey(const Key(ScreenshotActions.sticker)),
       ),
       findsOneWidget,

@@ -390,7 +390,7 @@ void main() {
     await tester.tap(find.byKey(const Key('apply-stroke-width')));
     expect(result, 20);
   });
-  testWidgets('工具属性在第二行独立记忆，并在重新打开编辑器后恢复', (tester) async {
+  testWidgets('工具属性在属性列独立记忆，并在重新打开编辑器后恢复', (tester) async {
     // 用真实控件修改并重建编辑器；持久化只替换平台存储边界，避免仅测序列化。
     tester.view.physicalSize = const Size(640, 480);
     tester.view.devicePixelRatio = 1;
@@ -441,9 +441,13 @@ void main() {
     expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
+    // 图形在默认网格第 1 列，属性列紧跟其后，挤开后续列（#141）。
     expect(
-      tester.getRect(find.byKey(const Key('screenshot-attributes-row'))).top,
-      tester.getRect(find.byKey(const Key('screenshot-tools-row'))).bottom + 4,
+      tester
+          .getRect(find.byKey(const Key('screenshot-attributes-column-0')))
+          .left,
+      tester.getRect(find.byKey(const Key('screenshot-grid-column-0'))).right +
+          4,
     );
     await tap('${ScreenshotActions.shapePrefix}circle');
     await color('FF3B30', 'FF9500');

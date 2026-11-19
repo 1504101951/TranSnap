@@ -269,6 +269,76 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (!_toolbar.hidden.contains(id)) id,
   ];
 
+  /// 网格中表示「忙碌」的占位格，显示沙漏而不是功能按钮。
+  static const _busyCell = 'screenshot-busy';
+
+  /// actions 为当前可用动作；返回工具栏网格的各列（#141）：
+  /// 配置列按格位放置功能，隐藏与空格为 null（留出空位），没有可见功能的列不显示；
+  /// 当前父级的子级列与当前工具的属性列（各按 6 格分列）插在父级（或当前工具）所在列之后；
+  /// 保存后的「在访达中显示」与忙碌沙漏放在最后的状态列。slots 为真表示配置列，按钮显示键位。
+  List<({String key, List<String?> cells, bool slots})> _gridColumns(
+    Map<String, VoidCallback?> actions,
+  ) {
+    List<List<String>> chunk(List<String> ids) => [
+      for (var start = 0; start < ids.length; start += ToolbarGrid.slots)
+        ids.sublist(start, math.min(start + ToolbarGrid.slots, ids.length)),
+    ];
+    final attributes = actions.keys
+        .where(
+          (id) =>
+              id != ScreenshotActions.reveal &&
+              !ScreenshotActions.icons.containsKey(id),
+        )
+        .toList();
+    final inserted = [
+      for (final (index, cells) in chunk(_visibleChildren).indexed)
+        (key: 'screenshot-children-column-$index', cells: <String?>[...cells], slots: false),
+      for (final (index, cells) in chunk(attributes).indexed)
+        (key: 'screenshot-attributes-column-$index', cells: <String?>[...cells], slots: false),
+    ];
+    final anchor = _group ?? _activeId;
+    final columns = <({String key, List<String?> cells, bool slots})>[];
+    var placed = false;
+    for (final (index, column) in _toolbar.columns.indexed) {
+      final cells = [
+        for (final id in column.slots)
+          id == null || _toolbar.hidden.contains(id) ? null : id,
+      ];
+      if (cells.every((id) => id == null)) continue;
+      columns.add((key: 'screenshot-grid-column-$index', cells: cells, slots: true));
+      // 子级与属性挤开后续列，紧跟父级所在列（#141）。
+      if (!placed && column.slots.contains(anchor)) {
+        columns.addAll(inserted);
+        placed = true;
+      }
+    }
+    if (!placed) columns.addAll(inserted);
+    final status = [
+      if (actions.containsKey(ScreenshotActions.reveal)) ScreenshotActions.reveal,
+      if (_busy) _busyCell,
+    ];
+    if (status.isNotEmpty) {
+      columns.add((key: 'screenshot-status-column', cells: status, slots: false));
+    }
+    return columns;
+  }
+
+  /// 无参数；返回网格下方（竖向时外侧）各附加行的按钮数，顺序与 _buildToolbar 一致：
+  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 32pt 按钮加 4pt 间距折算格数。
+  List<int> _stripLengths() => [
+    if (_beautifyExpanded)
+      1 +
+          ((BeautifyMetrics.paddingMenuWidth + 4) / 36).ceil() +
+          ((BeautifyMetrics.radiusMenuWidth + 4) / 36).ceil(),
+    if (_expandedRow == _ExpandedRow.ratio) CropMetrics.ratios.length,
+    // 录制目标行：三个目标、录制选项、开始与取消共 6 个按钮（#129）。
+    if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop) 6,
+    if ((_recordingExpanded || _liveExpanded) &&
+        _tool == ScreenshotTool.crop &&
+        _recordingTarget == CaptureTarget.application)
+      math.max(1, _recordingApplications.length),
+  ];
+
   /// 无参数；先监听再拉取快照，首张截图无需等待引擎启动通知，无返回值。
   @override
   void initState() {
@@ -2499,41 +2569,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                           (_capture['displayWidth'] as num).toDouble(),
                           (_capture['displayHeight'] as num).toDouble(),
                         ),
-                  // 第二行是当前父级的子级、当前工具的属性，以及展开时的美化设置：
-                  // 背景按钮 + 内边距与圆角下拉，下拉宽度按 32pt 按钮加 4pt 间距折算格数。
-                  secondaryItemCount:
-                      _visibleChildren.length +
-                      _toolbarActions().keys
-                          .where(
-                            (id) =>
-                                id != ScreenshotActions.reveal &&
-                                !ScreenshotActions.icons.containsKey(id),
-                          )
-                          .length +
-                      (_beautifyExpanded
-                          ? 1 +
-                                ((BeautifyMetrics.paddingMenuWidth + 4) / 36)
-                                    .ceil() +
-                                ((BeautifyMetrics.radiusMenuWidth + 4) / 36)
-                                    .ceil()
-                          : 0),
-                  toolbarItemCount:
-                      _toolbar.topLevel
-                          .where((id) => !_toolbar.hidden.contains(id))
-                          .length +
-                      (_busy ? 1 : 0),
-                  // 两种准备共用行数。工具栏厚度和按钮行宽都靠它留在屏幕安全区内。
-                  recordingRows:
-                      (_recordingExpanded || _liveExpanded) &&
-                          _tool == ScreenshotTool.crop
-                      ? (_recordingTarget == CaptureTarget.application ? 2 : 1)
-                      : 0,
-                  applicationCount: _recordingApplications.length,
+                  // 网格列数（含插入的子级、属性与状态列）与附加行的按钮数决定工具栏尺寸（#141）。
+                  gridColumns: _gridColumns(_toolbarActions()).length,
+                  strips: _stripLengths(),
                   beautify: _beautify,
-                  // 比例行：全部比例预设。
-                  settingsRowItems: _expandedRow == _ExpandedRow.ratio
-                      ? CropMetrics.ratios.length
-                      : 0,
                   feedbackIsError: _failed,
                   feedback: _message,
                   ocrOverlays: _ocrOverlays,
@@ -2827,24 +2866,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return _busy ? actions.map((id, _) => MapEntry(id, null)) : actions;
   }
 
-  /// axis为横/竖方向；按持久化顺序放置独立按钮，容器透明且可滚动。
+  /// axis 为横/竖方向；按网格放置独立按钮（#141）：横向时每列 6 格自上而下，竖向时转置；
+  /// 附加行（美化参数、比例、录制目标、应用图标）排在网格之后，容器透明且可滚动。
   Widget _buildToolbar(BuildContext context, Axis axis) {
     final actions = _toolbarActions();
-    final top = _toolbar.topLevel
-        .where((id) => !_toolbar.hidden.contains(id))
-        .toList();
-    // 第二行先放当前父级的子级，再放当前工具的属性。
-    final attributes = [
-      ..._visibleChildren,
-      ...actions.keys.where(
-        (id) =>
-            id != ScreenshotActions.reveal &&
-            !ScreenshotActions.icons.containsKey(id),
-      ),
-    ];
-    if (actions.containsKey(ScreenshotActions.reveal)) {
-      top.add(ScreenshotActions.reveal);
-    }
+    final cross = axis == Axis.horizontal ? Axis.vertical : Axis.horizontal;
     final colors = Theme.of(context).colorScheme;
     final icons = <String, IconData>{
       ...ScreenshotActions.icons,
@@ -2862,7 +2888,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
     };
     // 模式按钮不产生hover层；普通操作保留主题反馈，属性不进入顶层排序。
-    Widget button(String id) {
+    // badge 为格位键位文字，配置列中的按钮在右下角显示（#67「截图工具栏网格」）。
+    Widget button(String id, {String? badge}) {
       final mode =
           id.startsWith(ScreenshotActions.shapePrefix) ||
           id.startsWith(ScreenshotActions.brushPrefix);
@@ -2914,6 +2941,29 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           icon: Icon(icons[id] ?? Icons.circle, size: 16),
         ),
       );
+      if (badge != null) {
+        child = Stack(
+          children: [
+            child,
+            Positioned(
+              right: 2,
+              bottom: 2,
+              child: IgnorePointer(
+                child: Text(
+                  badge,
+                  key: Key('toolbar-badge-$id'),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
       // 每个模式同样需要材料承载；外层工具栏保持透明。
       final surface = NativeGlassSurface(material: true, child: child);
       // 贴纸按钮挂锚点，供贴纸下拉框定位。
@@ -2921,32 +2971,42 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       return KeyedSubtree(key: _stickerAnchor, child: surface);
     }
 
-    // 每组沿工具栏方向独立滚动；动态行数只改变工具栏占位，画布像素不参与布局。
-    // trailing 为排在按钮之后的控件，美化设置借此与贴纸等子级同处一行。
-    Widget row(
-      List<String> ids,
-      String key, {
-      bool loading = false,
-      List<Widget> trailing = const [],
-    }) => SingleChildScrollView(
-          key: Key(key),
-          scrollDirection: axis,
-          child: Flex(
-            direction: axis,
-            mainAxisSize: MainAxisSize.min,
-            spacing: 4,
-            children: [
-              for (final id in ids) button(id),
-              ...trailing,
-              if (loading)
-                const SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(Icons.hourglass_top, size: 14),
-                ),
-            ],
-          ),
-        );
+    // 网格沿工具栏方向排列各列、整体滚动；每列沿交叉方向 6 格，空位留出 32×32pt（#141）。
+    final grid = SingleChildScrollView(
+      key: const Key('screenshot-tools-grid'),
+      scrollDirection: axis,
+      child: Flex(
+        direction: axis,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 4,
+        children: [
+          for (final column in _gridColumns(actions))
+            Flex(
+              key: Key(column.key),
+              direction: cross,
+              mainAxisSize: MainAxisSize.min,
+              spacing: 4,
+              children: [
+                for (final id in column.cells)
+                  if (id == null)
+                    const SizedBox(width: 32, height: 32)
+                  else if (id == _busyCell)
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(Icons.hourglass_top, size: 14),
+                    )
+                  else
+                    button(
+                      id,
+                      badge: column.slots ? _toolbar.shortcutLabel(id) : null,
+                    ),
+              ],
+            ),
+        ],
+      ),
+    );
 
     /// label为提示与可访问名称，icon为图标，selected为选择状态；返回32pt独立材料按钮。
     Widget captureButton(
@@ -3053,14 +3113,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ),
       ],
     ];
+    // 附加行顺序与 _stripLengths 一致，尺寸计算依赖它。
     final rows = <Widget>[
-      row(top, 'screenshot-tools-row', loading: _busy),
-      if (attributes.isNotEmpty || beautifyControls.isNotEmpty)
-        row(
-          attributes,
-          'screenshot-attributes-row',
-          trailing: beautifyControls,
-        ),
+      if (beautifyControls.isNotEmpty)
+        captureRow('screenshot-beautify-row', beautifyControls),
       // 比例行：自由与固定宽高比，锁定后框选与调整保持比例（#106）。
       if (_expandedRow == _ExpandedRow.ratio)
         captureRow('ratio-row', [
@@ -3184,11 +3240,18 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             ),
         ]),
     ];
+    final hasGrid = _gridColumns(actions).isNotEmpty;
     final groups = Flex(
-      direction: axis == Axis.horizontal ? Axis.vertical : Axis.horizontal,
+      direction: cross,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 4,
       children: [
+        if (hasGrid)
+          SizedBox(
+            width: axis == Axis.vertical ? 32.0 * ToolbarGrid.slots + 4 * (ToolbarGrid.slots - 1) : null,
+            height: axis == Axis.horizontal ? 32.0 * ToolbarGrid.slots + 4 * (ToolbarGrid.slots - 1) : null,
+            child: grid,
+          ),
         for (final row in rows)
           SizedBox(
             width: axis == Axis.vertical ? 32 : null,
@@ -3243,12 +3306,9 @@ class _EditorSurface extends StatefulWidget {
     required this.toolbarBuilder,
     this.toolbarSafeArea,
     this.displaySize,
-    required this.toolbarItemCount,
-    this.secondaryItemCount = 0,
-    this.recordingRows = 0,
+    required this.gridColumns,
+    this.strips = const [],
     this.beautify,
-    this.settingsRowItems = 0,
-    this.applicationCount = 0,
     required this.feedbackIsError,
     required this.feedback,
     required this.ocrOverlays,
@@ -3261,16 +3321,14 @@ class _EditorSurface extends StatefulWidget {
   final double? imageScale;
   final Rect? toolbarSafeArea;
   final Size? displaySize;
-  final int toolbarItemCount;
-  final int secondaryItemCount;
-  final int recordingRows;
+  /// 工具栏网格的列数（含插入的子级、属性与状态列）；0 表示网格没有可见按钮（#141）。
+  final int gridColumns;
+
+  /// 网格下方（竖向时外侧）各附加行的按钮数：美化参数、比例、录制目标、应用图标。
+  final List<int> strips;
 
   /// 本次截图的美化参数；非 null 时在选区外预览背景与阴影。
   final BeautifyStyle? beautify;
-
-  /// 展开中的美化行或比例行的按钮数；0 表示均收起，参与工具栏尺寸计算。
-  final int settingsRowItems;
-  final int applicationCount;
   final bool feedbackIsError;
   final MethodChannel channel;
   final EditDocument document;
@@ -3360,13 +3418,10 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   resultSize.height,
                 );
           // 只按已提交选区定位；拖动过程中保持同一个图片坐标系。
+          // 工具栏长度取网格列数与最长附加行的较大者；厚度为网格 6 格加各附加行（#141）。
           final maxItems = [
-            widget.toolbarItemCount,
-            widget.secondaryItemCount,
-            // 录制目标行：三个目标、录制选项、开始与取消共 6 个按钮（#129）。
-            if (widget.recordingRows > 0) 6,
-            if (widget.recordingRows > 1) widget.applicationCount,
-            if (widget.settingsRowItems > 0) widget.settingsRowItems,
+            widget.gridColumns,
+            ...widget.strips,
           ].reduce(math.max);
           final layout = ScreenshotEditorLayout.place(
             viewport: constraints.biggest,
@@ -3391,11 +3446,11 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             image: imageSize,
             crop: widget.document.cropRect,
             toolbarLength: 16 + maxItems * 32 + math.max(0, maxItems - 1) * 4,
-            rowCount:
-                1 +
-                (widget.secondaryItemCount > 0 ? 1 : 0) +
-                widget.recordingRows +
-                (widget.settingsRowItems > 0 ? 1 : 0),
+            rowCount: math.max(
+              1,
+              (widget.gridColumns > 0 ? ToolbarGrid.slots : 0) +
+                  widget.strips.length,
+            ),
           );
           final fitted = layout.canvas;
           Rect cropDisplay = mapRectToFitted(
@@ -3730,20 +3785,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 拖动时不让工具栏遮住正在变化的选区；松开后按新选区重新定位。
-                if ((widget.dragStart == null || widget.textInputOpen) &&
-                    (widget.toolbarItemCount > 0 ||
-                        widget.secondaryItemCount > 0))
-                  Positioned.fromRect(
-                    rect: layout.toolbar,
-                    child: widget.toolbarBuilder(context, layout.axis),
-                  ),
-                if (widget.feedback != null)
-                  ToolbarFeedback(
-                    toolbar: layout.toolbar,
-                    message: widget.feedback!,
-                    isError: widget.feedbackIsError,
-                  ),
                 if (widget.textInputOpen)
                   Positioned.fromRect(
                     rect: mapRectToFitted(
@@ -3796,6 +3837,20 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         ),
                       ),
                     ),
+                  ),
+                // 拖动时不让工具栏遮住正在变化的选区；松开后按新选区重新定位。
+                // 工具栏叠在文字输入框之上：网格工具栏较厚，放进选区内时仍要可以点击（#141）。
+                if ((widget.dragStart == null || widget.textInputOpen) &&
+                    (widget.gridColumns > 0 || widget.strips.isNotEmpty))
+                  Positioned.fromRect(
+                    rect: layout.toolbar,
+                    child: widget.toolbarBuilder(context, layout.axis),
+                  ),
+                if (widget.feedback != null)
+                  ToolbarFeedback(
+                    toolbar: layout.toolbar,
+                    message: widget.feedback!,
+                    isError: widget.feedbackIsError,
                   ),
                 if (widget.selectedText != null ||
                     (widget.previewAnnotation?.kind == AnnotationKind.text))

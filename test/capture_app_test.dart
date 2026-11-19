@@ -546,10 +546,18 @@ void main() {
       await tester.pumpAndSettle();
       // 默认网格中截图在裸数字第 2 格，提示为「名称 + 键位」（#141）。
       expect(find.byTooltip('截图 2'), findsOneWidget);
-      final attributes = find.byKey(const Key('screenshot-attributes-row'));
+      // 截图的子级列插在截图所在的第 1 列之后，挤开后续列（#141）。
+      final children = find.byKey(const Key('screenshot-children-column-0'));
       expect(
-        find.descendant(of: attributes, matching: find.byTooltip('录制')),
+        find.descendant(of: children, matching: find.byTooltip('录制')),
         findsOneWidget,
+      );
+      expect(
+        tester.getRect(children).left,
+        tester
+                .getRect(find.byKey(const Key('screenshot-grid-column-0')))
+                .right +
+            4,
       );
       if (scrolling) {
         await tester.tap(find.byKey(const Key(ScreenshotActions.scrolling)));
