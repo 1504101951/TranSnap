@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Translation
 
 /// Apple 系统翻译：按语言对创建无界面 TranslationSession，在本机翻译一组段落。
@@ -11,6 +12,9 @@ final class SystemTranslationService {
     /// 框架未返回某个段落的译文；整批按失败处理，Dart 不接受不完整结果。
     struct IncompleteResponse: Error {}
 
+    /// 排查日志：每次请求的段数、语言对、耗时与结果，不写原文或译文（#138）。
+    private static let log = Logger(subsystem: "TranslateApp", category: "SystemTranslation")
+
     /// requestId 定位会话，texts 为待译段落，source/target 为语言码（如 zh-CN、en），strategy 为策略协议值。
     /// 返回与 texts 下标一一对应的译文；语言包未安装、语言对不支持或框架失败时抛出错误，
     /// 等待重试期间请求被取消时抛出 CancellationError。
@@ -18,6 +22,23 @@ final class SystemTranslationService {
         requestId: String, texts: [String], source: String, target: String, strategy: String
     ) async throws -> [String] {
         defer { sessions[requestId] = nil }
+        // 开始与结束各记一行；只有开始没有结束即为框架调用未返回。
+        Self.log.notice("start id=\(requestId, privacy: .public) count=\(texts.count) \(source, privacy: .public)->\(target, privacy: .public)")
+        let started = ContinuousClock.now
+        do {
+            let translations = try await translateWithRetry(requestId: requestId, texts: texts, source: source, target: target, strategy: strategy)
+            Self.log.notice("end id=\(requestId, privacy: .public) ms=\(Self.milliseconds(since: started)) ok")
+            return translations
+        } catch {
+            Self.log.notice("end id=\(requestId, privacy: .public) ms=\(Self.milliseconds(since: started)) error=\(String(describing: type(of: error)), privacy: .public)")
+            throw error
+        }
+    }
+
+    /// 参数与返回同 translate；执行翻译，冷启动误报未安装时确认已安装后重试一次。
+    private func translateWithRetry(
+        requestId: String, texts: [String], source: String, target: String, strategy: String
+    ) async throws -> [String] {
         do {
             // run 新建会话并翻译整批段落。
             return try await run(requestId: requestId, texts: texts, source: source, target: target, strategy: strategy)
@@ -34,6 +55,12 @@ final class SystemTranslationService {
             guard sessions[requestId] != nil else { throw CancellationError() }
             return try await run(requestId: requestId, texts: texts, source: source, target: target, strategy: strategy)
         }
+    }
+
+    /// 作用：计算自 start 起经过的毫秒数。参数 start：起始时刻。返回：整数毫秒。
+    private static func milliseconds(since start: ContinuousClock.Instant) -> Int {
+        let elapsed = ContinuousClock.now - start
+        return Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     /// 参数同 translate；新建会话并登记到 sessions 以便取消，返回与 texts 下标一一对应的译文；

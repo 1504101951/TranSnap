@@ -90,7 +90,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 
 术语文件由 `glossary_file.dart` 解析为预览行并按既有术语键合并，CSV 与 JSON 使用同一字段契约。原生桥负责文件选择与保存；确认导入后通过设置页的串行事务提交，失败仅在预览中保留文件草稿和错误，取消不把未保存术语带入后续自动保存。
 
-文件与剪贴板图片经 `ScreenshotWindowController` 在后台解码为首帧、方向归正的 sRGB BGRA，复用截图引擎和编辑文档。普通图片窗口登记 `DockPresence`，关闭时撤销；图片不具有屏幕采集能力。截图翻译复用实时翻译的段落会话：主引擎为截图持有独立的 `LiveRegionSession` 实例，`translateScreenshotBlocks` 把识别出的段落块作为单个样本开始一次会话，快照经 `publishScreenshotTranslation` 带捕获 ID 推回，`ScreenshotWindowController.publishTranslation` 只转给仍是该截图的编辑引擎。原生关闭/替换经 `cancelScreenshotTranslation` 结束会话并取消在途批次。截图翻译不写翻译历史。
+文件与剪贴板图片经 `ScreenshotWindowController` 在后台解码为首帧、方向归正的 sRGB BGRA，复用截图引擎和编辑文档。普通图片窗口登记 `DockPresence`，关闭时撤销；图片不具有屏幕采集能力。截图翻译复用实时翻译的段落会话：主引擎为截图持有独立的 `LiveRegionSession` 实例，`translateScreenshotBlocks` 把识别出的段落块作为单个样本开始一次会话，快照经 `publishScreenshotTranslation` 带捕获 ID 推回，`ScreenshotWindowController.publishTranslation` 只转给仍是该截图的编辑引擎。原生关闭/替换经 `cancelScreenshotTranslation` 结束会话并取消在途批次。截图翻译不写翻译历史。排查日志（`subsystem == "TranslateApp"`，notice 级别）只记数字与状态：`LiveRegion` 类别记录截图识别耗时与段落数、发起翻译到主引擎受理的耗时、快照状态变化与批次计时（字段同实时翻译）；`SystemTranslation` 类别记录 Apple 系统翻译每次请求的开始、结束、段数、语言对、耗时与结果，只有开始没有结束即为框架调用未返回。
 
 `TranslationHistoryStore` 统一处理原文/译文关键词、来源、完成时间范围和稳定游标；日期由窗口按本地日历转换为左闭右开的毫秒范围。保留期限与确认状态存于 `history_meta`，默认 30 天，可选 90/365/永久；首次存在过期记录时等用户确认，确认后在启动、写入和设置期限时删除过期记录，列表与来源查询只按期限下界过滤、不写库；改期限时先按原期限删除，再应用新期限。期限提交与清理在同一事务中，单条删除及清空仅操作翻译历史。刷新/分页失败保留各自重试语义和可见记录。
 

@@ -58,7 +58,7 @@ enum PerformanceLog {
     }
 }
 
-/// 实时翻译的排查日志。只写数量与耗时，不写屏幕文字或译文。
+/// 实时翻译与截图翻译的排查日志（#138）。只写数量、耗时与状态，不写屏幕文字或译文。
 enum LiveRegionLog {
     private static let logger = Logger(subsystem: "TranslateApp", category: "LiveRegion")
 

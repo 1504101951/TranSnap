@@ -81,6 +81,8 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
 
     private var selectedDisplayID: CGDirectDisplayID = 0
     private var selectedScale: CGFloat = 1
+    /// 截图翻译最近一次写入日志的「捕获身份 + 状态」，状态不变的快照不重复记录。
+    private var lastLoggedTranslationStatus: String?
     /// 冻结帧源图（BGRA）；冻结视图直接显示，快照以原始字节交给截图引擎（#68 批次 A）。
     private var image: CGImage?
     private var captureId: String? {
@@ -353,7 +355,27 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
     /// 只转发当前截图的快照；截图已关闭或被替换时丢弃迟到快照。无返回值。
     func publishTranslation(_ state: [String: Any]) {
         guard let id = state["id"] as? String, id == captureId else { return }
+        // 状态变化与批次计时写入排查日志（与实时翻译的批次日志字段相同），不含屏幕文字或译文（#138）。
+        let status = state["status"] as? String ?? ""
+        let key = "\(id)\n\(status)"
+        if key != lastLoggedTranslationStatus {
+            lastLoggedTranslationStatus = key
+            let overlays = (state["overlays"] as? [Any])?.count ?? 0
+            LiveRegionLog.note("screenshot status=\(status) phase=\(state["phase"] ?? "") overlays=\(overlays)")
+        }
+        for item in state["metrics"] as? [[String: Any]] ?? [] {
+            let fields = ["blocks", "chars", "waitMs", "firstMs", "totalMs", "inflight", "outcome"]
+                .map { "\($0)=\(item[$0] ?? "")" }
+                .joined(separator: " ")
+            LiveRegionLog.note("screenshot batch \(fields)")
+        }
         channel?.invokeMethod(AppConstants.publishScreenshotTranslationMethod, arguments: state)
+    }
+
+    /// 作用：计算自 start 起经过的毫秒数，用于排查日志。参数 start：起始时刻。返回：整数毫秒。
+    private static func milliseconds(since start: ContinuousClock.Instant) -> Int {
+        let elapsed = ContinuousClock.now - start
+        return Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     /// 无参数；关闭编辑窗并关闭引擎，保留已创建的贴图。
@@ -594,8 +616,11 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             }
             // recognizeBlocks 在后台任务解码与识别段落，识别期间主线程不阻塞（#115、#138）。
             Task { @MainActor in
+                let started = ContinuousClock.now
                 do {
                     let blocks = try await Task.detached { try await ScreenCaptureService.recognizeBlocks(png: payload) }.value
+                    // 记录识别耗时与段落数，排查截图翻译停在识别阶段的情况。
+                    LiveRegionLog.note("screenshot ocr ms=\(Self.milliseconds(since: started)) paragraphs=\(blocks.count)")
                     // 识别期间截图可能被关闭或替换，迟到结果按过期处理。
                     guard id == self.captureId else {
                         result(Self.staleCaptureFailure)
@@ -603,6 +628,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
                     }
                     result(blocks)
                 } catch {
+                    LiveRegionLog.note("screenshot ocr ms=\(Self.milliseconds(since: started)) failed")
                     result(FlutterError(code: AppConstants.ocrFailedError, message: error.localizedDescription, details: nil))
                 }
             }
@@ -662,11 +688,17 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
                 return
             }
             // 段落块原样转交主引擎；主引擎开始会话后立即返回，译文经 publishTranslation 推回（#138）。
+            // 记录发起与主引擎受理的耗时：受理前要完成逐段语言识别，迟迟不返回时截图工具栏保持忙碌。
+            LiveRegionLog.note("screenshot translate start paragraphs=\(blocks.count)")
+            let started = ContinuousClock.now
             MacPlatformBridge.Shared.instance?.requestApplication(
                 AppConstants.translateScreenshotBlocksMethod,
-                arguments: ["id": id, "blocks": blocks],
-                result: result
-            )
+                arguments: ["id": id, "blocks": blocks]
+            ) { reply in
+                let outcome = reply is FlutterError ? "failed" : "accepted"
+                LiveRegionLog.note("screenshot translate \(outcome) ms=\(Self.milliseconds(since: started))")
+                result(reply)
+            }
         case AppConstants.closeScreenshotMethod:
             // closeForCapture 统一释放草稿，窗口待启动时同样可以关闭。
             closeForCapture(); result(nil)
