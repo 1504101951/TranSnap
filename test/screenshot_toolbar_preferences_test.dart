@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
 import 'package:translate_app/src/common/constants/toolbar_grid.dart';
+import 'package:translate_app/src/settings/app_settings.dart';
+import 'package:translate_app/src/common/constants/shortcut_keys.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/screenshot_toolbar_editor.dart';
 import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
@@ -189,12 +191,68 @@ void main() {
     );
   });
 
+  test('全局快捷键与系统快捷键按数字行键码换算为格位，带 ⇧ 或 7 以外的键不落在网格', () {
+    // 作用：冲突判断以格位为准，Carbon 与 NSEvent 两种修饰键表示都换算为工具栏位掩码。
+    // 边界：键码 18 为 1、22 为 6（ANSI 键码不连续）；26 为 7 不在网格；带 ⇧ 时不属于工具栏。
+    expect(ToolbarGrid.slotOfCarbon(18, ShortcutKeys.command), (
+      modifiers: cmd,
+      digit: 1,
+    ));
+    expect(
+      ToolbarGrid.slotOfCarbon(22, ShortcutKeys.control | ShortcutKeys.option),
+      (modifiers: ctrl | opt, digit: 6),
+    );
+    expect(ToolbarGrid.slotOfCarbon(26, ShortcutKeys.command), isNull);
+    expect(
+      ToolbarGrid.slotOfCarbon(18, ShortcutKeys.command | ShortcutKeys.shift),
+      isNull,
+    );
+    // NSEvent：Control 1<<18、Command 1<<20、Shift 1<<17。
+    expect(ToolbarGrid.slotOfCocoa(18, 1 << 18), (modifiers: ctrl, digit: 1));
+    expect(ToolbarGrid.slotOfCocoa(19, (1 << 20) | (1 << 17)), isNull);
+  });
+
+  test('全局快捷键落在有工具的格位时拒绝保存，落在空格或网格外时允许', () {
+    // 作用：全局快捷键独占注册，与工具栏格位互斥，两侧修改都在设置提交校验中拒绝。
+    // 边界：⌘1 是默认网格中画笔的格位 → 拒绝；⌥5 是默认空格 → 允许；⌘7 不在网格 → 允许。
+    AppSettings withTranslate(int code, int modifiers) => AppSettings(
+      primaryLanguage: 'zh-CN',
+      shortcutKeyCode: code,
+      shortcutLabel: 'x',
+      shortcutModifiers: modifiers,
+    );
+    expect(
+      () => withTranslate(18, ShortcutKeys.command).validate(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('画笔'),
+        ),
+      ),
+    );
+    expect(
+      () => withTranslate(23, ShortcutKeys.option).validate(),
+      returnsNormally,
+    );
+    expect(
+      () => withTranslate(26, ShortcutKeys.command).validate(),
+      returnsNormally,
+    );
+    expect(withTranslate(23, ShortcutKeys.option).globalShortcutSlots, {
+      (modifiers: opt, digit: 5): '全局翻译',
+    });
+  });
+
   group('网格编辑器', () {
-    /// tester 为测试驱动，value 为初始配置；返回读取最新已保存配置的函数。
+    /// tester 为测试驱动，value 为初始配置，reserved/systemSlots 为全局占用与系统冲突格位；
+    /// 返回读取最新已保存配置的函数。
     Future<ScreenshotToolbarPreferences Function()> pumpEditor(
       WidgetTester tester,
-      ScreenshotToolbarPreferences value,
-    ) async {
+      ScreenshotToolbarPreferences value, {
+      Map<({int modifiers, int digit}), String> reserved = const {},
+      Set<({int modifiers, int digit})> systemSlots = const {},
+    }) async {
       tester.view.physicalSize = const Size(900, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -208,6 +266,8 @@ void main() {
               child: ScreenshotToolbarEditor(
                 value: value,
                 onChanged: (next) => saved = next,
+                reserved: reserved,
+                systemSlots: systemSlots,
               ),
             ),
           ),
@@ -229,6 +289,34 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
     }
+
+    testWidgets('全局快捷键占用的空格不可放入并说明用途；与系统快捷键相同的格子标红说明系统优先', (tester) async {
+      // 作用：防冲突在编辑入口可见。
+      // 边界：⌥5 被全局翻译占用，拖入关闭后配置不变；⌘1（画笔）与系统快捷键相同时键位说明为「⌘1 系统优先」。
+      final saved = await pumpEditor(
+        tester,
+        ScreenshotToolbarPreferences(),
+        reserved: {(modifiers: opt, digit: 5): '全局翻译'},
+        systemSlots: {(modifiers: cmd, digit: 1)},
+      );
+      expect(find.text('⌥5 已用于全局翻译'), findsOneWidget);
+      await drag(
+        tester,
+        ScreenshotActions.close,
+        find.byKey(const ValueKey('toolbar-slot-2-4')),
+      );
+      expect(saved().shortcutLabel(ScreenshotActions.close), '⌥4');
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('toolbar-key-${ScreenshotActions.brush}'),
+              ),
+            )
+            .data,
+        '⌘1 系统优先',
+      );
+    });
 
     testWidgets('格子显示键位；拖到有工具的格子交换，拖到空格留下原位空格', (tester) async {
       // 作用：格位决定快捷键，拖动即改变快捷键且不会出现重复。

@@ -556,6 +556,19 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             // 只把用户带到「语言与地区」，下载由系统完成，App 内不触发下载（#98）。
             NSWorkspace.shared.open(AppConstants.translationLanguagesSettingsURL)
             result(nil)
+        case AppConstants.systemShortcutsMethod:
+            // 系统设置「键盘快捷键」只把用户改过的项写入该偏好域，参数为 [字符, 虚拟键码, NSEvent 修饰键标志]。
+            // 已知限制：未改动、沿用系统默认值的项不在其中；数字行 1–6 加 ⌃⌥⌘ 目前没有默认启用的系统快捷键，
+            // 若系统新增此类默认快捷键需重新评估（#141）。
+            let entries = UserDefaults(suiteName: AppConstants.symbolicHotKeysDomain)?
+                .dictionary(forKey: AppConstants.symbolicHotKeysKey) as? [String: [String: Any]] ?? [:]
+            let enabled: [[String: Int]] = entries.values.compactMap { entry in
+                guard entry["enabled"] as? Bool == true,
+                      let parameters = (entry["value"] as? [String: Any])?["parameters"] as? [Int],
+                      parameters.count == 3 else { return nil }
+                return ["keyCode": parameters[1], "modifiers": parameters[2]]
+            }
+            result(enabled)
         case AppConstants.chooseExcludedAppMethod:
             let picker = NSOpenPanel()
             picker.allowedContentTypes = [.applicationBundle]

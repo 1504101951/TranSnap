@@ -14,18 +14,29 @@ class ScreenshotToolbarEditor extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.reserved = const {},
+    this.systemSlots = const {},
   });
   final ScreenshotToolbarPreferences value;
   final ValueChanged<ScreenshotToolbarPreferences> onChanged;
 
+  /// 被本应用全局快捷键占用的格位到用途名称；这些格位不可放入工具（#141）。
+  final Map<({int modifiers, int digit}), String> reserved;
+
+  /// 与已启用系统快捷键相同的格位；放了工具时标红提示系统优先，不阻止保存（#141）。
+  final Set<({int modifiers, int digit})> systemSlots;
+
   /// 格子宽高、圆角与间距（#67）。
-  static const cellWidth = 120.0;
+  static const cellWidth = 152.0;
   static const cellHeight = 56.0;
   static const cellGap = 4.0;
   static const columnGap = 8.0;
 
   /// 子级列表的行最小高度（#67）。
   static const childRowHeight = 40.0;
+
+  /// 与系统快捷键冲突的格子边框与说明颜色（#67）。
+  static const conflictRed = Color(0xFFFF3B30);
 
   /// 被拖动格子的不透明度；目标格边框宽度。
   static const draggingOpacity = 0.6;
@@ -325,10 +336,14 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   /// at 为格位，modifiers 为所在列组合，id 为格中功能（空格为 null）；返回可放下的格子。
   Widget _cell(BuildContext context, _Slot at, int modifiers, String? id) {
     final key = '${ToolbarModifiers.label(modifiers)}${at.slot + 1}';
+    final slot = (modifiers: modifiers, digit: at.slot + 1);
+    // 全局快捷键占用的格位不可放入；与系统快捷键相同的格位可放但标红提示（#141）。
+    final reservedFor = widget.reserved[slot];
+    final systemConflict = id != null && widget.systemSlots.contains(slot);
     return DragTarget<String>(
       key: ValueKey('toolbar-slot-${at.column}-${at.slot}'),
       onWillAcceptWithDetails: (details) =>
-          _placeInSlot(details.data, at) != null,
+          reservedFor == null && _placeInSlot(details.data, at) != null,
       onAcceptWithDetails: (details) {
         final next = _placeInSlot(details.data, at);
         if (next != null) _submit(next);
@@ -342,6 +357,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   color: NativeGlassTheme.selectionBlue,
                   width: ScreenshotToolbarEditor.targetBorder,
                 )
+              : systemConflict
+              ? const BorderSide(
+                  color: ScreenshotToolbarEditor.conflictRed,
+                  width: ScreenshotToolbarEditor.targetBorder,
+                )
               : id == _selected
               ? BorderSide(color: colors.primary)
               : BorderSide.none,
@@ -351,13 +371,18 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 painter: _DashedBorder(colors.outlineVariant),
                 child: Center(
                   child: Text(
-                    key,
+                    reservedFor == null ? key : '$key 已用于$reservedFor',
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: colors.onSurfaceVariant),
                   ),
                 ),
               )
-            : _toolCell(context, id, key);
+            : _toolCell(
+                context,
+                id,
+                systemConflict ? '$key 系统优先' : key,
+                conflict: systemConflict,
+              );
         return Container(
           width: ScreenshotToolbarEditor.cellWidth,
           height: ScreenshotToolbarEditor.cellHeight,
@@ -368,13 +393,18 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id 为格中功能，key 为格位键位文字；返回拖拽手柄、图标、名称与键位、眼睛按钮。
+  /// id 为格中功能，key 为格位键位文字，conflict 为与系统快捷键冲突；返回拖拽手柄、图标、名称与键位、眼睛按钮。
   /// 点按可承载子级的工具时选中它，网格下方显示其子级。
-  Widget _toolCell(BuildContext context, String id, String key) {
+  Widget _toolCell(
+    BuildContext context,
+    String id,
+    String key, {
+    required bool conflict,
+  }) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
     final colors = Theme.of(context).colorScheme;
-    return GestureDetector(
+    final cell = GestureDetector(
       key: ValueKey('toolbar-cell-$id'),
       behavior: HitTestBehavior.opaque,
       onTap: ScreenshotActions.composable[id]!.hostsChildren
@@ -412,8 +442,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 Text(
                   key,
                   key: ValueKey('toolbar-key-$id'),
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: colors.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: conflict
+                        ? ScreenshotToolbarEditor.conflictRed
+                        : colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -422,6 +455,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         ],
       ),
     );
+    // 与系统快捷键冲突时悬停说明系统优先（#67）。
+    return conflict ? Tooltip(message: '与系统快捷键冲突，系统优先', child: cell) : cell;
   }
 
   /// parent 为选中的父级；返回「〈名称〉的子级」列表，可拖入拖出网格与排序。
@@ -608,6 +643,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     child: IconButton(
       key: ValueKey('visibility-$id'),
       tooltip: '${visible ? '隐藏' : '显示'} $label',
+      constraints: const BoxConstraints.tightFor(
+        width: GlassMetrics.hitSize,
+        height: GlassMetrics.hitSize,
+      ),
+      padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         backgroundColor: Colors.transparent,
         shadowColor: Colors.transparent,

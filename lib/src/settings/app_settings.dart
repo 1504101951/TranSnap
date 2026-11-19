@@ -1,6 +1,8 @@
 import '../screenshot/drawing_preferences.dart';
 import '../common/constants/appearance_modes.dart';
 import '../common/constants/preference_keys.dart';
+import '../common/constants/screenshot_actions.dart';
+import '../common/constants/toolbar_grid.dart';
 import '../common/constants/screenshot_enums.dart';
 import '../common/constants/shortcut_keys.dart';
 import '../common/constants/text_mode.dart';
@@ -331,7 +333,27 @@ class AppSettings {
     if (combinations.length != shortcuts.length) {
       throw const FormatException('翻译、输入翻译与截图快捷键不能相同。');
     }
+    // 全局快捷键独占注册，落在有工具的截图工具栏格位上会让该格在截图编辑中无法触发；两侧修改都在此拒绝（#141）。
+    for (final MapEntry(key: slot, value: purpose) in globalShortcutSlots.entries) {
+      final action = screenshotToolbar.actionAt(slot.modifiers, slot.digit);
+      if (action != null) {
+        throw FormatException(
+          '$purpose快捷键与截图工具栏「${ScreenshotActions.labels[action]}」'
+          '（${ToolbarModifiers.label(slot.modifiers)}${slot.digit}）相同，请换一个组合或移动该工具。',
+        );
+      }
+    }
   }
+
+  /// 无参数；返回落在截图工具栏网格格位上的全局快捷键：格位（修饰键与数字）到用途名称（#141）。
+  Map<({int modifiers, int digit}), String> get globalShortcutSlots => {
+    for (final (purpose, code, modifiers) in [
+      ('全局翻译', shortcutKeyCode, shortcutModifiers),
+      ('输入翻译', inputShortcutKeyCode, inputShortcutModifiers),
+      ('区域截图', screenshotShortcutKeyCode, screenshotShortcutModifiers),
+    ])
+      ?ToolbarGrid.slotOfCarbon(code, modifiers): purpose,
+  };
 
   /// 无参数；返回可经 MethodChannel 和 UserDefaults 存储的标量字典。
   Map<String, Object> toMap() => {

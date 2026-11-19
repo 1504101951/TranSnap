@@ -68,6 +68,9 @@ abstract final class MethodNames {
 
   static const chooseExcludedApp = 'chooseExcludedApp';
 
+  /// 设置窗口读取已启用的系统快捷键：返回 [{keyCode, modifiers}]，modifiers 为 NSEvent 修饰键标志原始值（#141）。
+  static const systemShortcuts = 'systemShortcuts';
+
   static const chooseScreenshotDirectory = 'chooseScreenshotDirectory';
 
   static const closePermissionWizard = 'closePermissionWizard';

@@ -5,6 +5,7 @@ import '../common/constants/glass_metrics.dart';
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/appearance_modes.dart';
 import '../common/constants/method_names.dart';
+import '../common/constants/toolbar_grid.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/error_codes.dart';
 import '../common/constants/screenshot_enums.dart';
@@ -152,6 +153,30 @@ class _SettingsPageState extends State<_SettingsPage>
     setState(() => _page = page);
     // _checkLanguagePacks 按已提交的主次语言查询，语言设置改动后回到通用页即可看到新状态。
     if (page == SettingsPage.general) _checkLanguagePacks();
+    // _loadSystemShortcuts 每次进入工具栏页重新读取，系统设置中的修改随即生效（#141）。
+    if (page == SettingsPage.toolbar) _loadSystemShortcuts();
+  }
+
+  /// 已启用的系统快捷键落在截图工具栏网格上的格位；工具栏页打开时读取。
+  Set<({int modifiers, int digit})> _systemShortcutSlots = const {};
+
+  /// 无参数；读取已启用的系统快捷键并换算为网格格位，非数字行 1–6 或带 ⇧ 的忽略，无返回值。
+  Future<void> _loadSystemShortcuts() async {
+    final entries =
+        await _channel.invokeListMethod<Map<Object?, Object?>>(
+          MethodNames.systemShortcuts,
+        ) ??
+        const [];
+    if (!mounted) return;
+    setState(
+      () => _systemShortcutSlots = {
+        for (final entry in entries)
+          ?ToolbarGrid.slotOfCocoa(
+            entry['keyCode'] as int,
+            entry['modifiers'] as int,
+          ),
+      },
+    );
   }
 
   /// 无参数；向主引擎查询 Apple 系统翻译语言包状态并显示说明，缺少或不支持时显示失败原因，无返回值。
@@ -1308,6 +1333,9 @@ class _SettingsPageState extends State<_SettingsPage>
                               onChanged: (value) => _edit(
                                 () => _settings!.screenshotToolbar = value,
                               ),
+                              // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
+                              reserved: settings.globalShortcutSlots,
+                              systemSlots: _systemShortcutSlots,
                             ),
                           ],
                         ),

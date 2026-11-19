@@ -204,6 +204,11 @@ enum AppConstants {
     static let badArgsError = "bad_args"
     static let badSettingsError = "bad_settings"
     static let chooseExcludedAppMethod = "chooseExcludedApp"
+    /// systemShortcuts 协议值；读取已启用的系统快捷键 [{keyCode, modifiers}]，与 Dart 常量同步（#141）。
+    static let systemShortcutsMethod = "systemShortcuts"
+    /// 系统快捷键设置的偏好域与键；只读取，不修改。
+    static let symbolicHotKeysDomain = "com.apple.symbolichotkeys"
+    static let symbolicHotKeysKey = "AppleSymbolicHotKeys"
     static let chooseScreenshotDirectoryMethod = "chooseScreenshotDirectory"
     static let closePermissionWizardMethod = "closePermissionWizard"
     static let closeScreenshotMethod = "closeScreenshot"
