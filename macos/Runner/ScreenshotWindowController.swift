@@ -461,7 +461,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
     /// 缺省值由Dart领域对象提供。
     private func toolbarPreferences() -> [String: Any] {
         let preferences = AppPreferences.current
-        return preferences.filter { [AppConstants.screenshotToolbarOrderKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarShortcutsKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingShowsClicksKey, AppConstants.stickersKey].contains($0.key) }
+        return preferences.filter { [AppConstants.screenshotToolbarColumnsKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingShowsClicksKey, AppConstants.stickersKey].contains($0.key) }
             .merging([AppConstants.stickerDirectoryKey: AppConstants.stickersURL.path]) { current, _ in current }
     }
 
@@ -1030,23 +1030,22 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             return true
         }
         // 非激活面板不保证收到Flutter键盘事件；直接派发语义动作，禁止重放字符。
+        // 格位快捷键：数字行物理键 1–6 加 Control/Option/Command 交给 Dart，按其网格配置（含默认网格）解析为功能（#141）；
+        // 带 Shift 的组合不属于工具栏，照常放行。
         guard let id = captureId,
-              let character = event.characters(byApplyingModifiers: [])?.lowercased(),
-              character.unicodeScalars.count == 1,
-              let key = character.unicodeScalars.first,
-              let shortcuts = toolbarPreferences()[AppConstants.screenshotToolbarShortcutsKey] as? [String: [String: Int]] else {
+              let slot = AppConstants.screenshotToolbarSlotKeyCodes.firstIndex(of: event.keyCode),
+              !event.modifierFlags.contains(.shift) else {
             return false
         }
         let flags = event.modifierFlags
         let modifiers = (flags.contains(.control) ? 1 : 0)
             | (flags.contains(.option) ? 2 : 0)
-            | (flags.contains(.shift) ? 4 : 0)
             | (flags.contains(.command) ? 8 : 0)
-        guard let action = shortcuts.first(where: {
-            $0.value["keyId"] == Int(key.value) && $0.value["modifiers"] == modifiers
-        })?.key else { return false }
         if !event.isARepeat {
-            channel?.invokeMethod(AppConstants.screenshotToolbarActionMethod, arguments: ["id": id, "action": action])
+            channel?.invokeMethod(
+                AppConstants.screenshotToolbarSlotMethod,
+                arguments: ["id": id, "modifiers": modifiers, "digit": slot + 1]
+            )
         }
         return true
     }

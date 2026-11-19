@@ -49,7 +49,8 @@ abstract final class MethodNames {
   static const setBrushCursor = 'setBrushCursor';
   static const screenshotTextInput = 'screenshotTextInput';
   static const screenshotToolbarChanged = 'screenshotToolbarChanged';
-  static const screenshotToolbarAction = 'screenshotToolbarAction';
+  /// 原生截图面板转来的格位快捷键：{id, modifiers, digit}，digit 为 1–6，由截图引擎按网格解析（#141）。
+  static const screenshotToolbarSlot = 'screenshotToolbarSlot';
 
   static const appReady = 'appReady';
 

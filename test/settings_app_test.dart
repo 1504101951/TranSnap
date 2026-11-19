@@ -343,11 +343,11 @@ void main() {
     await openSettingsPage(tester, '操作');
     expect(find.byKey(const ValueKey('区域截图快捷键')), findsOneWidget);
 
-    // 工具栏子页直接展示编辑器，无需展开，也不弹出对话框，且只含顶层工具。
+    // 工具栏子页直接展示网格编辑器，无需展开，也不弹出对话框，且只含可拼接功能（#141）。
     await openSettingsPage(tester, '工具栏');
     expect(find.byType(Dialog), findsNothing);
     expect(
-      find.byKey(const ValueKey('toolbar-row-screenshot-tool-cursor')),
+      find.byKey(const ValueKey('toolbar-cell-screenshot-tool-cursor')),
       findsOneWidget,
     );
     expect(find.text('增大字号'), findsNothing);

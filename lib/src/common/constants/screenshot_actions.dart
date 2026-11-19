@@ -71,7 +71,7 @@ abstract final class ScreenshotActions {
   };
 
   /// 默认的父子结构：键为父级，值为按顺序排列的子级；未列出的功能默认是一级。
-  /// 取色与标尺默认放在截图的子级行，一级保持 17 项、不超出 640pt 工具栏（#111）。
+  /// 取色与标尺默认是截图的子级，一级共 16 项，默认网格为 6+6+4（#111、#141）。
   static const defaultChildren = <String, List<String>>{
     crop: [record, scrolling, eyedropper, ruler],
     beautify: [sticker],

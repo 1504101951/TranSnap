@@ -11,6 +11,7 @@ import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
 import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:translate_app/src/common/constants/toolbar_grid.dart';
 
 import 'support/capture_pixels.dart';
 
@@ -543,7 +544,8 @@ void main() {
         Offset(canvas.width / 2, canvas.height / 2),
       );
       await tester.pumpAndSettle();
-      expect(find.byTooltip('截图'), findsOneWidget);
+      // 默认网格中截图在裸数字第 2 格，提示为「名称 + 键位」（#141）。
+      expect(find.byTooltip('截图 2'), findsOneWidget);
       final attributes = find.byKey(const Key('screenshot-attributes-row'));
       expect(
         find.descendant(of: attributes, matching: find.byTooltip('录制')),
@@ -1038,10 +1040,19 @@ void main() {
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/toolbar-tree');
+    // 除滚动长截图外全部为一级，按注册表顺序每列 6 格填入无、⌘、⌥、⌃ 四列（#141）。
+    final topLevel = [
+      for (final id in ScreenshotActions.composable.keys)
+        if (id != ScreenshotActions.scrolling) id,
+    ];
     final toolbar = ScreenshotToolbarPreferences(
-      order: [
-        for (final id in ScreenshotActions.composable.keys)
-          if (id != ScreenshotActions.scrolling) id,
+      columns: [
+        for (final (index, modifiers)
+            in ToolbarModifiers.allowed.take(4).indexed)
+          ToolbarColumn(modifiers, [
+            for (var slot = 0; slot < ToolbarGrid.slots; slot++)
+              topLevel.elementAtOrNull(index * ToolbarGrid.slots + slot),
+          ]),
       ],
       children: {
         ScreenshotActions.brush: [ScreenshotActions.scrolling],

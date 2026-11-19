@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_actions.dart';
+import '../common/constants/toolbar_grid.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_toolbar_preferences.dart';
 
-/// 截图工具配置：拖拽排序与拼接父子级、录制快捷键、显示或隐藏；仅修改偏好，不注册全局热键。
+/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格」）：每列一种修饰键组合、6 个格位，格位即快捷键；
+/// 拖动工具到格位获得键位，同格交换；选中可承载子级的工具后在网格下方编辑其子级；仅修改偏好，不注册全局热键。
 class ScreenshotToolbarEditor extends StatefulWidget {
   const ScreenshotToolbarEditor({
     super.key,
@@ -16,61 +18,55 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   final ScreenshotToolbarPreferences value;
   final ValueChanged<ScreenshotToolbarPreferences> onChanged;
 
-  /// 每一行的固定高度。
-  static const rowHeight = 56.0;
+  /// 格子宽高、圆角与间距（#67）。
+  static const cellWidth = 120.0;
+  static const cellHeight = 56.0;
+  static const cellGap = 4.0;
+  static const columnGap = 8.0;
 
-  /// 子级相对一级的缩进；落点指示线也按这个距离缩进。
-  static const indent = 24.0;
+  /// 子级列表的行最小高度（#67）。
+  static const childRowHeight = 40.0;
 
-  /// 拖动中指示落点的横线高度。
-  static const dropLineHeight = 2.0;
-
-  /// 被拖动行的不透明度。
+  /// 被拖动格子的不透明度；目标格边框宽度。
   static const draggingOpacity = 0.6;
+  static const targetBorder = 2.0;
 
-  /// 拖动中，可以挂载的行在右半边铺的选中蓝底色的不透明度。
-  static const attachTint = 0.08;
-
-  /// 拖动中，不能挂载的行在右半边盖的遮罩的不透明度；遮罩越重，这一行右半边越淡。
-  static const blockedVeil = 0.6;
-
-  /// 挂载目标（父级行）整行高亮的不透明度。
-  static const hostHighlight = 0.18;
-
-  /// 无参数；创建局部录制与排序状态，提交沿用父页自动保存。
+  /// 无参数；创建局部选中与错误状态，提交沿用父页自动保存。
   @override
   State<ScreenshotToolbarEditor> createState() =>
       _ScreenshotToolbarEditorState();
 }
 
-/// 一次拖动的落点：next 为松手后的配置；line 为指示线在列表中的行位置，null 表示不画线；
-/// level 为落点层级；host 为挂载时要高亮的父级，排序时为 null。
-typedef _Drop = ({
-  ScreenshotToolbarPreferences next,
-  int? line,
-  int level,
-  String? host,
-});
+/// 格位坐标：column 为列下标，slot 为格下标（0–5）。
+typedef _Slot = ({int column, int slot});
 
 class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   late ScreenshotToolbarPreferences _value = widget.value;
-  final _recorder = FocusNode();
-  final _list = GlobalKey();
-  String? _recording;
   String? _error;
 
-  /// 正在拖动的功能与当前落点；落点为空表示这个位置不允许放下。
-  String? _dragging;
-  _Drop? _drop;
+  /// 选中的可承载子级的一级工具；非 null 时网格下方显示其子级列表。
+  String? _selected;
 
-  /// 无参数；释放局部键盘焦点，离开配置后不再捕获输入。
+  /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
+  final Map<String, FocusNode> _handles = {};
+
+  /// 无参数；释放手柄焦点。
   @override
   void dispose() {
-    _recorder.dispose();
+    for (final node in _handles.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
-  /// next为完整配置；校验成功才提交，错误保留原值并给出原因。
+  /// oldWidget 为父级旧快照；外部重新加载时采用父级配置。
+  @override
+  void didUpdateWidget(covariant ScreenshotToolbarEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) _value = widget.value;
+  }
+
+  /// next 为完整配置；校验成功才提交，错误保留原值并给出原因。
   void _submit(ScreenshotToolbarPreferences next) {
     try {
       next.validate();
@@ -84,421 +80,441 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     }
   }
 
-  /// 无参数；返回按显示顺序排列的行：每个一级功能后面紧跟它的子级。
-  List<({String id, int level})> get _rows => [
-    for (final id in _value.order) ...[
-      (id: id, level: 0),
-      for (final child in _value.children[id] ?? const <String>[])
-        (id: child, level: 1),
-    ],
-  ];
+  /// id 为功能；返回它所在的格位，子级或不存在时为 null。
+  _Slot? _slotOf(String id) {
+    for (final (column, value) in _value.columns.indexed) {
+      final slot = value.slots.indexOf(id);
+      if (slot >= 0) return (column: column, slot: slot);
+    }
+    return null;
+  }
 
   /// 无参数；返回可修改的父子结构副本。
   Map<String, List<String>> _childrenCopy() => {
     for (final entry in _value.children.entries) entry.key: [...entry.value],
   };
 
-  /// id 为一行上的功能；返回这一行所属的一级功能：一级为它自己，子级为它的父级。
-  String _hostOf(String id) => _value.parentOf(id) ?? id;
+  /// id 为功能；返回它能否成为子级：自己没有子级。
+  bool _canBeChild(String id) => (_value.children[id] ?? const []).isEmpty;
 
-  /// dragged 为被拖动的功能，id 为列表中的某一行；返回 dragged 能否挂到这一行所属的一级功能之下。
-  /// 只有工具可以包含子级；自己带着子级的功能不能再成为别人的子级；不能挂到自己之下。
-  bool _canAttach(String dragged, String id) {
-    final host = _hostOf(id);
-    return host != dragged &&
-        ScreenshotActions.composable[host]!.hostsChildren &&
-        (_value.children[dragged] ?? const []).isEmpty;
+  /// id 为被放下的功能，target 为目标格位；返回放下后的配置，不允许时为 null。
+  /// 目标格有工具时与 id 原位置交换：id 原在格位则两者互换；id 原为子级时，
+  /// 被换出的工具只有能成为子级（自己没有子级，且不是该父级本身）才交换。
+  ScreenshotToolbarPreferences? _placeInSlot(String id, _Slot target) {
+    final columns = [..._value.columns];
+    final children = _childrenCopy();
+    final occupant = columns[target.column].slots[target.slot];
+    if (occupant == id) return null;
+    final from = _slotOf(id);
+    final parent = _value.parentOf(id);
+    if (from != null) {
+      columns[from.column] = columns[from.column].withSlot(from.slot, occupant);
+    } else {
+      final siblings = children[parent]!;
+      final index = siblings.indexOf(id);
+      siblings.removeAt(index);
+      if (occupant != null) {
+        if (occupant == parent || !_canBeChild(occupant)) return null;
+        siblings.insert(index, occupant);
+      }
+      if (siblings.isEmpty) children.remove(parent);
+    }
+    columns[target.column] = columns[target.column].withSlot(target.slot, id);
+    return _value.copyWith(columns: columns, children: children);
   }
 
-  /// id 为被拖动的功能，local 为指针相对列表左上角的位置，width 为列表宽度。
-  /// 返回松手后的落点；该位置不允许放下时返回 null。
-  /// 左半边是一级：按纵向位置插到一级功能之间，子级拖到这里即变回一级。
-  /// 右半边是挂载：指针所在行属于哪个一级工具，就成为它的子级；
-  /// 指在父级行上排到子级末尾，指在某个子级行上则插到它的前后。
-  _Drop? _dropAt(String id, Offset local, double width) {
-    final rows = _rows;
-    // 父级带着自己的子级一起移动。
-    final moving = {id, ...?_value.children[id]};
-    final order = [..._value.order]..remove(id);
+  /// id 为被放下的功能，parent 为子级列表所属父级，index 为插入位置；返回放下后的配置，不允许时为 null。
+  /// id 不能是父级本身，且自己不能带子级；原在格位时留下空格。
+  ScreenshotToolbarPreferences? _placeAsChild(
+    String id,
+    String parent,
+    int index,
+  ) {
+    if (id == parent || !_canBeChild(id)) return null;
+    final columns = [..._value.columns];
     final children = _childrenCopy();
-    for (final list in children.values) {
-      list.remove(id);
+    final from = _slotOf(id);
+    var position = index;
+    if (from != null) {
+      columns[from.column] = columns[from.column].withSlot(from.slot, null);
+    } else {
+      final siblings = children[_value.parentOf(id)]!;
+      final old = siblings.indexOf(id);
+      siblings.removeAt(old);
+      // 同一列表内向后移动时，移除后目标下标前移一位。
+      if (_value.parentOf(id) == parent && old < position) position -= 1;
+      if (siblings.isEmpty) children.remove(_value.parentOf(id));
     }
-    if (local.dx > width / 2) {
-      final exact = local.dy / ScreenshotToolbarEditor.rowHeight;
-      final index = exact.floor().clamp(0, rows.length - 1);
-      final target = rows[index];
-      if (moving.contains(target.id) || !_canAttach(id, target.id)) {
-        return null;
-      }
-      final host = _hostOf(target.id);
-      final siblings = children[host] ??= [];
-      // 指在父级行上：排到末尾，只高亮父级，不画指示线。
-      if (target.level == 0) {
-        siblings.add(id);
-        return (
-          next: _value.copyWith(order: order, children: children),
-          line: null,
-          level: 1,
-          host: host,
-        );
-      }
-      // 指在子级行上：上半行插到它之前，下半行插到它之后。
-      final after = exact - index >= 0.5;
-      siblings.insert(siblings.indexOf(target.id) + (after ? 1 : 0), id);
-      return (
-        next: _value.copyWith(order: order, children: children),
-        line: index + (after ? 1 : 0),
-        level: 1,
-        host: host,
-      );
+    final list = children[parent] ??= [];
+    list.insert(position.clamp(0, list.length), id);
+    return _value.copyWith(columns: columns, children: children);
+  }
+
+  /// id 为格位中的功能，dx/dy 为方向键位移；与相邻格交换（列内上下、跨列左右），越界不动。
+  void _moveByKey(String id, int dx, int dy) {
+    final from = _slotOf(id)!;
+    final column = from.column + dx;
+    final slot = from.slot + dy;
+    if (column < 0 ||
+        column >= _value.columns.length ||
+        slot < 0 ||
+        slot >= ToolbarGrid.slots) {
+      return;
     }
-    final rest = [
-      for (final row in rows)
-        if (!moving.contains(row.id)) row,
-    ];
-    final pointed = (local.dy / ScreenshotToolbarEditor.rowHeight)
-        .round()
-        .clamp(0, rows.length);
-    var gap =
-        pointed -
-        rows.take(pointed).where((row) => moving.contains(row.id)).length;
-    // 间隙落在某个父级的子级之间时，移到这一组的上方或下方中较近的一处。
-    if (gap < rest.length && rest[gap].level == 1) {
-      var start = gap;
-      while (rest[start].level == 1) {
-        start -= 1;
-      }
-      var end = gap;
-      while (end < rest.length && rest[end].level == 1) {
-        end += 1;
-      }
-      gap = gap - start < end - gap ? start : end;
-    }
-    order.insert(rest.take(gap).where((row) => row.level == 0).length, id);
-    return (
-      next: _value.copyWith(order: order, children: children),
-      // 指示线画在落点间隙的下一行之上；落在末尾时画在列表底部。
-      line: gap < rest.length
-          ? rows.indexWhere((row) => row.id == rest[gap].id)
-          : rows.length,
-      level: 0,
-      host: null,
+    final next = _placeInSlot(id, (column: column, slot: slot));
+    if (next == null) return;
+    _submit(next);
+    // 格子换位后重建，把焦点交回该功能的手柄，便于连续用方向键移动。
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _handles[id]?.requestFocus(),
     );
   }
 
-  /// id 为功能，delta 为 -1 或 1；在同一层级的相邻位置之间移动一位，到头则不动。
-  void _shift(String id, int delta) {
-    final parent = _value.parentOf(id);
-    final siblings = [
-      ...(parent == null ? _value.order : _value.children[parent]!),
-    ];
+  /// id 为子级，delta 为 -1 或 1；在同一父级的子级之间移动一位，到头不动。
+  void _shiftChild(String id, int delta) {
+    final parent = _value.parentOf(id)!;
+    final siblings = [..._value.children[parent]!];
     final index = siblings.indexOf(id) + delta;
     if (index < 0 || index >= siblings.length) return;
     siblings
       ..remove(id)
       ..insert(index, id);
-    _submit(
-      parent == null
-          ? _value.copyWith(order: siblings)
-          : _value.copyWith(children: _childrenCopy()..[parent] = siblings),
+    _submit(_value.copyWith(children: _childrenCopy()..[parent] = siblings));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _handles[id]?.requestFocus(),
     );
   }
 
-  /// id 为一级功能；放到它上方那个一级功能的子级末尾。上方不是工具或它自己有子级时不动。
-  void _nest(String id) {
-    final index = _value.order.indexOf(id);
-    if (index <= 0 || (_value.children[id] ?? const []).isNotEmpty) return;
-    final host = _value.order[index - 1];
-    if (!ScreenshotActions.composable[host]!.hostsChildren) return;
-    _submit(
-      _value.copyWith(
-        order: [..._value.order]..remove(id),
-        children: _childrenCopy()..[host] = [...?_value.children[host], id],
-      ),
+  /// 无参数；用第一个未使用的组合新增一列空列，已有 8 列时不出现入口。
+  void _addColumn() {
+    final used = {for (final column in _value.columns) column.modifiers};
+    final modifiers = ToolbarModifiers.allowed.firstWhere(
+      (value) => !used.contains(value),
     );
-  }
-
-  /// id 为子级功能；变回一级，放在原父级之后。
-  void _unnest(String id) {
-    final parent = _value.parentOf(id);
-    if (parent == null) return;
     _submit(
       _value.copyWith(
-        order: [..._value.order]..insert(_value.order.indexOf(parent) + 1, id),
-        children: _childrenCopy()..[parent]!.remove(id),
-      ),
-    );
-  }
-
-  /// id 为被拖动的功能，global 为指针的屏幕位置；更新落点。
-  void _dragTo(String id, Offset global) {
-    final box = _list.currentContext!.findRenderObject()! as RenderBox;
-    setState(() {
-      _dragging = id;
-      _drop = _dropAt(id, box.globalToLocal(global), box.size.width);
-    });
-  }
-
-  /// commit 为真表示松手；有合法落点时提交，否则保持原位。
-  void _endDrag({required bool commit}) {
-    final drop = _drop;
-    setState(() {
-      _dragging = null;
-      _drop = null;
-    });
-    if (commit && drop != null) _submit(drop.next);
-  }
-
-  /// oldWidget为父级旧快照；外部重新加载时采用父级配置，不覆盖正在录制的按键。
-  @override
-  void didUpdateWidget(covariant ScreenshotToolbarEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.value != oldWidget.value) _value = widget.value;
-  }
-
-  /// event为配置局部键；仅录制期间消费，Escape/失焦取消且不写配置。
-  KeyEventResult _record(FocusNode node, KeyEvent event) {
-    final id = _recording;
-    if (id == null) return KeyEventResult.ignored;
-    if (event is! KeyDownEvent) return KeyEventResult.handled;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      setState(() => _recording = null);
-      return KeyEventResult.handled;
-    }
-    if ({
-      LogicalKeyboardKey.metaLeft,
-      LogicalKeyboardKey.metaRight,
-      LogicalKeyboardKey.controlLeft,
-      LogicalKeyboardKey.controlRight,
-      LogicalKeyboardKey.altLeft,
-      LogicalKeyboardKey.altRight,
-      LogicalKeyboardKey.shiftLeft,
-      LogicalKeyboardKey.shiftRight,
-    }.contains(event.logicalKey)) {
-      return KeyEventResult.handled;
-    }
-    _submit(
-      _value.copyWith(
-        shortcuts: {..._value.shortcuts, id: ToolbarShortcut.fromEvent(event)},
-      ),
-    );
-    setState(() => _recording = null);
-    return KeyEventResult.handled;
-  }
-
-  /// context为页面主题；列表随设置正文滚动，不创建弹窗或独立滚动区域。
-  @override
-  Widget build(BuildContext context) {
-    final rows = _rows;
-    final drop = _drop;
-    final moving = _dragging == null
-        ? const <String>{}
-        : {_dragging!, ...?_value.children[_dragging]};
-    return Focus(
-      focusNode: _recorder,
-      onKeyEvent: _record,
-      onFocusChange: (focused) {
-        if (!focused && _recording != null) setState(() => _recording = null);
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_error != null)
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          Stack(
-            key: _list,
-            clipBehavior: Clip.none,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final (index, row) in rows.indexed)
-                    Opacity(
-                      key: ValueKey('toolbar-row-${row.id}'),
-                      opacity: moving.contains(row.id)
-                          ? ScreenshotToolbarEditor.draggingOpacity
-                          : 1,
-                      child: Stack(
-                        children: [
-                          // 挂载目标整行高亮。
-                          if (drop?.host == row.id)
-                            Positioned.fill(
-                              key: const ValueKey('toolbar-host-highlight'),
-                              child: IgnorePointer(
-                                child: ColoredBox(
-                                  color: NativeGlassTheme.selectionBlue
-                                      .withValues(
-                                        alpha: ScreenshotToolbarEditor
-                                            .hostHighlight,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          _row(
-                            context,
-                            row.id,
-                            row.level,
-                            last: index == rows.length - 1,
-                          ),
-                          // 拖动中右半边是挂载区：能挂的行铺淡蓝，不能挂的行盖上遮罩变淡。
-                          if (_dragging != null && !moving.contains(row.id))
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: FractionallySizedBox(
-                                  alignment: Alignment.centerRight,
-                                  widthFactor: 0.5,
-                                  child: ColoredBox(
-                                    key: ValueKey(
-                                      _canAttach(_dragging!, row.id)
-                                          ? 'toolbar-attach-${row.id}'
-                                          : 'toolbar-blocked-${row.id}',
-                                    ),
-                                    color: _canAttach(_dragging!, row.id)
-                                        ? NativeGlassTheme.selectionBlue
-                                              .withValues(
-                                                alpha: ScreenshotToolbarEditor
-                                                    .attachTint,
-                                              )
-                                        : Theme.of(context).colorScheme.surface
-                                              .withValues(
-                                                alpha: ScreenshotToolbarEditor
-                                                    .blockedVeil,
-                                              ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              // 指示线的左端跟随落点层级缩进：看线就知道会落在一级还是子级。
-              if (drop?.line != null)
-                Positioned(
-                  key: const ValueKey('toolbar-drop-line'),
-                  left: drop!.level * ScreenshotToolbarEditor.indent,
-                  right: 0,
-                  top:
-                      drop.line! * ScreenshotToolbarEditor.rowHeight -
-                      ScreenshotToolbarEditor.dropLineHeight / 2,
-                  height: ScreenshotToolbarEditor.dropLineHeight,
-                  child: const IgnorePointer(
-                    child: ColoredBox(color: NativeGlassTheme.selectionBlue),
-                  ),
-                ),
-            ],
+        columns: [
+          ..._value.columns,
+          ToolbarColumn(
+            modifiers,
+            List<String?>.filled(ToolbarGrid.slots, null),
           ),
         ],
       ),
     );
   }
 
-  /// id 为功能，level 为 0（一级）或 1（子级），last 表示列表最后一行；返回一行编辑控件。
-  Widget _row(
-    BuildContext context,
-    String id,
-    int level, {
-    required bool last,
-  }) {
-    final label = ScreenshotActions.labels[id]!;
+  /// column 为列下标；删除空列，后续列前移。
+  void _removeColumn(int column) {
+    _submit(_value.copyWith(columns: [..._value.columns]..removeAt(column)));
+  }
+
+  /// column 为列下标，modifiers 为新组合；改变该列的组合，格位与工具不变。
+  void _setModifiers(int column, int modifiers) {
+    final columns = [..._value.columns];
+    columns[column] = ToolbarColumn(modifiers, columns[column].slots);
+    _submit(_value.copyWith(columns: columns));
+  }
+
+  /// id 为功能；切换显示或隐藏，格位与键位保持。
+  void _toggleVisible(String id) {
     final visible = !_value.hidden.contains(id);
-    return SizedBox(
-      height: ScreenshotToolbarEditor.rowHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: last
-              ? null
-              : Border(
-                  bottom: BorderSide(
-                    color: Theme.of(context).colorScheme.outlineVariant,
+    _submit(
+      _value.copyWith(
+        hidden: visible
+            ? {..._value.hidden, id}
+            : ({..._value.hidden}..remove(id)),
+      ),
+    );
+  }
+
+  /// context 为页面主题；网格超出宽度时在页内横向滚动，子级列表随设置正文滚动。
+  @override
+  Widget build(BuildContext context) {
+    final selected = _selected != null && _slotOf(_selected!) != null
+        ? _selected
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_error != null)
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        SingleChildScrollView(
+          key: const ValueKey('toolbar-grid'),
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: ScreenshotToolbarEditor.columnGap,
+            children: [
+              for (final (index, column) in _value.columns.indexed)
+                _column(context, index, column),
+              if (_value.columns.length < ToolbarGrid.maxColumns)
+                NativeGlassSurface(
+                  material: true,
+                  child: TextButton(
+                    key: const ValueKey('toolbar-add-column'),
+                    onPressed: _addColumn,
+                    child: const Text('添加列'),
                   ),
                 ),
+            ],
+          ),
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: GlassMetrics.actionGap),
+          _childrenList(context, selected),
+        ],
+      ],
+    );
+  }
+
+  /// index 为列下标，column 为该列；返回列头（组合下拉、空列的删除入口）与 6 个格子。
+  Widget _column(BuildContext context, int index, ToolbarColumn column) {
+    final used = {
+      for (final other in _value.columns)
+        if (other != column) other.modifiers,
+    };
+    final empty = column.slots.every((slot) => slot == null);
+    return SizedBox(
+      key: ValueKey('toolbar-column-$index'),
+      width: ScreenshotToolbarEditor.cellWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: ScreenshotToolbarEditor.cellGap,
+        children: [
+          SizedBox(
+            height: GlassMetrics.buttonHeight,
+            child: Row(
+              children: [
+                Expanded(
+                  child: NativeGlassMenuButton<int>(
+                    key: ValueKey('toolbar-modifiers-$index'),
+                    value: column.modifiers,
+                    // 其他列已用的组合不可选，保证各列组合不重复。
+                    items: {
+                      for (final modifiers in ToolbarModifiers.allowed)
+                        if (!used.contains(modifiers))
+                          modifiers: modifiers == 0
+                              ? '无修饰'
+                              : ToolbarModifiers.label(modifiers),
+                    },
+                    onChanged: (modifiers) => _setModifiers(index, modifiers),
+                  ),
+                ),
+                if (empty)
+                  IconButton(
+                    key: ValueKey('toolbar-remove-column-$index'),
+                    tooltip: '删除列',
+                    icon: const Icon(Icons.close, size: GlassMetrics.icon),
+                    onPressed: () => _removeColumn(index),
+                  ),
+              ],
+            ),
+          ),
+          for (final (slot, id) in column.slots.indexed)
+            _cell(context, (column: index, slot: slot), column.modifiers, id),
+        ],
+      ),
+    );
+  }
+
+  /// at 为格位，modifiers 为所在列组合，id 为格中功能（空格为 null）；返回可放下的格子。
+  Widget _cell(BuildContext context, _Slot at, int modifiers, String? id) {
+    final key = '${ToolbarModifiers.label(modifiers)}${at.slot + 1}';
+    return DragTarget<String>(
+      key: ValueKey('toolbar-slot-${at.column}-${at.slot}'),
+      onWillAcceptWithDetails: (details) =>
+          _placeInSlot(details.data, at) != null,
+      onAcceptWithDetails: (details) {
+        final next = _placeInSlot(details.data, at);
+        if (next != null) _submit(next);
+      },
+      builder: (context, candidates, rejected) {
+        final colors = Theme.of(context).colorScheme;
+        final shape = RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+          side: candidates.isNotEmpty
+              ? const BorderSide(
+                  color: NativeGlassTheme.selectionBlue,
+                  width: ScreenshotToolbarEditor.targetBorder,
+                )
+              : id == _selected
+              ? BorderSide(color: colors.primary)
+              : BorderSide.none,
+        );
+        final content = id == null
+            ? CustomPaint(
+                painter: _DashedBorder(colors.outlineVariant),
+                child: Center(
+                  child: Text(
+                    key,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                ),
+              )
+            : _toolCell(context, id, key);
+        return Container(
+          width: ScreenshotToolbarEditor.cellWidth,
+          height: ScreenshotToolbarEditor.cellHeight,
+          decoration: ShapeDecoration(shape: shape),
+          child: content,
+        );
+      },
+    );
+  }
+
+  /// id 为格中功能，key 为格位键位文字；返回拖拽手柄、图标、名称与键位、眼睛按钮。
+  /// 点按可承载子级的工具时选中它，网格下方显示其子级。
+  Widget _toolCell(BuildContext context, String id, String key) {
+    final label = ScreenshotActions.labels[id]!;
+    final visible = !_value.hidden.contains(id);
+    final colors = Theme.of(context).colorScheme;
+    return GestureDetector(
+      key: ValueKey('toolbar-cell-$id'),
+      behavior: HitTestBehavior.opaque,
+      onTap: ScreenshotActions.composable[id]!.hostsChildren
+          ? () => setState(() => _selected = _selected == id ? null : id)
+          : null,
+      child: Row(
+        children: [
+          _handle(
+            context,
+            id,
+            label,
+            onKey: (logical) => switch (logical) {
+              LogicalKeyboardKey.arrowUp => () => _moveByKey(id, 0, -1),
+              LogicalKeyboardKey.arrowDown => () => _moveByKey(id, 0, 1),
+              LogicalKeyboardKey.arrowLeft => () => _moveByKey(id, -1, 0),
+              LogicalKeyboardKey.arrowRight => () => _moveByKey(id, 1, 0),
+              _ => null,
+            },
+          ),
+          Icon(ScreenshotActions.icons[id], size: GlassMetrics.icon),
+          const SizedBox(width: GlassMetrics.actionGap),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: visible ? null : colors.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  key,
+                  key: ValueKey('toolbar-key-$id'),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          _eye(id, label, visible),
+        ],
+      ),
+    );
+  }
+
+  /// parent 为选中的父级；返回「〈名称〉的子级」列表，可拖入拖出网格与排序。
+  Widget _childrenList(BuildContext context, String parent) {
+    final children = _value.children[parent] ?? const <String>[];
+    final title = '${ScreenshotActions.labels[parent]}的子级';
+    return Column(
+      key: ValueKey('toolbar-children-$parent'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        for (final (index, id) in children.indexed)
+          _childRow(context, parent, index, id),
+        // 末尾落点：拖到这里排到子级末尾；没有子级时同样作为第一个子级的落点。
+        DragTarget<String>(
+          key: ValueKey('toolbar-children-end-$parent'),
+          onWillAcceptWithDetails: (details) =>
+              _placeAsChild(details.data, parent, children.length) != null,
+          onAcceptWithDetails: (details) {
+            final next = _placeAsChild(details.data, parent, children.length);
+            if (next != null) _submit(next);
+          },
+          builder: (context, candidates, rejected) => Container(
+            height: ScreenshotToolbarEditor.childRowHeight,
+            alignment: Alignment.centerLeft,
+            decoration: candidates.isEmpty
+                ? null
+                : const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: NativeGlassTheme.selectionBlue,
+                        width: ScreenshotToolbarEditor.targetBorder,
+                      ),
+                    ),
+                  ),
+            child: Text(
+              children.isEmpty ? '把工具拖到这里成为子级' : '拖到这里放在末尾',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// parent 为父级，index 为子级下标，id 为子级；返回可拖动、可在其前方放下的一行。
+  Widget _childRow(BuildContext context, String parent, int index, String id) {
+    final label = ScreenshotActions.labels[id]!;
+    final visible = !_value.hidden.contains(id);
+    return DragTarget<String>(
+      key: ValueKey('toolbar-child-$id'),
+      onWillAcceptWithDetails: (details) =>
+          _placeAsChild(details.data, parent, index) != null,
+      onAcceptWithDetails: (details) {
+        final next = _placeAsChild(details.data, parent, index);
+        if (next != null) _submit(next);
+      },
+      builder: (context, candidates, rejected) => Container(
+        constraints: const BoxConstraints(
+          minHeight: ScreenshotToolbarEditor.childRowHeight,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            top: candidates.isEmpty
+                ? BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  )
+                : const BorderSide(
+                    color: NativeGlassTheme.selectionBlue,
+                    width: ScreenshotToolbarEditor.targetBorder,
+                  ),
+          ),
         ),
         child: Row(
           children: [
-            SizedBox(width: level * ScreenshotToolbarEditor.indent),
-            Semantics(
-              label: '排序 $label',
-              onIncrease: () => _shift(id, 1),
-              onDecrease: () => _shift(id, -1),
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (_recording != null || event is! KeyDownEvent) {
-                    return KeyEventResult.ignored;
-                  }
-                  // 上下在同级之间移动；右键成为上方工具的子级，左键变回一级。
-                  final move = switch (event.logicalKey) {
-                    LogicalKeyboardKey.arrowUp => () => _shift(id, -1),
-                    LogicalKeyboardKey.arrowDown => () => _shift(id, 1),
-                    LogicalKeyboardKey.arrowRight => () => _nest(id),
-                    LogicalKeyboardKey.arrowLeft => () => _unnest(id),
-                    _ => null,
-                  };
-                  if (move == null) return KeyEventResult.ignored;
-                  move();
-                  return KeyEventResult.handled;
-                },
-                child: Builder(
-                  builder: (context) {
-                    final focused = Focus.of(context).hasFocus;
-                    return Tooltip(
-                      message: '拖拽排序或拼接 $label；聚焦后使用方向键',
-                      child: GestureDetector(
-                        key: ValueKey('drag-$id'),
-                        onPanStart: (details) =>
-                            _dragTo(id, details.globalPosition),
-                        onPanUpdate: (details) =>
-                            _dragTo(id, details.globalPosition),
-                        onPanEnd: (_) => _endDrag(commit: true),
-                        onPanCancel: () => _endDrag(commit: false),
-                        child: Listener(
-                          onPointerDown: (event) {
-                            // 排序与按键录制互斥，手柄获得焦点后方向键只负责移动行。
-                            if (_recording != null) {
-                              setState(() => _recording = null);
-                            }
-                            Focus.of(context).requestFocus();
-                          },
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.grab,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: ShapeDecoration(
-                                shape: RoundedSuperellipseBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: focused
-                                      ? BorderSide(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          width: 2,
-                                        )
-                                      : BorderSide.none,
-                                ),
-                              ),
-                              child: const Icon(Icons.drag_handle, size: 16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+            _handle(
+              context,
+              id,
+              label,
+              onKey: (logical) => switch (logical) {
+                LogicalKeyboardKey.arrowUp => () => _shiftChild(id, -1),
+                LogicalKeyboardKey.arrowDown => () => _shiftChild(id, 1),
+                _ => null,
+              },
             ),
-            const SizedBox(width: GlassMetrics.actionGap),
             Icon(ScreenshotActions.icons[id], size: GlassMetrics.icon),
             const SizedBox(width: GlassMetrics.actionGap),
             Expanded(
               child: Text(
                 label,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: visible
                       ? null
@@ -506,69 +522,133 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 ),
               ),
             ),
-            NativeGlassSurface(
-              material: true,
-              child: TextButton(
-                key: ValueKey('bind-$id'),
-                onPressed: () {
-                  setState(() {
-                    _recording = id;
-                    _error = null;
-                  });
-                  _recorder.requestFocus();
-                },
-                child: Text(
-                  _recording == id
-                      ? '按键… Esc取消'
-                      : _value.shortcuts[id]?.label ?? '设置快捷键',
-                ),
-              ),
-            ),
-            const SizedBox(width: GlassMetrics.actionGap),
-            NativeGlassSurface(
-              material: true,
-              child: IconButton(
-                tooltip: '清除 $label 快捷键',
-                icon: const Icon(Icons.backspace_outlined),
-                onPressed: _value.shortcuts.containsKey(id)
-                    ? () => _submit(
-                        _value.copyWith(
-                          shortcuts: {..._value.shortcuts}..remove(id),
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            const SizedBox(width: GlassMetrics.actionGap),
-            Semantics(
-              toggled: visible,
-              child: IconButton(
-                key: ValueKey('visibility-$id'),
-                tooltip: '${visible ? '隐藏' : '显示'} $label',
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  foregroundColor: visible
-                      ? NativeGlassTheme.selectionBlue
-                      : const Color(0xFF929292),
-                ),
-                icon: Icon(
-                  visible ? Icons.visibility : Icons.visibility_off,
-                  size: 18,
-                ),
-                // 可见性与结构、绑定独立保存，隐藏不丢失用户配置。
-                onPressed: () => _submit(
-                  _value.copyWith(
-                    hidden: visible
-                        ? {..._value.hidden, id}
-                        : ({..._value.hidden}..remove(id)),
-                  ),
-                ),
-              ),
-            ),
+            _eye(id, label, visible),
           ],
         ),
       ),
     );
   }
+
+  /// id/label 为功能与名称，onKey 把方向键映射为移动动作（不处理时返回 null）；
+  /// 返回 32×32 拖拽手柄：鼠标拖动放到格位或子级列表，聚焦后方向键移动，提供可访问性调整动作。
+  Widget _handle(
+    BuildContext context,
+    String id,
+    String label, {
+    required VoidCallback? Function(LogicalKeyboardKey key) onKey,
+  }) {
+    final handle = Builder(
+      builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return Container(
+          width: GlassMetrics.hitSize,
+          height: GlassMetrics.hitSize,
+          decoration: ShapeDecoration(
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+              side: focused
+                  ? BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    )
+                  : BorderSide.none,
+            ),
+          ),
+          child: const Icon(Icons.drag_handle, size: GlassMetrics.icon),
+        );
+      },
+    );
+    return Semantics(
+      label: '移动 $label',
+      onIncrease: onKey(LogicalKeyboardKey.arrowDown),
+      onDecrease: onKey(LogicalKeyboardKey.arrowUp),
+      child: Focus(
+        focusNode: _handles.putIfAbsent(id, FocusNode.new),
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          final move = onKey(event.logicalKey);
+          if (move == null) return KeyEventResult.ignored;
+          move();
+          return KeyEventResult.handled;
+        },
+        child: Builder(
+          builder: (context) => Tooltip(
+            message: '拖到格位获得该格快捷键；聚焦后用方向键移动 $label',
+            child: Listener(
+              onPointerDown: (_) => Focus.of(context).requestFocus(),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: Draggable<String>(
+                  key: ValueKey('drag-$id'),
+                  data: id,
+                  feedback: Material(
+                    color: Colors.transparent,
+                    child: Opacity(
+                      opacity: ScreenshotToolbarEditor.draggingOpacity,
+                      child: Icon(ScreenshotActions.icons[id], size: 24),
+                    ),
+                  ),
+                  childWhenDragging: Opacity(
+                    opacity: ScreenshotToolbarEditor.draggingOpacity,
+                    child: handle,
+                  ),
+                  child: handle,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// id/label 为功能与名称，visible 为当前可见性；返回切换显示的眼睛按钮（#67）。
+  Widget _eye(String id, String label, bool visible) => Semantics(
+    toggled: visible,
+    child: IconButton(
+      key: ValueKey('visibility-$id'),
+      tooltip: '${visible ? '隐藏' : '显示'} $label',
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        foregroundColor: visible
+            ? NativeGlassTheme.selectionBlue
+            : const Color(0xFF929292),
+      ),
+      icon: Icon(visible ? Icons.visibility : Icons.visibility_off, size: 18),
+      onPressed: () => _toggleVisible(id),
+    ),
+  );
+}
+
+/// 空格的 1pt 虚线边框（#67）：沿圆角矩形绘制 4pt 线段、3pt 间隔。
+class _DashedBorder extends CustomPainter {
+  const _DashedBorder(this.color);
+  final Color color;
+
+  /// canvas/size 为绘制目标；沿 r8 圆角矩形路径按段描线。
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          (Offset.zero & size).deflate(0.5),
+          const Radius.circular(GlassMetrics.controlRadius),
+        ),
+      );
+    for (final metric in path.computeMetrics()) {
+      for (var start = 0.0; start < metric.length; start += 7) {
+        canvas.drawPath(metric.extractPath(start, start + 4), paint);
+      }
+    }
+  }
+
+  /// oldDelegate 为上一画笔；颜色变化时重画。
+  @override
+  bool shouldRepaint(covariant _DashedBorder oldDelegate) =>
+      oldDelegate.color != color;
 }

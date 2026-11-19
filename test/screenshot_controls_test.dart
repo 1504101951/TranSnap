@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
 import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:translate_app/src/common/constants/toolbar_grid.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/utils/geometry.dart';
@@ -715,19 +716,29 @@ void main() {
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
+    // 全部功能为一级、按注册表倒序排列：文字放在裸数字 1，截图放在 ⌘2，其余依序填满（#141）。
+    final rest = [
+      for (final id in ScreenshotActions.icons.keys.toList().reversed)
+        if (id != ScreenshotActions.text && id != ScreenshotActions.crop) id,
+    ];
     final preferences = ScreenshotToolbarPreferences(
-      order: ScreenshotActions.icons.keys.toList().reversed.toList(),
+      columns: [
+        ToolbarColumn(0, [ScreenshotActions.text, ...rest.sublist(0, 5)]),
+        ToolbarColumn(ToolbarModifiers.command, [
+          rest[5],
+          ScreenshotActions.crop,
+          ...rest.sublist(6, 10),
+        ]),
+        ToolbarColumn(ToolbarModifiers.option, rest.sublist(10, 16)),
+        ToolbarColumn(ToolbarModifiers.control, [
+          ...rest.sublist(16),
+          null,
+          null,
+          null,
+        ]),
+      ],
+      children: const {},
       hidden: {ScreenshotActions.text},
-      shortcuts: {
-        ScreenshotActions.text: ToolbarShortcut(
-          LogicalKeyboardKey.digit1.keyId,
-          0,
-        ),
-        ScreenshotActions.crop: ToolbarShortcut(
-          LogicalKeyboardKey.digit2.keyId,
-          8,
-        ),
-      },
     );
     const channel = MethodChannel('test/toolbar-config');
     final messenger =
@@ -757,14 +768,15 @@ void main() {
       ),
     );
     expect(find.byKey(const Key(ScreenshotActions.text)), findsNothing);
-    // 原生非激活面板发送语义动作；必须看到实际文字控件出现，旧捕获不能切换工具。
-    Future<void> nativeAction(String id, String action) async {
+    // 原生非激活面板转来格位按键（修饰键 + 数字）；必须看到实际文字控件出现，旧捕获不能切换工具。
+    Future<void> nativeSlot(String id, int modifiers, int digit) async {
       await messenger.handlePlatformMessage(
         channel.name,
         const StandardMethodCodec().encodeMethodCall(
-          MethodCall(MethodNames.screenshotToolbarAction, {
+          MethodCall(MethodNames.screenshotToolbarSlot, {
             'id': id,
-            'action': action,
+            'modifiers': modifiers,
+            'digit': digit,
           }),
         ),
         (_) {},
@@ -772,11 +784,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await nativeAction('stale', ScreenshotActions.text);
+    await nativeSlot('stale', 0, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
-    await nativeAction('tool-test', ScreenshotActions.text);
+    await nativeSlot('tool-test', 0, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
-    await nativeAction('tool-test', ScreenshotActions.crop);
+    await nativeSlot('tool-test', ToolbarModifiers.command, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pumpAndSettle();
@@ -784,7 +796,7 @@ void main() {
     await tester.tapAt(canvas.center);
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
-    await nativeAction('tool-test', ScreenshotActions.crop);
+    await nativeSlot('tool-test', ToolbarModifiers.command, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
@@ -1404,4 +1416,3 @@ Future<(Size, Rect)> _copyCrop(
   await tester.pumpAndSettle();
   return (rect!.size, rect);
 }
-

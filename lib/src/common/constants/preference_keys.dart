@@ -5,11 +5,12 @@ abstract final class PreferenceKeys {
   /// 每工具独立绘图参数。
   static const screenshotDrawing = 'screenshotDrawing';
   static const screenshotToolbarHidden = 'screenshotToolbarHidden';
-  static const screenshotToolbarOrder = 'screenshotToolbarOrder';
+
+  /// 截图工具栏网格：各列的修饰键组合与 6 个格位（#141）；与原生偏好键一致。
+  static const screenshotToolbarColumns = 'screenshotToolbarColumns';
 
   /// 截图工具栏的父子结构：父级ID到子级ID列表；与原生偏好键一致。
   static const screenshotToolbarChildren = 'screenshotToolbarChildren';
-  static const screenshotToolbarShortcuts = 'screenshotToolbarShortcuts';
 
   static const automatic = 'automatic';
 

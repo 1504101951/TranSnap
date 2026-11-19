@@ -112,12 +112,15 @@ enum AppConstants {
     static let resizeNorthEastSouthWest = "nesw"
     static let screenshotTextInputMethod = "screenshotTextInput"
     static let screenshotToolbarHiddenKey = "screenshotToolbarHidden"
-    static let screenshotToolbarOrderKey = "screenshotToolbarOrder"
+    /// 截图工具栏网格：[{modifiers, slots}]，modifiers 为 Control=1/Option=2/Command=8 位掩码，slots 为 6 个功能 ID（空格为空字符串），与 Dart 一致（#141）。
+    static let screenshotToolbarColumnsKey = "screenshotToolbarColumns"
     static let screenshotToolbarChildrenKey = "screenshotToolbarChildren"
-    static let screenshotToolbarShortcutsKey = "screenshotToolbarShortcuts"
+    /// 网格格位对应的数字行物理键码（kVK_ANSI_1…6），下标 0 为第 1 格（#141）。
+    static let screenshotToolbarSlotKeyCodes: [UInt16] = [18, 19, 20, 21, 23, 22]
     /// 截图局部工具配置独立广播，不替换截图编辑草稿。
     static let screenshotToolbarChangedMethod = "screenshotToolbarChanged"
-    static let screenshotToolbarActionMethod = "screenshotToolbarAction"
+    /// 截图面板收到格位快捷键时交给截图引擎：{id, modifiers, digit}，digit 为 1–6（#141）。
+    static let screenshotToolbarSlotMethod = "screenshotToolbarSlot"
     /// 跨引擎外观模式与通知名称；与Dart AppearanceModes一致。
     static let appearanceSystem = "system"
     static let appearanceLight = "light"

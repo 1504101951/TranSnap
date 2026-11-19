@@ -238,7 +238,8 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(NSCursor.current.image.tiffRepresentation, NSCursor.arrow.image.tiffRepresentation)
     }
 
-    /// 无参数；非激活截图的数字/Command组合在原生入口被消费，文本输入与关闭后原样放行。
+    /// 作用：非激活截图的格位按键（数字行 1–6 加 ⌘⌥⌃）在原生入口被消费，文本输入、带 ⇧ 与关闭后原样放行（#141）。
+    /// 边界依据：格位只有数字 1–6，7 不属于工具栏；⇧ 组合不属于工具栏；解析为功能由 Dart 按网格完成。
     @MainActor
     func testScreenshotConfiguredShortcutConsumesOnlyItsScope() async throws {
         let previous = UserDefaults.standard.object(forKey: AppConstants.preferencesKey)
@@ -246,10 +247,7 @@ class RunnerTests: XCTestCase {
             if let previous { UserDefaults.standard.set(previous, forKey: AppConstants.preferencesKey) }
             else { UserDefaults.standard.removeObject(forKey: AppConstants.preferencesKey) }
         }
-        UserDefaults.standard.set([AppConstants.screenshotToolbarShortcutsKey: [
-            "screenshot-tool-text": ["keyId": 49, "modifiers": 0],
-            "screenshot-tool-crop": ["keyId": 50, "modifiers": 8],
-        ]], forKey: AppConstants.preferencesKey)
+        UserDefaults.standard.set([String: Any](), forKey: AppConstants.preferencesKey)
         let controller = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
         defer { controller.shutdown() }
         let image = try captureImageFixture(width: 80, height: 60, color: .white)
@@ -265,14 +263,17 @@ class RunnerTests: XCTestCase {
         controller.handle(FlutterMethodCall(methodName: AppConstants.getScreenshotMethod, arguments: nil)) { snapshot = $0 as? [String: Any] }
         XCTAssertEqual(snapshot?[AppConstants.screenshotDrawingKey] as? NSDictionary, drawing as NSDictionary)
 
-        // 49/50是逻辑字符1/2，18/19是ANSI物理键；真实event tap路径不直接给Flutter注入键。
+        // 18/19 是 ANSI 物理键 1/2，26 是 7；真实 event tap 路径不直接给 Flutter 注入键。
         let one = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 18, keyDown: true))
         let two = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 19, keyDown: true))
         two.flags = .maskCommand
         XCTAssertNil(controller.filterScreenshotEvent(one))
         XCTAssertNil(controller.filterScreenshotEvent(two))
-        let unbound = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 20, keyDown: true))
-        XCTAssertTrue(controller.filterScreenshotEvent(unbound) === unbound)
+        let seven = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 26, keyDown: true))
+        XCTAssertTrue(controller.filterScreenshotEvent(seven) === seven)
+        let shifted = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 18, keyDown: true))
+        shifted.flags = .maskShift
+        XCTAssertTrue(controller.filterScreenshotEvent(shifted) === shifted)
         controller.handle(FlutterMethodCall(methodName: AppConstants.screenshotTextInputMethod, arguments: ["id": "shortcut", "active": true])) { _ in }
         XCTAssertTrue(controller.filterScreenshotEvent(one) === one)
         controller.handle(FlutterMethodCall(methodName: AppConstants.screenshotTextInputMethod, arguments: ["id": "shortcut", "active": false])) { _ in }
@@ -485,8 +486,8 @@ class RunnerTests: XCTestCase {
             try? FileManager.default.removeItem(at: root)
         }
         var preferences = previousPreferences as? [String: Any] ?? [:]
-        // 112/8 对应逻辑字符 p 与 Command；35 是 ANSI P，覆盖用户配置到原生事件的映射。
-        preferences[AppConstants.screenshotToolbarShortcutsKey] = ["screenshot-pin": ["keyId": 112, "modifiers": 8]]
+        // 去掉已保存的网格，使用默认网格：贴图在 ⌘ 列第 4 格，即 ⌘4（#141）。
+        preferences[AppConstants.screenshotToolbarColumnsKey] = nil
         defaults.set(preferences, forKey: AppConstants.preferencesKey)
         defaults.set(root.path, forKey: AppConstants.screenshotSaveDirectoryKey)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -513,8 +514,8 @@ class RunnerTests: XCTestCase {
         panel.resignKey()
         let event = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 0,
-            windowNumber: panel.windowNumber, context: nil, characters: "p",
-            charactersIgnoringModifiers: "p", isARepeat: false, keyCode: 35
+            windowNumber: panel.windowNumber, context: nil, characters: "4",
+            charactersIgnoringModifiers: "4", isARepeat: false, keyCode: 21
         ))
         // filterScreenshotEvent 消费原生配置键，再由 Dart 完成合成、贴图及关闭会话。
         XCTAssertNil(controller.filterScreenshotEvent(try XCTUnwrap(event.cgEvent)))

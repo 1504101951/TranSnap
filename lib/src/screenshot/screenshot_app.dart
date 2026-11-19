@@ -34,6 +34,7 @@ import 'stickers.dart';
 import 'recognized_text_panel.dart';
 import 'screenshot_editor_layout.dart';
 import '../settings/screenshot_toolbar_preferences.dart';
+import '../common/constants/toolbar_grid.dart';
 import '../common/constants/screenshot_actions.dart';
 
 /// handle 为控制点方向，plusWhenIdle控制空白十字；channel为截图引擎，返回系统或原生对角光标。
@@ -309,15 +310,20 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           _message = status.isEmpty ? null : status;
           _failed = false;
         });
-      } else if (call.method == MethodNames.screenshotToolbarAction) {
+      } else if (call.method == MethodNames.screenshotToolbarSlot) {
         final args = call.arguments as Map;
-        // 原生语义动作只操作当前捕获；排队中的旧动作不能切走文字输入。
+        // 原生转来的格位快捷键只操作当前捕获；排队中的旧按键不能切走文字输入。
         if (_capture['id'] == null ||
             _capture['id'] != args['id'] ||
             _textInputOpen) {
           return;
         }
-        _toolbarActions()[args['action']]?.call();
+        // actionAt 按网格把修饰键与数字解析为功能；空格或无此列时不执行。
+        final action = _toolbar.actionAt(
+          args['modifiers'] as int,
+          args['digit'] as int,
+        );
+        if (action != null) _toolbarActions()[action]?.call();
       } else if (call.method == MethodNames.deleteScreenshotSelection) {
         // 非激活截图面板的 Delete 由原生转发；只作用于当前捕获，文字输入时留给输入框（#103）。
         final id = (call.arguments as Map)['id'];
@@ -2376,13 +2382,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             }
             return KeyEventResult.handled;
           }
-          final chord = ToolbarShortcut.fromEvent(event);
-          final action = _toolbar.shortcuts.entries
-              .where((item) => item.value.matches(chord))
-              .firstOrNull;
+          // 格位快捷键：数字行物理键 1–6 加当前修饰键定位网格中的功能（#141）。
+          final digit = ToolbarGrid.digits[event.physicalKey];
+          final action = digit == null
+              ? null
+              : _toolbar.actionAt(ToolbarModifiers.pressed(), digit);
           if (action != null) {
             // 隐藏只影响按钮；动作自身仍检查忙碌、撤销历史等执行条件。
-            _toolbarActions()[action.key]?.call();
+            _toolbarActions()[action]?.call();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -2511,7 +2518,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                                     .ceil()
                           : 0),
                   toolbarItemCount:
-                      _toolbar.order
+                      _toolbar.topLevel
                           .where((id) => !_toolbar.hidden.contains(id))
                           .length +
                       (_busy ? 1 : 0),
@@ -2823,7 +2830,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// axis为横/竖方向；按持久化顺序放置独立按钮，容器透明且可滚动。
   Widget _buildToolbar(BuildContext context, Axis axis) {
     final actions = _toolbarActions();
-    final top = _toolbar.order
+    final top = _toolbar.topLevel
         .where((id) => !_toolbar.hidden.contains(id))
         .toList();
     // 第二行先放当前父级的子级，再放当前工具的属性。
@@ -2872,7 +2879,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         child: IconButton(
           key: Key(id),
           tooltip:
-              '${ScreenshotActions.labels[id]}${_toolbar.shortcuts[id] == null ? '' : ' ${_toolbar.shortcuts[id]!.label}'}',
+              '${ScreenshotActions.labels[id]}${_toolbar.shortcutLabel(id) == null ? '' : ' ${_toolbar.shortcutLabel(id)}'}',
           onPressed: actions[id],
           style: mode
               ? ButtonStyle(
