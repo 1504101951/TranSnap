@@ -1308,7 +1308,7 @@ void main() {
     );
     expect(
       find.descendant(
-        of: find.byKey(const Key('screenshot-children-column-0')),
+        of: find.byKey(const Key('screenshot-children-group-0')),
         matching: find.byKey(const Key(ScreenshotActions.sticker)),
       ),
       findsOneWidget,

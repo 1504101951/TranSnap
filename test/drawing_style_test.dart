@@ -441,12 +441,12 @@ void main() {
     expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
-    // 图形在默认网格第 1 列，属性列紧跟其后，挤开后续列（#141）。
+    // 工具栏横放：图形在第 1 行，属性组作为一行紧跟其下，挤开后续行（#141）。
     expect(
       tester
-          .getRect(find.byKey(const Key('screenshot-attributes-column-0')))
-          .left,
-      tester.getRect(find.byKey(const Key('screenshot-grid-column-0'))).right +
+          .getRect(find.byKey(const Key('screenshot-attributes-group-0')))
+          .top,
+      tester.getRect(find.byKey(const Key('screenshot-grid-group-0'))).bottom +
           4,
     );
     await tap('${ScreenshotActions.shapePrefix}circle');

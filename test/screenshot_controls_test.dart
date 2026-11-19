@@ -713,9 +713,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('网格工具栏：隐藏工具留空位，整列隐藏不显示，按钮标注键位（#141）', (tester) async {
+  testWidgets('工具栏按组排列：隐藏工具留空位，整组隐藏不显示，按钮标注键位（#141）', (tester) async {
     // 作用：位置与快捷键对应关系在截图编辑器中保持不变。
-    // 边界：⌘ 列第 2 格隐藏时，第 1 格与第 3 格相隔两格（72pt）；⌥ 列全部隐藏时该列不显示；
+    // 边界：工具栏横放在选区下方，每组为一行；⌘ 组第 2 格隐藏时，第 1 格与第 3 格水平相隔两格（72pt）；⌥ 组全部隐藏时该行不显示；
     // 裸数字列按钮标注「1」，⌘ 列第 3 格标注「⌘3」。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
@@ -752,12 +752,12 @@ void main() {
     final first = defaults.columns[1].slots[0]!;
     final third = defaults.columns[1].slots[2]!;
     expect(
-      tester.getTopLeft(find.byKey(Key(third))).dy -
-          tester.getTopLeft(find.byKey(Key(first))).dy,
+      tester.getTopLeft(find.byKey(Key(third))).dx -
+          tester.getTopLeft(find.byKey(Key(first))).dx,
       72,
     );
-    expect(find.byKey(const Key('screenshot-grid-column-1')), findsOneWidget);
-    expect(find.byKey(const Key('screenshot-grid-column-2')), findsNothing);
+    expect(find.byKey(const Key('screenshot-grid-group-1')), findsOneWidget);
+    expect(find.byKey(const Key('screenshot-grid-group-2')), findsNothing);
     expect(
       tester
           .widget<Text>(
@@ -820,12 +820,20 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
-    expect(
-      tester.getTopLeft(find.byKey(const Key(ScreenshotActions.close))).dx,
-      lessThan(
-        tester.getTopLeft(find.byKey(const Key(ScreenshotActions.crop))).dx,
-      ),
+    // 关闭在无修饰组第 2 格、截图在 ⌘ 组第 2 格：同一格序号，所在组先后决定位置（#141）。
+    // 横放时组为行，关闭在截图上方；竖放时组为列，关闭在截图左侧。
+    final close = tester.getTopLeft(
+      find.byKey(const Key(ScreenshotActions.close)),
     );
+    final crop = tester.getTopLeft(
+      find.byKey(const Key(ScreenshotActions.crop)),
+    );
+    final horizontal =
+        tester
+            .widget<Flex>(find.byKey(const Key('screenshot-grid-group-0')))
+            .direction ==
+        Axis.horizontal;
+    expect(horizontal ? close.dy < crop.dy : close.dx < crop.dx, isTrue);
     expect(find.byKey(const Key(ScreenshotActions.text)), findsNothing);
     // 原生非激活面板转来格位按键（修饰键 + 数字）；必须看到实际文字控件出现，旧捕获不能切换工具。
     Future<void> nativeSlot(String id, int modifiers, int digit) async {
@@ -1100,13 +1108,11 @@ void main() {
       final toolbar = tester.getRect(
         find.byKey(const Key('screenshot-toolbar')),
       );
-      // 竖向工具栏：网格沿纵向排列各列（#141）。
+      // 竖放在选区一侧：每组为一列，6 格自上而下（#141）。
       expect(
         tester
-            .widget<SingleChildScrollView>(
-              find.byKey(const Key('screenshot-tools-grid')),
-            )
-            .scrollDirection,
+            .widget<Flex>(find.byKey(const Key('screenshot-grid-group-0')))
+            .direction,
         Axis.vertical,
       );
       expect(toolbar.overlaps(crop), isFalse);
