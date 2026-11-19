@@ -16,7 +16,7 @@ Dart业务逻辑和Flutter界面行为回归测试。
 12. [permission_wizard_test.dart](permission_wizard_test.dart)：验证两项权限齐备后的进入条件。
 13. [screenshot_app_test.dart](screenshot_app_test.dart)：验证无屏幕权限的导入图片编辑、OCR/翻译及屏幕采集禁用，截图标注、导出与识别结果中的二维码、条码及链接打开行为，以及美化行背景调色盘、「无背景」与下拉可用状态，贴纸下拉框的 Emoji 段放置、两段「管理贴纸…」与下拉框高度不变，贴纸经美化子级放置、导出与 Delete 删除。
 14. [screenshot_controls_test.dart](screenshot_controls_test.dart)：验证截图工具快捷键、选择、拉伸、方向键微调、固定比例及确认行为。
-15. [screenshot_toolbar_preferences_test.dart](screenshot_toolbar_preferences_test.dart)：验证工具排序、显隐、快捷键录制和配置校验。
+15. [screenshot_toolbar_preferences_test.dart](screenshot_toolbar_preferences_test.dart)：验证截图工具栏网格的默认布局与格位快捷键、保存往返、旧配置重置、缺失功能补位、组合与格数校验、全局与系统快捷键的格位换算和互斥，以及网格编辑器的拖动交换、增删列、列顺序拖动、子级拖入拖出、隐藏与方向键移动。
 16. [selection_history_test.dart](selection_history_test.dart)：验证选区翻译成功、失败和取消时的历史记录边界，以及输入翻译不显示卡片、替换成功结束会话与未替换原因交给失败气泡。
 17. [selection_session_test.dart](selection_session_test.dart)：验证选区翻译生命周期、取消和状态变化，以及卡片服务菜单只影响本卡片、非模型服务的润色失败、输入翻译使用独立语言方向。
 18. [settings_app_test.dart](settings_app_test.dart)：验证设置页面侧边栏切换子页与保留草稿、默认翻译服务含Apple系统翻译、通用页语言包状态、服务显示、术语表增删改、提示词弹窗的四个字段、恢复默认与空值校验、思考开关随提示词保存、翻译语言分段只改输入翻译一组、贴纸添加与删除、确认截图动作、长截图滚动方式及配置更新。

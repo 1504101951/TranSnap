@@ -61,10 +61,13 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
   final Map<String, FocusNode> _handles = {};
 
+  /// 各列拖拽手柄的焦点；按列组合保存（组合各列唯一），列移动后焦点仍跟随该列。
+  final Map<int, FocusNode> _columnHandles = {};
+
   /// 无参数；释放手柄焦点。
   @override
   void dispose() {
-    for (final node in _handles.values) {
+    for (final node in [..._handles.values, ..._columnHandles.values]) {
       node.dispose();
     }
     super.dispose();
@@ -215,6 +218,20 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
+  /// from 为被移动的列下标，to 为目标位置；把该列移到 to，其余列依次让位。
+  /// 组合与格位随列移动，各工具快捷键不变，只改变工具栏上的排列（#141）。
+  void _moveColumn(int from, int to) {
+    if (from == to || to < 0 || to >= _value.columns.length) return;
+    final modifiers = _value.columns[from].modifiers;
+    final columns = [..._value.columns];
+    columns.insert(to, columns.removeAt(from));
+    _submit(_value.copyWith(columns: columns));
+    // 列重建后把焦点交回该列的手柄，便于连续用方向键移动。
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _columnHandles[modifiers]?.requestFocus(),
+    );
+  }
+
   /// column 为列下标；删除空列，后续列前移。
   void _removeColumn(int column) {
     _submit(_value.copyWith(columns: [..._value.columns]..removeAt(column)));
@@ -290,8 +307,58 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         if (other != column) other.modifiers,
     };
     final empty = column.slots.every((slot) => slot == null);
-    return SizedBox(
+    final label = column.modifiers == 0
+        ? '无修饰列'
+        : '${ToolbarModifiers.label(column.modifiers)} 列';
+    // 列作为落点：拖来的列移到本列位置，落点一侧显示竖线（左移在左侧、右移在右侧）（#67）。
+    return DragTarget<int>(
       key: ValueKey('toolbar-column-$index'),
+      onWillAcceptWithDetails: (details) => details.data != index,
+      onAcceptWithDetails: (details) => _moveColumn(details.data, index),
+      builder: (context, candidates, rejected) {
+        final from = candidates.firstOrNull;
+        final side = BorderSide(
+          color: NativeGlassTheme.selectionBlue,
+          width: ScreenshotToolbarEditor.targetBorder,
+        );
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: from == null
+                ? null
+                : from < index
+                ? Border(right: side)
+                : Border(left: side),
+          ),
+          child: _columnBody(context, index, column, used, empty, label),
+        );
+      },
+    );
+  }
+
+  /// index/column 为列下标与列，used 为其他列已用组合，empty 为该列是否没有工具，label 为列名称；
+  /// 返回列头（拖拽手柄、组合下拉、空列的删除入口）与 6 个格子。
+  Widget _columnBody(
+    BuildContext context,
+    int index,
+    ToolbarColumn column,
+    Set<int> used,
+    bool empty,
+    String label,
+  ) {
+    final handle = SizedBox(
+      width: GlassMetrics.hitSize,
+      height: GlassMetrics.buttonHeight,
+      child: Builder(
+        builder: (context) => Icon(
+          Icons.drag_indicator,
+          size: GlassMetrics.icon,
+          color: Focus.of(context).hasFocus
+              ? Theme.of(context).colorScheme.primary
+              : null,
+        ),
+      ),
+    );
+    return SizedBox(
       width: ScreenshotToolbarEditor.cellWidth,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -301,6 +368,59 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             height: GlassMetrics.buttonHeight,
             child: Row(
               children: [
+                // 列拖拽手柄：鼠标拖到其他列上移动本列；聚焦后左右方向键移动（#67）。
+                Semantics(
+                  label: '移动$label',
+                  onIncrease: () => _moveColumn(index, index + 1),
+                  onDecrease: () => _moveColumn(index, index - 1),
+                  child: Focus(
+                    focusNode: _columnHandles.putIfAbsent(
+                      column.modifiers,
+                      FocusNode.new,
+                    ),
+                    onKeyEvent: (node, event) {
+                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                      final delta = switch (event.logicalKey) {
+                        LogicalKeyboardKey.arrowLeft => -1,
+                        LogicalKeyboardKey.arrowRight => 1,
+                        _ => 0,
+                      };
+                      if (delta == 0) return KeyEventResult.ignored;
+                      _moveColumn(index, index + delta);
+                      return KeyEventResult.handled;
+                    },
+                    child: Builder(
+                      builder: (context) => Tooltip(
+                        message: '拖动调整$label的位置，快捷键不变',
+                        child: Listener(
+                          onPointerDown: (_) =>
+                              Focus.of(context).requestFocus(),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.grab,
+                            child: Draggable<int>(
+                              key: ValueKey('drag-column-$index'),
+                              data: index,
+                              feedback: Material(
+                                color: Colors.transparent,
+                                child: Opacity(
+                                  opacity:
+                                      ScreenshotToolbarEditor.draggingOpacity,
+                                  child: Text(label),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity:
+                                    ScreenshotToolbarEditor.draggingOpacity,
+                                child: handle,
+                              ),
+                              child: handle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: NativeGlassMenuButton<int>(
                     key: ValueKey('toolbar-modifiers-$index'),

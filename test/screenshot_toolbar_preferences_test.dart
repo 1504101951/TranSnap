@@ -318,6 +318,31 @@ void main() {
       );
     });
 
+    testWidgets('拖动列头手柄调整列顺序，组合与格位随列移动、快捷键不变；方向键左右移动列', (tester) async {
+      // 作用：只改变工具栏上的列排列，不改变任何工具的快捷键（用户确认）。
+      // 边界：把 ⌘ 列（第 2 列）拖到第 1 列上 → 顺序变为 ⌘、无、⌥，画笔仍是 ⌘1、光标仍是 1；
+      // 聚焦 ⌘ 列手柄按右方向键 → 回到第 2 列；最左列再按左方向键不动。
+      final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+      await drag(
+        tester,
+        'column-1',
+        find.byKey(const ValueKey('toolbar-column-0')),
+      );
+      expect(saved().columns.map((c) => c.modifiers), [cmd, 0, opt]);
+      expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
+      expect(saved().shortcutLabel(ScreenshotActions.cursor), '1');
+
+      await tester.tap(find.byKey(const ValueKey('drag-column-0')));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(saved().columns.map((c) => c.modifiers), [cmd, 0, opt]);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(saved().columns.map((c) => c.modifiers), [0, cmd, opt]);
+      expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
+    });
+
     testWidgets('格子显示键位；拖到有工具的格子交换，拖到空格留下原位空格', (tester) async {
       // 作用：格位决定快捷键，拖动即改变快捷键且不会出现重复。
       // 边界：光标（1）拖到画笔（⌘1）交换；关闭（⌥4）拖到空格 ⌥6 后原格 ⌥4 变空。
