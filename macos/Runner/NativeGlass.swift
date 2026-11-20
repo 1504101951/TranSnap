@@ -7,6 +7,7 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
     private let channel: FlutterMethodChannel
     private weak var controller: FlutterViewController?
     private var appearanceObserver: NSObjectProtocol?
+    private var accentObserver: NSObjectProtocol?
 
     /// controller 绑定当前引擎；监听保存成功广播并更新该引擎和原生窗口。
     init(controller: FlutterViewController) {
@@ -22,13 +23,32 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
             self.channel.invokeMethod(AppConstants.appearanceChangedMethod, arguments: Self.appearanceSnapshot())
             if let window = self.controller?.view.window { Self.applyAppearance(to: window) }
         }
+        // 用户在系统设置里改强调色时系统颜色整体刷新；沿用外观广播把新强调色推给本引擎（#142）。
+        accentObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.channel.invokeMethod(AppConstants.appearanceChangedMethod, arguments: Self.appearanceSnapshot())
+        }
     }
 
-    /// 无参数；返回已提交的视觉字段，不读取凭据或业务草稿。
+    /// 无参数；返回已提交的视觉字段与当前系统强调色（浅、深外观各一份），不读取凭据或业务草稿。
     static func appearanceSnapshot() -> [String: Any] {
         let preferences = AppPreferences.current
         return [AppConstants.glassAppearanceKey: preferences[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem,
-                AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8]
+                AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
+                AppConstants.accentLightKey: accentARGB(.aqua),
+                AppConstants.accentDarkKey: accentARGB(.darkAqua)]
+    }
+
+    /// name 为浅色或深色外观；在该外观下解析系统强调色，返回 sRGB ARGB 整数（如系统蓝浅色 0xFF007AFF）。
+    static func accentARGB(_ name: NSAppearance.Name) -> Int {
+        var argb = 0
+        // 强调色是动态颜色，必须在目标外观下解析才能得到浅、深两套值。
+        NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
+            let color = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+            let channel = { (value: CGFloat) in Int((value * 255).rounded()) }
+            argb = channel(color.alphaComponent) << 24 | channel(color.redComponent) << 16
+                | channel(color.greenComponent) << 8 | channel(color.blueComponent)
+        }
+        return argb
     }
 
     /// window 为实际原生窗口；应用手动明暗或系统继承，不改焦点及层级。
@@ -65,6 +85,7 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
 
     deinit {
         if let appearanceObserver { NotificationCenter.default.removeObserver(appearanceObserver) }
+        if let accentObserver { NotificationCenter.default.removeObserver(accentObserver) }
         channel.setMethodCallHandler(nil)
     }
 

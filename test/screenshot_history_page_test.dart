@@ -65,7 +65,8 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: ScreenshotHistoryPage(channel: channel, version: 0),
         ),
@@ -159,7 +160,8 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: ScreenshotHistoryPage(channel: channel, version: 0),
         ),

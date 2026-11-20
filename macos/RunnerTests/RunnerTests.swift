@@ -962,6 +962,17 @@ class RunnerTests: XCTestCase {
         }
     }
 
+    /// 无参数；外观快照携带浅、深两份不透明的系统强调色 ARGB，供各 Flutter 引擎跟随系统强调色（#142）。
+    /// 边界：两份都必须存在且 alpha 为 0xFF（系统强调色不透明）。
+    func testAppearanceSnapshotCarriesOpaqueAccentColors() {
+        let snapshot = NativeGlassFactory.appearanceSnapshot()
+        for key in [AppConstants.accentLightKey, AppConstants.accentDarkKey] {
+            let argb = snapshot[key] as? Int
+            XCTAssertNotNil(argb)
+            XCTAssertEqual((argb ?? 0) >> 24 & 0xFF, 0xFF)
+        }
+    }
+
     /// 无参数；使用真实设备语言识别，确保法语不会被当成英语，无返回值。
     @MainActor
     func testDeviceLanguageDetection() {

@@ -240,6 +240,9 @@ enum AppConstants {
     static let getScreenshotMethod = "getScreenshot"
     static let glassAppearanceKey = "glassAppearance"
     static let glassOpacityKey = "glassOpacity"
+    /// 外观快照中按浅、深外观解析的系统强调色（sRGB ARGB 整数），与 Dart AppearanceKeys 同步（#142）。
+    static let accentLightKey = "accentLight"
+    static let accentDarkKey = "accentDark"
     static let hideOverlayMethod = "hideOverlay"
     static let historyEntrypoint = "historyMain"
     static let keychainFailedError = "keychain_failed"

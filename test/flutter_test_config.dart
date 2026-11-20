@@ -1,3 +1,4 @@
+import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 
@@ -18,6 +19,9 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
           (_) async => {
             PreferenceKeys.glassAppearance: 'system',
             PreferenceKeys.glassOpacity: 0.8,
+            // 原生快照总是携带浅、深外观下的系统强调色；测试用系统蓝。
+            AppearanceKeys.accentLight: 0xFF007AFF,
+            AppearanceKeys.accentDark: 0xFF0A84FF,
           },
         );
     // headless widget 环境没有 NSView，保留真实前景布局、焦点及业务状态验证。

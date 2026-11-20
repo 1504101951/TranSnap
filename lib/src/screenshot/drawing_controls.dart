@@ -338,7 +338,7 @@ class _ColorPickerState extends State<ColorPicker> {
                         icon: Icon(icon),
                         style: IconButton.styleFrom(
                           backgroundColor: _direction == direction
-                              ? NativeGlassTheme.selectionBlue
+                              ? NativeGlassTheme.accentOf(context)
                               : Colors.transparent,
                           foregroundColor: _direction == direction
                               ? Colors.white

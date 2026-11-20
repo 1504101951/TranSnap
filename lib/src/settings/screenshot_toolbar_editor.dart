@@ -48,6 +48,20 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   /// 与系统快捷键冲突的格子边框与说明颜色（#67）。
   static const conflictRed = Color(0xFFFF3B30);
 
+  /// 原生克制风格（#67）：工具格与组合下拉的平面底色、0.5pt 细线颜色（浅/深），选中工具的强调色描边宽度。
+  static const cellFillLight = Color(0xFFFFFFFF);
+  static const cellFillDark = Color(0xFF2C2C2E);
+  static const cellLineLight = Color(0x1A000000);
+  static const cellLineDark = Color(0x1AFFFFFF);
+  static const hairline = 0.5;
+  static const selectedBorder = 1.5;
+
+  /// context 为主题位置；返回当前明暗外观下工具格的平面底色与细线颜色。
+  static ({Color fill, Color line}) cellColors(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? (fill: cellFillDark, line: cellLineDark)
+      : (fill: cellFillLight, line: cellLineLight);
+
   /// 被拖动格子的不透明度；目标格边框宽度。
   static const draggingOpacity = 0.6;
   static const targetBorder = 2.0;
@@ -363,7 +377,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       builder: (context, candidates, rejected) {
         final from = candidates.firstOrNull;
         final side = BorderSide(
-          color: NativeGlassTheme.selectionBlue,
+          color: NativeGlassTheme.accentOf(context),
           width: ScreenshotToolbarEditor.targetBorder,
         );
         return DecoratedBox(
@@ -415,6 +429,19 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             child: NativeGlassMenuButton<int>(
               key: ValueKey('toolbar-modifiers-$index'),
               dense: true,
+              // 组合下拉与工具格同底，不单独使用玻璃材料（#67 原生克制风格）。
+              flat: ShapeDecoration(
+                color: ScreenshotToolbarEditor.cellColors(context).fill,
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.circular(
+                    GlassMetrics.controlRadius,
+                  ),
+                  side: BorderSide(
+                    color: ScreenshotToolbarEditor.cellColors(context).line,
+                    width: ScreenshotToolbarEditor.hairline,
+                  ),
+                ),
+              ),
               value: column.modifiers,
               // 其他组已用的组合不可选，保证各组组合不重复。
               items: {
@@ -533,8 +560,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         final shape = RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
           side: candidates.isNotEmpty
-              ? const BorderSide(
-                  color: NativeGlassTheme.selectionBlue,
+              ? BorderSide(
+                  color: NativeGlassTheme.accentOf(context),
                   width: ScreenshotToolbarEditor.targetBorder,
                 )
               : systemConflict
@@ -543,8 +570,16 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   width: ScreenshotToolbarEditor.targetBorder,
                 )
               : id == _selected
-              ? BorderSide(color: colors.primary)
-              : BorderSide.none,
+              ? BorderSide(
+                  color: NativeGlassTheme.accentOf(context),
+                  width: ScreenshotToolbarEditor.selectedBorder,
+                )
+              : id == null
+              ? BorderSide.none
+              : BorderSide(
+                  color: ScreenshotToolbarEditor.cellColors(context).line,
+                  width: ScreenshotToolbarEditor.hairline,
+                ),
         );
         // 空格只有虚线框；被全局快捷键占用时居中注明用途，长说明在格内换行。
         final content = id == null
@@ -572,7 +607,13 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         return Container(
           width: ScreenshotToolbarEditor.cellWidth,
           height: ScreenshotToolbarEditor.cellHeight,
-          decoration: ShapeDecoration(shape: shape),
+          // 工具格为平面底色加细线，空格只有虚线框（#67 原生克制风格）。
+          decoration: ShapeDecoration(
+            shape: shape,
+            color: id == null
+                ? null
+                : ScreenshotToolbarEditor.cellColors(context).fill,
+          ),
           child: content,
         );
       },
@@ -689,10 +730,10 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             alignment: Alignment.centerLeft,
             decoration: candidates.isEmpty
                 ? null
-                : const BoxDecoration(
+                : BoxDecoration(
                     border: Border(
                       top: BorderSide(
-                        color: NativeGlassTheme.selectionBlue,
+                        color: NativeGlassTheme.accentOf(context),
                         width: ScreenshotToolbarEditor.targetBorder,
                       ),
                     ),
@@ -731,8 +772,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 ? BorderSide(
                     color: Theme.of(context).colorScheme.outlineVariant,
                   )
-                : const BorderSide(
-                    color: NativeGlassTheme.selectionBlue,
+                : BorderSide(
+                    color: NativeGlassTheme.accentOf(context),
                     width: ScreenshotToolbarEditor.targetBorder,
                   ),
           ),
@@ -863,7 +904,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         backgroundColor: Colors.transparent,
         shadowColor: Colors.transparent,
         foregroundColor: visible
-            ? NativeGlassTheme.selectionBlue
+            ? NativeGlassTheme.accentOf(context)
             : const Color(0xFF929292),
       ),
       icon: Icon(visible ? Icons.visibility : Icons.visibility_off, size: size),

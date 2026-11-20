@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:motor/motor.dart';
 
@@ -29,11 +30,7 @@ abstract final class AppMotion {
 /// 首次挂载或键变更时的 Bouncy 物理弹性进场（#142）；收敛后剥离变换包装，避免静态阶段亚像素偏差。
 class BouncyPresence extends StatefulWidget {
   /// child 为受控组件，fromScale 为起始缩放比；减少动态效果时直接输出 child。
-  const BouncyPresence({
-    super.key,
-    required this.child,
-    this.fromScale = 0.92,
-  });
+  const BouncyPresence({super.key, required this.child, this.fromScale = 0.92});
 
   final Widget child;
   final double fromScale;
@@ -261,7 +258,9 @@ class GentleShimmerSkeleton extends StatelessWidget {
               height: 14,
               decoration: BoxDecoration(
                 color: base,
-                borderRadius: BorderRadius.circular(GlassMetrics.menuItemRadius),
+                borderRadius: BorderRadius.circular(
+                  GlassMetrics.menuItemRadius,
+                ),
               ),
             ),
           ),
@@ -513,11 +512,7 @@ class _OpticalPrismFallbackPainter extends CustomPainter {
 /// 1. 译文卡片标题区状态机微交互图标（#142）：忙碌旋转、完成描边打勾、失败轻抖红叉、待机微环。
 class TranslationStatusIcon extends StatefulWidget {
   /// phase 为当前翻译会话阶段，size 为图标逻辑点尺寸。
-  const TranslationStatusIcon({
-    super.key,
-    required this.phase,
-    this.size = 14,
-  });
+  const TranslationStatusIcon({super.key, required this.phase, this.size = 14});
 
   final TranslationPhase phase;
   final double size;
@@ -589,8 +584,9 @@ class _TranslationStatusIconState extends State<TranslationStatusIcon>
     final isError =
         widget.phase == TranslationPhase.failed ||
         widget.phase == TranslationPhase.sizeLimited;
-    final popTarget =
-        widget.phase == TranslationPhase.completed || isError ? 1.0 : 0.96;
+    final popTarget = widget.phase == TranslationPhase.completed || isError
+        ? 1.0
+        : 0.96;
 
     Widget icon = SizedBox.square(
       dimension: widget.size,
@@ -734,8 +730,16 @@ class _TranslationStatusPainter extends CustomPainter {
         ..strokeWidth = 1.6
         ..strokeCap = StrokeCap.round
         ..color = error;
-      canvas.drawLine(center + Offset(-d, -d), center + Offset(d, d), crossPaint);
-      canvas.drawLine(center + Offset(d, -d), center + Offset(-d, d), crossPaint);
+      canvas.drawLine(
+        center + Offset(-d, -d),
+        center + Offset(d, d),
+        crossPaint,
+      );
+      canvas.drawLine(
+        center + Offset(d, -d),
+        center + Offset(-d, d),
+        crossPaint,
+      );
       return;
     }
     canvas.drawCircle(
@@ -833,7 +837,8 @@ class _SpeechWaveIconState extends State<SpeechWaveIcon>
       value: 1.0,
       motion: AppMotion.bouncy(context),
       child: wave,
-      builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+      builder: (context, scale, child) =>
+          Transform.scale(scale: scale, child: child),
     );
   }
 }
@@ -851,7 +856,8 @@ class _SpeechWavePainter extends CustomPainter {
     final step = size.width / 5.5;
     final startX = (size.width - step * 4) * 0.5;
     for (var i = 0; i < 5; i++) {
-      final amp = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(phase * math.pi * 2 + i * 0.95));
+      final amp =
+          0.35 + 0.65 * (0.5 + 0.5 * math.sin(phase * math.pi * 2 + i * 0.95));
       final barHeight = size.height * (0.28 + 0.58 * amp);
       final x = startX + i * step;
       final rect = RRect.fromRectAndRadius(
@@ -976,7 +982,8 @@ class _SparkBurstPainter extends CustomPainter {
     for (var i = 0; i < 8; i++) {
       final angle = (i * math.pi) / 4;
       final dist = baseR + progress * (size.shortestSide * 0.55);
-      final pos = center + Offset(math.cos(angle) * dist, math.sin(angle) * dist);
+      final pos =
+          center + Offset(math.cos(angle) * dist, math.sin(angle) * dist);
       canvas.drawCircle(pos, 1.2 * (1.0 - progress * 0.4), paint);
     }
   }
@@ -1012,14 +1019,17 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
   @override
   void initState() {
     super.initState();
-    _confirmController = AnimationController(
-      vsync: this,
-      duration: MotionMetrics.copyConfirmDuration,
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed && _transientActive && mounted) {
-          setState(() => _transientActive = false);
-        }
-      });
+    _confirmController =
+        AnimationController(
+          vsync: this,
+          duration: MotionMetrics.copyConfirmDuration,
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed &&
+              _transientActive &&
+              mounted) {
+            setState(() => _transientActive = false);
+          }
+        });
   }
 
   @override
@@ -1082,7 +1092,8 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
       value: 1.0,
       motion: AppMotion.bouncy(context),
       child: check,
-      builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+      builder: (context, scale, child) =>
+          Transform.scale(scale: scale, child: child),
     );
   }
 }
@@ -1282,14 +1293,701 @@ class _RecordingDotPainter extends CustomPainter {
           ..color = color.withValues(alpha: opacity),
       );
     }
-    canvas.drawCircle(
-      center,
-      size.shortestSide * 0.26,
-      Paint()..color = color,
-    );
+    canvas.drawCircle(center, size.shortestSide * 0.26, Paint()..color = color);
   }
 
   @override
   bool shouldRepaint(_RecordingDotPainter old) =>
       old.progress != progress || old.pulsing != pulsing || old.color != color;
+}
+
+/// 等待进度环（#142，#67 第 7 条）：包在按钮外，active 时强调色弧段沿圆角环流动；
+/// active 由真变假时环闭合、放大并淡出，结束后不再绘制。减少动态效果时等待中显示静态完整环。
+class BusyRing extends StatefulWidget {
+  /// child 为按钮，active 为是否正在等待，color 为环颜色（系统强调色）。
+  const BusyRing({
+    super.key,
+    required this.child,
+    required this.active,
+    required this.color,
+  });
+
+  final Widget child;
+  final bool active;
+  final Color color;
+
+  /// 无参数；创建流动与完成两段动画的状态。
+  @override
+  State<BusyRing> createState() => _BusyRingState();
+}
+
+class _BusyRingState extends State<BusyRing> with TickerProviderStateMixin {
+  late final _flow = AnimationController(
+    vsync: this,
+    duration: MotionMetrics.busyRingPeriod,
+  );
+  late final _finish = AnimationController(
+    vsync: this,
+    duration: MotionMetrics.busyRingFinish,
+  );
+
+  /// 无参数；挂载时已在等待则开始流动。
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _flow.repeat();
+  }
+
+  /// oldWidget 为上一配置；开始等待时重新流动，等待结束时播放闭合淡出。
+  @override
+  void didUpdateWidget(covariant BusyRing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _finish.reset();
+      _flow.repeat();
+    } else if (!widget.active && oldWidget.active) {
+      _flow.stop();
+      _finish.forward(from: 0);
+    }
+  }
+
+  /// 无参数；释放两个动画控制器。
+  @override
+  void dispose() {
+    _flow.dispose();
+    _finish.dispose();
+    super.dispose();
+  }
+
+  /// context 提供无障碍设置；返回按钮与外扩的环，环不参与命中。
+  @override
+  Widget build(BuildContext context) {
+    final reduced = AppMotion.reduced(context);
+    // 减少动态效果时不播放闭合淡出，等待结束即不再绘制。
+    final visible = widget.active || (!reduced && _finish.isAnimating);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        widget.child,
+        if (visible)
+          Positioned(
+            left: -MotionMetrics.busyRingOutset,
+            top: -MotionMetrics.busyRingOutset,
+            right: -MotionMetrics.busyRingOutset,
+            bottom: -MotionMetrics.busyRingOutset,
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_flow, _finish]),
+                builder: (context, _) => CustomPaint(
+                  painter: _BusyRingPainter(
+                    color: widget.color,
+                    phase: _flow.value,
+                    // 等待中：减少动态效果时为完整静态环，否则为流动弧段；完成后为闭合环。
+                    arc: widget.active && !reduced
+                        ? MotionMetrics.busyRingArc
+                        : 1,
+                    finish: widget.active ? 0 : _finish.value,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 进度环画笔：phase 为流动相位 0–1，arc 为弧段占周长比例（1 为闭合），finish 为完成进度 0–1（放大并淡出）。
+class _BusyRingPainter extends CustomPainter {
+  _BusyRingPainter({
+    required this.color,
+    required this.phase,
+    required this.arc,
+    required this.finish,
+  });
+
+  final Color color;
+  final double phase;
+  final double arc;
+  final double finish;
+
+  /// canvas/size 为环所在区域；沿圆角矩形路径截取弧段描边。
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = 1 + (MotionMetrics.busyRingFinishScale - 1) * finish;
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.scale(scale);
+    canvas.translate(-size.width / 2, -size.height / 2);
+    const inset = MotionMetrics.busyRingStroke / 2;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          (Offset.zero & size).deflate(inset),
+          const Radius.circular(MotionMetrics.busyRingRadius),
+        ),
+      );
+    final paint = Paint()
+      ..color = color.withValues(alpha: color.a * (1 - finish))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = MotionMetrics.busyRingStroke
+      ..strokeCap = StrokeCap.round;
+    if (arc >= 1) {
+      canvas.drawPath(path, paint);
+    } else {
+      // 弧段从 phase 处开始，跨过路径终点时分两段绘制。
+      for (final metric in path.computeMetrics()) {
+        final start = metric.length * phase;
+        final end = start + metric.length * arc;
+        canvas.drawPath(
+          metric.extractPath(start, math.min(end, metric.length)),
+          paint,
+        );
+        if (end > metric.length) {
+          canvas.drawPath(metric.extractPath(0, end - metric.length), paint);
+        }
+      }
+    }
+    canvas.restore();
+  }
+
+  /// oldDelegate 为上一画笔；任一参数变化时重画。
+  @override
+  bool shouldRepaint(covariant _BusyRingPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.phase != phase ||
+      oldDelegate.arc != arc ||
+      oldDelegate.finish != finish;
+}
+
+/// 译文逐字显影（#142，#67 第 8 条）：新到达的字逐个由透明、模糊变清晰；文字在原内容后追加时只显影追加部分，
+/// 内容被替换时整段重新显影。用一个动画控制器驱动段内各字的前景画笔，不为每个字创建控件。
+/// builder 拿到要显示的 TextSpan，由调用方决定用 Text.rich 或 SelectableText.rich 排版。
+class CharReveal extends StatefulWidget {
+  /// text 为当前译文，style 为整段样式（须含颜色），builder 用 TextSpan 构建实际文字控件。
+  const CharReveal({
+    super.key,
+    required this.text,
+    required this.style,
+    required this.builder,
+  });
+
+  final String text;
+  final TextStyle style;
+  final Widget Function(BuildContext context, TextSpan span) builder;
+
+  /// 无参数；创建显影批次状态。
+  @override
+  State<CharReveal> createState() => _CharRevealState();
+}
+
+class _CharRevealState extends State<CharReveal>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this)
+    ..addListener(() => setState(() {}));
+
+  /// 本批之前已完整显示的字数；本批显影的是 [_base, text.length) 这些字。
+  int _base = 0;
+
+  /// 本批各字之间的错峰（毫秒），保证同段错峰总长不超过上限。
+  double _stagger = 0;
+
+  /// 无参数；挂载时整段作为第一批显影。
+  @override
+  void initState() {
+    super.initState();
+    _start(0);
+  }
+
+  /// oldWidget 为上一配置；文字在原内容后追加时只显影追加部分，被替换时整段重新显影。
+  @override
+  void didUpdateWidget(covariant CharReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text == oldWidget.text) return;
+    _start(widget.text.startsWith(oldWidget.text) ? oldWidget.text.length : 0);
+  }
+
+  /// base 为已完整显示的字数；以剩余字数计算错峰并从头播放本批显影。
+  void _start(int base) {
+    _base = base;
+    final count = widget.text.length - base;
+    if (count <= 0) return;
+    final spread = MotionMetrics.charRevealMaxSpread.inMilliseconds;
+    _stagger = math.min(
+      MotionMetrics.charRevealStagger.inMilliseconds.toDouble(),
+      spread / count,
+    );
+    _controller.duration = Duration(
+      milliseconds:
+          (MotionMetrics.charRevealDuration.inMilliseconds +
+                  _stagger * (count - 1))
+              .ceil(),
+    );
+    _controller.forward(from: 0);
+  }
+
+  /// 无参数；释放动画控制器。
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// context 提供无障碍设置；返回 builder 构建的文字，显影中的字带各自的透明度与模糊。
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text;
+    final animating = _controller.isAnimating && _base < text.length;
+    if (AppMotion.reduced(context) || !animating) {
+      return widget.builder(context, TextSpan(text: text, style: widget.style));
+    }
+    final color = widget.style.color!;
+    final elapsed =
+        _controller.value * _controller.duration!.inMilliseconds.toDouble();
+    final duration = MotionMetrics.charRevealDuration.inMilliseconds;
+    // 每个字从自己的错峰起点开始，在单字时长内由透明、模糊变为清晰。
+    final chars = text.substring(_base).characters.toList();
+    return widget.builder(
+      context,
+      TextSpan(
+        style: widget.style,
+        children: [
+          TextSpan(text: text.substring(0, _base)),
+          for (final (index, char) in chars.indexed)
+            (() {
+              final t = ((elapsed - index * _stagger) / duration).clamp(
+                0.0,
+                1.0,
+              );
+              final sigma = MotionMetrics.charRevealBlur * (1 - t);
+              return TextSpan(
+                text: char,
+                style: TextStyle(
+                  foreground: Paint()
+                    ..color = color.withValues(alpha: color.a * t)
+                    ..maskFilter = sigma > 0.01
+                        ? MaskFilter.blur(BlurStyle.normal, sigma)
+                        : null,
+                ),
+              );
+            })(),
+        ],
+      ),
+    );
+  }
+}
+
+/// 选区流光边框（#142，#67 第 9 条）：沿 rect 周长流动的强调色光段，fast 为真（拖动或调整选区）时加速且相位连续；
+/// 选区定下后再流 MotionMetrics.selectionFlowLaps 圈并淡出，rect、fast 或 trigger（当前工具）变化时重新开始。
+/// 只是编辑界面装饰，不参与命中与导出；减少动态效果时不绘制。
+class SelectionFlow extends StatefulWidget {
+  /// rect 为显示坐标下的选区，color 为强调色，fast 为是否正在拖动或调整，trigger 变化（如切换工具）时重新流动。
+  const SelectionFlow({
+    super.key,
+    required this.rect,
+    required this.color,
+    required this.fast,
+    this.trigger,
+  });
+
+  final Rect rect;
+  final Color color;
+  final bool fast;
+  final Object? trigger;
+
+  /// 无参数；创建按帧推进相位与淡出的状态。
+  @override
+  State<SelectionFlow> createState() => _SelectionFlowState();
+}
+
+class _SelectionFlowState extends State<SelectionFlow>
+    with SingleTickerProviderStateMixin {
+  /// 光段起点相位 0–1 与整体不透明度 0–1；画笔监听它重画，不重建控件。
+  final _frame = ValueNotifier((phase: 0.0, opacity: 1.0));
+  late final _ticker = createTicker(_tick);
+  Duration _last = Duration.zero;
+
+  /// 选区定下（不再拖动）后已经流动的时长（微秒）。
+  int _idle = 0;
+
+  /// 无参数；选区定下后的总流动时长（微秒）。
+  int get _idleLimit =>
+      MotionMetrics.selectionFlowPeriod.inMicroseconds *
+      MotionMetrics.selectionFlowLaps;
+
+  /// elapsed 为自本次启动起的时长；按当前速度累加相位，切换快慢时不跳变；定下后计时，到时淡出并停止。
+  void _tick(Duration elapsed) {
+    final period = widget.fast
+        ? MotionMetrics.selectionFlowFastPeriod
+        : MotionMetrics.selectionFlowPeriod;
+    final step = (elapsed - _last).inMicroseconds;
+    _last = elapsed;
+    _idle = widget.fast ? 0 : _idle + step;
+    final left = _idleLimit - _idle;
+    final fade = MotionMetrics.selectionFlowFadeOut.inMicroseconds;
+    _frame.value = (
+      phase: (_frame.value.phase + step / period.inMicroseconds) % 1,
+      opacity: (left / fade).clamp(0.0, 1.0),
+    );
+    if (left <= 0) _ticker.stop();
+  }
+
+  /// 无参数；从头开始一轮流动（已在流动时只重置定下计时）。
+  void _restart() {
+    _idle = 0;
+    _frame.value = (phase: _frame.value.phase, opacity: 1.0);
+    if (_ticker.isActive) return;
+    _last = Duration.zero;
+    _ticker.start();
+  }
+
+  /// 无参数；挂载即开始一轮流动。
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  /// oldWidget 为上一配置；选区、拖动状态或触发值变化时重新流动。
+  @override
+  void didUpdateWidget(covariant SelectionFlow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.rect != oldWidget.rect ||
+        widget.fast != oldWidget.fast ||
+        widget.trigger != oldWidget.trigger) {
+      _restart();
+    }
+  }
+
+  /// 无参数；停止计时并释放帧状态。
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _frame.dispose();
+    super.dispose();
+  }
+
+  /// context 提供无障碍设置；返回铺满父级的流光画布，减少动态效果时为空。
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.reduced(context)) return const SizedBox.shrink();
+    return CustomPaint(
+      painter: _SelectionFlowPainter(
+        rect: widget.rect,
+        color: widget.color,
+        frame: _frame,
+      ),
+    );
+  }
+}
+
+/// 流光画笔：rect 为选区，color 为强调色，frame 为光段起点相位与整体不透明度（变化时重画）。
+class _SelectionFlowPainter extends CustomPainter {
+  _SelectionFlowPainter({
+    required this.rect,
+    required this.color,
+    required this.frame,
+  }) : super(repaint: frame);
+
+  final Rect rect;
+  final Color color;
+  final ValueNotifier<({double phase, double opacity})> frame;
+
+  /// canvas/size 为显示画布；先画外发光再画实线光段，跨过路径终点时分两段。
+  @override
+  void paint(Canvas canvas, Size size) {
+    final opacity = frame.value.opacity;
+    if (rect.width < 1 || rect.height < 1 || opacity <= 0) return;
+    final glow = Paint()
+      ..color = color.withValues(alpha: color.a * 0.6 * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = MotionMetrics.selectionFlowStroke
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        MotionMetrics.selectionFlowGlow / 2,
+      );
+    final line = Paint()
+      ..color = color.withValues(alpha: color.a * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = MotionMetrics.selectionFlowStroke
+      ..strokeCap = StrokeCap.round;
+    for (final metric in (Path()..addRect(rect)).computeMetrics()) {
+      final start = metric.length * frame.value.phase;
+      final end = start + metric.length * MotionMetrics.selectionFlowArc;
+      final pieces = [
+        metric.extractPath(start, math.min(end, metric.length)),
+        if (end > metric.length) metric.extractPath(0, end - metric.length),
+      ];
+      for (final piece in pieces) {
+        canvas.drawPath(piece, glow);
+        canvas.drawPath(piece, line);
+      }
+    }
+  }
+
+  /// oldDelegate 为上一画笔；选区或颜色变化时重画，相位变化由 repaint 驱动。
+  @override
+  bool shouldRepaint(covariant _SelectionFlowPainter oldDelegate) =>
+      oldDelegate.rect != rect || oldDelegate.color != color;
+}
+
+/// 工具栏液态展开（#142，#67 第 10 条）：items 各按钮从 anchor（父级按钮）位置沿物理弹簧（420ms、阻尼 0.62）
+/// 错峰移到自己的格位，移动期间按钮下方的液滴经模糊与阈值合成产生粘连；collapsing 为真时反向回到父级并融合，
+/// 结束后调用 onCollapsed。减少动态效果时直接显示，收起时立即调用 onCollapsed。
+class LiquidSplit extends StatefulWidget {
+  /// flexKey 为内部 Flex 的键，axis 为排列方向，lead 为排在最前、不参与动画的部件（组标签空位），
+  /// items 为按钮，anchor 为父级按钮的全局键，color 为液滴颜色（强调色）。
+  const LiquidSplit({
+    super.key,
+    required this.flexKey,
+    required this.axis,
+    required this.lead,
+    required this.items,
+    required this.anchor,
+    required this.color,
+    this.collapsing = false,
+    this.onCollapsed,
+  });
+
+  final Key flexKey;
+  final Axis axis;
+  final Widget lead;
+  final List<Widget> items;
+  final GlobalKey anchor;
+  final Color color;
+  final bool collapsing;
+  final VoidCallback? onCollapsed;
+
+  /// 无参数；创建按钮位移与液滴状态。
+  @override
+  State<LiquidSplit> createState() => _LiquidSplitState();
+}
+
+class _LiquidSplitState extends State<LiquidSplit>
+    with SingleTickerProviderStateMixin {
+  late final _ticker = createTicker(_tick);
+  final _stackKey = GlobalKey();
+  late List<GlobalKey> _itemKeys = _keys(widget.items.length);
+
+  /// 各按钮中心到父级中心的位移（本组坐标）；首帧布局前为 null，此时按钮先不显示。
+  List<Offset>? _deltas;
+
+  /// 父级按钮在本组坐标中的矩形，供液滴绘制。
+  Rect? _anchorRect;
+
+  /// 各按钮当前的展开进度（0 在父级、1 在格位）。
+  List<double> _progress = const [];
+
+  /// 周期 420ms、阻尼比 0.62 的弹簧，与 BouncyPresence 一致。
+  static final _spring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: math
+        .pow(
+          2 * math.pi / (MotionMetrics.bouncyDuration.inMicroseconds / 1e6),
+          2,
+        )
+        .toDouble(),
+    ratio: MotionMetrics.bouncyDampingRatio,
+  );
+
+  /// count 为按钮数；返回每个按钮的全局键，用于测量其位置。
+  static List<GlobalKey> _keys(int count) =>
+      List.generate(count, (_) => GlobalKey());
+
+  /// 无参数；首帧布局后测量位移并开始展开。
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _begin());
+  }
+
+  /// oldWidget 为上一配置；按钮数变化时重建测量键，开始收起时从当前进度反向播放。
+  @override
+  void didUpdateWidget(covariant LiquidSplit oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.items.length != oldWidget.items.length) {
+      _itemKeys = _keys(widget.items.length);
+    }
+    if (widget.collapsing && !oldWidget.collapsing) {
+      if (AppMotion.reduced(context) || _deltas == null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => widget.onCollapsed?.call(),
+        );
+        return;
+      }
+      // 重新计时，收起动画从头按弹簧回收。
+      _ticker
+        ..stop()
+        ..start();
+    }
+  }
+
+  /// 无参数；测量父级与各按钮的位置，减少动态效果或父级不在树上时直接显示。
+  void _begin() {
+    if (!mounted) return;
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final anchor =
+        widget.anchor.currentContext?.findRenderObject() as RenderBox?;
+    if (AppMotion.reduced(context) || stack == null || anchor == null) {
+      setState(() {
+        _deltas = const [];
+        _progress = const [];
+      });
+      return;
+    }
+    final anchorTopLeft = stack.globalToLocal(
+      anchor.localToGlobal(Offset.zero),
+    );
+    final anchorRect = anchorTopLeft & anchor.size;
+    final deltas = <Offset>[];
+    for (final key in _itemKeys) {
+      final box = key.currentContext!.findRenderObject()! as RenderBox;
+      final center = stack.globalToLocal(
+        box.localToGlobal(box.size.center(Offset.zero)),
+      );
+      deltas.add(anchorRect.center - center);
+    }
+    setState(() {
+      _anchorRect = anchorRect;
+      _deltas = deltas;
+      _progress = List.filled(deltas.length, 0);
+    });
+    _ticker.start();
+  }
+
+  /// elapsed 为本轮时长；按错峰推进各按钮的弹簧进度，全部到位后停止，收起完成时通知调用方。
+  void _tick(Duration elapsed) {
+    final seconds = elapsed.inMicroseconds / 1e6;
+    final stagger = MotionMetrics.liquidStagger.inMicroseconds / 1e6;
+    final from = widget.collapsing ? 1.0 : 0.0;
+    final to = widget.collapsing ? 0.0 : 1.0;
+    var done = true;
+    final progress = <double>[];
+    for (var index = 0; index < _itemKeys.length; index++) {
+      // 收起时从最后一个按钮开始回收，展开时从第一个开始弹出。
+      final order = widget.collapsing ? _itemKeys.length - 1 - index : index;
+      final time = math.max(0.0, seconds - order * stagger);
+      final simulation = SpringSimulation(_spring, from, to, 0);
+      progress.add(simulation.x(time));
+      if (!simulation.isDone(time)) done = false;
+    }
+    setState(() => _progress = progress);
+    if (!done) return;
+    _ticker.stop();
+    if (widget.collapsing) widget.onCollapsed?.call();
+    setState(() => _progress = List.filled(_itemKeys.length, to));
+  }
+
+  /// 无参数；停止计时。
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  /// context 提供主题；返回按钮行，展开或收起期间按钮带位移且下方绘制粘连液滴。
+  @override
+  Widget build(BuildContext context) {
+    final deltas = _deltas;
+    final moving = _ticker.isActive && deltas != null && deltas.isNotEmpty;
+    final flex = Flex(
+      key: widget.flexKey,
+      direction: widget.axis,
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        widget.lead,
+        for (final (index, item) in widget.items.indexed)
+          KeyedSubtree(
+            key: _itemKeys[index],
+            child: deltas == null
+                // 首帧尚未测量位置，先不显示，避免按钮在格位闪现。
+                ? Opacity(opacity: 0, child: item)
+                : deltas.isEmpty || !moving
+                ? item
+                : Transform.translate(
+                    offset: deltas[index] * (1 - _progress[index]),
+                    child: item,
+                  ),
+          ),
+      ],
+    );
+    return Stack(
+      key: _stackKey,
+      clipBehavior: Clip.none,
+      children: [
+        if (moving)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: MotionMetrics.liquidOpacity,
+                // 先模糊再按透明度阈值合成，相邻液滴的模糊边缘相连处形成粘连。
+                child: ColorFiltered(
+                  colorFilter: const ColorFilter.matrix([
+                    1, 0, 0, 0, 0, //
+                    0, 1, 0, 0, 0, //
+                    0, 0, 1, 0, 0, //
+                    0, 0, 0, 22, -9 * 255,
+                  ]),
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: MotionMetrics.liquidBlur,
+                      sigmaY: MotionMetrics.liquidBlur,
+                    ),
+                    child: CustomPaint(
+                      painter: _LiquidPainter(
+                        color: widget.color,
+                        anchor: _anchorRect,
+                        items: [
+                          for (final (index, key) in _itemKeys.indexed)
+                            if (key.currentContext?.findRenderObject()
+                                case final RenderBox box)
+                              (_stackKey.currentContext!.findRenderObject()!
+                                              as RenderBox)
+                                          .globalToLocal(
+                                            box.localToGlobal(Offset.zero),
+                                          ) +
+                                      deltas[index] * (1 - _progress[index]) &
+                                  box.size,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        flex,
+      ],
+    );
+  }
+}
+
+/// 液滴画笔：在父级与各按钮当前矩形处画圆角块，供外层模糊与阈值合成粘连。
+class _LiquidPainter extends CustomPainter {
+  _LiquidPainter({
+    required this.color,
+    required this.anchor,
+    required this.items,
+  });
+
+  final Color color;
+  final Rect? anchor;
+  final List<Rect> items;
+
+  /// canvas/size 为组画布；逐块绘制实心圆角矩形。
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (final rect in [?anchor, ...items]) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
+        paint,
+      );
+    }
+  }
+
+  /// oldDelegate 为上一画笔；每帧位置都会变化，始终重画。
+  @override
+  bool shouldRepaint(covariant _LiquidPainter oldDelegate) => true;
 }

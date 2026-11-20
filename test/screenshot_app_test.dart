@@ -9,6 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/emoji_catalog.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
+import 'package:translate_app/src/common/constants/toolbar_grid.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
+import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
@@ -502,6 +505,90 @@ void main() {
     await tester.tap(find.byTooltip('关闭').last);
     await tester.pump();
     expect(find.text('Hello'), findsNothing);
+  });
+
+  testWidgets('等待中的功能按钮自身显示进度环；按钮隐藏时在工具栏末尾显示进度环格（#142）', (tester) async {
+    // 作用：等待状态落在被点击的按钮上，工具栏不再出现沙漏格。
+    // 边界：识别未返回时「识别文字」按钮的进度环为等待态且没有状态格；返回后进度环结束；
+    // 隐藏「识别文字」后用 ⌥1 触发，按钮不可见，等待期间末尾出现进度环格，返回后消失。
+    tester.view.physicalSize = const Size(960, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final png = await tester.runAsync(_pngCheckerboard);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/screenshot-busy');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var pending = Completer<Object?>();
+    var hidden = <String>{};
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'shot-busy',
+          ...capture!,
+          'width': 8,
+          'height': 8,
+          ...ScreenshotToolbarPreferences(hidden: hidden).toMap(),
+        };
+      }
+      if (call.method == MethodNames.recognizeText) return pending.future;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pump();
+    // ring 取「识别文字」按钮外的进度环。
+    BusyRing ring() => tester.widget<BusyRing>(
+      find
+          .ancestor(
+            of: find.byKey(const Key(ScreenshotActions.ocrCopy)),
+            matching: find.byType(BusyRing),
+          )
+          .first,
+    );
+    // settle 让合成 PNG 等真实异步步骤跑完，再推进动画帧。
+    Future<void> settle() async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.ocrCopy)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.ocrCopy)));
+    await settle();
+    expect(ring().active, isTrue);
+    expect(find.byKey(const Key('screenshot-busy')), findsNothing);
+    pending.complete({'text': '', 'codes': <Object>[]});
+    await settle();
+    expect(ring().active, isFalse);
+
+    hidden = {ScreenshotActions.ocrCopy};
+    pending = Completer<Object?>();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pump();
+    expect(find.byKey(const Key(ScreenshotActions.ocrCopy)), findsNothing);
+    await messenger.handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall(MethodNames.screenshotToolbarSlot, {
+          'id': 'shot-busy',
+          'modifiers': ToolbarModifiers.option,
+          'digit': 1,
+        }),
+      ),
+      (_) {},
+    );
+    await settle();
+    expect(find.byKey(const Key('screenshot-busy')), findsOneWidget);
+    pending.complete({'text': '', 'codes': <Object>[]});
+    await settle();
+    expect(find.byKey(const Key('screenshot-busy')), findsNothing);
   });
 
   test('只有带主机名的 http/https 内容可作为链接打开', () {

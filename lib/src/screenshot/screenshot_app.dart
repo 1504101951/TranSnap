@@ -154,6 +154,15 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 工具栏「贴纸」按钮的锚点；贴纸下拉框据此定位，按钮未显示时无锚点。
   final _stickerAnchor = GlobalKey();
 
+  /// 工具栏各按钮的全局键：液态展开据此找到父级按钮的位置；按钮换行时元素随键移动，原生材料不重建（#142）。
+  final _buttonKeys = <String, GlobalKey>{};
+
+  /// 正在收起的子级组：parent 为原父级，cells 为原子级；液态收起播完后清空（#142）。
+  ({String parent, List<String> cells})? _closing;
+
+  /// 上一次构建时展开着的父级与子级，用于发现收起。
+  ({String parent, List<String> cells})? _open;
+
   /// 标尺两端（截图像素）；不进入标注与撤销，切换工具或新截图后清除（#111）。
   ({Offset start, Offset end})? _ruler;
 
@@ -169,6 +178,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   ScreenshotTool _tool = ScreenshotTool.crop;
   bool _busy = false;
+
+  /// 当前或最近一次等待对应的工具栏功能（复制、保存、贴图、识别文字、翻译文字、长截图、录制、实时翻译）；
+  /// 等待期间该按钮外显示进度环；没有对应按钮时为 null（#142）。
+  String? _busyId;
   bool _failed = false;
   bool _textInputOpen = false;
   String? _feedbackMessage;
@@ -264,6 +277,30 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (ScreenshotActions.composable[id]!.hostsChildren ? id : null);
   }
 
+  /// reduced 为是否减少动态效果；比较上一次构建时展开的子级，父级收起或换成别的父级时记下原子级供液态收起，
+  /// 重新展开同一父级时取消收起；减少动态效果时不保留收起中的组，无返回值（#142）。
+  void _syncClosing(bool reduced) {
+    final group = _group;
+    final children = _visibleChildren;
+    final open = group == null || children.isEmpty
+        ? null
+        : (parent: group, cells: children);
+    final previous = _open;
+    // 原子级若已全部成为一级或别的子级（配置更新），没有需要收起的按钮。
+    final placed = {
+      for (final column in _toolbar.columns) ...column.slots,
+      ...children,
+    };
+    if (!reduced &&
+        previous != null &&
+        previous.parent != open?.parent &&
+        previous.cells.any((id) => !placed.contains(id))) {
+      _closing = previous;
+    }
+    if (_closing != null && _closing!.parent == open?.parent) _closing = null;
+    _open = open;
+  }
+
   /// 无参数；返回第二行里按配置顺序排列、未隐藏的子级功能。
   List<String> get _visibleChildren => [
     for (final id in _toolbar.children[_group] ?? const <String>[])
@@ -312,8 +349,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (key: 'screenshot-attributes-group-$index', cells: <String?>[...cells], label: null),
     ];
     final anchor = _group ?? _activeId;
+    final closing = _closing;
     final groups = <_ToolbarCells>[];
     int? anchorGroup;
+    int? closingGroup;
     for (final (index, column) in _toolbar.columns.indexed) {
       final cells = [
         for (final id in column.slots)
@@ -323,27 +362,63 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (anchorGroup == null && column.slots.contains(anchor)) {
         anchorGroup = groups.length;
       }
+      if (closing != null &&
+          closingGroup == null &&
+          column.slots.contains(closing.parent)) {
+        closingGroup = groups.length;
+      }
       final label = column.modifiers == 0
           ? '无'
           : ToolbarModifiers.label(column.modifiers);
       groups.add((key: 'screenshot-grid-group-$index', cells: cells, label: label));
     }
+    // 等待中的功能按钮在工具栏可见时由它自己显示进度环；否则在末尾状态组显示同样的进度环格（#142）。
+    final shown = {
+      for (final group in [...groups, ...inserted]) ...group.cells,
+    };
     final status = [
       if (actions.containsKey(ScreenshotActions.reveal)) ScreenshotActions.reveal,
-      if (_busy) _busyCell,
+      if (_busy && !shown.contains(_busyId)) _busyCell,
     ];
     if (status.isNotEmpty) {
       groups.add((key: 'screenshot-status-group', cells: status, label: null));
     }
     final lines = pair(groups);
+    // extra 记录插在第 i 行之前的行。
+    final extra = <int, List<_ToolbarLine>>{};
+    // 正在收起的子级组插在它原父级所在行之后，播完液态收起后移除（#142）。
+    // 配置更新后原子级可能已在别的组里显示，同一按钮只出现一次，这些按钮不参与收起。
+    final leaving = [
+      for (final id in closing?.cells ?? const <String>[])
+        if (!shown.contains(id)) id,
+    ];
+    if (closing != null && leaving.isNotEmpty) {
+      final at = closingGroup == null
+          ? lines.length
+          : closingGroup ~/ perLine + 1;
+      (extra[at] ??= []).addAll(
+        pair([
+          for (final (index, cells) in chunk(leaving).indexed)
+            (
+              key: 'screenshot-closing-group-$index',
+              cells: <String?>[...cells],
+              label: null,
+            ),
+        ]),
+      );
+    }
     // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
     final after = anchorGroup == null ? lines.length : anchorGroup ~/ perLine + 1;
-    return [
-      ...lines.take(after),
+    (extra[after] ??= []).addAll([
       ...pair(inserted),
       for (final key in _strips().keys)
         (groups: const <_ToolbarCells>[], strip: key),
-      ...lines.skip(after),
+    ]);
+    return [
+      for (var index = 0; index <= lines.length; index++) ...[
+        ...?extra[index],
+        if (index < lines.length) lines[index],
+      ],
     ];
   }
 
@@ -1052,7 +1127,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   }) async {
     if (_busy || _capture['canCaptureMedia'] != true) return;
     final id = _capture['id'];
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _busyId = scrolling
+          ? ScreenshotActions.scrolling
+          : live
+          ? ScreenshotActions.live
+          : ScreenshotActions.record;
+    });
     try {
       await widget.channel.invokeMethod<void>(MethodNames.prepareCapture, {
         'id': id,
@@ -1095,7 +1177,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     required bool showsClicks,
   }) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      // 录制选项在附加行的菜单里，没有对应的工具栏按钮。
+      _busyId = null;
+    });
     try {
       await widget.channel.invokeMethod<void>(
         MethodNames.saveRecordingOptions,
@@ -1162,6 +1248,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (id == null || !_document.hasImage || _busy) return;
     setState(() {
       _busy = true;
+      // 「复制并保存」只由确认动作触发，没有对应按钮。
+      _busyId = switch (action) {
+        'copy' => ScreenshotActions.copy,
+        'save' => ScreenshotActions.save,
+        'pin' => ScreenshotActions.pin,
+        _ => null,
+      };
       _message = null;
       _failed = false;
     });
@@ -1305,6 +1398,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Future<void> _command(String method) async {
     setState(() {
       _busy = true;
+      _busyId = null;
       _message = null;
       _failed = false;
     });
@@ -1400,6 +1494,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (id == null || !_document.hasImage || _busy) return;
     setState(() {
       _busy = true;
+      _busyId = ScreenshotActions.ocrTranslate;
       _message = null;
       _failed = false;
     });
@@ -1451,6 +1546,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (id == null || !_document.hasImage || _busy) return null;
     setState(() {
       _busy = true;
+      _busyId = ScreenshotActions.ocrCopy;
       _message = null;
       _failed = false;
     });
@@ -2441,6 +2537,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Widget build(BuildContext context) {
     final renderedTool = _tool;
     _pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    _syncClosing(MediaQuery.disableAnimationsOf(context));
     final hasImage = _document.hasImage;
     return NativeGlassApp(
       home: Focus(
@@ -2944,10 +3041,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
     };
     // 模式按钮不产生hover层；普通操作保留主题反馈，属性不进入顶层排序。
+    // 正在使用的功能、子级所属父级与当前图形/画笔模式统一为强调色实底配白色图标（#67 原生克制风格）。
     Widget button(String id) {
-      final mode =
-          id.startsWith(ScreenshotActions.shapePrefix) ||
-          id.startsWith(ScreenshotActions.brushPrefix);
       // 高亮正在使用的功能，以及第二行所属的父级。
       final selected =
           id == _activeId ||
@@ -2963,57 +3058,52 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           tooltip:
               '${ScreenshotActions.labels[id]}${_toolbar.shortcutLabel(id) == null ? '' : ' ${_toolbar.shortcutLabel(id)}'}',
           onPressed: actions[id],
-          style: mode
-              ? ButtonStyle(
-                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                  backgroundColor: WidgetStatePropertyAll(
-                    selected
-                        ? NativeGlassTheme.selectionBlue
-                        : Colors.transparent,
-                  ),
-                  foregroundColor: WidgetStatePropertyAll(
-                    selected ? Colors.white : colors.onSurface,
-                  ),
-                  overlayColor: WidgetStateProperty.resolveWith(
-                    (states) => states.contains(WidgetState.pressed)
-                        ? (Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white.withValues(alpha: .10)
-                              : Colors.black.withValues(alpha: .08))
-                        : Colors.transparent,
-                  ),
-                  shape: WidgetStatePropertyAll(
-                    RoundedSuperellipseBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                )
-              : null,
-          color: mode
-              ? null
-              : selected
-              ? colors.primary
-              : colors.onSurface,
+          style: ButtonStyle(
+            padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+            backgroundColor: WidgetStatePropertyAll(
+              selected ? NativeGlassTheme.accentOf(context) : Colors.transparent,
+            ),
+            foregroundColor: WidgetStatePropertyAll(
+              selected ? Colors.white : colors.onSurface,
+            ),
+            overlayColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.pressed)
+                  ? (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: .10)
+                        : Colors.black.withValues(alpha: .08))
+                  : Colors.transparent,
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
           icon: Icon(icons[id] ?? Icons.circle, size: 16),
         ),
       );
       // 每个模式同样需要材料承载；外层工具栏保持透明。
       final surface = NativeGlassSurface(material: true, child: child);
+      // 每个按钮都包一层进度环，结构不随等待变化，避免重建按钮的原生材料；
+      // 只有最近一次等待对应的按钮在等待中流动、结束后闭合淡出（#142）。
+      final ringed = BusyRing(
+        active: _busy && id == _busyId,
+        color: NativeGlassTheme.accentOf(context),
+        child: surface,
+      );
       // 贴纸按钮挂锚点，供贴纸下拉框定位。
-      if (id != ScreenshotActions.sticker) return surface;
-      return KeyedSubtree(key: _stickerAnchor, child: surface);
+      final anchored = id == ScreenshotActions.sticker
+          ? KeyedSubtree(key: _stickerAnchor, child: ringed)
+          : ringed;
+      return KeyedSubtree(
+        key: _buttonKeys.putIfAbsent(id, GlobalKey.new),
+        child: anchored,
+      );
     }
 
     // 每组沿工具栏方向先放组合标签（横放在左、竖放在上），再排 6 格；空位留出 32×32pt（#141）。
     /// group 为一组格；返回沿工具栏方向排列的标签与格子，插入的子级、属性与状态组标签处留空并带弹簧入场（#142）。
     Widget groupOf(_ToolbarCells group) {
       final label = group.label;
-      final row = Flex(
-        key: Key(group.key),
-        direction: axis,
-        mainAxisSize: MainAxisSize.min,
-        spacing: 4,
-        children: [
-          SizedBox(
+      final lead = SizedBox(
             width: axis == Axis.horizontal ? ToolbarGrid.groupLabelWidth : 32,
             height: axis == Axis.horizontal ? 32 : ToolbarGrid.groupLabelHeight,
             child: label == null
@@ -3030,19 +3120,52 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       ),
                     ),
                   ),
+      );
+      final cells = [
+        for (final id in group.cells)
+          if (id == null)
+            const SizedBox(width: 32, height: 32)
+          else if (id == _busyCell)
+            BusyRing(
+              key: const Key(_busyCell),
+              active: true,
+              color: NativeGlassTheme.accentOf(context),
+              child: const SizedBox(width: 32, height: 32),
+            )
+          else
+            button(id),
+      ];
+      // 子级组从父级按钮液态分裂展开，收起中的组反向融合回父级后移除（#142）。
+      final closingGroup = group.key.startsWith('screenshot-closing-group-');
+      final parent = closingGroup
+          ? _closing?.parent
+          : group.key.startsWith('screenshot-children-group-')
+          ? _group
+          : null;
+      if (parent != null) {
+        return LiquidSplit(
+          // 换父级或转为收起时是新的展开过程，键不同以重新测量与计时。
+          key: ValueKey(
+            'liquid-${closingGroup ? 'closing' : 'open'}-$parent-${group.key}',
           ),
-          for (final id in group.cells)
-            if (id == null)
-              const SizedBox(width: 32, height: 32)
-            else if (id == _busyCell)
-              const SizedBox(
-                width: 32,
-                height: 32,
-                child: Icon(Icons.hourglass_top, size: 14),
-              )
-            else
-              button(id),
-        ],
+          flexKey: Key(group.key),
+          axis: axis,
+          lead: lead,
+          items: cells,
+          anchor: _buttonKeys.putIfAbsent(parent, GlobalKey.new),
+          color: NativeGlassTheme.accentOf(context),
+          collapsing: closingGroup,
+          onCollapsed: () {
+            if (mounted) setState(() => _closing = null);
+          },
+        );
+      }
+      final row = Flex(
+        key: Key(group.key),
+        direction: axis,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: [lead, ...cells],
       );
       if (label != null) return row;
       return BouncyPresence(
@@ -3074,7 +3197,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               style: IconButton.styleFrom(
                 padding: EdgeInsets.zero,
                 backgroundColor: selected
-                    ? NativeGlassTheme.selectionBlue
+                    ? NativeGlassTheme.accentOf(context)
                     : Colors.transparent,
                 foregroundColor: selected ? Colors.white : colors.onSurface,
               ),
@@ -3631,6 +3754,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   ...[
                     for (final overlay in widget.ocrOverlays)
                       Positioned.fromRect(
+                        // 按段落位置保持身份：流式追加的译文只显影新到达的字（#142）。
+                        key: ValueKey(overlay.rect),
                         rect: mapRectToFitted(
                           overlay.rect,
                           imageSize,
@@ -3779,6 +3904,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   child: CustomPaint(
                     size: constraints.biggest,
                     painter: _DimPainter(
+                      accent: NativeGlassTheme.accentOf(context),
                       recordingPreview: widget.recordingPreview,
                       cropDisplay: cropDisplay,
                       beautify: widget.beautify,
@@ -3794,6 +3920,23 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                     ),
                   ),
                 ),
+                // 选区流光边框：只在截图编辑选区上绘制，录制预览的原生边框不变；拖动或调整时加速（#142）。
+                if (widget.recordingWindows == null && !widget.recordingPreview)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: SelectionFlow(
+                        rect: cropDisplay,
+                        color: NativeGlassTheme.accentOf(context),
+                        // 只有框选新选区或拖动选区控制点时算「正在调整」；文字输入期间的拖动起点不算。
+                        fast:
+                            widget.activeHandle != null ||
+                            (widget.tool == ScreenshotTool.crop &&
+                                widget.dragStart != null &&
+                                !widget.textInputOpen),
+                        trigger: widget.tool,
+                      ),
+                    ),
+                  ),
                 // 选区像素尺寸标签：优先在左上角外侧上方，空间不足时放进选区内（#106）。
                 if ((widget.tool == ScreenshotTool.crop ||
                         widget.tool == ScreenshotTool.cursor) &&
@@ -3914,6 +4057,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                     child: CustomPaint(
                       size: constraints.biggest,
                       painter: _TextBoxPainter(
+                        accent: NativeGlassTheme.accentOf(context),
                         box: mapRectToFitted(
                           (widget.previewAnnotation ?? widget.selectedText)!
                               .bounds,
@@ -3984,20 +4128,25 @@ class _CornerCursorState extends State<_CornerCursor> {
   }
 }
 
-/// box 为显示坐标下的文本框；画出可拉伸控制点。
+/// box 为显示坐标下的文本框，accent 为系统强调色（控制点描边）；画出可拉伸控制点。
 class _TextBoxPainter extends CustomPainter {
-  _TextBoxPainter({required this.box});
+  _TextBoxPainter({required this.box, required this.accent});
 
   final Rect box;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
-    _DimPainter(cropDisplay: box, showHandles: true).paintHandles(canvas);
+    _DimPainter(
+      cropDisplay: box,
+      showHandles: true,
+      accent: accent,
+    ).paintHandles(canvas);
   }
 
   @override
   bool shouldRepaint(covariant _TextBoxPainter oldDelegate) =>
-      oldDelegate.box != box;
+      oldDelegate.box != box || oldDelegate.accent != accent;
 }
 
 /// 选区外遮罩；只负责变暗，不参与命中。
@@ -4005,6 +4154,7 @@ class _DimPainter extends CustomPainter {
   _DimPainter({
     required this.cropDisplay,
     required this.showHandles,
+    required this.accent,
     this.windows,
     this.recordingPreview = false,
     this.beautify,
@@ -4020,6 +4170,9 @@ class _DimPainter extends CustomPainter {
 
   final Rect cropDisplay;
   final bool showHandles;
+
+  /// 系统强调色：窗口录制预览的边框与控制点描边（#142）。
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4043,7 +4196,7 @@ class _DimPainter extends CustomPainter {
     }
     if (windows != null) {
       final border = Paint()
-        ..color = NativeGlassTheme.selectionBlue
+        ..color = accent
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1;
       for (final rect in windows!) {
@@ -4056,16 +4209,14 @@ class _DimPainter extends CustomPainter {
   /// canvas为显示坐标画布；绘制边框及八个控制点，不绘制遮罩，文本框共用。
   void paintHandles(Canvas canvas) {
     final border = Paint()
-      ..color = recordingPreview ? NativeGlassTheme.selectionBlue : Colors.white
+      ..color = recordingPreview ? accent : Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawRect(cropDisplay, border);
     if (!showHandles) return;
     const handle = GlassMetrics.cropHandle;
     final fill = Paint()
-      ..color = recordingPreview
-          ? NativeGlassTheme.selectionBlue
-          : Colors.white;
+      ..color = recordingPreview ? accent : Colors.white;
     for (final point in <Offset>[
       cropDisplay.topLeft,
       cropDisplay.topCenter,
@@ -4081,7 +4232,7 @@ class _DimPainter extends CustomPainter {
         point,
         handle / 2,
         Paint()
-          ..color = NativeGlassTheme.selectionBlue
+          ..color = accent
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1,
       );
@@ -4095,7 +4246,8 @@ class _DimPainter extends CustomPainter {
       oldDelegate.beautifyUnit != beautifyUnit ||
       oldDelegate.windows != windows ||
       oldDelegate.cropDisplay != cropDisplay ||
-      oldDelegate.showHandles != showHandles;
+      oldDelegate.showHandles != showHandles ||
+      oldDelegate.accent != accent;
 }
 
 /// 在源图坐标系绘制已提交标注与拖拽预览。
@@ -4306,13 +4458,17 @@ class _FitText extends StatelessWidget {
       if (box.width <= 1 || box.height <= 1) return const SizedBox.shrink();
       // 测量与绘制使用同一合并样式，字体族与 Text 实际渲染一致。
       final style = DefaultTextStyle.of(context).style.merge(_overlayTextStyle);
+      // CharReveal 让新到达的译文逐字显影；字号按完整文字计算，显影不改变排版（#142）。
       return Center(
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          textScaler: TextScaler.noScaling,
+        child: CharReveal(
+          text: text,
           style: style.copyWith(
             fontSize: fitOverlayFontSize(text: text, box: box, style: style),
+          ),
+          builder: (context, span) => Text.rich(
+            span,
+            textAlign: TextAlign.center,
+            textScaler: TextScaler.noScaling,
           ),
         ),
       );

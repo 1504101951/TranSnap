@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
@@ -95,6 +97,8 @@ void main() {
         const MethodCall(MethodNames.appearanceChanged, {
           PreferenceKeys.glassAppearance: 'dark',
           PreferenceKeys.glassOpacity: 0.2,
+          AppearanceKeys.accentLight: 0xFF007AFF,
+          AppearanceKeys.accentDark: 0xFF0A84FF,
         }),
       ),
       (_) {},
@@ -116,6 +120,8 @@ void main() {
         const MethodCall(MethodNames.appearanceChanged, {
           PreferenceKeys.glassAppearance: 'light',
           PreferenceKeys.glassOpacity: 1.0,
+          AppearanceKeys.accentLight: 0xFF953D96,
+          AppearanceKeys.accentDark: 0xFFA550A7,
         }),
       ),
       (_) {},
@@ -124,5 +130,30 @@ void main() {
     expect(Theme.of(context).brightness, Brightness.light);
     expect(Theme.of(context).colorScheme.onSurface, Colors.black);
     expect(find.text('玻璃透明度 60%'), findsOneWidget);
+    // 系统强调色改为紫色后，选中实底取浅色外观解析值，primary 为它与黑 75:25 混合（#142）。
+    expect(NativeGlassTheme.accentOf(context), const Color(0xFF953D96));
+    expect(
+      Theme.of(context).colorScheme.primary,
+      Color.lerp(const Color(0xFF953D96), Colors.black, 0.25),
+    );
+  });
+
+  test('外观快照缺少系统强调色时拒绝，系统蓝时 primary 与原定值一致', () {
+    // 作用：强调色是原生快照的必备字段，缺失说明两端契约不一致，应直接报错而不是悄悄用默认值。
+    // 边界：只缺深色值也拒绝；系统蓝浅色 #007AFF 与黑 75:25 混合约为 #005BC5，深色 #0A84FF 与白 65:35 混合约为 #64ACFF。
+    expect(
+      () => GlassAppearance.fromMap({
+        PreferenceKeys.glassAppearance: 'system',
+        PreferenceKeys.glassOpacity: 0.8,
+        AppearanceKeys.accentLight: 0xFF007AFF,
+      }),
+      throwsFormatException,
+    );
+    final light = NativeGlassTheme.data(Brightness.light).colorScheme.primary;
+    final dark = NativeGlassTheme.data(Brightness.dark).colorScheme.primary;
+    expect((light.r * 255).round(), 0);
+    expect((light.b * 255).round(), closeTo(0xBF, 2));
+    expect((dark.r * 255).round(), closeTo(0x5F, 2));
+    expect((dark.b * 255).round(), 0xFF);
   });
 }

@@ -401,18 +401,21 @@ class NativeGlassDropdown<T> extends StatelessWidget {
 /// 不带字段名称的玻璃菜单按钮；设置行与译文卡片标题区共用同一菜单材料与选项样式。
 class NativeGlassMenuButton<T> extends StatefulWidget {
   /// value/items 是选中值和有序选项；onChanged 为空表示禁用；
-  /// dense 为真时不设最小宽度、左右内边距 6pt，用于截图工具栏编辑器 72pt 宽的组头（#67）。
+  /// dense 为真时不设最小宽度、左右内边距 6pt，用于截图工具栏编辑器 72pt 宽的组头（#67）；
+  /// flat 非空时触发器用该平面装饰代替独立玻璃材料，与周围平面格子同底（#67 原生克制风格）。
   const NativeGlassMenuButton({
     super.key,
     required this.value,
     required this.items,
     required this.onChanged,
     this.dense = false,
+    this.flat,
   });
   final T value;
   final Map<T, String> items;
   final ValueChanged<T>? onChanged;
   final bool dense;
+  final Decoration? flat;
 
   /// 无参数；创建触发器和当前菜单项的焦点状态。
   @override
@@ -470,9 +473,8 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
           minWidth: widget.dense ? 0 : GlassMetrics.dropdownMinWidth,
           maxWidth: GlassMetrics.dropdownMaxWidth,
         ),
-        child: NativeGlassSurface(
-          material: true,
-          child: TextButton(
+        child: _surface(
+          TextButton(
             focusNode: _buttonFocus,
             onPressed: onChanged == null
                 ? null
@@ -503,6 +505,13 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
         ),
       ),
     );
+  }
+
+  /// trigger 为下拉触发按钮；flat 非空时返回平面装饰包装，否则返回独立玻璃材料包装。
+  Widget _surface(Widget trigger) {
+    final flat = widget.flat;
+    if (flat == null) return NativeGlassSurface(material: true, child: trigger);
+    return DecoratedBox(decoration: flat, child: trigger);
   }
 }
 
@@ -748,7 +757,7 @@ class NativeGlassSegments<T> extends StatelessWidget {
                                           ? Colors.white
                                           : colors.onSurface,
                                       backgroundColor: value == option.key
-                                          ? NativeGlassTheme.selectionBlue
+                                          ? NativeGlassTheme.accentOf(context)
                                           : Colors.transparent,
                                       shape: RoundedSuperellipseBorder(
                                         borderRadius: BorderRadius.circular(
@@ -883,7 +892,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: ShapeDecoration(
-            color: NativeGlassTheme.selectionBlue,
+            color: NativeGlassTheme.accentOf(context),
             shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
             ),
@@ -1188,12 +1197,18 @@ class _UniformSliderTrack extends RoundedRectSliderTrackShape {
 
 /// 五类窗口共用的语义主题；材料保持系统原生，内容区域以普通颜色保证可读性。
 abstract final class NativeGlassTheme {
-  /// 分段选中的蓝色与白字固定配对，避免深色主题反转为黑字。
-  static const selectionBlue = Color(0xFF007AFF);
+  /// context 为主题内的位置；返回当前明暗外观下的系统强调色，用于选中实底（配白字）、拖放目标、选区与进度环（#142）。
+  static Color accentOf(BuildContext context) =>
+      Theme.of(context).extension<GlassAccent>()!.color;
 
-  /// brightness 为当前明暗模式；返回统一控件、输入框、卡片与弹窗的 Material 主题。
-  static ThemeData data(Brightness brightness) {
+  /// brightness 为当前明暗模式，appearance 为视觉快照（取对应外观的系统强调色，默认系统蓝）；
+  /// 返回统一控件、输入框、卡片与弹窗的 Material 主题，accent 与 primary 只在这里定义（#67）。
+  static ThemeData data(
+    Brightness brightness, [
+    GlassAppearance appearance = const GlassAppearance(),
+  ]) {
     final dark = brightness == Brightness.dark;
+    final accent = dark ? appearance.accentDark : appearance.accentLight;
     final colors =
         ColorScheme.fromSeed(
           seedColor: const Color(0xFF0A84FF),
@@ -1208,7 +1223,10 @@ abstract final class NativeGlassTheme {
           outlineVariant: dark
               ? const Color(0xFF505050)
               : const Color(0xFFC5C5C5),
-          primary: dark ? const Color(0xFF64ACFF) : const Color(0xFF005BC5),
+          // 文字与图标强调需要比实底更高的对比度：浅色向黑、深色向白混合（系统蓝时约 #005BC5 / #64ACFF）。
+          primary: dark
+              ? Color.lerp(accent, Colors.white, 0.35)
+              : Color.lerp(accent, Colors.black, 0.25),
           onPrimary: dark ? Colors.black : Colors.white,
         );
     final controlShape = RoundedSuperellipseBorder(
@@ -1255,6 +1273,7 @@ abstract final class NativeGlassTheme {
       visualDensity: VisualDensity.standard,
       splashFactory: NoSplash.splashFactory,
       colorScheme: colors,
+      extensions: [GlassAccent(accent)],
       brightness: brightness,
       scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: AppBarTheme(
@@ -1373,7 +1392,7 @@ abstract final class NativeGlassTheme {
         ),
       ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: selectionBlue,
+        activeTrackColor: accent,
         inactiveTrackColor: colors.onSurface.withValues(alpha: 0.20),
         thumbColor: Colors.white,
         trackHeight: GlassMetrics.sliderTrack,
@@ -1425,17 +1444,22 @@ abstract final class NativeGlassTheme {
 
 /// 每个引擎仅持有视觉快照，业务设置仍归主引擎；改变主题不会替换表单或截图状态。
 class GlassAppearance {
-  /// mode 为 system/light/dark；opacity 为材料不透明度0.2–1，前景始终不透明。
+  /// mode 为 system/light/dark；opacity 为材料不透明度0.2–1，前景始终不透明；
+  /// accentLight/accentDark 为浅、深外观下的系统强调色，原生快照到达前为系统蓝（#142）。
   const GlassAppearance({
     this.mode = AppearanceModes.system,
     this.opacity = 0.8,
+    this.accentLight = const Color(0xFF007AFF),
+    this.accentDark = const Color(0xFF0A84FF),
   });
   final String mode;
   final double opacity;
+  final Color accentLight;
+  final Color accentDark;
   static final current = ValueNotifier(const GlassAppearance());
   static const channel = MethodChannel(ChannelNames.appearance);
 
-  /// map 为原生视觉偏好；校验边界后返回不可变配置。
+  /// map 为原生视觉快照（偏好与系统强调色）；校验边界后返回不可变配置，缺少强调色时抛出 FormatException。
   factory GlassAppearance.fromMap(Map<Object?, Object?> map) {
     final mode =
         map[PreferenceKeys.glassAppearance] as String? ??
@@ -1448,7 +1472,17 @@ class GlassAppearance {
         opacity > 1) {
       throw const FormatException('外观模式或玻璃透明度无效。');
     }
-    return GlassAppearance(mode: mode, opacity: opacity);
+    final accentLight = map[AppearanceKeys.accentLight];
+    final accentDark = map[AppearanceKeys.accentDark];
+    if (accentLight is! int || accentDark is! int) {
+      throw const FormatException('外观快照缺少系统强调色。');
+    }
+    return GlassAppearance(
+      mode: mode,
+      opacity: opacity,
+      accentLight: Color(accentLight),
+      accentDark: Color(accentDark),
+    );
   }
 
   /// 无参数；返回Material主题模式，跟随系统由Flutter现有亮度通知驱动。
@@ -1511,8 +1545,8 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
       debugShowCheckedModeBanner: false,
       title: widget.title,
       themeMode: appearance.themeMode,
-      theme: NativeGlassTheme.data(Brightness.light),
-      darkTheme: NativeGlassTheme.data(Brightness.dark),
+      theme: NativeGlassTheme.data(Brightness.light, appearance),
+      darkTheme: NativeGlassTheme.data(Brightness.dark, appearance),
       builder: (context, child) => _GlassAppearanceScope(child: child!),
       home: widget.home,
     ),
@@ -1535,4 +1569,20 @@ class _GlassMaterialScope extends InheritedWidget {
   /// oldWidget为上次作用域；标记恒定，无需通知。
   @override
   bool updateShouldNotify(_GlassMaterialScope oldWidget) => false;
+}
+
+/// 主题携带的系统强调色（#142）；经 NativeGlassTheme.accentOf 读取，明暗切换时随主题插值。
+class GlassAccent extends ThemeExtension<GlassAccent> {
+  /// color 为当前外观下解析的系统强调色。
+  const GlassAccent(this.color);
+  final Color color;
+
+  /// color 为替换值；返回新的强调色扩展。
+  @override
+  GlassAccent copyWith({Color? color}) => GlassAccent(color ?? this.color);
+
+  /// other 为目标主题的扩展，t 为插值进度；返回颜色插值后的扩展。
+  @override
+  GlassAccent lerp(covariant GlassAccent? other, double t) =>
+      other == null ? this : GlassAccent(Color.lerp(color, other.color, t)!);
 }

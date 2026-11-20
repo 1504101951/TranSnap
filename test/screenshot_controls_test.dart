@@ -836,6 +836,61 @@ void main() {
     expect(narrow1.left, narrow0.left);
   });
 
+  testWidgets('子级组从父级按钮液态展开，收起时融合回父级后移除（#142）', (tester) async {
+    // 作用：展开与收起都以父级按钮为起止点，而不是在格位上直接出现或消失。
+    // 边界：切到矩形工具后「截图」的子级进入收起中的组，动画结束即移除；
+    // 切回截图后第 2 帧时「录制」仍在离格位较远处（靠近父级），动画结束后回到格位。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-liquid');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'liquid',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    final record = find.byKey(const Key(ScreenshotActions.record));
+    final settled = tester.getCenter(record);
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('screenshot-closing-group-0')),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(record, findsNothing);
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final crop = tester.getCenter(find.byKey(const Key(ScreenshotActions.crop)));
+    expect(
+      (tester.getCenter(record) - crop).distance,
+      lessThan((settled - crop).distance),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(record), settled);
+  });
+
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));

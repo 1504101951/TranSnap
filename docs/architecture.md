@@ -158,6 +158,11 @@ OCR 由 `ScreenCaptureService.recognizeDocument` 用 Vision 文档识别在原�
 - `OpticalPrismOverlay` 在前景 `IgnorePointer` 叠加层以 Flutter Impeller 片段着色器 `shaders/optical_prism.frag` 绘制随指针受光角偏移的 `1.25pt` 银白倒角与微弱色散（预乘透明度，浅/暗峰值 `0.75`/`0.55`），并在结果完成时播放一次斜向扫光；底层 `AppKitView` 与 `NSGlassEffectView` 不进入着色流程、不重建。
 - `TranslationStatusIcon`、`SpeechWaveIcon`、`VocabularyBookmarkIcon`、`CopyConfirmIcon`、`RecordingPulseIcon` 以纯 Dart `CustomPainter`、`Canvas` 与可控动画控制器驱动状态切换微交互，不依赖原生动画运行库，并保证复制 `1.3s` 确认回弹等有限时长在卸载前自动收敛。
 - Swift 端 `OverlayPanelController` 按 `AppConstants.overlayFadeInDuration`（`0.16s`）与 `overlayResizeAnimationDuration`（`0.24s`）平滑处理非激活翻译浮层的显示渐显与流式尺寸过渡。
+- 系统强调色：`NativeGlassFactory.appearanceSnapshot` 在浅色、深色外观下分别解析 `NSColor.controlAccentColor` 为 sRGB ARGB（`accentLight`、`accentDark`），收到 `NSColor.systemColorsDidChangeNotification` 时沿用 `appearanceChanged` 广播；`GlassAppearance` 携带两份强调色，`NativeGlassTheme.data` 以 `GlassAccent` 主题扩展提供 accent，primary 浅色由强调色与黑按 75:25、深色与白按 65:35 混合，业务代码经 `NativeGlassTheme.accentOf` 读取。
+- `BusyRing` 包在每个截图工具栏按钮外（结构不随等待变化，原生材料不重建），`_busyId` 指向等待中的功能时在按钮外 2pt 处流动 28% 弧段，结束时闭合放大淡出；对应按钮不可见时状态组显示同样的环。
+- `CharReveal` 用一个动画控制器为段内新到达的字生成逐字 `TextSpan` 前景画笔（透明度与模糊），截图译文盖层用 `Text.rich`、翻译卡片译文用 `SelectableText.rich` 排版；追加文字只显影新字。
+- `SelectionFlow` 以 Ticker 累加相位绘制选区周长 22% 的强调色光段（2400ms 一圈，调整选区时 800ms），定下后流两圈并在最后 600ms 淡出，选区、调整状态或工具变化时重新开始。
+- `LiquidSplit` 承载截图工具栏的子级组：按钮挂 `_buttonKeys` 全局键，首帧后测量父级按钮与各按钮中心的位移，用阻尼比 0.62、周期 420ms 的 `SpringSimulation` 按 40ms 错峰把按钮从父级移到格位，移动期间下方液滴经 `ImageFilter.blur` 与透明度阈值 `ColorFilter` 合成粘连；父级收起时 `_syncClosing` 保留原子级为收起中的组，反向播放后由 `onCollapsed` 移除。
 - 全部动效统一遵循系统减少动态效果设置（Dart 读 `MediaQuery.disableAnimationsOf`，Swift 读 `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`），开启后以静态瞬时切换呈现，不另设应用内动效开关。
 
 TranslationProgress 只保存已完成分片、配对和上一片双尾；SelectionSession 持有冻结服务与方向，失败后通过 retry 重发失败片。翻译浮层仍消费统一 TranslationSnapshot，成功后的历史写入沿用主入口的完整结果边界。

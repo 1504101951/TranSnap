@@ -2,7 +2,7 @@
 
 跨模块平台协议、状态、偏好键与界面数值常量。
 
-1. [appearance_modes.dart](appearance_modes.dart)：定义跟随系统、浅色和深色的外观模式标识。
+1. [appearance_modes.dart](appearance_modes.dart)：定义跟随系统、浅色和深色的外观模式标识，以及外观快照中系统强调色的键。
 2. [bridge_event_types.dart](bridge_event_types.dart)：定义原生桥向Dart发送的事件类型名称。
 3. [channel_names.dart](channel_names.dart)：集中定义Flutter平台方法与事件通道名。
 4. [error_codes.dart](error_codes.dart)：集中定义跨平台调用和业务失败的错误码。

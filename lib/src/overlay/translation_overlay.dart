@@ -152,10 +152,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   visualDensity: VisualDensity.standard,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   // 保留主题字体，让中文和系统字体设置使用同一套字形回退。
-                  textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  textStyle: Theme.of(context).textTheme.labelLarge!
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -202,24 +200,14 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       speakSource: false,
       body: busy && snap.translatedText.isEmpty
           ? const GentleShimmerSkeleton(lines: 2)
-          : _paragraphs(
-              pairs,
-              translated: true,
-              large: large,
-              failed: failed,
-            ),
+          : _paragraphs(pairs, translated: true, large: large, failed: failed),
     );
     final sourcePane = _pane(
       paneKey: 'source',
       title: '原文',
       text: snap.sourceText,
       speakSource: true,
-      body: _paragraphs(
-        pairs,
-        translated: false,
-        large: large,
-        failed: false,
-      ),
+      body: _paragraphs(pairs, translated: false, large: large, failed: false),
     );
     // 三种布局：词典（左 2/5 上下分屏、右 3/5 词典）、同语言（只有原文）、普通（左右各半）。
     final Widget body;
@@ -524,36 +512,53 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       spacing: 8,
       children: [
         for (var index = 0; index < pairs.length; index++)
-          GentleReveal(
-            key: ValueKey(
-              '${widget.session.sessionId}-${translated ? 't' : 's'}-$index-${failed ? 'err' : 'ok'}',
+          // 成功的译文逐字显影（CharReveal，#142）；原文与失败段沿用逐段入场与失败轻抖。
+          if (translated && !failed)
+            MouseRegion(
+              key: ValueKey('${widget.session.sessionId}-reveal-$index'),
+              onEnter: (_) => setState(() {
+                _hoveredParagraph = (widget.session.sessionId, index);
+              }),
+              onExit: (_) => setState(() => _hoveredParagraph = null),
+              child: CharReveal(
+                key: ValueKey('translated-paragraph-$index'),
+                text: pairs[index].translation,
+                style: style,
+                builder: (context, span) => SelectableText.rich(span),
+              ),
+            )
+          else
+            GentleReveal(
+              key: ValueKey(
+                '${widget.session.sessionId}-${translated ? 't' : 's'}-$index-${failed ? 'err' : 'ok'}',
+              ),
+              staggerIndex: index.clamp(0, 6),
+              shakeOnError: translated && failed,
+              child: translated
+                  ? MouseRegion(
+                      key: ValueKey('translated-paragraph-$index'),
+                      onEnter: (_) => setState(() {
+                        _hoveredParagraph = (widget.session.sessionId, index);
+                      }),
+                      onExit: (_) => setState(() => _hoveredParagraph = null),
+                      child: SelectableText(
+                        pairs[index].translation,
+                        style: style,
+                      ),
+                    )
+                  : Container(
+                      key: ValueKey('source-paragraph-$index'),
+                      decoration: BoxDecoration(
+                        color:
+                            _hoveredParagraph ==
+                                (widget.session.sessionId, index)
+                            ? colors.primaryContainer
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: SelectableText(pairs[index].source, style: style),
+                    ),
             ),
-            staggerIndex: index.clamp(0, 6),
-            shakeOnError: translated && failed,
-            child: translated
-                ? MouseRegion(
-                    key: ValueKey('translated-paragraph-$index'),
-                    onEnter: (_) => setState(() {
-                      _hoveredParagraph = (widget.session.sessionId, index);
-                    }),
-                    onExit: (_) => setState(() => _hoveredParagraph = null),
-                    child: SelectableText(
-                      pairs[index].translation,
-                      style: style,
-                    ),
-                  )
-                : Container(
-                    key: ValueKey('source-paragraph-$index'),
-                    decoration: BoxDecoration(
-                      color:
-                          _hoveredParagraph == (widget.session.sessionId, index)
-                          ? colors.primaryContainer
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: SelectableText(pairs[index].source, style: style),
-                  ),
-          ),
       ],
     );
   }

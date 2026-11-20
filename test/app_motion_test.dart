@@ -174,6 +174,8 @@ void main() {
     ];
     await tester.pumpWidget(
       MaterialApp(
+        // 侧边栏滑块读取主题中的系统强调色（#142）。
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => NativeGlassSidebar<String>(
@@ -196,5 +198,37 @@ void main() {
     );
     expect(semantics, hasLength(1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('CharReveal 追加文字只显影新到达的字，替换文字整段重新显影，结束后为整段纯文本（#142）', (
+    tester,
+  ) async {
+    // 作用：流式译文逐字显影时已显示的字不再闪烁。
+    // 边界：「你好」显影中追加「世界」后，前缀 2 字合为一段、只有 2 个新字逐字绘制；
+    // 换成不以原文开头的「再见」时 0 个前缀字；单字 260ms 加错峰后（< 1s）回到单个纯文本片段。
+    late TextSpan span;
+    Widget host(String text) => MaterialApp(
+      home: CharReveal(
+        text: text,
+        style: const TextStyle(color: Colors.black),
+        builder: (context, value) {
+          span = value;
+          return Text.rich(value);
+        },
+      ),
+    );
+    await tester.pumpWidget(host('你好'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpWidget(host('你好世界'));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect((span.children!.first as TextSpan).text, '你好');
+    expect(span.children!.length, 1 + 2);
+    await tester.pumpWidget(host('再见'));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect((span.children!.first as TextSpan).text, '');
+    expect(span.children!.length, 1 + 2);
+    await tester.pump(const Duration(seconds: 1));
+    expect(span.children, isNull);
+    expect(span.text, '再见');
   });
 }

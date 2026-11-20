@@ -7,4 +7,4 @@
 3. [native_resize_cursor.dart](native_resize_cursor.dart)：通过截图通道为四角拉伸设置AppKit原生对角光标。
 4. [toolbar_feedback.dart](toolbar_feedback.dart)：在工具栏外侧的可用区域显示保存、成功及错误响应。
 5. [native_brush_cursor.dart](native_brush_cursor.dart)：通过截图通道设置与画笔粗细、颜色一致的原生圆点光标。
-6. [app_motion.dart](app_motion.dart)：提供物理弹簧进场、舒缓链式入场、玻璃骨架扫光、光学棱镜着色器装饰层及纯 Dart 矢量状态机图标。
+6. [app_motion.dart](app_motion.dart)：提供物理弹簧进场、舒缓链式入场、玻璃骨架扫光、光学棱镜着色器装饰层、纯 Dart 矢量状态机图标、等待进度环、译文逐字显影、选区流光与工具栏液态展开。

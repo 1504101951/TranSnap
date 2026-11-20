@@ -345,6 +345,7 @@ void main() {
     var cancelled = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: ColorPicker(
             initial: (color: Colors.black, gradient: null),
@@ -374,6 +375,7 @@ void main() {
     double? result;
     await tester.pumpWidget(
       MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: StrokeWidthPicker(
             initial: 3,
@@ -674,6 +676,7 @@ void main() {
     final results = <ColorFill>[];
     await tester.pumpWidget(
       MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
         home: Scaffold(
           body: ColorPicker(
             initial: (color: Colors.black, gradient: null),

@@ -111,7 +111,7 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             border: Border.all(
-                              color: NativeGlassTheme.selectionBlue,
+                              color: NativeGlassTheme.accentOf(context),
                             ),
                           ),
                         ),

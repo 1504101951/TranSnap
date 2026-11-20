@@ -345,6 +345,8 @@ void main() {
         ),
       ),
     );
+    // 原文逐段滑入、译文逐字显影，入场结束后再比较位置（#142）。
+    await tester.pumpAndSettle();
     expect(find.text('First.'), findsOneWidget);
     expect(find.text('第二段。'), findsOneWidget);
     expect(find.text('完整译文'), findsNothing);
