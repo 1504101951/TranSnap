@@ -150,6 +150,16 @@ OCR 由 `ScreenCaptureService.recognizeDocument` 用 Vision 文档识别在原�
 
 视觉设置与普通偏好一起由主 Dart 引擎提交；Swift 提交后通知每个 NativeGlassFactory，各独立引擎通过 appearance 通道只接收视觉快照。NativeGlassApp 重建主题并保留业务页面，NativeGlassSurface 使用单材料作用域防止嵌套折射。普通窗口由 NativeReadingCanvas 绘制贯穿标题与正文的 sRGB 阅读底色，NativeGlassWindowPage 使用同色且无内部圆角；contentLayoutGuide仅用于避让系统交互安全区。
 
+### 界面动效与光学高光（#142）
+
+界面动效参数集中定义在 `lib/src/common/constants/motion_metrics.dart`（物理弹簧 `420ms` / 阻尼比 `0.62`、舒缓入场 `440ms` / 错峰 `80ms` / 模糊 `4pt`、棱镜 `1.25pt` 银白倒角与 `0.16` 冷暖色散及 `1100ms` 完成扫光），共用组件位于 `lib/src/common/widgets/app_motion.dart`：
+- `AppMotion.bouncy` 使用 `motor` 的 `CupertinoMotion.bouncy(snapToEnd: true)` 驱动 `BouncyPresence`（翻译结果卡、录制目标与动态工具栏行、悬浮控制气泡）与 `NativeGlassSidebar` 的弹簧选中指示滑块；弹簧稳定后锁定精确 `1.0` 且保持同构子树，既消除亚像素变换偏差，也不拆装 `MenuAnchor` 等有状态控件。
+- `GentleReveal` 与 `GentleShimmerSkeleton` 通过带可取消延迟定时器的 `_ControlledAnimate` 驱动 `flutter_animate` 的 `FadeEffect`、`SlideEffect`、`BlurEffect`、`ShakeEffect` 与有限周期 `ShimmerEffect`，分别用于译文/词典段落错峰入场、失败轻抖与首字骨架扫光；承载 `AppKitView` 玻璃气泡的列表条目关闭模糊通道，避免跨层合成冲突。
+- `OpticalPrismOverlay` 在前景 `IgnorePointer` 叠加层以 Flutter Impeller 片段着色器 `shaders/optical_prism.frag` 绘制随指针受光角偏移的 `1.25pt` 银白倒角与微弱色散（预乘透明度，浅/暗峰值 `0.75`/`0.55`），并在结果完成时播放一次斜向扫光；底层 `AppKitView` 与 `NSGlassEffectView` 不进入着色流程、不重建。
+- `TranslationStatusIcon`、`SpeechWaveIcon`、`VocabularyBookmarkIcon`、`CopyConfirmIcon`、`RecordingPulseIcon` 以纯 Dart `CustomPainter`、`Canvas` 与可控动画控制器驱动状态切换微交互，不依赖原生动画运行库，并保证复制 `1.3s` 确认回弹等有限时长在卸载前自动收敛。
+- Swift 端 `OverlayPanelController` 按 `AppConstants.overlayFadeInDuration`（`0.16s`）与 `overlayResizeAnimationDuration`（`0.24s`）平滑处理非激活翻译浮层的显示渐显与流式尺寸过渡。
+- 全部动效统一遵循系统减少动态效果设置（Dart 读 `MediaQuery.disableAnimationsOf`，Swift 读 `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`），开启后以静态瞬时切换呈现，不另设应用内动效开关。
+
 TranslationProgress 只保存已完成分片、配对和上一片双尾；SelectionSession 持有冻结服务与方向，失败后通过 retry 重发失败片。翻译浮层仍消费统一 TranslationSnapshot，成功后的历史写入沿用主入口的完整结果边界。
 
 ### 设置自动保存

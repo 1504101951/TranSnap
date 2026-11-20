@@ -19,6 +19,7 @@ import '../common/constants/method_names.dart';
 import '../common/constants/screenshot_enums.dart';
 import '../common/utils/geometry.dart';
 import '../common/utils/screenshot_filename.dart';
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import '../common/widgets/toolbar_feedback.dart';
 import '../common/widgets/native_brush_cursor.dart';
@@ -2975,30 +2976,39 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
 
     // 每组沿工具栏方向排 6 格（横放为一行、竖放为一列），各组沿交叉方向依次排列；空位留出 32×32pt（#141）。
+    // 插入的子级、属性与状态组带弹簧入场，配置组保持静止（#142）。
     final grid = [
       for (final group in _gridGroups(actions))
-        Flex(
-          key: Key(group.key),
-          direction: axis,
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: [
-                for (final id in group.cells)
-                  if (id == null)
-                    const SizedBox(width: 32, height: 32)
-                  else if (id == _busyCell)
-                    const SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: Icon(Icons.hourglass_top, size: 14),
-                    )
-                  else
-                    button(
-                      id,
-                      badge: group.slots ? _toolbar.shortcutLabel(id) : null,
-                    ),
-          ],
-        ),
+        (() {
+          final row = Flex(
+            key: Key(group.key),
+            direction: axis,
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [
+              for (final id in group.cells)
+                if (id == null)
+                  const SizedBox(width: 32, height: 32)
+                else if (id == _busyCell)
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Icon(Icons.hourglass_top, size: 14),
+                  )
+                else
+                  button(
+                    id,
+                    badge: group.slots ? _toolbar.shortcutLabel(id) : null,
+                  ),
+            ],
+          );
+          if (group.slots) return row;
+          return BouncyPresence(
+            key: ValueKey('presence-${group.key}'),
+            fromScale: 0.90,
+            child: row,
+          );
+        })(),
     ];
 
     /// label为提示与可访问名称，icon为图标，selected为选择状态；返回32pt独立材料按钮。
@@ -3033,18 +3043,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ),
     );
 
-    /// key为行身份、children为按钮；返回沿当前工具栏方向可滚动的32pt操作行。
-    Widget captureRow(String key, List<Widget> children) =>
-        SingleChildScrollView(
-          key: Key(key),
-          scrollDirection: axis,
-          child: Flex(
-            direction: axis,
-            mainAxisSize: MainAxisSize.min,
-            spacing: 4,
-            children: children,
-          ),
-        );
+    /// key为行身份、children为按钮；返回沿当前工具栏方向可滚动的32pt操作行，附加行启用物理弹簧入场（#142）。
+    Widget captureRow(String key, List<Widget> children) => BouncyPresence(
+      key: ValueKey('presence-$key'),
+      fromScale: 0.92,
+      child: SingleChildScrollView(
+        key: Key(key),
+        scrollDirection: axis,
+        child: Flex(
+          direction: axis,
+          mainAxisSize: MainAxisSize.min,
+          spacing: 4,
+          children: children,
+        ),
+      ),
+    );
     final beautify = _beautify;
     // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
     final beautifyControls = <Widget>[

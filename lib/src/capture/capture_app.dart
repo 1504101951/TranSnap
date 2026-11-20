@@ -9,6 +9,7 @@ import '../common/constants/channel_names.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/screenshot_filename.dart';
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import '../common/widgets/toolbar_feedback.dart';
 
@@ -172,6 +173,7 @@ class _CaptureAppState extends State<CaptureApp> {
           CapturePhase.scrolling,
           CapturePhase.paused,
         ].contains(_phase);
+    final countdown = _state['countdown'] as int?;
     final status = label;
 
     /// description为上方提示，child为状态或操作；返回不共享外壳的32pt玻璃气泡。
@@ -188,45 +190,78 @@ class _CaptureAppState extends State<CaptureApp> {
       ),
     );
 
-    /// description为提示与可访问名，icon为操作图标，action为空时禁用；返回明确命中尺寸的按钮。
-    Widget action(String description, IconData icon, VoidCallback? action) =>
-        SizedBox.square(
-          dimension: GlassMetrics.hitSize,
-          child: bubble(
-            description,
-            IconButton(
-              onPressed: action,
-              padding: EdgeInsets.zero,
-              icon: Icon(
-                icon,
-                size: GlassMetrics.icon,
-                semanticLabel: description,
-              ),
+    /// index 为错峰序号，description 为提示与可访问名，icon 为操作图标，action 为空时禁用；返回明确命中尺寸的按钮。
+    Widget action(
+      int index,
+      String description,
+      IconData icon,
+      VoidCallback? action,
+    ) => GentleReveal(
+      key: ValueKey('capture-bubble-$index'),
+      staggerIndex: index,
+      blur: false,
+      child: SizedBox.square(
+        dimension: GlassMetrics.hitSize,
+        child: bubble(
+          description,
+          IconButton(
+            onPressed: action,
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              icon,
+              size: GlassMetrics.icon,
+              semanticLabel: description,
             ),
           ),
-        );
+        ),
+      ),
+    );
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
-          child: bubble(
-            status,
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: GlassMetrics.buttonMinWidth,
-                maxWidth: 196,
-                minHeight: GlassMetrics.hitSize,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Center(
-                  widthFactor: 1,
-                  heightFactor: 1,
-                  child: Text(
-                    status,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          child: GentleReveal(
+            key: const ValueKey('capture-bubble-0'),
+            staggerIndex: 0,
+            blur: false,
+            child: bubble(
+              status,
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: GlassMetrics.buttonMinWidth,
+                  maxWidth: 196,
+                  minHeight: GlassMetrics.hitSize,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Center(
+                    widthFactor: 1,
+                    heightFactor: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (countdown != null ||
+                            _phase == CapturePhase.recording ||
+                            _phase == CapturePhase.paused) ...[
+                          RecordingPulseIcon(
+                            countdown: countdown,
+                            active: _phase == CapturePhase.recording,
+                            paused: paused,
+                            pulseKey: _state['elapsed'],
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Flexible(
+                          child: Text(
+                            status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -235,6 +270,7 @@ class _CaptureAppState extends State<CaptureApp> {
         ),
         const SizedBox(width: 4),
         action(
+          1,
           paused ? '开始' : '暂停',
           paused ? Icons.play_arrow : Icons.pause,
           editable
@@ -243,12 +279,13 @@ class _CaptureAppState extends State<CaptureApp> {
         ),
         const SizedBox(width: 4),
         action(
+          2,
           '结束',
           Icons.stop,
           editable ? () => _invoke(MethodNames.stopCapture) : null,
         ),
         const SizedBox(width: 4),
-        action('放弃', Icons.close, _pending ? null : _discard),
+        action(3, '放弃', Icons.close, _pending ? null : _discard),
       ],
     );
   }

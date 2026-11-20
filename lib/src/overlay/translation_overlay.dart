@@ -4,6 +4,7 @@ import '../common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 
 import '../selection/selection_session.dart';
@@ -56,139 +57,220 @@ class TranslationOverlay extends StatefulWidget {
   State<TranslationOverlay> createState() => _TranslationOverlayState();
 }
 
-/// 根据会话呈现触发按钮或结果；仅持有段落悬停状态，翻译由会话管理。
+/// 根据会话呈现触发按钮或结果；持有段落悬停与轻量微交互状态，翻译由会话管理。
 class _TranslationOverlayState extends State<TranslationOverlay> {
   (String?, int)? _hoveredParagraph;
+  TranslationPhase? _lastPhase;
+  String? _lastSessionId;
+  int _sweepCount = 0;
+  String? _speakingKey;
+  final Map<String, int> _copyTriggers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _syncSessionState();
+    widget.session.addListener(_onSessionChanged);
+  }
+
+  @override
+  void didUpdateWidget(TranslationOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) {
+      oldWidget.session.removeListener(_onSessionChanged);
+      widget.session.addListener(_onSessionChanged);
+      _syncSessionState();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  void _onSessionChanged() {
+    if (!mounted) return;
+    setState(_syncSessionState);
+  }
+
+  /// 会话标识或阶段跃迁时复位局部微交互态，并在完成翻译瞬间触发一次表面光学扫光（#142）。
+  void _syncSessionState() {
+    final phase = widget.session.snapshot.phase;
+    final id = widget.session.sessionId;
+    if (_lastSessionId != id || phase == TranslationPhase.idle) {
+      _lastSessionId = id;
+      _speakingKey = null;
+      _copyTriggers.clear();
+    }
+    if (_lastPhase != phase) {
+      _lastPhase = phase;
+      if (phase == TranslationPhase.completed) {
+        _sweepCount += 1;
+      }
+      if (phase == TranslationPhase.translating ||
+          phase == TranslationPhase.idle) {
+        _speakingKey = null;
+      }
+    }
+  }
 
   /// context 提供主题；返回随会话更新的单按钮或结果卡片。
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.session,
-      builder: (context, _) {
-        final snap = widget.session.snapshot;
-        final definition = widget.session.definition;
-        // 已校验的语义段落成对展示；没有配对时整段作为一对。词典释义单独成栏。
-        final pairs = snap.pairs.isEmpty
-            ? [TranslationPair(snap.sourceText, snap.translatedText)]
-            : snap.pairs;
-        if (snap.phase == TranslationPhase.idle) {
-          return const SizedBox.shrink();
-        }
-        if (snap.phase == TranslationPhase.trigger) {
-          // 触发态整块区域就是按钮，拖动手势胜出时不会误发翻译请求。
-          return Center(
-            child: GestureDetector(
-              onPanStart: (_) => widget.onDrag(),
-              child: NativeGlassSurface(
-                material: true,
-                radius: GlassMetrics.primaryRadius,
-                child: FilledButton(
-                  onPressed: widget.onActivate,
-                  style: FilledButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: TranslationOverlay.triggerSize,
-                    fixedSize: TranslationOverlay.triggerSize,
-                    alignment: Alignment.center,
-                    visualDensity: VisualDensity.standard,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    // 保留主题字体，让中文和系统字体设置使用同一套字形回退。
-                    textStyle: Theme.of(context).textTheme.labelLarge!
-                        .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(Icons.translate_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('翻译', textAlign: TextAlign.center),
-                    ],
+    final snap = widget.session.snapshot;
+    final definition = widget.session.definition;
+    // 已校验的语义段落成对展示；没有配对时整段作为一对。词典释义单独成栏。
+    final pairs = snap.pairs.isEmpty
+        ? [TranslationPair(snap.sourceText, snap.translatedText)]
+        : snap.pairs;
+    if (snap.phase == TranslationPhase.idle) {
+      return const SizedBox.shrink();
+    }
+    if (snap.phase == TranslationPhase.trigger) {
+      // 触发态整块区域就是按钮，拖动手势胜出时不会误发翻译请求。
+      return Center(
+        child: BouncyPresence(
+          key: ValueKey('trigger-${widget.session.sessionId}'),
+          fromScale: 0.88,
+          child: GestureDetector(
+            onPanStart: (_) => widget.onDrag(),
+            child: NativeGlassSurface(
+              material: true,
+              radius: GlassMetrics.primaryRadius,
+              child: FilledButton(
+                onPressed: widget.onActivate,
+                style: FilledButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: TranslationOverlay.triggerSize,
+                  fixedSize: TranslationOverlay.triggerSize,
+                  alignment: Alignment.center,
+                  visualDensity: VisualDensity.standard,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  // 保留主题字体，让中文和系统字体设置使用同一套字形回退。
+                  textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-            ),
-          );
-        }
-
-        final busy = snap.phase == TranslationPhase.translating;
-        final mode = widget.session.mode;
-        final modeLabel = TranslationOverlay.modeLabels[mode]!;
-        final title = switch (snap.phase) {
-          TranslationPhase.translating => '$modeLabel中…',
-          TranslationPhase.failed => snap.message ?? '$modeLabel失败',
-          TranslationPhase.sizeLimited => snap.message ?? '选区过长',
-          _ => mode == TextMode.translate ? '双语对照' : '$modeLabel结果',
-        };
-        final colors = Theme.of(context).colorScheme;
-        // 服务菜单：本卡片选用的服务，未选择时为默认服务（#100）。
-        final choices = widget.session.serviceChoices();
-        final currentService =
-            widget.session.serviceOverride ??
-            choices.firstWhere((choice) => choice.isDefault).id;
-        final resultLabel = mode == TextMode.translate ? '译文' : modeLabel;
-        // 查到词典时左侧译文与原文用 18/26 大字号，否则正文 14/22（#134）。
-        final large = definition != null;
-        final resultPane = _pane(
-          title: resultLabel,
-          text: snap.translatedText,
-          speakSource: false,
-          body: _paragraphs(pairs, translated: true, large: large),
-        );
-        final sourcePane = _pane(
-          title: '原文',
-          text: snap.sourceText,
-          speakSource: true,
-          body: _paragraphs(pairs, translated: false, large: large),
-        );
-        // 三种布局：词典（左 2/5 上下分屏、右 3/5 词典）、同语言（只有原文）、普通（左右各半）。
-        final Widget body;
-        if (definition != null) {
-          body = Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Column(
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Expanded(child: resultPane),
-                    const Divider(),
-                    Expanded(child: sourcePane),
+                    Icon(Icons.translate_rounded, size: 16),
+                    SizedBox(width: 6),
+                    Text('翻译', textAlign: TextAlign.center),
                   ],
                 ),
               ),
-              const VerticalDivider(width: 1),
-              Expanded(
-                flex: 3,
-                // 词典栏朗读原文单词作为发音，复制释义原文。
-                child: _pane(
-                  title: '词典',
-                  text: definition,
-                  speakSource: true,
-                  vocabulary: snap.phase == TranslationPhase.completed,
-                  body: DictionaryDefinitionView(definition: definition),
-                ),
-              ),
-            ],
-          );
-        } else if (widget.session.sourceIsTarget) {
-          body = sourcePane;
-        } else {
-          body = Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: resultPane),
-              const VerticalDivider(width: 1),
-              Expanded(child: sourcePane),
-            ],
-          );
-        }
-        return NativeGlassSurface(
+            ),
+          ),
+        ),
+      );
+    }
+
+    final busy = snap.phase == TranslationPhase.translating;
+    final failed =
+        snap.phase == TranslationPhase.failed ||
+        snap.phase == TranslationPhase.sizeLimited;
+    final mode = widget.session.mode;
+    final modeLabel = TranslationOverlay.modeLabels[mode]!;
+    final title = switch (snap.phase) {
+      TranslationPhase.translating => '$modeLabel中…',
+      TranslationPhase.failed => snap.message ?? '$modeLabel失败',
+      TranslationPhase.sizeLimited => snap.message ?? '选区过长',
+      _ => mode == TextMode.translate ? '双语对照' : '$modeLabel结果',
+    };
+    final colors = Theme.of(context).colorScheme;
+    // 服务菜单：本卡片选用的服务，未选择时为默认服务（#100）。
+    final choices = widget.session.serviceChoices();
+    final currentService =
+        widget.session.serviceOverride ??
+        choices.firstWhere((choice) => choice.isDefault).id;
+    final resultLabel = mode == TextMode.translate ? '译文' : modeLabel;
+    // 查到词典时左侧译文与原文用 18/26 大字号，否则正文 14/22（#134）。
+    final large = definition != null;
+    final resultPane = _pane(
+      paneKey: 'result',
+      title: resultLabel,
+      text: snap.translatedText,
+      speakSource: false,
+      body: busy && snap.translatedText.isEmpty
+          ? const GentleShimmerSkeleton(lines: 2)
+          : _paragraphs(
+              pairs,
+              translated: true,
+              large: large,
+              failed: failed,
+            ),
+    );
+    final sourcePane = _pane(
+      paneKey: 'source',
+      title: '原文',
+      text: snap.sourceText,
+      speakSource: true,
+      body: _paragraphs(
+        pairs,
+        translated: false,
+        large: large,
+        failed: false,
+      ),
+    );
+    // 三种布局：词典（左 2/5 上下分屏、右 3/5 词典）、同语言（只有原文）、普通（左右各半）。
+    final Widget body;
+    if (definition != null) {
+      body = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              children: [
+                Expanded(child: resultPane),
+                const Divider(),
+                Expanded(child: sourcePane),
+              ],
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            flex: 3,
+            // 词典栏朗读原文单词作为发音，复制释义原文。
+            child: _pane(
+              paneKey: 'dictionary',
+              title: '词典',
+              text: definition,
+              speakSource: true,
+              vocabulary: snap.phase == TranslationPhase.completed,
+              body: DictionaryDefinitionView(definition: definition),
+            ),
+          ),
+        ],
+      );
+    } else if (widget.session.sourceIsTarget) {
+      body = sourcePane;
+    } else {
+      body = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: resultPane),
+          const VerticalDivider(width: 1),
+          Expanded(child: sourcePane),
+        ],
+      );
+    }
+    return BouncyPresence(
+      key: ValueKey('card-${widget.session.sessionId}'),
+      fromScale: 0.94,
+      child: OpticalPrismOverlay(
+        radius: GlassMetrics.panelRadius,
+        sweepTrigger: _sweepCount,
+        child: NativeGlassSurface(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -216,17 +298,11 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                                     color: colors.onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 8),
-                                  if (busy)
-                                    const Padding(
-                                      padding: EdgeInsets.only(right: 8),
-                                      child: SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
+                                  TranslationStatusIcon(
+                                    phase: snap.phase,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       title,
@@ -290,7 +366,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                       const SizedBox(width: 6),
                       _CardButton(
                         tooltip: '关闭',
-                        icon: Icons.close,
+                        icon: const Icon(Icons.close),
                         onPressed: widget.onDismiss,
                         visual: 28,
                         radius: GlassMetrics.controlRadius,
@@ -315,14 +391,15 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  /// title 为栏名，text 为该栏可朗读与复制的全文，speakSource 为朗读原文（true）或结果（false），
+  /// paneKey 区分栏内局部状态，title 为栏名，text 为该栏可朗读与复制的全文，speakSource 为朗读原文（true）或结果（false），
   /// vocabulary 为是否在栏头最前显示「加入生词本」，body 为可滚动正文；返回 28pt 栏头加独立滚动正文的一栏。
   Widget _pane({
+    required String paneKey,
     required String title,
     required String text,
     required bool speakSource,
@@ -330,26 +407,40 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     bool vocabulary = false,
   }) {
     final saved = widget.session.savedToVocabulary;
+    final speaking = _speakingKey == paneKey;
+    final copyTrigger = _copyTriggers[paneKey] ?? 0;
     final actions = [
       // 查到释义且翻译完成后可加入生词本；本卡片加入后改为已加入并禁用（#102）。
       if (vocabulary)
         (
           saved ? '已加入生词本' : '加入生词本',
-          saved ? Icons.bookmark_added : Icons.bookmark_add_outlined,
+          VocabularyBookmarkIcon(saved: saved, size: 14),
           saved ? null : widget.onAddVocabulary,
         ),
       // 朗读与复制在栏为空时禁用。
       (
         '朗读$title',
-        Icons.volume_up_rounded,
-        text.isEmpty ? null : () => widget.onSpeak(speakSource),
+        SpeechWaveIcon(speaking: speaking, size: 14),
+        text.isEmpty
+            ? null
+            : () {
+                setState(() {
+                  _speakingKey = speaking ? null : paneKey;
+                });
+                widget.onSpeak(speakSource);
+              },
       ),
       (
         '复制$title',
-        Icons.copy_rounded,
+        CopyConfirmIcon(trigger: copyTrigger, size: 14),
         text.isEmpty
             ? null
-            : () => Clipboard.setData(ClipboardData(text: text)),
+            : () {
+                Clipboard.setData(ClipboardData(text: text));
+                setState(() {
+                  _copyTriggers[paneKey] = copyTrigger + 1;
+                });
+              },
       ),
     ];
     return Column(
@@ -413,12 +504,13 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
   }
 
-  /// pairs 为已校验的段落配对，translated 选择译文（true）或原文（false），large 为词典布局的 18/26 字号；
+  /// pairs 为已校验的段落配对，translated 选择译文（true）或原文（false），large 为词典布局的 18/26 字号，failed 触发失败轻抖；
   /// 返回段间距 8pt 的段落列，悬停译文段落时高亮对应原文段落。
   Widget _paragraphs(
     List<TranslationPair> pairs, {
     required bool translated,
     required bool large,
+    required bool failed,
   }) {
     final colors = Theme.of(context).colorScheme;
     final style = TextStyle(
@@ -432,26 +524,36 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       spacing: 8,
       children: [
         for (var index = 0; index < pairs.length; index++)
-          translated
-              ? MouseRegion(
-                  key: ValueKey('translated-paragraph-$index'),
-                  onEnter: (_) => setState(() {
-                    _hoveredParagraph = (widget.session.sessionId, index);
-                  }),
-                  onExit: (_) => setState(() => _hoveredParagraph = null),
-                  child: SelectableText(pairs[index].translation, style: style),
-                )
-              : Container(
-                  key: ValueKey('source-paragraph-$index'),
-                  decoration: BoxDecoration(
-                    color:
-                        _hoveredParagraph == (widget.session.sessionId, index)
-                        ? colors.primaryContainer
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
+          GentleReveal(
+            key: ValueKey(
+              '${widget.session.sessionId}-${translated ? 't' : 's'}-$index-${failed ? 'err' : 'ok'}',
+            ),
+            staggerIndex: index.clamp(0, 6),
+            shakeOnError: translated && failed,
+            child: translated
+                ? MouseRegion(
+                    key: ValueKey('translated-paragraph-$index'),
+                    onEnter: (_) => setState(() {
+                      _hoveredParagraph = (widget.session.sessionId, index);
+                    }),
+                    onExit: (_) => setState(() => _hoveredParagraph = null),
+                    child: SelectableText(
+                      pairs[index].translation,
+                      style: style,
+                    ),
+                  )
+                : Container(
+                    key: ValueKey('source-paragraph-$index'),
+                    decoration: BoxDecoration(
+                      color:
+                          _hoveredParagraph == (widget.session.sessionId, index)
+                          ? colors.primaryContainer
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SelectableText(pairs[index].source, style: style),
                   ),
-                  child: SelectableText(pairs[index].source, style: style),
-                ),
+          ),
       ],
     );
   }
@@ -459,7 +561,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
 
 /// 卡片中的玻璃图标按钮：中心绘制 visual×visual 的可见按钮，外围 32×32 命中区同样触发动作。
 class _CardButton extends StatelessWidget {
-  /// tooltip 为提示与可访问名，icon 为图标，onPressed 为空表示禁用；visual、radius、iconSize 为可见尺寸、圆角与图标边长。
+  /// tooltip 为提示与可访问名，icon 为图标组件，onPressed 为空表示禁用；visual、radius、iconSize 为可见尺寸、圆角与图标边长。
   const _CardButton({
     required this.tooltip,
     required this.icon,
@@ -469,7 +571,7 @@ class _CardButton extends StatelessWidget {
     required this.iconSize,
   });
   final String tooltip;
-  final IconData icon;
+  final Widget icon;
   final VoidCallback? onPressed;
   final double visual;
   final double radius;
@@ -500,7 +602,7 @@ class _CardButton extends StatelessWidget {
               padding: EdgeInsets.zero,
               constraints: BoxConstraints.tight(Size.square(visual)),
               iconSize: iconSize,
-              icon: Icon(icon),
+              icon: icon,
             ),
           ),
         ),

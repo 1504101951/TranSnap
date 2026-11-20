@@ -527,6 +527,9 @@ enum AppConstants {
     static let mcpNoWindowAtPointMessage = "No app window at that point."
     /// 操作已执行但附带截图失败时追加的说明。
     static let mcpScreenshotUnavailableMessage = "Screenshot unavailable: grant Screen Recording permission."
+    /// 非激活翻译浮层缩放与淡入动画时长，单位秒（#67、#142）。
+    static let overlayResizeAnimationDuration: TimeInterval = 0.24
+    static let overlayFadeInDuration: TimeInterval = 0.16
     /// 操控会话的时长上限与空闲上限，单位秒（#140：30 分钟、5 分钟）。
     static let controlSessionLimit: TimeInterval = 30 * 60
     static let controlIdleLimit: TimeInterval = 5 * 60

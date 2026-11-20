@@ -13,6 +13,8 @@ dependencies:
   characters: ^1.4.1
   crypto: ^3.0.7
   sqlite3: ^3.6.0
+  motor: ^1.1.0
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:
@@ -21,3 +23,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - shaders/optical_prism.frag

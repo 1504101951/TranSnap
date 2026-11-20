@@ -68,7 +68,20 @@ final class OverlayPanelController {
         panel.setFrame(frame, display: true)
         if NSApp.isHidden { NSApp.unhideWithoutActivation() }
         // 显示和交互都不调用 activate / makeKey，键盘继续留在来源应用。
-        if captureHidden { capturedSessionId = sessionId } else { panel.orderFrontRegardless() }
+        if captureHidden {
+            capturedSessionId = sessionId
+        } else if !panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = AppConstants.overlayFadeInDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        } else {
+            panel.alphaValue = 1
+            panel.orderFrontRegardless()
+        }
     }
 
     /// sessionId 标识要关闭的会话；过期指令不影响当前窗口，无返回值。
@@ -76,6 +89,7 @@ final class OverlayPanelController {
         guard currentSessionId == sessionId else { return }
         currentSessionId = nil
         dragStartEvent = nil
+        panel.alphaValue = 1
         panel.orderOut(nil)
     }
 
@@ -91,7 +105,15 @@ final class OverlayPanelController {
             frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - size.width)
             frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - size.height)
         }
-        panel.setFrame(frame, display: true)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.setFrame(frame, display: true)
+        } else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = AppConstants.overlayResizeAnimationDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(frame, display: true)
+            }
+        }
     }
 
     /// hidden 表示系统正在框选；临时排除翻译浮层，完成后只恢复仍有效的会话，无返回值。

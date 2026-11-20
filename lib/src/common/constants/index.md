@@ -27,3 +27,4 @@
 22. [shortcut_keys.dart](shortcut_keys.dart)：定义全局快捷键的修饰键位、键码、组合规则与提示文案。
 23. [emoji_catalog.dart](emoji_catalog.dart)：定义贴纸下拉框按类别分组的 Unicode 标准 Emoji。
 24. [toolbar_grid.dart](toolbar_grid.dart)：定义截图工具栏网格的列组合修饰键位、每列格数、最大列数、默认列与数字行物理键映射。
+25. [motion_metrics.dart](motion_metrics.dart)：定义界面物理弹簧、舒缓链式入场、光学棱镜高光与矢量状态机的规格数值。

@@ -8,7 +8,8 @@
 2. [lib/](lib/index.md)：Flutter应用入口与Dart业务模块。
 3. [macos/](macos/index.md)：macOS原生代码、Xcode工程、构建配置与测试。
 4. [scripts/](scripts/index.md)：macOS固定签名打包与安装脚本。
-5. [test/](test/index.md)：Dart业务逻辑和Flutter界面行为回归测试。
+5. [shaders/](shaders/index.md)：Flutter Impeller GPU 片段着色器资源。
+6. [test/](test/index.md)：Dart业务逻辑和Flutter界面行为回归测试。
 6. [.gitignore](.gitignore)：定义构建产物、缓存及本机配置的Git忽略范围。
 7. [.metadata](.metadata)：记录Flutter项目类型和工具维护元数据。
 8. [AGENTS.md](AGENTS.md)：规定智能体的文档阅读、规格同步、目录索引和交付权限。

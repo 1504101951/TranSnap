@@ -10,6 +10,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:motor/motor.dart';
+
+import 'app_motion.dart';
 
 /// 普通窗口的连续阅读底色；四角由AppKit统一裁剪，Flutter只绘制内容，不另画面板。
 class NativeGlassWindowPage extends StatelessWidget {
@@ -811,44 +814,105 @@ class NativeGlassSidebar<T> extends StatelessWidget {
   final List<NativeGlassSidebarSection<T>> sections;
   final ValueChanged<T> onChanged;
 
-  /// context 提供主题；返回固定宽度的导航列，内容超出窗口高度时在侧边栏内滚动。
+  /// 无参数；计算当前选中项在列表内容坐标系中的纵向起点与高度，未命中时返回 null。
+  ({double top, double height})? _selectedGeometry() {
+    var top = 0.0;
+    for (final section in sections) {
+      if (section.value != null && section.value == value) {
+        return (top: top, height: GlassMetrics.sidebarSectionHeight);
+      }
+      top += GlassMetrics.sidebarSectionHeight;
+      for (final child in section.children.keys) {
+        if (child == value) {
+          return (top: top, height: GlassMetrics.sidebarItemHeight);
+        }
+        top += GlassMetrics.sidebarItemHeight;
+      }
+    }
+    return null;
+  }
+
+  /// context 提供主题；返回固定宽度的导航列，选中滑块由 Bouncy 物理弹簧驱动（#142）。
   @override
-  Widget build(BuildContext context) => NativeGlassSurface(
-    material: true,
-    radius: 0,
-    child: SizedBox(
-      width: GlassMetrics.sidebarWidth,
-      height: double.infinity,
-      child: ListView(
-        padding: const EdgeInsets.all(GlassMetrics.sidebarPadding),
-        children: [
-          for (final section in sections) ...[
-            // 一级行：可选中的分组直接是子页，其余只作标签。
+  Widget build(BuildContext context) {
+    final selection = _selectedGeometry();
+    final reduced = AppMotion.reduced(context);
+    final rows = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in sections) ...[
+          // 一级行：可选中的分组直接是子页，其余只作标签。
+          _row(
+            context,
+            height: GlassMetrics.sidebarSectionHeight,
+            indent: 0,
+            icon: section.icon,
+            label: section.title,
+            bold: true,
+            target: section.value,
+          ),
+          for (final child in section.children.entries)
             _row(
               context,
-              height: GlassMetrics.sidebarSectionHeight,
-              indent: 0,
-              icon: section.icon,
-              label: section.title,
-              bold: true,
-              target: section.value,
+              height: GlassMetrics.sidebarItemHeight,
+              indent: GlassMetrics.sidebarItemIndent,
+              label: child.value,
+              target: child.key,
             ),
-            for (final child in section.children.entries)
-              _row(
-                context,
-                height: GlassMetrics.sidebarItemHeight,
-                indent: GlassMetrics.sidebarItemIndent,
-                label: child.value,
-                target: child.key,
-              ),
-          ],
         ],
+      ],
+    );
+    Widget indicator(double top, double height) => Positioned(
+      left: 0,
+      right: 0,
+      top: top,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: NativeGlassTheme.selectionBlue,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+            ),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+    return NativeGlassSurface(
+      material: true,
+      radius: 0,
+      child: SizedBox(
+        width: GlassMetrics.sidebarWidth,
+        height: double.infinity,
+        child: ListView(
+          padding: const EdgeInsets.all(GlassMetrics.sidebarPadding),
+          children: [
+            Stack(
+              children: [
+                if (selection != null && reduced)
+                  indicator(selection.top, selection.height)
+                else if (selection != null)
+                  SingleMotionBuilder(
+                    value: selection.top,
+                    motion: AppMotion.bouncy(context),
+                    builder: (context, animatedTop, _) => SingleMotionBuilder(
+                      value: selection.height,
+                      motion: AppMotion.bouncy(context),
+                      builder: (context, animatedHeight, _) =>
+                          indicator(animatedTop, animatedHeight),
+                    ),
+                  ),
+                rows,
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// height/indent 为行高与左缩进，icon/label/bold 为行内容，target 为点选后切换到的子页；
-  /// target 为空时返回不可点选的标签行，否则返回带选中蓝底与按下反馈的按钮行。
+  /// target 为空时返回不可点选的标签行，否则返回透明背景按钮行（由底层弹簧滑块呈现选中蓝底）。
   Widget _row(
     BuildContext context, {
     required double height,
@@ -900,9 +964,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
             padding: EdgeInsets.only(left: indent + GlassMetrics.iconGap),
             alignment: Alignment.centerLeft,
             foregroundColor: selected ? Colors.white : colors.onSurface,
-            backgroundColor: selected
-                ? NativeGlassTheme.selectionBlue
-                : Colors.transparent,
+            backgroundColor: Colors.transparent,
             shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
             ),
