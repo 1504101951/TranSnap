@@ -147,6 +147,21 @@ enum AppConstants {
     /// 语言识别直接采用首位结果的最低置信度；低于它时只在前若干名中取用户语言。
     static let languageDetectionConfidence = 0.5
     static let languageDetectionCandidates = 3
+    /// 语言识别先验权重（#1）：可识别语言基准 1，热门语言 3，用户语言 30；短文本优先判为用户语言，特征明确的其他语言不受影响。
+    /// 用户语言需为热门的 10 倍：只放大热门层时，同在热门层的法语会与英语抢短文本。
+    static let languageDetectionBaseWeight = 1.0
+    static let languageDetectionPopularWeight = 3.0
+    static let languageDetectionUserWeight = 30.0
+    /// 热门语言（识别器语言码）：英、简中、繁中、日、韩、法、德、西、葡、俄、意。
+    static let languageDetectionPopular = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "fr", "de", "es", "pt", "ru", "it"]
+    /// NLLanguageRecognizer 可识别的全部语言码（57 种）。给出先验后未列出的语言几乎不会被识别出来，
+    /// 系统新增可识别语言时须补入此表。
+    static let languageDetectionAll = [
+        "am", "ar", "hy", "bn", "bg", "my", "ca", "chr", "hr", "cs", "da", "nl", "en", "fi", "fr", "ka", "de", "el", "gu",
+        "he", "hi", "hu", "is", "id", "it", "ja", "kn", "kk", "km", "ko", "lo", "ms", "ml", "mr", "mn-Mong", "nb", "or",
+        "fa", "pl", "pt", "pa-Guru", "ro", "ru", "zh-Hans", "si", "sk", "es", "sv", "ta", "te", "th", "bo", "zh-Hant",
+        "tr", "uk", "ur", "vi",
+    ]
     /// recordingShowsClicks 协议值；区域与显示器录制是否由系统绘制鼠标点击高亮，Dart 设置写入、开始录制时读取（#110）。与Dart常量同步。
     static let recordingShowsClicksKey = "recordingShowsClicks"
     /// scrollCaptureMode 偏好键；长截图滚动方式 manual/automatic，开始长截图时读取（#112），与Dart常量同步。

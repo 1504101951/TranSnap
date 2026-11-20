@@ -1,6 +1,7 @@
 import Cocoa
 import CoreImage
 import ImageIO
+import NaturalLanguage
 import UniformTypeIdentifiers
 import FlutterMacOS
 import ServiceManagement
@@ -1255,6 +1256,30 @@ class RunnerTests: XCTestCase {
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user), "en")
         XCTAssertNil(LanguageDetection.resolve(
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: ["en", "fr"]))
+    }
+
+    /// 无参数；用真实识别器验证先验（#1）：短英文不再被判成相近语言，特征明确的外语仍按原语言。
+    /// 边界：Animation duration 无先验时法语 0.54 已达直接采用阈值；Control center 无先验时罗马尼亚语排第二；
+    /// 罗马尼亚语、意大利语、日语短句来自热门层内外两侧，确认先验不会把它们拉成用户语言。
+    func testLanguageDetectionHintsFavorUserLanguages() {
+        let user = ["zh-CN", "en"]
+        XCTAssertEqual(LanguageDetection.detect("Animation duration", preferred: user), "en")
+        XCTAssertEqual(LanguageDetection.detect("Control center", preferred: user), "en")
+        XCTAssertEqual(LanguageDetection.detect("Durata animației", preferred: user), "ro")
+        XCTAssertEqual(LanguageDetection.detect("Impostazioni avanzate", preferred: user), "it")
+        XCTAssertEqual(LanguageDetection.detect("設定を開く", preferred: user), "ja")
+    }
+
+    /// 无参数；验证先验权重的分层与用户语言码换算（#1）。
+    /// 边界：zh-CN 换算为 zh-Hans、pt-BR 换算为 pt；未登记的 xx 被忽略；表外语言没有权重。
+    func testLanguageDetectionHintWeights() {
+        let hints = LanguageDetection.hints(preferred: ["zh-CN", "pt-BR", "xx"])
+        XCTAssertEqual(hints[NLLanguage("zh-Hans")], AppConstants.languageDetectionUserWeight)
+        XCTAssertEqual(hints[NLLanguage("pt")], AppConstants.languageDetectionUserWeight)
+        XCTAssertEqual(hints[NLLanguage("en")], AppConstants.languageDetectionPopularWeight)
+        XCTAssertEqual(hints[NLLanguage("ro")], AppConstants.languageDetectionBaseWeight)
+        XCTAssertNil(hints[NLLanguage("xx")])
+        XCTAssertEqual(hints.count, AppConstants.languageDetectionAll.count)
     }
 
     /// 无参数；只有带主机名的 http/https 内容可交给浏览器，协议大小写不敏感，其他协议与无协议文字返回 nil（#108）。

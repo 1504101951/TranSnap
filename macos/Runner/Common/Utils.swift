@@ -83,17 +83,40 @@ enum AppPreferences {
     }
 }
 
-/// 设备语言识别：短文本置信度低时在前几名里取用户语言，中文按字形判断简繁（#1）。
+/// 设备语言识别：按用户语言与热门语言给先验，短文本置信度低时在前几名里取用户语言，中文按字形判断简繁（#1）。
 enum LanguageDetection {
-    /// text 为待识别原文；返回语言码（如 en、zh-Hans），无法判断时为 nil。用户语言取自已保存的偏好。
-    static func detect(_ text: String) -> String? {
+    /// text 为待识别原文，preferred 为用户语言码（如 zh-CN、en），默认取已保存的偏好；
+    /// 返回语言码（如 en、zh-Hans），无法判断时为 nil。
+    static func detect(_ text: String, preferred: [String]? = nil) -> String? {
+        let preferred = preferred ?? {
+            let preferences = AppPreferences.current
+            return AppConstants.userLanguageKeys.compactMap { preferences[$0] as? String }
+        }()
         let recognizer = NLLanguageRecognizer()
+        // 先验让短文本（如 Animation duration）不被判成法语、罗马尼亚语等相近语言。
+        recognizer.languageHints = hints(preferred: preferred)
         recognizer.processString(text)
         let hypotheses = recognizer.languageHypotheses(withMaximum: AppConstants.languageDetectionCandidates)
             .map { (code: $0.key.rawValue, confidence: $0.value) }
-        let preferences = AppPreferences.current
-        let preferred = AppConstants.userLanguageKeys.compactMap { preferences[$0] as? String }
         return resolve(hypotheses: hypotheses, text: text, preferred: preferred)
+    }
+
+    /// preferred 为用户语言码（如 zh-CN、en）；返回识别器先验：全部可识别语言为基准权重，热门语言与用户语言依次加权。
+    /// 用户语言码按识别器写法换算（中文取 zh-Hans/zh-Hant，其余取语言部分），不在可识别表中的忽略。
+    static func hints(preferred: [String]) -> [NLLanguage: Double] {
+        var weights = Dictionary(uniqueKeysWithValues: AppConstants.languageDetectionAll.map {
+            (NLLanguage(rawValue: $0), AppConstants.languageDetectionBaseWeight)
+        })
+        for code in AppConstants.languageDetectionPopular {
+            weights[NLLanguage(rawValue: code)] = AppConstants.languageDetectionPopularWeight
+        }
+        for code in preferred {
+            // chineseScript 给出中文的简繁字形；非中文取语言部分（pt-BR → pt）。
+            let identifier = chineseScript(code).map { "zh-\($0)" } ?? Locale.Language(identifier: code).languageCode?.identifier
+            guard let identifier, AppConstants.languageDetectionAll.contains(identifier) else { continue }
+            weights[NLLanguage(rawValue: identifier)] = AppConstants.languageDetectionUserWeight
+        }
+        return weights
     }
 
     /// hypotheses 为识别器的前几名（语言码与置信度），text 为原文，preferred 为用户设置的语言码（如 zh-CN、en）；
