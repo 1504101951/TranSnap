@@ -400,16 +400,19 @@ class NativeGlassDropdown<T> extends StatelessWidget {
 
 /// 不带字段名称的玻璃菜单按钮；设置行与译文卡片标题区共用同一菜单材料与选项样式。
 class NativeGlassMenuButton<T> extends StatefulWidget {
-  /// value/items 是选中值和有序选项；onChanged 为空表示禁用。
+  /// value/items 是选中值和有序选项；onChanged 为空表示禁用；
+  /// dense 为真时不设最小宽度、左右内边距 6pt，用于截图工具栏编辑器 72pt 宽的组头（#67）。
   const NativeGlassMenuButton({
     super.key,
     required this.value,
     required this.items,
     required this.onChanged,
+    this.dense = false,
   });
   final T value;
   final Map<T, String> items;
   final ValueChanged<T>? onChanged;
+  final bool dense;
 
   /// 无参数；创建触发器和当前菜单项的焦点状态。
   @override
@@ -463,8 +466,8 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
         ),
       ],
       builder: (context, controller, _) => ConstrainedBox(
-        constraints: const BoxConstraints(
-          minWidth: GlassMetrics.dropdownMinWidth,
+        constraints: BoxConstraints(
+          minWidth: widget.dense ? 0 : GlassMetrics.dropdownMinWidth,
           maxWidth: GlassMetrics.dropdownMaxWidth,
         ),
         child: NativeGlassSurface(
@@ -477,11 +480,21 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
                       ? controller.close()
                       : controller.open(),
             style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.dense ? 6 : 10,
+                vertical: 5,
+              ),
             ),
             child: Row(
               children: [
-                Expanded(child: Text(items[value]!, textAlign: TextAlign.left)),
+                Expanded(
+                  child: Text(
+                    items[value]!,
+                    textAlign: TextAlign.left,
+                    maxLines: widget.dense ? 1 : null,
+                    overflow: widget.dense ? TextOverflow.ellipsis : null,
+                  ),
+                ),
                 const SizedBox(width: 6),
                 const Icon(Icons.unfold_more, size: 12),
               ],

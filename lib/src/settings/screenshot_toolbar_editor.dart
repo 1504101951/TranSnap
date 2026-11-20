@@ -7,8 +7,8 @@ import '../common/constants/toolbar_grid.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_toolbar_preferences.dart';
 
-/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格」）：每列一种修饰键组合、6 个格位，格位即快捷键；
-/// 拖动工具到格位获得键位，同格交换；选中可承载子级的工具后在网格下方编辑其子级；仅修改偏好，不注册全局热键。
+/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格编辑器」）：每组一行，左侧组头选修饰键组合，6 个紧凑格位从左到右，格位即快捷键；
+/// 整格拖到格位获得键位，同格交换；选中可承载子级的工具后在网格下方编辑其子级；仅修改偏好，不注册全局热键。
 class ScreenshotToolbarEditor extends StatefulWidget {
   const ScreenshotToolbarEditor({
     super.key,
@@ -26,11 +26,19 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   /// 与已启用系统快捷键相同的格位；放了工具时标红提示系统优先，不阻止保存（#141）。
   final Set<({int modifiers, int digit})> systemSlots;
 
-  /// 格子宽高、圆角与间距（#67）。
-  static const cellWidth = 152.0;
-  static const cellHeight = 56.0;
+  /// 格子宽高与间距、组头宽与组头到格子的间距、行间距（#67）。
+  static const cellWidth = 64.0;
+  static const cellHeight = 64.0;
   static const cellGap = 4.0;
-  static const columnGap = 8.0;
+  static const headerWidth = 72.0;
+  static const headerGap = 8.0;
+  static const rowGap = 8.0;
+
+  /// 格内名称与键位字号，眼睛图标与命中区（#67）。
+  static const labelFont = 11.0;
+  static const keyFont = 10.0;
+  static const eyeIcon = 14.0;
+  static const eyeHit = 20.0;
 
   /// 子级列表的行最小高度（#67）。
   static const childRowHeight = 40.0;
@@ -48,7 +56,7 @@ class ScreenshotToolbarEditor extends StatefulWidget {
       _ScreenshotToolbarEditorState();
 }
 
-/// 格位坐标：column 为列下标，slot 为格下标（0–5）。
+/// 格位坐标：column 为组下标，slot 为格下标（0–5）。
 typedef _Slot = ({int column, int slot});
 
 class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
@@ -61,7 +69,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
   final Map<String, FocusNode> _handles = {};
 
-  /// 各列拖拽手柄的焦点；按列组合保存（组合各列唯一），列移动后焦点仍跟随该列。
+  /// 各组拖拽手柄的焦点；按组合保存（组合各组唯一），组移动后焦点仍跟随该组。
   final Map<int, FocusNode> _columnHandles = {};
 
   /// 无参数；释放手柄焦点。
@@ -164,11 +172,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return _value.copyWith(columns: columns, children: children);
   }
 
-  /// id 为格位中的功能，dx/dy 为方向键位移；与相邻格交换（列内上下、跨列左右），越界不动。
-  void _moveByKey(String id, int dx, int dy) {
+  /// id 为格位中的功能，dColumn/dSlot 为方向键位移（上下跨组、左右在组内）；与相邻格交换，越界不动。
+  void _moveByKey(String id, int dColumn, int dSlot) {
     final from = _slotOf(id)!;
-    final column = from.column + dx;
-    final slot = from.slot + dy;
+    final column = from.column + dColumn;
+    final slot = from.slot + dSlot;
     if (column < 0 ||
         column >= _value.columns.length ||
         slot < 0 ||
@@ -199,7 +207,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// 无参数；用第一个未使用的组合新增一列空列，已有 8 列时不出现入口。
+  /// 无参数；用第一个未使用的组合新增一个空组，已有 8 组时不出现入口。
   void _addColumn() {
     final used = {for (final column in _value.columns) column.modifiers};
     final modifiers = ToolbarModifiers.allowed.firstWhere(
@@ -218,26 +226,26 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// from 为被移动的列下标，to 为目标位置；把该列移到 to，其余列依次让位。
-  /// 组合与格位随列移动，各工具快捷键不变，只改变工具栏上的排列（#141）。
+  /// from 为被移动的组下标，to 为目标位置；把该组移到 to，其余组依次让位。
+  /// 组合与格位随组移动，各工具快捷键不变，只改变工具栏上的排列（#141）。
   void _moveColumn(int from, int to) {
     if (from == to || to < 0 || to >= _value.columns.length) return;
     final modifiers = _value.columns[from].modifiers;
     final columns = [..._value.columns];
     columns.insert(to, columns.removeAt(from));
     _submit(_value.copyWith(columns: columns));
-    // 列重建后把焦点交回该列的手柄，便于连续用方向键移动。
+    // 组重建后把焦点交回该组的手柄，便于连续用方向键移动。
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _columnHandles[modifiers]?.requestFocus(),
     );
   }
 
-  /// column 为列下标；删除空列，后续列前移。
+  /// column 为组下标；删除空组，后续组前移。
   void _removeColumn(int column) {
     _submit(_value.copyWith(columns: [..._value.columns]..removeAt(column)));
   }
 
-  /// column 为列下标，modifiers 为新组合；改变该列的组合，格位与工具不变。
+  /// column 为组下标，modifiers 为新组合；改变该组的组合，格位与工具不变。
   void _setModifiers(int column, int modifiers) {
     final columns = [..._value.columns];
     columns[column] = ToolbarColumn(modifiers, columns[column].slots);
@@ -256,7 +264,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// context 为页面主题；网格超出宽度时在页内横向滚动，子级列表随设置正文滚动。
+  /// context 为页面主题；每组一行自上而下，超出宽度时在页内横向滚动，子级列表随设置正文滚动。
   @override
   Widget build(BuildContext context) {
     final selected = _selected != null && _slotOf(_selected!) != null
@@ -274,9 +282,9 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         SingleChildScrollView(
           key: const ValueKey('toolbar-grid'),
           scrollDirection: Axis.horizontal,
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: ScreenshotToolbarEditor.columnGap,
+            spacing: ScreenshotToolbarEditor.rowGap,
             children: [
               for (final (index, column) in _value.columns.indexed)
                 _column(context, index, column),
@@ -286,7 +294,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   child: TextButton(
                     key: const ValueKey('toolbar-add-column'),
                     onPressed: _addColumn,
-                    child: const Text('添加列'),
+                    child: const Text('添加组'),
                   ),
                 ),
             ],
@@ -300,7 +308,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// index 为列下标，column 为该列；返回列头（组合下拉、空列的删除入口）与 6 个格子。
+  /// index 为组下标，column 为该组；返回可接收拖来的组的一行：组头与 6 个格子。
   Widget _column(BuildContext context, int index, ToolbarColumn column) {
     final used = {
       for (final other in _value.columns)
@@ -308,9 +316,9 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     };
     final empty = column.slots.every((slot) => slot == null);
     final label = column.modifiers == 0
-        ? '无修饰列'
-        : '${ToolbarModifiers.label(column.modifiers)} 列';
-    // 列作为落点：拖来的列移到本列位置，落点一侧显示竖线（左移在左侧、右移在右侧）（#67）。
+        ? '无修饰组'
+        : '${ToolbarModifiers.label(column.modifiers)} 组';
+    // 组作为落点：拖来的组移到本组位置，落点一侧显示横线（上移在上方、下移在下方）（#67）。
     return DragTarget<int>(
       key: ValueKey('toolbar-column-$index'),
       onWillAcceptWithDetails: (details) => details.data != index,
@@ -326,8 +334,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             border: from == null
                 ? null
                 : from < index
-                ? Border(right: side)
-                : Border(left: side),
+                ? Border(bottom: side)
+                : Border(top: side),
           ),
           child: _columnBody(context, index, column, used, empty, label),
         );
@@ -335,8 +343,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// index/column 为列下标与列，used 为其他列已用组合，empty 为该列是否没有工具，label 为列名称；
-  /// 返回列头（拖拽手柄、组合下拉、空列的删除入口）与 6 个格子。
+  /// index/column 为组下标与组，used 为其他组已用组合，empty 为该组是否没有工具，label 为组名称；
+  /// 返回组头（组合下拉在上，拖动手柄与空组删除入口在下）与从左到右的 6 个格子。
   Widget _columnBody(
     BuildContext context,
     int index,
@@ -347,7 +355,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   ) {
     final handle = SizedBox(
       width: GlassMetrics.hitSize,
-      height: GlassMetrics.buttonHeight,
+      height: GlassMetrics.hitSize,
       child: Builder(
         builder: (context) => Icon(
           Icons.drag_indicator,
@@ -358,102 +366,118 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         ),
       ),
     );
-    return SizedBox(
-      width: ScreenshotToolbarEditor.cellWidth,
+    final header = SizedBox(
+      width: ScreenshotToolbarEditor.headerWidth,
+      height: ScreenshotToolbarEditor.cellHeight,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        spacing: ScreenshotToolbarEditor.cellGap,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
             height: GlassMetrics.buttonHeight,
-            child: Row(
-              children: [
-                // 列拖拽手柄：鼠标拖到其他列上移动本列；聚焦后左右方向键移动（#67）。
-                Semantics(
-                  label: '移动$label',
-                  onIncrease: () => _moveColumn(index, index + 1),
-                  onDecrease: () => _moveColumn(index, index - 1),
-                  child: Focus(
-                    focusNode: _columnHandles.putIfAbsent(
-                      column.modifiers,
-                      FocusNode.new,
-                    ),
-                    onKeyEvent: (node, event) {
-                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                      final delta = switch (event.logicalKey) {
-                        LogicalKeyboardKey.arrowLeft => -1,
-                        LogicalKeyboardKey.arrowRight => 1,
-                        _ => 0,
-                      };
-                      if (delta == 0) return KeyEventResult.ignored;
-                      _moveColumn(index, index + delta);
-                      return KeyEventResult.handled;
-                    },
-                    child: Builder(
-                      builder: (context) => Tooltip(
-                        message: '拖动调整$label的位置，快捷键不变',
-                        child: Listener(
-                          onPointerDown: (_) =>
-                              Focus.of(context).requestFocus(),
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.grab,
-                            child: Draggable<int>(
-                              key: ValueKey('drag-column-$index'),
-                              data: index,
-                              feedback: Material(
-                                color: Colors.transparent,
-                                child: Opacity(
-                                  opacity:
-                                      ScreenshotToolbarEditor.draggingOpacity,
-                                  child: Text(label),
-                                ),
-                              ),
-                              childWhenDragging: Opacity(
+            child: NativeGlassMenuButton<int>(
+              key: ValueKey('toolbar-modifiers-$index'),
+              dense: true,
+              value: column.modifiers,
+              // 其他组已用的组合不可选，保证各组组合不重复。
+              items: {
+                for (final modifiers in ToolbarModifiers.allowed)
+                  if (!used.contains(modifiers))
+                    modifiers: modifiers == 0
+                        ? '无修饰'
+                        : ToolbarModifiers.label(modifiers),
+              },
+              onChanged: (modifiers) => _setModifiers(index, modifiers),
+            ),
+          ),
+          Row(
+            children: [
+              // 组拖拽手柄：鼠标拖到其他组上移动本组；聚焦后上下方向键移动（#67）。
+              Semantics(
+                label: '移动$label',
+                onIncrease: () => _moveColumn(index, index + 1),
+                onDecrease: () => _moveColumn(index, index - 1),
+                child: Focus(
+                  focusNode: _columnHandles.putIfAbsent(
+                    column.modifiers,
+                    FocusNode.new,
+                  ),
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                    final delta = switch (event.logicalKey) {
+                      LogicalKeyboardKey.arrowUp => -1,
+                      LogicalKeyboardKey.arrowDown => 1,
+                      _ => 0,
+                    };
+                    if (delta == 0) return KeyEventResult.ignored;
+                    _moveColumn(index, index + delta);
+                    return KeyEventResult.handled;
+                  },
+                  child: Builder(
+                    builder: (context) => Tooltip(
+                      message: '拖动调整$label的位置，快捷键不变',
+                      child: Listener(
+                        onPointerDown: (_) => Focus.of(context).requestFocus(),
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: Draggable<int>(
+                            key: ValueKey('drag-column-$index'),
+                            data: index,
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: Opacity(
                                 opacity:
                                     ScreenshotToolbarEditor.draggingOpacity,
-                                child: handle,
+                                child: Text(label),
                               ),
+                            ),
+                            childWhenDragging: Opacity(
+                              opacity: ScreenshotToolbarEditor.draggingOpacity,
                               child: handle,
                             ),
+                            child: handle,
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                Expanded(
-                  child: NativeGlassMenuButton<int>(
-                    key: ValueKey('toolbar-modifiers-$index'),
-                    value: column.modifiers,
-                    // 其他列已用的组合不可选，保证各列组合不重复。
-                    items: {
-                      for (final modifiers in ToolbarModifiers.allowed)
-                        if (!used.contains(modifiers))
-                          modifiers: modifiers == 0
-                              ? '无修饰'
-                              : ToolbarModifiers.label(modifiers),
-                    },
-                    onChanged: (modifiers) => _setModifiers(index, modifiers),
+              ),
+              if (empty)
+                IconButton(
+                  key: ValueKey('toolbar-remove-column-$index'),
+                  tooltip: '删除组',
+                  constraints: const BoxConstraints.tightFor(
+                    width: GlassMetrics.hitSize,
+                    height: GlassMetrics.hitSize,
                   ),
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.close, size: GlassMetrics.icon),
+                  onPressed: () => _removeColumn(index),
                 ),
-                if (empty)
-                  IconButton(
-                    key: ValueKey('toolbar-remove-column-$index'),
-                    tooltip: '删除列',
-                    icon: const Icon(Icons.close, size: GlassMetrics.icon),
-                    onPressed: () => _removeColumn(index),
-                  ),
-              ],
-            ),
+            ],
           ),
-          for (final (slot, id) in column.slots.indexed)
-            _cell(context, (column: index, slot: slot), column.modifiers, id),
         ],
       ),
     );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        header,
+        const SizedBox(width: ScreenshotToolbarEditor.headerGap),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: ScreenshotToolbarEditor.cellGap,
+          children: [
+            for (final (slot, id) in column.slots.indexed)
+              _cell(context, (column: index, slot: slot), column.modifiers, id),
+          ],
+        ),
+      ],
+    );
   }
 
-  /// at 为格位，modifiers 为所在列组合，id 为格中功能（空格为 null）；返回可放下的格子。
+  /// at 为格位，modifiers 为所在组组合，id 为格中功能（空格为 null）；返回可放下的格子。
   Widget _cell(BuildContext context, _Slot at, int modifiers, String? id) {
     final key = '${ToolbarModifiers.label(modifiers)}${at.slot + 1}';
     final slot = (modifiers: modifiers, digit: at.slot + 1);
@@ -486,14 +510,23 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
               ? BorderSide(color: colors.primary)
               : BorderSide.none,
         );
+        // 空格居中显示键位，被全局快捷键占用时注明用途，长说明在格内换行。
         final content = id == null
             ? CustomPaint(
                 painter: _DashedBorder(colors.outlineVariant),
                 child: Center(
-                  child: Text(
-                    reservedFor == null ? key : '$key 已用于$reservedFor',
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: colors.onSurfaceVariant),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Text(
+                      reservedFor == null ? key : '$key 已用于$reservedFor',
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ScreenshotToolbarEditor.keyFont,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ),
               )
@@ -513,8 +546,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id 为格中功能，key 为格位键位文字，conflict 为与系统快捷键冲突；返回拖拽手柄、图标、名称与键位、眼睛按钮。
-  /// 点按可承载子级的工具时选中它，网格下方显示其子级。
+  /// id 为格中功能，key 为格位键位文字，conflict 为与系统快捷键冲突；返回可整格拖动的紧凑格：
+  /// 自上而下为图标、名称与键位，右上角为眼睛按钮。点按可承载子级的工具时选中它，网格下方显示其子级。
   Widget _toolCell(
     BuildContext context,
     String id,
@@ -524,59 +557,83 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
     final colors = Theme.of(context).colorScheme;
+    final body = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          ScreenshotActions.icons[id],
+          size: GlassMetrics.icon,
+          color: visible ? null : colors.onSurfaceVariant,
+        ),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ScreenshotToolbarEditor.labelFont,
+            color: visible ? null : colors.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          key,
+          key: ValueKey('toolbar-key-$id'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ScreenshotToolbarEditor.keyFont,
+            color: conflict
+                ? ScreenshotToolbarEditor.conflictRed
+                : colors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
     final cell = GestureDetector(
       key: ValueKey('toolbar-cell-$id'),
       behavior: HitTestBehavior.opaque,
       onTap: ScreenshotActions.composable[id]!.hostsChildren
           ? () => setState(() => _selected = _selected == id ? null : id)
           : null,
-      child: Row(
+      child: Stack(
         children: [
-          _handle(
-            context,
-            id,
-            label,
-            onKey: (logical) => switch (logical) {
-              LogicalKeyboardKey.arrowUp => () => _moveByKey(id, 0, -1),
-              LogicalKeyboardKey.arrowDown => () => _moveByKey(id, 0, 1),
-              LogicalKeyboardKey.arrowLeft => () => _moveByKey(id, -1, 0),
-              LogicalKeyboardKey.arrowRight => () => _moveByKey(id, 1, 0),
-              _ => null,
-            },
-          ),
-          Icon(ScreenshotActions.icons[id], size: GlassMetrics.icon),
-          const SizedBox(width: GlassMetrics.actionGap),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: visible ? null : colors.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  key,
-                  key: ValueKey('toolbar-key-$id'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: conflict
-                        ? ScreenshotToolbarEditor.conflictRed
-                        : colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: body,
             ),
           ),
-          _eye(id, label, visible),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: _eye(
+              id,
+              label,
+              visible,
+              size: ScreenshotToolbarEditor.eyeIcon,
+              hit: ScreenshotToolbarEditor.eyeHit,
+            ),
+          ),
         ],
       ),
     );
+    // 整格作为拖拽来源；方向键上下跨组、左右在组内与相邻格交换。
+    final draggable = _handle(
+      context,
+      id,
+      label,
+      onKey: (logical) => switch (logical) {
+        LogicalKeyboardKey.arrowUp => () => _moveByKey(id, -1, 0),
+        LogicalKeyboardKey.arrowDown => () => _moveByKey(id, 1, 0),
+        LogicalKeyboardKey.arrowLeft => () => _moveByKey(id, 0, -1),
+        LogicalKeyboardKey.arrowRight => () => _moveByKey(id, 0, 1),
+        _ => null,
+      },
+      child: cell,
+    );
     // 与系统快捷键冲突时悬停说明系统优先（#67）。
-    return conflict ? Tooltip(message: '与系统快捷键冲突，系统优先', child: cell) : cell;
+    return conflict
+        ? Tooltip(message: '与系统快捷键冲突，系统优先', child: draggable)
+        : draggable;
   }
 
   /// parent 为选中的父级；返回「〈名称〉的子级」列表，可拖入拖出网格与排序。
@@ -684,20 +741,22 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id/label 为功能与名称，onKey 把方向键映射为移动动作（不处理时返回 null）；
-  /// 返回 32×32 拖拽手柄：鼠标拖动放到格位或子级列表，聚焦后方向键移动，提供可访问性调整动作。
+  /// id/label 为功能与名称，onKey 把方向键映射为移动动作（不处理时返回 null），
+  /// child 为拖拽来源的外观（格位中的整格），为空时使用 32×32 拖拽图标（子级列表行）；
+  /// 返回拖拽来源：鼠标拖动放到格位或子级列表，聚焦后方向键移动并显示 2pt 焦点描边，提供可访问性调整动作。
   Widget _handle(
     BuildContext context,
     String id,
     String label, {
     required VoidCallback? Function(LogicalKeyboardKey key) onKey,
+    Widget? child,
   }) {
     final handle = Builder(
       builder: (context) {
         final focused = Focus.of(context).hasFocus;
         return Container(
-          width: GlassMetrics.hitSize,
-          height: GlassMetrics.hitSize,
+          width: child == null ? GlassMetrics.hitSize : null,
+          height: child == null ? GlassMetrics.hitSize : null,
           decoration: ShapeDecoration(
             shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
@@ -709,7 +768,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   : BorderSide.none,
             ),
           ),
-          child: const Icon(Icons.drag_handle, size: GlassMetrics.icon),
+          child:
+              child ?? const Icon(Icons.drag_handle, size: GlassMetrics.icon),
         );
       },
     );
@@ -757,16 +817,20 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id/label 为功能与名称，visible 为当前可见性；返回切换显示的眼睛按钮（#67）。
-  Widget _eye(String id, String label, bool visible) => Semantics(
+  /// id/label 为功能与名称，visible 为当前可见性，size/hit 为图标与命中区边长（格内为紧凑尺寸）；
+  /// 返回切换显示的眼睛按钮（#67）。
+  Widget _eye(
+    String id,
+    String label,
+    bool visible, {
+    double size = 18,
+    double hit = GlassMetrics.hitSize,
+  }) => Semantics(
     toggled: visible,
     child: IconButton(
       key: ValueKey('visibility-$id'),
       tooltip: '${visible ? '隐藏' : '显示'} $label',
-      constraints: const BoxConstraints.tightFor(
-        width: GlassMetrics.hitSize,
-        height: GlassMetrics.hitSize,
-      ),
+      constraints: BoxConstraints.tightFor(width: hit, height: hit),
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         backgroundColor: Colors.transparent,
@@ -775,7 +839,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             ? NativeGlassTheme.selectionBlue
             : const Color(0xFF929292),
       ),
-      icon: Icon(visible ? Icons.visibility : Icons.visibility_off, size: 18),
+      icon: Icon(visible ? Icons.visibility : Icons.visibility_off, size: size),
       onPressed: () => _toggleVisible(id),
     ),
   );

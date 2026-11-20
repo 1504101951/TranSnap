@@ -318,10 +318,10 @@ void main() {
       );
     });
 
-    testWidgets('拖动列头手柄调整列顺序，组合与格位随列移动、快捷键不变；方向键左右移动列', (tester) async {
-      // 作用：只改变工具栏上的列排列，不改变任何工具的快捷键（用户确认）。
-      // 边界：把 ⌘ 列（第 2 列）拖到第 1 列上 → 顺序变为 ⌘、无、⌥，画笔仍是 ⌘1、光标仍是 1；
-      // 聚焦 ⌘ 列手柄按右方向键 → 回到第 2 列；最左列再按左方向键不动。
+    testWidgets('拖动组头手柄调整组顺序，组合与格位随组移动、快捷键不变；方向键上下移动组', (tester) async {
+      // 作用：只改变工具栏上的组排列，不改变任何工具的快捷键（用户确认）。
+      // 边界：把 ⌘ 组（第 2 行）拖到第 1 行上 → 顺序变为 ⌘、无、⌥，画笔仍是 ⌘1、光标仍是 1；
+      // 聚焦 ⌘ 组手柄按下方向键 → 回到第 2 行；最上一行再按上方向键不动。
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
       await drag(
         tester,
@@ -334,10 +334,10 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('drag-column-0')));
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
       expect(saved().columns.map((c) => c.modifiers), [cmd, 0, opt]);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       expect(saved().columns.map((c) => c.modifiers), [0, cmd, opt]);
       expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
@@ -374,9 +374,9 @@ void main() {
       expect(saved().columns[2].slots[3], isNull);
     });
 
-    testWidgets('添加列用第一个未使用的组合，只有空列可删除，组合下拉不含其他列已用的组合', (tester) async {
-      // 作用：列组合不重复由编辑器入口保证。
-      // 边界：默认已用无、⌘、⌥，新列为 ⌃；有工具的列没有删除入口。
+    testWidgets('添加组用第一个未使用的组合，只有空组可删除，组合下拉不含其他组已用的组合', (tester) async {
+      // 作用：组合不重复由编辑器入口保证。
+      // 边界：默认已用无、⌘、⌥，新组为 ⌃；有工具的组没有删除入口。
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
       expect(
         find.byKey(const ValueKey('toolbar-remove-column-0')),
@@ -441,7 +441,7 @@ void main() {
 
     testWidgets('隐藏保留格位与键位；方向键与相邻格交换', (tester) async {
       // 作用：隐藏不改变快捷键；键盘可以完成排列。
-      // 边界：隐藏光标后仍是 1；聚焦光标手柄按下方向键与第 2 格「截图」交换，按右方向键移到 ⌘ 列同一格。
+      // 边界：隐藏光标后仍是 1；聚焦光标格按右方向键与同组第 2 格「截图」交换，按下方向键移到 ⌘ 组同一格。
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
       await tester.tap(
         find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
@@ -454,11 +454,11 @@ void main() {
         find.byKey(const ValueKey('drag-${ScreenshotActions.cursor}')),
       );
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       expect(saved().shortcutLabel(ScreenshotActions.cursor), '2');
       expect(saved().shortcutLabel(ScreenshotActions.crop), '1');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       expect(saved().shortcutLabel(ScreenshotActions.cursor), '⌘2');
     });

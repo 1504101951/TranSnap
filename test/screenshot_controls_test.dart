@@ -772,6 +772,69 @@ void main() {
     );
   });
 
+  testWidgets('工具栏每行两组两端对齐，三级行插在父级所在行之后，放不下时每行一组（#141）', (tester) async {
+    // 作用：两组并排节省厚度；录制目标等附加行紧跟父级所在行，不落到工具栏最底部。
+    // 边界：默认 3 组时无修饰组与 ⌘ 组同行，⌘ 组右缘贴工具栏右内边距 8pt，两组间距不小于 12pt，⌥ 组在下一行；
+    // 截图（无修饰第 2 格）的子级组与录制目标行依次插在第一行与 ⌥ 组之间；
+    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 452pt，改为每行一组。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-lines');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'lines',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    // rect 取某个键的全局矩形。
+    Rect rect(String key) => tester.getRect(find.byKey(Key(key)));
+    final toolbar = rect('screenshot-toolbar');
+    final group0 = rect('screenshot-grid-group-0');
+    final group1 = rect('screenshot-grid-group-1');
+    final group2 = rect('screenshot-grid-group-2');
+    expect(group1.top, group0.top);
+    expect(group1.right, toolbar.right - 8);
+    expect(group1.left - group0.right, greaterThanOrEqualTo(12));
+    expect(group2.top, greaterThan(group0.top));
+    expect(group2.left, group0.left);
+    final children = rect('screenshot-children-group-0');
+    expect(children.top, greaterThan(group0.top));
+    expect(children.top, lessThan(group2.top));
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
+    await tester.pumpAndSettle();
+    final targets = rect('recording-targets-row');
+    expect(targets.top, greaterThan(rect('screenshot-children-group-0').top));
+    expect(targets.top, lessThan(rect('screenshot-grid-group-2').top));
+
+    tester.view.physicalSize = const Size(400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
+    final narrow0 = rect('screenshot-grid-group-0');
+    final narrow1 = rect('screenshot-grid-group-1');
+    expect(narrow1.top, greaterThan(narrow0.top));
+    expect(narrow1.left, narrow0.left);
+  });
+
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
@@ -821,7 +884,7 @@ void main() {
     await tester.pumpAndSettle();
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
     // 关闭在无修饰组第 2 格、截图在 ⌘ 组第 2 格：同一格序号，所在组先后决定位置（#141）。
-    // 横放时组为行，关闭在截图上方；竖放时组为列，关闭在截图左侧。
+    // 两组并排时横放关闭在截图左侧、竖放在上方；改为每行一组时横放在上方、竖放在左侧。
     final close = tester.getTopLeft(
       find.byKey(const Key(ScreenshotActions.close)),
     );
@@ -833,7 +896,17 @@ void main() {
             .widget<Flex>(find.byKey(const Key('screenshot-grid-group-0')))
             .direction ==
         Axis.horizontal;
-    expect(horizontal ? close.dy < crop.dy : close.dx < crop.dx, isTrue);
+    final group0 = tester.getRect(
+      find.byKey(const Key('screenshot-grid-group-0')),
+    );
+    final group1 = tester.getRect(
+      find.byKey(const Key('screenshot-grid-group-1')),
+    );
+    final paired = horizontal
+        ? group0.top == group1.top
+        : group0.left == group1.left;
+    // 横放并排与竖放单列都沿水平方向比较，其余沿竖直方向比较。
+    expect(horizontal == paired ? close.dx < crop.dx : close.dy < crop.dy, isTrue);
     expect(find.byKey(const Key(ScreenshotActions.text)), findsNothing);
     // 原生非激活面板转来格位按键（修饰键 + 数字）；必须看到实际文字控件出现，旧捕获不能切换工具。
     Future<void> nativeSlot(String id, int modifiers, int digit) async {

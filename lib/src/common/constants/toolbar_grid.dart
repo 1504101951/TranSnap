@@ -41,6 +41,10 @@ abstract final class ToolbarGrid {
   static const slots = 6;
   static const maxColumns = 8;
 
+  /// 截图工具栏每行（竖放为每列）并排的组数，两组之间的最小间距（#67）。
+  static const groupsPerLine = 2;
+  static const groupGap = 12.0;
+
   /// 默认列的组合：无、⌘、⌥。
   static const defaultModifiers = [
     0,
