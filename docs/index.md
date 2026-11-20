@@ -13,3 +13,4 @@
 9. [media/](media/index.md)：README引用的项目介绍动画（GIF与视频）。
 10. [glossary.md](glossary.md)：选区翻译领域术语表。
 11. [usage.md](usage.md)：完整使用说明。
+12. [motion-unify-handoff.md](motion-unify-handoff.md)：界面动效统一、设置页静态优化与录制结果栏调整的待实现交接文档（#142 第三期）。
