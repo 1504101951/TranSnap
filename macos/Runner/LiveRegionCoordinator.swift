@@ -1,23 +1,176 @@
 import AppKit
 import FlutterMacOS
+import QuartzCore
 
-/// 把整段译文缩进段落块矩形并在矩形内换行。字号可以很小，绘制不超出该矩形。
+/// 实时翻译盖层的逐字显影计算（#142）：批内追加仅显影新字、错峰受总长上限约束，与 Dart CharReveal 一致。
+enum CharRevealBatch {
+    /// previous 为上一帧译文，current 为当前帧译文；返回本帧已完整显示的前缀字数（Character 粒度）。
+    /// 内容不变时返回全长，紧跟上次前缀追加时保留已显示部分，首次或整段替换时从头显影。
+    static func batchBase(previous: String, current: String) -> Int {
+        guard !current.isEmpty else { return 0 }
+        if previous == current { return current.count }
+        if !previous.isEmpty && current.hasPrefix(previous) { return previous.count }
+        return 0
+    }
+
+    /// revealingCount 为本批待显影字数，baseStagger 为基准字间隔，maxSpread 为整段错峰总长上限；返回单个字符间的错峰时长。
+    static func stagger(
+        revealingCount: Int,
+        baseStagger: TimeInterval = AppConstants.charRevealStagger,
+        maxSpread: TimeInterval = AppConstants.charRevealMaxSpread
+    ) -> TimeInterval {
+        guard revealingCount > 0 else { return 0 }
+        return min(baseStagger, maxSpread / Double(revealingCount))
+    }
+
+    /// revealingCount 为本批待显影字数，charDuration 为单字显现时长，其余为错峰上限；返回本批显影总时长（秒）。
+    static func totalDuration(
+        revealingCount: Int,
+        charDuration: TimeInterval = AppConstants.charRevealDuration,
+        baseStagger: TimeInterval = AppConstants.charRevealStagger,
+        maxSpread: TimeInterval = AppConstants.charRevealMaxSpread
+    ) -> TimeInterval {
+        guard revealingCount > 0 else { return 0 }
+        let step = stagger(revealingCount: revealingCount, baseStagger: baseStagger, maxSpread: maxSpread)
+        return charDuration + step * Double(revealingCount - 1)
+    }
+
+    /// elapsed 为本批已经过时间（秒），index 为本批内字符序号，stagger 为字间错峰，charDuration 为单字显影时长；返回 0...1 进度。
+    static func progress(
+        elapsed: TimeInterval,
+        index: Int,
+        stagger: TimeInterval,
+        charDuration: TimeInterval = AppConstants.charRevealDuration
+    ) -> CGFloat {
+        let delay = Double(index) * stagger
+        guard charDuration > 0 else { return elapsed >= delay ? 1 : 0 }
+        let ratio = (elapsed - delay) / charDuration
+        return CGFloat(min(1, max(0, ratio)))
+    }
+
+    /// progress 为单字 0...1 显影进度，maxBlur 为初始模糊半径（pt）；返回当前同色阴影近似模糊半径。
+    static func blurRadius(progress: CGFloat, maxBlur: CGFloat = AppConstants.charRevealBlur) -> CGFloat {
+        let clamped = min(1, max(0, progress))
+        return maxBlur * (1 - clamped)
+    }
+}
+
+/// 逐帧显影定时器代理；以弱引用连接视图，视图销毁时自动释放显示链路，避免循环引用与跨线程清理冲突。
+private final class LiveRevealLinkTarget: NSObject {
+    weak var owner: LiveFitTextView?
+
+    /// owner 为驱动逐帧显影的段落视图；保存弱引用，不延长视图寿命。
+    init(owner: LiveFitTextView) {
+        self.owner = owner
+    }
+
+    /// link 为显示器刷新信号；宿主视图已销毁时立即停止链路，否则触发下一帧显影重绘。
+    @objc func step(_ link: CADisplayLink) {
+        MainActor.assumeIsolated {
+            guard let owner else {
+                link.invalidate()
+                return
+            }
+            owner.stepReveal()
+        }
+    }
+}
+
+/// 把整段译文缩进段落块矩形并在矩形内换行。字号可以很小，绘制不超出该矩形，并按批次逐字显现（#142）。
 final class LiveFitTextView: NSView {
-    /// 段落译文；内容不变时不重画。
-    var text = "" { didSet { if text != oldValue { needsDisplay = true } } }
+    /// 读取系统「减少动态效果」设置；测试可覆写以隔离系统偏好。
+    var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// 段落译文；内容不变时不重画，追加新字仅显影后缀，替换则整段重播（减少动态效果下直接显示）。
+    var text = "" {
+        didSet {
+            guard text != oldValue else { return }
+            let base = CharRevealBatch.batchBase(previous: oldValue, current: text)
+            let count = text.count - base
+            if text.isEmpty || count <= 0 || isReduceMotion() {
+                stopReveal()
+                revealedBase = text.count
+            } else {
+                revealedBase = base
+                batchStagger = CharRevealBatch.stagger(revealingCount: count)
+                batchDuration = CharRevealBatch.totalDuration(revealingCount: count)
+                batchStartedAt = CACurrentMediaTime()
+                ensureDisplayLink()
+            }
+            needsDisplay = true
+        }
+    }
+
+    /// 本批开始前已完整显示的字符数；显影区间为 [revealedBase, text.count)。
+    private var revealedBase = 0
+    private var batchStagger: TimeInterval = 0
+    private var batchDuration: TimeInterval = 0
+    private var batchStartedAt: TimeInterval?
+    private var displayLink: CADisplayLink?
     /// 最近一次适配的结果：同一段文字在同一尺寸下不重复计算字号。
     private var fitted: (text: String, size: NSSize, font: NSFont)?
 
-    /// dirtyRect 为需要重画的区域。白底盖住原文，黑色半粗体缩进框内。
+    /// 无参数；视图挂入或移出窗口时同步维护显影刷新链路，离窗即停，无返回值。
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            stopReveal()
+        } else if revealedBase < text.count, batchStartedAt != nil, !isReduceMotion() {
+            ensureDisplayLink()
+        }
+    }
+
+    /// 无参数；停止显影刷新并清空段落内容，在段落槽位复用前或盖层关闭时调用，无返回值。
+    func reset() {
+        stopReveal()
+        revealedBase = 0
+        fitted = nil
+        text = ""
+    }
+
+    /// 无参数；确认显示刷新链路已激活，用于显影期间逐帧重绘，无返回值。
+    private func ensureDisplayLink() {
+        guard window != nil, displayLink == nil else { return }
+        let link = displayLink(target: LiveRevealLinkTarget(owner: self), selector: #selector(LiveRevealLinkTarget.step(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    /// 无参数；停止当前显影链路并清理计时起点，无返回值。
+    private func stopReveal() {
+        displayLink?.invalidate()
+        displayLink = nil
+        batchStartedAt = nil
+    }
+
+    /// 无参数；处理每次屏幕刷新：未到总时长时请求重绘，完成后停表并固化全段，无返回值。
+    fileprivate func stepReveal() {
+        guard !isReduceMotion(),
+              revealedBase < text.count,
+              let batchStartedAt else {
+            stopReveal()
+            revealedBase = text.count
+            needsDisplay = true
+            return
+        }
+        if CACurrentMediaTime() - batchStartedAt >= batchDuration {
+            stopReveal()
+            revealedBase = text.count
+        }
+        needsDisplay = true
+    }
+
+    /// dirtyRect 为需要重画的区域。白底盖住原文，黑色半粗体缩进框内，逐字显影期用透明度与同色阴影柔和渐入。
     override func draw(_ dirtyRect: NSRect) {
         NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0xCC / 255).setFill()
         bounds.fill()
         guard !text.isEmpty, bounds.width > 1, bounds.height > 1 else { return }
+        // 字号与居中边界始终按完整文本测算，避免显影期间文字换行跳动。
         let fitted = fittedFont()
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byWordWrapping
-        let attributes: [NSAttributedString.Key: Any] = [
+        let baseAttributes: [NSAttributedString.Key: Any] = [
             .font: fitted,
             .foregroundColor: NSColor.black,
             .paragraphStyle: style,
@@ -25,17 +178,57 @@ final class LiveFitTextView: NSView {
         let measured = (text as NSString).boundingRect(
             with: NSSize(width: bounds.width, height: 10_000),
             options: [.usesLineFragmentOrigin],
-            attributes: attributes
+            attributes: baseAttributes
         )
         let origin = NSPoint(
             x: 0,
             y: max(0, (bounds.height - measured.height) / 2)
         )
-        (text as NSString).draw(
-            with: NSRect(origin: origin, size: NSSize(width: bounds.width, height: bounds.height)),
-            options: [.usesLineFragmentOrigin],
-            attributes: attributes
-        )
+        let drawRect = NSRect(origin: origin, size: NSSize(width: bounds.width, height: bounds.height))
+
+        let animatingElapsed: TimeInterval? = {
+            guard !isReduceMotion(),
+                  revealedBase < text.count,
+                  let batchStartedAt else { return nil }
+            let elapsed = CACurrentMediaTime() - batchStartedAt
+            if elapsed >= batchDuration {
+                stopReveal()
+                revealedBase = text.count
+                return nil
+            }
+            return elapsed
+        }()
+
+        guard let elapsed = animatingElapsed else {
+            (text as NSString).draw(
+                with: drawRect,
+                options: [.usesLineFragmentOrigin],
+                attributes: baseAttributes
+            )
+            return
+        }
+
+        let attributed = NSMutableAttributedString(string: text, attributes: baseAttributes)
+        var cursor = text.index(text.startIndex, offsetBy: revealedBase)
+        var offset = 0
+        while cursor < text.endIndex {
+            let next = text.index(after: cursor)
+            let range = NSRange(cursor..<next, in: text)
+            let t = CharRevealBatch.progress(elapsed: elapsed, index: offset, stagger: batchStagger)
+            let color = NSColor.black.withAlphaComponent(t)
+            attributed.addAttribute(.foregroundColor, value: color, range: range)
+            let blur = CharRevealBatch.blurRadius(progress: t)
+            if blur > 0.01 && t > 0.001 {
+                let shadow = NSShadow()
+                shadow.shadowColor = color
+                shadow.shadowOffset = .zero
+                shadow.shadowBlurRadius = blur
+                attributed.addAttribute(.shadow, value: shadow, range: range)
+            }
+            cursor = next
+            offset += 1
+        }
+        attributed.draw(with: drawRect, options: [.usesLineFragmentOrigin])
     }
 
     /// 无参数。返回能把整段留在当前矩形里的最大半粗体字号；文字与尺寸都没变时沿用上次结果。
@@ -107,6 +300,7 @@ final class LiveTextOverlay {
             }
             for (position, view) in canvas.subviews.enumerated() {
                 guard position < items.count, let label = view as? LiveFitTextView else {
+                    (view as? LiveFitTextView)?.reset()
                     view.isHidden = true
                     continue
                 }
@@ -123,9 +317,12 @@ final class LiveTextOverlay {
         apply([])
     }
 
-    /// 无参数。关闭全部盖层窗口；会话结束时调用。
+    /// 无参数。关闭全部盖层窗口并停止显影链路；会话结束时调用。
     func close() {
         for item in panels {
+            for case let label as LiveFitTextView in item.panel.contentView?.subviews ?? [] {
+                label.reset()
+            }
             item.panel.orderOut(nil)
         }
         panels = []

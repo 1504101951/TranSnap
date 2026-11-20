@@ -8,32 +8,37 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 
 /// 无参数；验证公共动效基座的无障碍降级、光学高光安全回退、五组纯 Dart 矢量状态机与侧边栏弹簧滑块（#142）。
 void main() {
-  testWidgets('减少动态效果时 BouncyPresence、GentleReveal 与 OpticalPrismOverlay 瞬时降级且无异常', (
-    tester,
-  ) async {
-    // 边界：disableAnimations 为 true 时跳过电机/链式包装并直出内容，OpticalPrismOverlay 仍能稳定绘制。
-    await tester.pumpWidget(
-      const MediaQuery(
-        data: MediaQueryData(disableAnimations: true),
-        child: MaterialApp(
-          home: Scaffold(
-            body: BouncyPresence(
-              child: GentleReveal(
-                staggerIndex: 2,
-                child: OpticalPrismOverlay(
-                  sweepTrigger: 1,
-                  child: SizedBox(width: 240, height: 120, child: Text('无障碍降级')),
+  testWidgets(
+    '减少动态效果时 BouncyPresence、GentleReveal 与 OpticalPrismOverlay 瞬时降级且无异常',
+    (tester) async {
+      // 边界：disableAnimations 为 true 时跳过电机/链式包装并直出内容，OpticalPrismOverlay 仍能稳定绘制。
+      await tester.pumpWidget(
+        const MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: Scaffold(
+              body: BouncyPresence(
+                child: GentleReveal(
+                  staggerIndex: 2,
+                  child: OpticalPrismOverlay(
+                    sweepTrigger: 1,
+                    child: SizedBox(
+                      width: 240,
+                      height: 120,
+                      child: Text('无障碍降级'),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    expect(find.text('无障碍降级'), findsOneWidget);
-    expect(find.byType(SingleMotionBuilder), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      expect(find.text('无障碍降级'), findsOneWidget);
+      expect(find.byType(SingleMotionBuilder), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('BouncyPresence、GentleReveal 与 OpticalPrismOverlay 扫光均可正常收敛', (
     tester,
@@ -73,9 +78,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('五组纯 Dart 矢量状态机：状态切换正确，复制确认 1.3 秒自动回弹且无残留计时器', (
-    tester,
-  ) async {
+  testWidgets('五组纯 Dart 矢量状态机：状态切换正确，复制确认 1.3 秒自动回弹且无残留计时器', (tester) async {
     // 边界：朗读空闲保留 Icons.volume_up_rounded；复制触发后先变为对勾绘制，1.3s 结束自动恢复 Icons.copy_rounded。
     var phase = TranslationPhase.translating;
     var speaking = false;
@@ -197,6 +200,36 @@ void main() {
       ),
     );
     expect(semantics, hasLength(1));
+
+    // 验证选中滑块与侧边栏左右各留 6pt 内边距，并在垂直方向与选中行完全对齐（#142）。
+    final sidebarRect = tester.getRect(find.byType(NativeGlassSidebar<String>));
+    final indicatorRect = tester.getRect(
+      find.byKey(const ValueKey('native-glass-sidebar-indicator')),
+    );
+    final selectedRowRect = tester.getRect(
+      find.ancestor(
+        of: find.text('录制'),
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.selected == true,
+        ),
+      ),
+    );
+    expect(
+      indicatorRect.left,
+      moreOrLessEquals(sidebarRect.left + 6, epsilon: 0.01),
+    );
+    expect(
+      indicatorRect.right,
+      moreOrLessEquals(sidebarRect.right - 6, epsilon: 0.01),
+    );
+    expect(
+      indicatorRect.top,
+      moreOrLessEquals(selectedRowRect.top, epsilon: 0.01),
+    );
+    expect(
+      indicatorRect.height,
+      moreOrLessEquals(selectedRowRect.height, epsilon: 0.01),
+    );
     expect(tester.takeException(), isNull);
   });
 

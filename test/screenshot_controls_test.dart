@@ -871,10 +871,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
     await tester.pump();
-    expect(
-      find.byKey(const Key('screenshot-closing-group-0')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
     expect(record, findsNothing);
@@ -882,13 +879,139 @@ void main() {
     await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 16));
-    final crop = tester.getCenter(find.byKey(const Key(ScreenshotActions.crop)));
+    final crop = tester.getCenter(
+      find.byKey(const Key(ScreenshotActions.crop)),
+    );
     expect(
       (tester.getCenter(record) - crop).distance,
       lessThan((settled - crop).distance),
     );
     await tester.pumpAndSettle();
     expect(tester.getCenter(record), settled);
+  });
+
+  testWidgets('切换父级时，新子级组紧跟新父级所在行，旧子级组直接移除（#142）', (tester) async {
+    // 作用：验证从「截图」直接切到「美化」时不保留收起中的「截图」子级，新子级不被挤到第三行。
+    // 边界：切换后首帧无 screenshot-closing-group-0，且「美化」子级组紧跟「美化」所在组行（间距 4pt）。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-switch-parent');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'switch-parent',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('screenshot-children-group-0')),
+        matching: find.byKey(const Key(ScreenshotActions.record)),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(find.byKey(const Key(ScreenshotActions.record)), findsNothing);
+    final children = find.byKey(const Key('screenshot-children-group-0'));
+    expect(
+      find.descendant(
+        of: children,
+        matching: find.byKey(const Key(ScreenshotActions.sticker)),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('screenshot-grid-group-1')),
+        matching: find.byKey(const Key(ScreenshotActions.beautify)),
+      ),
+      findsOneWidget,
+    );
+    final horizontal =
+        tester
+            .widget<Flex>(find.byKey(const Key('screenshot-grid-group-1')))
+            .direction ==
+        Axis.horizontal;
+    final parentGroupRect = tester.getRect(
+      find.byKey(const Key('screenshot-grid-group-1')),
+    );
+    final childrenRect = tester.getRect(children);
+    expect(
+      horizontal ? childrenRect.top : childrenRect.left,
+      (horizontal ? parentGroupRect.bottom : parentGroupRect.right) + 4,
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('拖动选区并松手后，没有新的收起组，展开中的组也不再重新从父级位置开始（#142）', (tester) async {
+    // 作用：验证拖动选区期间工具栏仅隐藏不卸载，松手后直接保留已展开的子级位置。
+    // 边界：拖动期间工具栏不可见且不可命中；松手后第 2 帧无收起组，「录制」相对「截图」偏移保持稳定不变。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-drag-no-replay');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'drag-no-replay',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    final record = find.byKey(const Key(ScreenshotActions.record));
+    final crop = find.byKey(const Key(ScreenshotActions.crop));
+    final settledDelta = tester.getCenter(record) - tester.getCenter(crop);
+
+    final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
+    final gesture = await tester.startGesture(
+      canvas.topLeft + const Offset(10, 10),
+    );
+    await gesture.moveBy(const Offset(100, 80));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-toolbar')), findsNothing);
+    expect(record.hitTestable(), findsNothing);
+
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(tester.getCenter(record) - tester.getCenter(crop), settledDelta);
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(record) - tester.getCenter(crop), settledDelta);
   });
 
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
@@ -962,7 +1085,10 @@ void main() {
         ? group0.top == group1.top
         : group0.left == group1.left;
     // 横放并排与竖放单列都沿水平方向比较，其余沿竖直方向比较。
-    expect(horizontal == paired ? close.dx < crop.dx : close.dy < crop.dy, isTrue);
+    expect(
+      horizontal == paired ? close.dx < crop.dx : close.dy < crop.dy,
+      isTrue,
+    );
     expect(find.byKey(const Key(ScreenshotActions.text)), findsNothing);
     // 原生非激活面板转来格位按键（修饰键 + 数字）；必须看到实际文字控件出现，旧捕获不能切换工具。
     Future<void> nativeSlot(String id, int modifiers, int digit) async {

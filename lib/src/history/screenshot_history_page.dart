@@ -38,6 +38,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   List<ScreenshotRecord>? _records;
   bool? _recording;
   String? _message;
+  String? _busyAction;
 
   /// 勾选的记录 id，用于拼接、拆分与比较（#109）；只在本页保存。
   Set<int> _selected = {};
@@ -108,11 +109,14 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     }
   }
 
-  /// produce 调用原生生成结果图片，done 为完成提示；把结果加入截图历史、清空勾选并重新读取，失败显示原因（#109）。
+  /// action 为操作标识（'stitch' / 'split'），produce 调用原生生成结果图片，done 为完成提示；
+  /// 把结果加入截图历史、清空勾选并重新读取，失败显示原因（#109）。
   Future<void> _compose(
+    String action,
     Future<List<Uint8List>> Function() produce,
     String Function(int count) done,
   ) async {
+    setState(() => _busyAction = action);
     try {
       final images = await produce();
       await widget.channel.invokeMethod<void>(
@@ -128,6 +132,8 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     } on PlatformException catch (error) {
       if (!mounted) return;
       setState(() => _message = error.message ?? _operationFailed);
+    } finally {
+      if (mounted) setState(() => _busyAction = null);
     }
   }
 
@@ -141,6 +147,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
     if (vertical == null) return;
     await _compose(
+      'stitch',
       () async => [
         (await widget.channel.invokeMethod<Uint8List>(
           MethodNames.stitchScreenshots,
@@ -164,6 +171,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
     if (parts == null) return;
     await _compose(
+      'split',
       () async => (await widget.channel.invokeListMethod<Uint8List>(
         MethodNames.splitScreenshot,
         {'path': record.path, 'parts': parts},
@@ -175,26 +183,29 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   /// 无参数；原生逐像素比较勾选的两张截图后打开并排比较弹窗，失败显示原因，返回结束的 Future。
   Future<void> _compare() async {
     final chosen = _chosen;
+    setState(() => _busyAction = 'compare');
+    Map<String, Object?>? result;
     try {
-      final result = (await widget.channel.invokeMapMethod<String, Object?>(
+      result = await widget.channel.invokeMapMethod<String, Object?>(
         MethodNames.compareScreenshots,
         {'first': chosen[0].path, 'second': chosen[1].path},
-      ))!;
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => ScreenshotCompareDialog(
-          first: chosen[0],
-          second: chosen[1],
-          mask: result['mask'] as Uint8List,
-          different: result['different'] as int,
-          total: result['total'] as int,
-        ),
       );
     } on PlatformException catch (error) {
-      if (!mounted) return;
-      setState(() => _message = error.message ?? _operationFailed);
+      if (mounted) setState(() => _message = error.message ?? _operationFailed);
+    } finally {
+      if (mounted) setState(() => _busyAction = null);
     }
+    if (!mounted || result == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ScreenshotCompareDialog(
+        first: chosen[0],
+        second: chosen[1],
+        mask: result!['mask'] as Uint8List,
+        different: result['different'] as int,
+        total: result['total'] as int,
+      ),
+    );
   }
 
   /// context 提供主题；返回开关栏与截图卡片列表。
@@ -256,16 +267,17 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                   style: theme.textTheme.bodySmall,
                 ),
                 const Spacer(),
-                for (final (label, enabled, action) in [
-                  ('拼接', _selected.length >= 2, _stitch),
-                  ('拆分', _selected.length == 1, _split),
-                  ('比较', _selected.length == 2, _compare),
+                for (final (id, label, enabled, action) in [
+                  ('stitch', '拼接', _selected.length >= 2, _stitch),
+                  ('split', '拆分', _selected.length == 1, _split),
+                  ('compare', '比较', _selected.length == 2, _compare),
                 ]) ...[
                   const SizedBox(width: 8),
                   NativeGlassSurface(
                     material: true,
+                    busy: _busyAction == id,
                     child: TextButton(
-                      onPressed: enabled ? action : null,
+                      onPressed: _busyAction == null && enabled ? action : null,
                       child: Text(label),
                     ),
                   ),

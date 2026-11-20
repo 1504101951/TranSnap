@@ -78,6 +78,10 @@ class AppDelegate: FlutterAppDelegate {
             self?.permissionWizard.show()
         }
         selectionMonitor.start()
+        // 清空上次运行残留的剪贴板临时视频，后台执行以免拖慢应用启动（#68 第 10 条、#142）。
+        Task.detached(priority: .utility) {
+            CaptureWindowController.clearRecordingClipboardDirectory()
+        }
         // MCP socket 随 App 常驻监听；开关关闭时由服务返回「MCP 未开启」，helper 不会误报未运行。
         bridge.mcp.start(path: MCPSocket.defaultURL.path)
         // 不调用 super.applicationDidFinishLaunching：FlutterAppDelegate 未实现该方法，

@@ -33,6 +33,7 @@ class _CaptureAppState extends State<CaptureApp> {
   // 首个原生状态到达前为空闲；原生每次状态都带 phase，缺少即按协议错误抛出（#124）。
   Map<String, dynamic> _state = {'phase': CapturePhase.idle.name};
   bool _pending = false;
+  String? _pendingMethod;
   String? _feedback;
   bool _feedbackIsError = false;
   Timer? _feedbackTimer;
@@ -107,14 +108,15 @@ class _CaptureAppState extends State<CaptureApp> {
     });
   }
 
-  /// method/arguments 为已知采集命令及参数；返回完整快照，错误只显示在当前窗口。
-  Future<void> _invoke(
+  /// method/arguments 为已知采集命令及参数；返回命令是否成功完成（未抛出平台异常），错误只显示在当前窗口。
+  Future<bool> _invoke(
     String method, [
     Map<String, Object?> arguments = const {},
   ]) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() {
       _pending = true;
+      _pendingMethod = method;
       _feedbackTimer?.cancel();
       _feedback = null;
     });
@@ -124,10 +126,17 @@ class _CaptureAppState extends State<CaptureApp> {
         {if (_state['id'] != null) 'id': _state['id'], ...arguments},
       );
       if (value != null) _apply(value);
+      return true;
     } on PlatformException catch (error) {
       if (mounted) _showFeedback(error.message ?? error.code, isError: true);
+      return false;
     } finally {
-      if (mounted) setState(() => _pending = false);
+      if (mounted) {
+        setState(() {
+          _pending = false;
+          _pendingMethod = null;
+        });
+      }
     }
   }
 
@@ -139,6 +148,13 @@ class _CaptureAppState extends State<CaptureApp> {
     await _invoke(MethodNames.copyScreenshot);
     if (!mounted || _feedback != null) return;
     _showFeedback('已复制');
+  }
+
+  /// 无参数；将完整录制或裁剪片段复制到剪贴板，成功后显示「已复制视频」，失败沿用原生错误反馈（#142）。
+  Future<void> _copyVideo() async {
+    final ok = await _invoke(MethodNames.copyRecording);
+    if (!ok || !mounted || _feedback != null) return;
+    _showFeedback('已复制视频');
   }
 
   /// 无参数；两种采集共用四个独立材料气泡，状态只读，三操作沿用真实阶段约束。
@@ -176,27 +192,32 @@ class _CaptureAppState extends State<CaptureApp> {
     final countdown = _state['countdown'] as int?;
     final status = label;
 
-    /// description为上方提示，child为状态或操作；返回不共享外壳的32pt玻璃气泡。
-    Widget bubble(String description, Widget child) => Tooltip(
-      message: description,
-      preferBelow: false,
-      verticalOffset: GlassMetrics.hitSize / 2 + GlassMetrics.toastGap,
-      constraints: const BoxConstraints(minHeight: GlassMetrics.buttonHeight),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      child: NativeGlassSurface(
-        material: true,
-        radius: GlassMetrics.controlRadius,
-        child: child,
-      ),
-    );
+    /// description 为上方提示，child 为状态或操作，busy 为是否显示按钮等待进度环；返回不共享外壳的32pt玻璃气泡。
+    Widget bubble(String description, Widget child, {bool busy = false}) =>
+        Tooltip(
+          message: description,
+          preferBelow: false,
+          verticalOffset: GlassMetrics.hitSize / 2 + GlassMetrics.toastGap,
+          constraints: const BoxConstraints(
+            minHeight: GlassMetrics.buttonHeight,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: NativeGlassSurface(
+            material: true,
+            radius: GlassMetrics.controlRadius,
+            busy: busy,
+            child: child,
+          ),
+        );
 
-    /// index 为错峰序号，description 为提示与可访问名，icon 为操作图标，action 为空时禁用；返回明确命中尺寸的按钮。
+    /// index 为错峰序号，description 为提示与可访问名，icon 为操作图标，action 为空时禁用，busy 控制外圈等待进度环；返回明确命中尺寸的按钮。
     Widget action(
       int index,
       String description,
       IconData icon,
-      VoidCallback? action,
-    ) => GentleReveal(
+      VoidCallback? action, {
+      bool busy = false,
+    }) => GentleReveal(
       key: ValueKey('capture-bubble-$index'),
       staggerIndex: index,
       blur: false,
@@ -213,6 +234,7 @@ class _CaptureAppState extends State<CaptureApp> {
               semanticLabel: description,
             ),
           ),
+          busy: busy,
         ),
       ),
     );
@@ -276,6 +298,7 @@ class _CaptureAppState extends State<CaptureApp> {
           editable
               ? () => _invoke(MethodNames.setCapturePaused, {'paused': !paused})
               : null,
+          busy: _pending && _pendingMethod == MethodNames.setCapturePaused,
         ),
         const SizedBox(width: 4),
         action(
@@ -283,14 +306,21 @@ class _CaptureAppState extends State<CaptureApp> {
           '结束',
           Icons.stop,
           editable ? () => _invoke(MethodNames.stopCapture) : null,
+          busy: _pending && _pendingMethod == MethodNames.stopCapture,
         ),
         const SizedBox(width: 4),
-        action(3, '放弃', Icons.close, _pending ? null : _discard),
+        action(
+          3,
+          '放弃',
+          Icons.close,
+          _pending ? null : _discard,
+          busy: _pending && _pendingMethod == MethodNames.cancelCapture,
+        ),
       ],
     );
   }
 
-  /// 无参数；返回等比视频与固定右侧纵向工具栏，系统标题栏由原生窗口承载。
+  /// 无参数；返回等比视频与固定在底部居中的横排工具栏，系统标题栏由原生窗口承载（#67、#142）。
   Widget _videoResult() {
     final pixels = Size(
       (_state['width'] as num).toDouble(),
@@ -332,17 +362,25 @@ class _CaptureAppState extends State<CaptureApp> {
         MethodNames.exportRecordingWebM,
       ),
     ];
-    // 七个操作保持固定位置；转换时对应导出按钮直接提供取消，不展开参数表单。
-    final actions = <(String, IconData, VoidCallback?)>[
+    // 八个操作保持固定位置；转换时对应导出按钮直接提供取消并显示进度环，复制与其余操作禁用。
+    final actions = <(String, IconData, VoidCallback?, bool)>[
       (
         '播放视频',
         Icons.play_arrow,
         enabled ? () => _invoke(MethodNames.previewRecording) : null,
+        _pending && _pendingMethod == MethodNames.previewRecording,
       ),
       (
         '裁剪',
         Icons.content_cut,
         enabled ? () => _invoke(MethodNames.trimRecording) : null,
+        _pending && _pendingMethod == MethodNames.trimRecording,
+      ),
+      (
+        '复制视频',
+        Icons.content_copy,
+        enabled ? () => _copyVideo() : null,
+        _pending && _pendingMethod == MethodNames.copyRecording,
       ),
       for (final (kind, label, icon, method) in exports)
         kind == exporting
@@ -352,40 +390,60 @@ class _CaptureAppState extends State<CaptureApp> {
                 _pending
                     ? null
                     : () => _invoke(MethodNames.cancelRecordingExport),
+                true,
               )
-            : (label, icon, enabled ? () => _invoke(method) : null),
-      ('关闭当前采集', Icons.close, _pending ? null : _discard),
+            : (
+                label,
+                icon,
+                enabled ? () => _invoke(method) : null,
+                _pending && _pendingMethod == method,
+              ),
+      (
+        '关闭当前采集',
+        Icons.close,
+        _pending ? null : _discard,
+        _pending && _pendingMethod == MethodNames.cancelCapture,
+      ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
         const margin = GlassMetrics.toolbarPadding;
         const gap = GlassMetrics.toastGap;
-        // 右侧预留48pt工具栏、8pt间隔和左右各8pt外边距；与原生内容尺寸一致。
-        const reservedWidth = GlassMetrics.toolbarThickness + gap + margin * 2;
-        final toolbarHeight =
+        // 上边距和左右边距 8pt；视频下方隔 8pt 是 48pt 厚的横排工具栏，纵向共预留 64pt（#67、#142）。
+        const reservedWidth = margin * 2;
+        const reservedHeight = GlassMetrics.toolbarThickness + gap + margin;
+        final toolbarWidth =
             actions.length * GlassMetrics.hitSize +
             (actions.length - 1) * GlassMetrics.captureResultActionGap +
             margin * 2;
+        final availableWidth = math.max(
+          0.0,
+          constraints.maxWidth - reservedWidth,
+        );
+        final availableHeight = math.max(
+          0.0,
+          constraints.maxHeight - reservedHeight,
+        );
         final scale = math.min(
           1.0,
           math.min(
-            (constraints.maxWidth - reservedWidth) / logical.width,
-            (constraints.maxHeight - margin * 2) / logical.height,
+            availableWidth / logical.width,
+            availableHeight / logical.height,
           ),
         );
         final size = logical * scale;
         final media = Rect.fromLTWH(
-          margin + (constraints.maxWidth - reservedWidth - size.width) / 2,
-          (constraints.maxHeight - size.height) / 2,
+          margin + (availableWidth - size.width) / 2,
+          margin + (availableHeight - size.height) / 2,
           size.width,
           size.height,
         );
-        // 工具栏拥有独立的右侧列，窗口缩小时仍完整容纳，不覆盖视频。
+        // 底部 356×48 工具栏水平居中，自身四周带 8pt 内边距，窗口缩至 356×65 时仍不覆盖视频。
         final toolbar = Rect.fromLTWH(
-          constraints.maxWidth - margin - GlassMetrics.toolbarThickness,
-          (constraints.maxHeight - toolbarHeight) / 2,
+          (constraints.maxWidth - toolbarWidth) / 2,
+          constraints.maxHeight - GlassMetrics.toolbarThickness,
+          toolbarWidth,
           GlassMetrics.toolbarThickness,
-          toolbarHeight,
         );
         return Stack(
           children: [
@@ -406,17 +464,20 @@ class _CaptureAppState extends State<CaptureApp> {
               rect: toolbar,
               child: Padding(
                 padding: const EdgeInsets.all(margin),
-                child: Column(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (var i = 0; i < actions.length; i++) ...[
                       if (i > 0)
-                        SizedBox(height: GlassMetrics.captureResultActionGap),
+                        const SizedBox(
+                          width: GlassMetrics.captureResultActionGap,
+                        ),
                       SizedBox.square(
                         dimension: GlassMetrics.hitSize,
                         child: NativeGlassSurface(
                           material: true,
                           radius: GlassMetrics.controlRadius,
+                          busy: actions[i].$4,
                           child: IconButton(
                             tooltip: actions[i].$1,
                             padding: EdgeInsets.zero,
@@ -446,17 +507,29 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// child为视频或长图结果；Escape与系统关闭一样立即放弃，已经保存的文件保留。
-  Widget _resultPage(Widget child) => Material(
+  /// child 为视频或长图结果，allowCopyVideo 为真时响应 ⌘C 复制视频；Escape 立即放弃当前会话并保留已保存文件。
+  Widget _resultPage(Widget child, {bool allowCopyVideo = false}) => Material(
     type: MaterialType.transparency,
     child: Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent ||
-            event.logicalKey != LogicalKeyboardKey.escape) {
-          return KeyEventResult.ignored;
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          if (!_pending) unawaited(_discard());
+          return KeyEventResult.handled;
         }
-        if (!_pending) unawaited(_discard());
+        final keys = HardwareKeyboard.instance;
+        final isCopyCombo =
+            allowCopyVideo &&
+            event.logicalKey == LogicalKeyboardKey.keyC &&
+            keys.isMetaPressed &&
+            !keys.isControlPressed &&
+            !keys.isAltPressed &&
+            !keys.isShiftPressed;
+        if (!isCopyCombo) return KeyEventResult.ignored;
+        if (!_pending && _phase == CapturePhase.videoReady) {
+          unawaited(_copyVideo());
+        }
         return KeyEventResult.handled;
       },
       child: child,
@@ -473,7 +546,7 @@ class _CaptureAppState extends State<CaptureApp> {
     final bytes = _state['imageBytes'] as Uint8List;
     final enabled = !_pending;
     // 三个操作固定在右侧，不提供裁剪、贴图或编辑工具。
-    final actions = <(String, IconData, VoidCallback?)>[
+    final actions = <(String, IconData, VoidCallback?, bool)>[
       (
         '保存',
         Icons.save_outlined,
@@ -482,9 +555,20 @@ class _CaptureAppState extends State<CaptureApp> {
                 'name': screenshotFilename(DateTime.now()),
               })
             : null,
+        _pending && _pendingMethod == MethodNames.saveScreenshot,
       ),
-      ('复制', Icons.copy_outlined, enabled ? () => _copyImage() : null),
-      ('放弃', Icons.close, _pending ? null : _discard),
+      (
+        '复制',
+        Icons.copy_outlined,
+        enabled ? () => _copyImage() : null,
+        _pending && _pendingMethod == MethodNames.copyScreenshot,
+      ),
+      (
+        '放弃',
+        Icons.close,
+        _pending ? null : _discard,
+        _pending && _pendingMethod == MethodNames.cancelCapture,
+      ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -556,6 +640,7 @@ class _CaptureAppState extends State<CaptureApp> {
                         child: NativeGlassSurface(
                           material: true,
                           radius: GlassMetrics.controlRadius,
+                          busy: actions[i].$4,
                           child: IconButton(
                             tooltip: actions[i].$1,
                             padding: EdgeInsets.zero,
@@ -634,6 +719,6 @@ class _CaptureAppState extends State<CaptureApp> {
       );
     }
     if (_phase == CapturePhase.imageReady) return _resultPage(_imageResult());
-    return _resultPage(_videoResult());
+    return _resultPage(_videoResult(), allowCopyVideo: true);
   }
 }

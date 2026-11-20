@@ -33,8 +33,10 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
   /// 屏幕录制是否已授权。
   bool _screenAccess = false;
 
-  /// 申请过程中禁用按钮，避免重复弹系统框。
-  bool _busy = false;
+  /// 正在向系统申请的权限方法名；非空时禁用按钮，避免重复弹系统框。
+  String? _busyMethod;
+
+  bool get _busy => _busyMethod != null;
 
   /// 系统 API 失败时的可读说明。
   String? _message;
@@ -82,14 +84,14 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
       await _refresh();
       return;
     }
-    setState(() => _busy = true);
+    setState(() => _busyMethod = method);
     try {
       await widget.channel.invokeMethod<void>(method);
       await _refresh();
     } on PlatformException catch (error) {
       if (mounted) setState(() => _message = error.message);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busyMethod = null);
     }
   }
 
@@ -139,6 +141,7 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
                   title: '辅助功能',
                   granted: _accessibility,
                   buttonLabel: '授权辅助功能',
+                  busy: _busyMethod == MethodNames.openAccessibility,
                   onPressed: _busy
                       ? null
                       : () => _request(
@@ -151,6 +154,7 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
                   title: '屏幕录制',
                   granted: _screenAccess,
                   buttonLabel: '申请录屏权限',
+                  busy: _busyMethod == MethodNames.requestScreenAccess,
                   onPressed: _busy
                       ? null
                       : () => _request(
@@ -198,19 +202,21 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
   }
 }
 
-/// title 为权限名，granted 为当前状态，buttonLabel 为申请按钮文案。
+/// title 为权限名，granted 为当前状态，buttonLabel 为申请按钮文案，busy 为当前行正在申请。
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
     required this.title,
     required this.granted,
     required this.buttonLabel,
     required this.onPressed,
+    this.busy = false,
   });
 
   final String title;
   final bool granted;
   final String buttonLabel;
   final VoidCallback? onPressed;
+  final bool busy;
 
   /// context 为布局上下文；返回一行状态与申请按钮。
   @override
@@ -222,13 +228,15 @@ class _PermissionRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(granted ? '已授权' : '未授权'),
+              const SizedBox(height: 4),
+              NativeGlassStatus(granted: granted),
             ],
           ),
         ),
         // 权限动作复用共享材料和32pt主要按钮，语义禁用仍由标准按钮承担。
         NativeGlassSurface(
           material: true,
+          busy: busy,
           child: FilledButton.tonal(
             onPressed: granted ? null : onPressed,
             child: Text(granted ? '已完成' : buttonLabel),

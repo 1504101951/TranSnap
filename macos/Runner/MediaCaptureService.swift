@@ -65,6 +65,12 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
     /// 无参数；返回是否处于录制前倒计时，此时尚未建立捕获流（#129）。
     var isCountingDown: Bool { phase == .preparing && details["countdown"] != nil }
 
+    /// 无参数；返回当前会话是否为区域录制（不含全屏、窗口与应用录制，#142）。
+    var isRegionRecording: Bool {
+        details["kind"] as? String == "recording"
+            && recordingArguments["kind"] as? String == CaptureTarget.region.rawValue
+    }
+
     /// 无参数；返回会话身份、实际阶段、预览或错误元数据，不携带外部凭据。
     func snapshot() -> [String: Any] {
         var value = details

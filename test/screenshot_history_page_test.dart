@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/history/screenshot_history_page.dart';
 
@@ -222,5 +224,83 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, '比较'));
     await tester.pumpAndSettle();
     expect(find.text('差异像素 1 / 总像素 4（25.00%）'), findsOneWidget);
+  });
+
+  testWidgets('截图历史拼接、拆分、比较等待期间仅对应按钮显示进度环，完成后收起（#142）', (tester) async {
+    // 作用：验证后台合成/逐像素对比挂起时只激活发起操作的按钮进度环，并阻止同时触发其他动作。
+    // 边界：勾选 2 张后点「比较」，compareScreenshots 未返回前仅「比较」active=true、「拼接」active=false，返回后全部归 false。
+    final directory = Directory.systemTemp.createTempSync(
+      'screenshot-compose-busy-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final pixel = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    );
+    final rows = [
+      for (final id in [1, 2])
+        {
+          'id': id,
+          'path': '${directory.path}/$id.png',
+          'width': 1,
+          'height': 1,
+          'capturedAt': id * 10,
+          'exists': true,
+        },
+    ];
+    for (final row in rows) {
+      File(row['path']! as String).writeAsBytesSync(pixel);
+    }
+    final pendingCompare = Completer<Map<String, Object?>>();
+    const channel = MethodChannel('test/screenshot-compose-busy');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.screenshotHistoryList:
+          return rows;
+        case MethodNames.screenshotHistoryRecording:
+          return false;
+        case MethodNames.compareScreenshots:
+          return pendingCompare.future;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: ScreenshotHistoryPage(channel: channel, version: 0),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final index in [0, 1]) {
+      await tester.tap(find.byType(Checkbox).at(index));
+      await tester.pump();
+    }
+    BusyRing ringFor(String label) => tester.widget<BusyRing>(
+      find
+          .ancestor(
+            of: find.widgetWithText(TextButton, label),
+            matching: find.byType(BusyRing),
+          )
+          .first,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, '比较'));
+    await tester.pump();
+    expect(ringFor('比较').active, isTrue);
+    expect(ringFor('拼接').active, isFalse);
+
+    pendingCompare.complete({
+      'mask': Uint8List.fromList(pixel),
+      'different': 0,
+      'total': 1,
+    });
+    await tester.pumpAndSettle();
+    expect(ringFor('比较').active, isFalse);
+    expect(find.text('两张截图像素完全一致'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -277,8 +277,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (ScreenshotActions.composable[id]!.hostsChildren ? id : null);
   }
 
-  /// reduced 为是否减少动态效果；比较上一次构建时展开的子级，父级收起或换成别的父级时记下原子级供液态收起，
-  /// 重新展开同一父级时取消收起；减少动态效果时不保留收起中的组，无返回值（#142）。
+  /// reduced 为是否减少动态效果；比较上一次构建时展开的子级，仅在收起后没有展开任何父级（open == null）时
+  /// 记下原子级供液态收起；切换父级时旧组直接移除，不挤到新子级前；减少动态效果时不保留收起中的组，无返回值（#142）。
   void _syncClosing(bool reduced) {
     final group = _group;
     final children = _visibleChildren;
@@ -291,13 +291,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       for (final column in _toolbar.columns) ...column.slots,
       ...children,
     };
-    if (!reduced &&
-        previous != null &&
-        previous.parent != open?.parent &&
+    if (reduced || open != null) {
+      _closing = null;
+    } else if (previous != null &&
         previous.cells.any((id) => !placed.contains(id))) {
       _closing = previous;
     }
-    if (_closing != null && _closing!.parent == open?.parent) _closing = null;
     _open = open;
   }
 
@@ -3082,19 +3081,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           icon: Icon(icons[id] ?? Icons.circle, size: 16),
         ),
       );
-      // 每个模式同样需要材料承载；外层工具栏保持透明。
-      final surface = NativeGlassSurface(material: true, child: child);
-      // 每个按钮都包一层进度环，结构不随等待变化，避免重建按钮的原生材料；
-      // 只有最近一次等待对应的按钮在等待中流动、结束后闭合淡出（#142）。
-      final ringed = BusyRing(
-        active: _busy && id == _busyId,
-        color: NativeGlassTheme.accentOf(context),
-        child: surface,
+      // 每个模式同样需要材料承载并由共享表面控制进度环，结构不随等待变化（#142）。
+      final surface = NativeGlassSurface(
+        material: true,
+        busy: _busy && id == _busyId,
+        child: child,
       );
       // 贴纸按钮挂锚点，供贴纸下拉框定位。
       final anchored = id == ScreenshotActions.sticker
-          ? KeyedSubtree(key: _stickerAnchor, child: ringed)
-          : ringed;
+          ? KeyedSubtree(key: _stickerAnchor, child: surface)
+          : surface;
       return KeyedSubtree(
         key: _buttonKeys.putIfAbsent(id, GlobalKey.new),
         child: anchored,
@@ -3927,23 +3923,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                     ),
                   ),
                 ),
-                // 选区流光边框：只在截图编辑选区上绘制，录制预览的原生边框不变；拖动或调整时加速（#142）。
-                if (widget.recordingWindows == null && !widget.recordingPreview)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: SelectionFlow(
-                        rect: cropDisplay,
-                        color: NativeGlassTheme.accentOf(context),
-                        // 只有框选新选区或拖动选区控制点时算「正在调整」；文字输入期间的拖动起点不算。
-                        fast:
-                            widget.activeHandle != null ||
-                            (widget.tool == ScreenshotTool.crop &&
-                                widget.dragStart != null &&
-                                !widget.textInputOpen),
-                        trigger: widget.tool,
-                      ),
-                    ),
-                  ),
                 // 选区像素尺寸标签：优先在左上角外侧上方，空间不足时放进选区内（#106）。
                 if ((widget.tool == ScreenshotTool.crop ||
                         widget.tool == ScreenshotTool.cursor) &&
@@ -4044,13 +4023,18 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 拖动时不让工具栏遮住正在变化的选区；松开后按新选区重新定位。
+                // 拖动时不让工具栏遮住正在变化的选区，但保持挂载以保留 LiquidSplit/BouncyPresence 状态、避免松手后重播（#142）；
+                // Visibility 默认 maintainSize 为 false（底层 Offstage），隐藏时不绘制也不接收点击。
                 // 工具栏叠在文字输入框之上：网格工具栏较厚，放进选区内时仍要可以点击（#141）。
-                if ((widget.dragStart == null || widget.textInputOpen) &&
-                    lines.lengths.isNotEmpty)
+                if (lines.lengths.isNotEmpty)
                   Positioned.fromRect(
                     rect: layout.toolbar,
-                    child: widget.toolbarBuilder(context, layout.axis, perLine),
+                    child: Visibility(
+                      visible: widget.dragStart == null || widget.textInputOpen,
+                      maintainState: true,
+                      maintainAnimation: true,
+                      child: widget.toolbarBuilder(context, layout.axis, perLine),
+                    ),
                   ),
                 if (widget.feedback != null)
                   ToolbarFeedback(

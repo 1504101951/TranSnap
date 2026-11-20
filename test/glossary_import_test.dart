@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 import 'package:translate_app/src/settings/glossary_editor.dart';
@@ -134,7 +135,7 @@ void main() {
     await tester.tap(find.widgetWithText(MenuItemButton, '覆盖已有值'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认导入'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(saved.single.translation, '现有');
     expect(find.text('保存中…'), findsOneWidget);
     expect(
@@ -208,7 +209,7 @@ void main() {
     await tester.tap(find.text('导入…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认导入'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('保存中…'), findsOneWidget);
     expect(saved[PreferenceKeys.glossary], isEmpty);
     gate.complete();
@@ -376,5 +377,59 @@ void main() {
         );
       }
     }
+  });
+
+  testWidgets('术语表导入与确认保存等待期间仅对应按钮显示进度环，完成后关闭（#142）', (tester) async {
+    // 作用：验证术语管理导入等待与预览确认保存等待各自激活对应按钮的进度环，不触发无关按钮。
+    // 边界：导入文件选择挂起期间「导入…」active=true、「导出…」active=false；确认保存期间「保存中…」active=true。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final picking = Completer<Map<String, String>?>();
+    final saving = Completer<void>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.openGlossaryFile) return picking.future;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(
+      NativeGlassApp(
+        home: GlossaryManager(
+          glossary: const [],
+          defaultLanguage: 'zh-CN',
+          channel: channel,
+          onChanged: (_) {},
+          onImport: (_) => saving.future,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    BusyRing ringFor(String text) => tester.widget<BusyRing>(
+      find.ancestor(of: find.text(text), matching: find.byType(BusyRing)).first,
+    );
+
+    await tester.tap(find.text('导入…'));
+    await tester.pump();
+    expect(ringFor('导入…').active, isTrue);
+    expect(ringFor('导出…').active, isFalse);
+
+    picking.complete({
+      'name': 't.json',
+      'format': 'json',
+      'text': '[{"term":"API","translation":"接口","language":"zh-CN"}]',
+    });
+    await tester.pumpAndSettle();
+    expect(ringFor('确认导入').active, isFalse);
+
+    await tester.tap(find.text('确认导入'));
+    await tester.pump();
+    expect(ringFor('保存中…').active, isTrue);
+    expect(ringFor('取消').active, isFalse);
+
+    saving.complete();
+    await tester.pumpAndSettle();
+    expect(ringFor('导入…').active, isFalse);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -35,13 +35,15 @@ class GlossaryManager extends StatefulWidget {
 /// 持有弹窗内展示的术语列表；设置页保存的是每次改动后交回的完整副本。
 class _GlossaryManagerState extends State<GlossaryManager> {
   late final List<GlossaryEntry> _entries = [...widget.glossary];
-  bool _working = false;
+  String? _workingAction;
   String? _message;
+
+  bool get _working => _workingAction != null;
 
   /// 无参数；经系统面板选取文件并打开预览，取消不改动列表，返回操作结束的 Future。
   Future<void> _import() async {
     setState(() {
-      _working = true;
+      _workingAction = 'import';
       _message = null;
     });
     try {
@@ -51,6 +53,8 @@ class _GlossaryManagerState extends State<GlossaryManager> {
       if (file == null || !mounted) return;
       // parseGlossaryFile 一次校验整份文件，预览确认前不写设置草稿。
       final draft = parseGlossaryFile(file['text']!, format: file['format']!);
+      // 文件已读入并解析完成，进入交互预览前结束「导入…」的等待进度环。
+      setState(() => _workingAction = null);
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -73,7 +77,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     } on PlatformException catch (error) {
       if (mounted) setState(() => _message = error.message ?? '无法读取术语文件。');
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _workingAction = null);
     }
   }
 
@@ -102,7 +106,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     );
     if (format == null || !mounted) return;
     setState(() {
-      _working = true;
+      _workingAction = 'export';
       _message = null;
     });
     try {
@@ -116,7 +120,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     } on PlatformException catch (error) {
       if (mounted) setState(() => _message = error.message ?? '导出失败，请重试。');
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _workingAction = null);
     }
   }
 
@@ -224,6 +228,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     actions: [
       NativeGlassSurface(
         material: true,
+        busy: _workingAction == 'import',
         child: TextButton(
           onPressed: _working ? null : _import,
           child: const Text('导入…'),
@@ -231,6 +236,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
       ),
       NativeGlassSurface(
         material: true,
+        busy: _workingAction == 'export',
         child: TextButton(
           onPressed: _working ? null : _export,
           child: const Text('导出…'),
@@ -390,6 +396,7 @@ class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
           ),
           NativeGlassSurface(
             material: true,
+            busy: _saving,
             child: FilledButton(
               onPressed: _saving || draft.errorCount != 0 || draft.rows.isEmpty
                   ? null

@@ -262,12 +262,20 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
       children: [
         NativeGlassGroup(
           children: [
-            const Text('MCP 接口', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            NativeGlassSwitchTile(
-              title: '允许 agent 截图',
-              value: widget.enabled,
-              onChanged: widget.onChanged,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'MCP 接口',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                NativeGlassSwitchTile(
+                  title: '允许 agent 截图',
+                  value: widget.enabled,
+                  onChanged: widget.onChanged,
+                ),
+              ],
             ),
             // 操控依赖 MCP 接口；「允许 agent 截图」关闭时该行禁用（#67「设置 MCP 页」）。
             NativeGlassSwitchTile(
@@ -275,44 +283,62 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
               value: widget.controlEnabled,
               onChanged: widget.enabled ? widget.onControlChanged : null,
             ),
-            const SizedBox(height: 8),
-            const Text('helper 路径'),
-            const SizedBox(height: GlassMetrics.labelGap),
-            // 完整路径可选中复制，超长换行，不截断、不缩小字号。
-            SelectableText(
-              _helperPath ?? '',
-              key: const ValueKey('mcp-helper-path'),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _textButton(
-                const ValueKey('mcp-copy-config'),
-                // 隐藏的最长文案占位，反馈文字切换时按钮宽度不变。
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const ExcludeSemantics(
-                      child: Opacity(opacity: 0, child: Text(_copyLabel)),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('helper 路径'),
+                  const SizedBox(height: GlassMetrics.labelGap),
+                  // 完整路径可选中复制，超长换行，不截断、不缩小字号。
+                  SelectableText(
+                    _helperPath ?? '',
+                    key: const ValueKey('mcp-helper-path'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _textButton(
+                      const ValueKey('mcp-copy-config'),
+                      // 隐藏的最长文案占位，反馈文字切换时按钮宽度不变。
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const ExcludeSemantics(
+                            child: Opacity(opacity: 0, child: Text(_copyLabel)),
+                          ),
+                          Text(_copied ? _copiedLabel : _copyLabel),
+                        ],
+                      ),
+                      copy,
                     ),
-                    Text(_copied ? _copiedLabel : _copyLabel),
-                  ],
-                ),
-                copy,
+                  ),
+                ],
               ),
             ),
           ],
         ),
         NativeGlassGroup(
           children: [
-            const Text('接入平台', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            if (_service != null)
-              for (final (index, platform) in mcpPlatforms.indexed) ...[
-                if (index > 0) const Divider(height: 1),
-                _platformRow(platform),
-              ],
+            if (_service == null)
+              const Text('接入平台', style: TextStyle(fontWeight: FontWeight.w600))
+            else
+              for (final (index, platform) in mcpPlatforms.indexed)
+                if (index == 0)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '接入平台',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      _platformRow(platform),
+                    ],
+                  )
+                else
+                  _platformRow(platform),
           ],
         ),
       ],

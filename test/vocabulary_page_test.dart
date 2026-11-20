@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/history/vocabulary_page.dart';
 
 /// 无参数；用假历史通道验证生词本分段的展示、删除、导出反馈与空列表状态。
@@ -71,5 +74,55 @@ void main() {
           .onPressed,
       isNull,
     );
+  });
+
+  testWidgets('生词本导出等待期间按钮显示进度环，完成后收起（#142）', (tester) async {
+    // 作用：验证生词本点击「导出 CSV」后在系统保存返回前显示进度环，结束后关闭。
+    // 边界：saveTextFile 挂起时 BusyRing.active=true，完成后恢复 false。
+    const channel = MethodChannel('test/vocabulary-busy');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final pending = Completer<String?>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.vocabularyList:
+          return [
+            {
+              'word': 'pear',
+              'translation': '梨',
+              'definition': 'noun 梨',
+              'addedAt': 1,
+            },
+          ];
+        case MethodNames.vocabularyCsv:
+          return '"pear","梨","noun 梨"\n';
+        case MethodNames.saveTextFile:
+          return pending.future;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: VocabularyPage(channel: channel, version: 0)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    BusyRing ring() => tester.widget<BusyRing>(
+      find
+          .ancestor(of: find.text('导出 CSV'), matching: find.byType(BusyRing))
+          .first,
+    );
+    expect(ring().active, isFalse);
+
+    await tester.tap(find.text('导出 CSV'));
+    await tester.pump();
+    expect(ring().active, isTrue);
+
+    pending.complete('/Users/test/pear.csv');
+    await tester.pumpAndSettle();
+    expect(ring().active, isFalse);
+    expect(tester.takeException(), isNull);
   });
 }

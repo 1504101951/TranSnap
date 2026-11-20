@@ -178,6 +178,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
               Expanded(child: Text(_message ?? '')),
               NativeGlassSurface(
                 material: true,
+                busy: _exporting,
                 child: TextButton(
                   onPressed: _exporting || (entries?.isEmpty ?? true)
                       ? null

@@ -53,6 +53,12 @@ enum AppConstants {
     static let captureControlSize = NSSize(width: 320, height: 84)
     static let captureShadeOpacity: CGFloat = 0.6
     static let captureControlGap: CGFloat = 8
+    /// 区域录制边框流光规范数值（#67 第 9 条、#142）：光段占周长 22%、线宽 2pt、外发光 8pt（shadowRadius 4）、周期 2.4s。
+    static let recordingFlowArc: CGFloat = 0.22
+    static let recordingFlowStroke: CGFloat = 2
+    static let recordingFlowGlow: CGFloat = 8
+    static let recordingFlowPeriod: CFTimeInterval = 2.4
+    static let recordingFlowShadowOpacity: Float = 0.85
     /// Issue #87长截图过程提示：沿用#67文字反馈的最大宽、内边距与圆角，距选区8pt，显示1000ms。
     static let scrollHintMaxWidth: CGFloat = 240
     static let scrollHintPadding = NSSize(width: 12, height: 5)
@@ -64,9 +70,9 @@ enum AppConstants {
     static let scrollPreviewMaxImageHeight: CGFloat = 240
     static let scrollPreviewImageRadius: CGFloat = 4
     static let scrollPreviewTargetLine: CGFloat = 2
-    /// 右侧七个32pt按钮、12pt间距和8pt内边距（7×32+6×12+16）；与Dart工具栏尺寸一致。
-    static let captureResultToolbarWidth: CGFloat = 48
-    static let captureResultToolbarHeight: CGFloat = 312
+    /// 录制结果底部工具栏长度与厚度（8 个 32pt 按钮、7 个 12pt 间距和左右各 8pt 内边距：8×32+7×12+16=356；上下各 8pt 内边距：32+16=48）；与 Dart 一致。
+    static let captureResultToolbarLength: CGFloat = 356
+    static let captureResultToolbarThickness: CGFloat = 48
     /// 录制最高帧率：ScreenCaptureKit 最小帧间隔为其倒数；WebM 编码以此作为码率分配的帧率提示（#110）。
     static let recordingFramesPerSecond: Int32 = 30
     /// WebM 编码页面的自定义 URL 协议名；编码页面与待编码帧都经此协议交给不挂窗口的 WKWebView（#110）。
@@ -85,6 +91,10 @@ enum AppConstants {
     static let setCapturePausedMethod = "setCapturePaused"
     static let cancelCaptureMethod = "cancelCapture"
     static let saveRecordingMethod = "saveRecording"
+    /// copyRecording 协议值；拷贝完整视频或裁剪片段到剪贴板临时目录并写入文件引用（#142），与 Dart 常量同步。
+    static let copyRecordingMethod = "copyRecording"
+    /// 录屏复制到剪贴板使用的临时子目录名；下次启动应用时清空（#68 第 10 条、#142）。
+    static let recordingClipboardDirectoryName = "TranslateApp-Clipboard"
     static let previewRecordingMethod = "previewRecording"
     static let exportRecordingGIFMethod = "exportRecordingGIF"
     /// exportRecordingAPNG 协议值；按 GIF 设置导出 APNG（#110），与Dart常量同步。
@@ -548,6 +558,11 @@ enum AppConstants {
     /// 非激活翻译浮层缩放与淡入动画时长，单位秒（#67、#142）。
     static let overlayResizeAnimationDuration: TimeInterval = 0.24
     static let overlayFadeInDuration: TimeInterval = 0.16
+    /// 实时翻译盖层逐字显影参数：单字时长（秒）、错峰间隔（秒）、错峰总长上限（秒）与初始模糊半径（pt），与 Dart MotionMetrics 一致（#142）。
+    static let charRevealDuration: TimeInterval = 0.26
+    static let charRevealStagger: TimeInterval = 0.018
+    static let charRevealMaxSpread: TimeInterval = 0.60
+    static let charRevealBlur: CGFloat = 3
     /// 操控会话的时长上限与空闲上限，单位秒（#140：30 分钟、5 分钟）。
     static let controlSessionLimit: TimeInterval = 30 * 60
     static let controlIdleLimit: TimeInterval = 5 * 60

@@ -1,6 +1,7 @@
 import AppKit
 import AVKit
 import FlutterMacOS
+import QuartzCore
 
 /// 采集工具协调者；截图层确认选区，采集与暂停时显示实时阴影与四气泡控制条，完成后展示结果。
 @MainActor
@@ -247,19 +248,20 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
-    /// pixels为源视频像素，scale为来源显示倍率，visible为屏幕可用区；返回包含系统标题栏、等比媒体与工具栏的窗口。
+    /// pixels 为源视频像素，scale 为来源显示倍率，visible 为屏幕可用区；返回包含系统标题栏、等比媒体与底部 356×48 工具栏的窗口（#67、#142）。
     static func resultFrame(pixels: NSSize, scale: CGFloat, visible: NSRect) -> NSRect {
         let logical = NSSize(width: pixels.width / scale, height: pixels.height / scale)
         let inset = AppConstants.captureControlGap
-        // 系统标题栏和边框占用真实窗口空间，Flutter只布局标题栏下方的可用内容。
+        // 系统标题栏和边框占用真实窗口空间，Flutter 只布局标题栏下方的可用内容。
         let available = NSWindow.contentRect(forFrameRect: visible, styleMask: AppConstants.captureResultWindowStyle).size
-        // 右侧48pt工具栏、8pt间隔和左右各8pt外边距；纵向七个按钮含padding共312pt。
-        let reservedWidth = AppConstants.captureResultToolbarWidth + inset * 3
+        // 上边距和左右边距 8pt；视频下方隔 8pt 是 48pt 厚的横排工具栏（宽 356pt），纵向预留 64pt。
+        let reservedWidth = inset * 2
+        let reservedHeight = inset * 2 + AppConstants.captureResultToolbarThickness
         let fit = min(1, min((available.width - reservedWidth) / logical.width,
-                             (available.height - inset * 2) / logical.height))
-        // 浮点缩放可能在恰好铺满时多出亚像素；窗口边界始终限制在可用屏幕内。
-        let contentSize = NSSize(width: min(available.width, logical.width * fit + reservedWidth),
-                                 height: min(available.height, max(logical.height * fit, AppConstants.captureResultToolbarHeight) + inset * 2))
+                             (available.height - reservedHeight) / logical.height))
+        // 浮点缩放可能在恰好铺满时多出亚像素；窗口宽度至少容纳 356pt 工具栏并限制在可用屏幕内。
+        let contentSize = NSSize(width: min(available.width, max(logical.width * fit + reservedWidth, AppConstants.captureResultToolbarLength)),
+                                 height: min(available.height, logical.height * fit + reservedHeight))
         let frame = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: AppConstants.captureResultWindowStyle)
         let size = NSSize(width: min(visible.width, frame.width), height: min(visible.height, frame.height))
@@ -425,10 +427,10 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         window.contentMinSize = image ? AppConstants.longScreenshotResultMinimumSize : Self.recordingResultMinimumSize()
     }
 
-    /// 无参数；返回录制结果窗的最小内容尺寸，保留右侧六个操作、内外间距和至少1pt视频，缩放不裁掉工具栏。
+    /// 无参数；返回录制结果窗的最小内容尺寸（356×65），保留底部横排八操作、间距与至少 1pt 视频，缩放不裁掉工具栏（#142）。
     private static func recordingResultMinimumSize() -> NSSize {
-        NSSize(width: AppConstants.captureResultToolbarWidth + AppConstants.captureControlGap * 3 + 1,
-               height: AppConstants.captureResultToolbarHeight + AppConstants.captureControlGap * 2)
+        NSSize(width: AppConstants.captureResultToolbarLength,
+               height: AppConstants.captureControlGap * 2 + AppConstants.captureResultToolbarThickness + 1)
     }
 
     /// 无参数；控制条固定在发起截图显示器的右下角，不随窗口移动或采集范围跳屏。
@@ -539,6 +541,11 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
             let view = shade.contentView as! CaptureShadeView
             view.selection = frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
                 .intersection(NSRect(origin: .zero, size: screen.frame.size))
+            // 仅在区域录制（且非实时翻译预览）期间叠加流动边框，暂停时冻住光段相位（#142）。
+            view.flowsBorder = liveShadeFrame == nil
+                && service.isRegionRecording
+                && [.recording, .pausing, .paused].contains(service.phase)
+            view.flowPaused = [.pausing, .paused].contains(service.phase)
         }
         for displayID in Set(captureShades.keys).subtracting(active) {
             captureShades.removeValue(forKey: displayID)?.close()
@@ -663,6 +670,8 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
                 case AppConstants.saveRecordingMethod:
                     let target = try outputURL(.mp4, date: Date())
                     try service.saveVideo(to: target)
+                case AppConstants.copyRecordingMethod:
+                    try await copyRecording()
                 case AppConstants.previewRecordingMethod:
                     try await preview()
                 case AppConstants.trimRecordingMethod:
@@ -785,6 +794,72 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         let end = item.forwardPlaybackEndTime.isValid ? item.forwardPlaybackEndTime : item.duration
         try service.setTrim(start <= .zero && end >= item.duration ? nil : CMTimeRange(start: start, end: end))
     }
+
+    /// 无参数；返回复制录制文件专用的应用临时剪贴板子目录，位于 NSTemporaryDirectory() 下。
+    nonisolated static func recordingClipboardDirectory() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent(AppConstants.recordingClipboardDirectoryName, isDirectory: true)
+    }
+
+    /// directory 为剪贴板临时子目录；清空上次启动残留的复制视频临时文件，无返回值（#68 第 10 条、#142）。
+    nonisolated static func clearRecordingClipboardDirectory(at directory: URL = recordingClipboardDirectory()) {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+            return
+        }
+        for entry in entries {
+            try? fileManager.removeItem(at: entry)
+        }
+    }
+
+    /// date 为点击复制时刻，directory 为目标剪贴板子目录；返回不冲突的「录屏-yyyyMMdd-HHmmss.mp4」文件 URL。
+    nonisolated static func clipboardVideoURL(date: Date, in directory: URL = recordingClipboardDirectory()) throws -> URL {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let stem = "录屏-\(formatter.string(from: date))"
+        let first = directory.appendingPathComponent("\(stem).mp4")
+        if !fileManager.fileExists(atPath: first.path) { return first }
+        var index = 2
+        while true {
+            let candidate = directory.appendingPathComponent("\(stem)-\(index).mp4")
+            if !fileManager.fileExists(atPath: candidate.path) { return candidate }
+            index += 1
+        }
+    }
+
+    /// 无参数；拷贝完整视频或当前裁剪片段到应用剪贴板临时目录，并把文件 URL 写入系统剪贴板，结果窗关闭后仍可粘贴（#142）。
+    private func copyRecording() async throws {
+        let token = service.id
+        let source = try service.recordingURL()
+        let range = service.trim
+        let target = try await Task.detached {
+            let destination = try Self.clipboardVideoURL(date: Date())
+            do {
+                if let range {
+                    try await MediaCaptureService.trimVideo(source: source, range: range, destination: destination) { _ in }
+                } else {
+                    try FileManager.default.copyItem(at: source, to: destination)
+                }
+                return destination
+            } catch {
+                try? FileManager.default.removeItem(at: destination)
+                throw error
+            }
+        }.value
+        guard token == service.id else {
+            try? FileManager.default.removeItem(at: target)
+            throw GIFExporter.ExportError(message: "录制会话已失效。")
+        }
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.writeObjects([target as NSURL]) else {
+            try? FileManager.default.removeItem(at: target)
+            throw GIFExporter.ExportError(message: "无法复制视频，请重试。")
+        }
+    }
 }
 
 /// Flutter结果页的系统视频视图工厂；创建视图发生在Flutter的macOS主线程。
@@ -815,12 +890,131 @@ private final class CaptureControlPanel: NSPanel {
 
 /// 录制中的实时选区阴影；不持有冻结图像，不处理输入，绘制内容被系统捕获过滤器排除。
 final class CaptureShadeView: NSView {
+    private static let flowAnimationKey = "recordingBorderFlow"
+
     /// 应用窗口的本屏局部矩形并集；nil表示普通区域遮罩，空数组表示本屏无应用窗口。
-    var contentRects: [NSRect]? { didSet { needsDisplay = true } }
+    var contentRects: [NSRect]? {
+        didSet {
+            guard contentRects != oldValue else { return }
+            needsDisplay = true
+            syncFlowLayer()
+        }
+    }
     /// selection为本显示器局部点坐标；变化后重绘阴影和1pt选区边框。
-    var selection = NSRect.zero { didSet { needsDisplay = true } }
+    var selection = NSRect.zero {
+        didSet {
+            guard selection != oldValue else { return }
+            needsDisplay = true
+            syncFlowLayer()
+        }
+    }
+    /// 是否绘制区域录制流光边框（#142，#67 第 9 条）；仅区域录制开启，窗口/长截图与截图预览关闭。
+    var flowsBorder = false {
+        didSet {
+            guard flowsBorder != oldValue else { return }
+            syncFlowLayer()
+        }
+    }
+    /// 区域录制流光是否暂停在当前位置（#142）；暂停时图层 speed 为 0，恢复时保持相位接着流动。
+    var flowPaused = false {
+        didSet {
+            guard flowPaused != oldValue else { return }
+            syncFlowPause()
+        }
+    }
+    /// 读取系统「减少动态效果」设置；测试可覆写以隔离系统偏好。
+    var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private(set) var flowLayer: CAShapeLayer?
+    private var flowSize = NSSize.zero
     private(set) var hintView: NSGlassEffectView?
     private var hintGeneration = 0
+
+    /// 无参数；外观变化时把最新系统强调色同步到区域录制流光层，无返回值。
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if let flowLayer { applyFlowAppearance(to: flowLayer) }
+    }
+
+    /// layer 为区域流光形状层；按当前有效外观写入强调色描边与外发光，无返回值。
+    private func applyFlowAppearance(to layer: CAShapeLayer) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accent = NSColor.controlAccentColor.cgColor
+            layer.strokeColor = accent
+            layer.shadowColor = accent
+        }
+    }
+
+    /// 无参数；按区域录制状态与减少动态效果设置创建、更新或移除 CAShapeLayer 流光边框，无返回值。
+    func syncFlowLayer() {
+        let rect = selection.insetBy(dx: 0.5, dy: 0.5)
+        let enabled = flowsBorder
+            && contentRects == nil
+            && !isReduceMotion()
+            && rect.width > 0
+            && rect.height > 0
+        guard enabled else {
+            flowLayer?.removeAllAnimations()
+            flowLayer?.removeFromSuperlayer()
+            flowLayer = nil
+            flowSize = .zero
+            return
+        }
+        wantsLayer = true
+        let shape: CAShapeLayer
+        if let existing = flowLayer {
+            shape = existing
+        } else {
+            shape = CAShapeLayer()
+            shape.fillColor = nil
+            shape.lineWidth = AppConstants.recordingFlowStroke
+            shape.lineCap = .round
+            shape.shadowOffset = .zero
+            shape.shadowRadius = AppConstants.recordingFlowGlow / 2
+            shape.shadowOpacity = AppConstants.recordingFlowShadowOpacity
+            layer?.insertSublayer(shape, at: 0)
+            flowLayer = shape
+        }
+        shape.frame = bounds
+        shape.path = CGPath(rect: rect, transform: nil)
+        applyFlowAppearance(to: shape)
+        let perimeter = 2 * (rect.width + rect.height)
+        let dash = Double(perimeter * AppConstants.recordingFlowArc)
+        let gap = Double(perimeter) - dash
+        shape.lineDashPattern = [NSNumber(value: dash), NSNumber(value: gap)]
+        if flowSize != rect.size || shape.animation(forKey: Self.flowAnimationKey) == nil {
+            flowSize = rect.size
+            // 仅在首次创建或选区尺寸改变时重建相位动画；先复原时间轴，再应用暂停状态。
+            shape.speed = 1
+            shape.timeOffset = 0
+            shape.beginTime = 0
+            let animation = CABasicAnimation(keyPath: "lineDashPhase")
+            animation.fromValue = 0
+            animation.toValue = -perimeter
+            animation.duration = AppConstants.recordingFlowPeriod
+            animation.repeatCount = .infinity
+            animation.isRemovedOnCompletion = false
+            shape.add(animation, forKey: Self.flowAnimationKey)
+        }
+        syncFlowPause()
+    }
+
+    /// 无参数；暂停时置 speed=0 并锁定 timeOffset，恢复时从原相位继续流动，无返回值。
+    private func syncFlowPause() {
+        guard let shape = flowLayer else { return }
+        if flowPaused {
+            guard shape.speed != 0 else { return }
+            let pausedTime = shape.convertTime(CACurrentMediaTime(), from: nil)
+            shape.speed = 0
+            shape.timeOffset = pausedTime
+        } else {
+            guard shape.speed == 0 else { return }
+            let pausedTime = shape.timeOffset
+            shape.speed = 1
+            shape.timeOffset = 0
+            shape.beginTime = 0
+            shape.beginTime = shape.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
+        }
+    }
 
     /// text为长截图过程提示，isError选择错误语义色；visible为本屏可用区、avoiding为控制面板和缩略图（均为本视图坐标）。
     /// 按选区上、下、左、右寻找距选区8pt的位置，都放不下才放在选区正中央；显示1000ms。

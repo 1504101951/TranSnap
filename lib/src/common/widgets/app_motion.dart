@@ -1301,20 +1301,22 @@ class _RecordingDotPainter extends CustomPainter {
       old.progress != progress || old.pulsing != pulsing || old.color != color;
 }
 
-/// 等待进度环（#142，#67 第 7 条）：包在按钮外，active 时强调色弧段沿圆角环流动；
+/// 等待进度环（#142，#67 第 7 条、第 12 条）：包在按钮外，active 时强调色弧段沿圆角环流动；
 /// active 由真变假时环闭合、放大并淡出，结束后不再绘制。减少动态效果时等待中显示静态完整环。
 class BusyRing extends StatefulWidget {
-  /// child 为按钮，active 为是否正在等待，color 为环颜色（系统强调色）。
+  /// child 为按钮，active 为是否正在等待，color 为环颜色（系统强调色），radius 为环圆角（按钮圆角 + 外扩 2pt）。
   const BusyRing({
     super.key,
     required this.child,
     required this.active,
     required this.color,
+    this.radius = MotionMetrics.busyRingRadius,
   });
 
   final Widget child;
   final bool active;
   final Color color;
+  final double radius;
 
   /// 无参数；创建流动与完成两段动画的状态。
   @override
@@ -1331,23 +1333,39 @@ class _BusyRingState extends State<BusyRing> with TickerProviderStateMixin {
     duration: MotionMetrics.busyRingFinish,
   );
 
-  /// 无参数；挂载时已在等待则开始流动。
+  /// 无参数；完成动画结束时触发重建，移除不再可见的环层。
   @override
   void initState() {
     super.initState();
-    if (widget.active) _flow.repeat();
+    _finish.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) setState(() {});
+    });
+  }
+
+  /// 无参数；随无障碍设置同步流动控制器，减少动态效果时不启动循环。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduced = AppMotion.reduced(context);
+    if (widget.active && !reduced) {
+      if (!_flow.isAnimating) _flow.repeat();
+    } else {
+      _flow.stop();
+      if (reduced) _finish.stop();
+    }
   }
 
   /// oldWidget 为上一配置；开始等待时重新流动，等待结束时播放闭合淡出。
   @override
   void didUpdateWidget(covariant BusyRing oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final reduced = AppMotion.reduced(context);
     if (widget.active && !oldWidget.active) {
       _finish.reset();
-      _flow.repeat();
+      if (!reduced) _flow.repeat();
     } else if (!widget.active && oldWidget.active) {
       _flow.stop();
-      _finish.forward(from: 0);
+      if (!reduced) _finish.forward(from: 0);
     }
   }
 
@@ -1381,6 +1399,7 @@ class _BusyRingState extends State<BusyRing> with TickerProviderStateMixin {
                 builder: (context, _) => CustomPaint(
                   painter: _BusyRingPainter(
                     color: widget.color,
+                    radius: widget.radius,
                     phase: _flow.value,
                     // 等待中：减少动态效果时为完整静态环，否则为流动弧段；完成后为闭合环。
                     arc: widget.active && !reduced
@@ -1397,16 +1416,18 @@ class _BusyRingState extends State<BusyRing> with TickerProviderStateMixin {
   }
 }
 
-/// 进度环画笔：phase 为流动相位 0–1，arc 为弧段占周长比例（1 为闭合），finish 为完成进度 0–1（放大并淡出）。
+/// 进度环画笔：radius 为环圆角，phase 为流动相位 0–1，arc 为弧段占周长比例（1 为闭合），finish 为完成进度 0–1（放大并淡出）。
 class _BusyRingPainter extends CustomPainter {
   _BusyRingPainter({
     required this.color,
+    required this.radius,
     required this.phase,
     required this.arc,
     required this.finish,
   });
 
   final Color color;
+  final double radius;
   final double phase;
   final double arc;
   final double finish;
@@ -1424,7 +1445,7 @@ class _BusyRingPainter extends CustomPainter {
       ..addRRect(
         RRect.fromRectAndRadius(
           (Offset.zero & size).deflate(inset),
-          const Radius.circular(MotionMetrics.busyRingRadius),
+          Radius.circular(radius),
         ),
       );
     final paint = Paint()
@@ -1455,6 +1476,7 @@ class _BusyRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _BusyRingPainter oldDelegate) =>
       oldDelegate.color != color ||
+      oldDelegate.radius != radius ||
       oldDelegate.phase != phase ||
       oldDelegate.arc != arc ||
       oldDelegate.finish != finish;
@@ -1575,160 +1597,6 @@ class _CharRevealState extends State<CharReveal>
       ),
     );
   }
-}
-
-/// 选区流光边框（#142，#67 第 9 条）：沿 rect 周长流动的强调色光段，fast 为真（拖动或调整选区）时加速且相位连续；
-/// 选区定下后再流 MotionMetrics.selectionFlowLaps 圈并淡出，rect、fast 或 trigger（当前工具）变化时重新开始。
-/// 只是编辑界面装饰，不参与命中与导出；减少动态效果时不绘制。
-class SelectionFlow extends StatefulWidget {
-  /// rect 为显示坐标下的选区，color 为强调色，fast 为是否正在拖动或调整，trigger 变化（如切换工具）时重新流动。
-  const SelectionFlow({
-    super.key,
-    required this.rect,
-    required this.color,
-    required this.fast,
-    this.trigger,
-  });
-
-  final Rect rect;
-  final Color color;
-  final bool fast;
-  final Object? trigger;
-
-  /// 无参数；创建按帧推进相位与淡出的状态。
-  @override
-  State<SelectionFlow> createState() => _SelectionFlowState();
-}
-
-class _SelectionFlowState extends State<SelectionFlow>
-    with SingleTickerProviderStateMixin {
-  /// 光段起点相位 0–1 与整体不透明度 0–1；画笔监听它重画，不重建控件。
-  final _frame = ValueNotifier((phase: 0.0, opacity: 1.0));
-  late final _ticker = createTicker(_tick);
-  Duration _last = Duration.zero;
-
-  /// 选区定下（不再拖动）后已经流动的时长（微秒）。
-  int _idle = 0;
-
-  /// 无参数；选区定下后的总流动时长（微秒）。
-  int get _idleLimit =>
-      MotionMetrics.selectionFlowPeriod.inMicroseconds *
-      MotionMetrics.selectionFlowLaps;
-
-  /// elapsed 为自本次启动起的时长；按当前速度累加相位，切换快慢时不跳变；定下后计时，到时淡出并停止。
-  void _tick(Duration elapsed) {
-    final period = widget.fast
-        ? MotionMetrics.selectionFlowFastPeriod
-        : MotionMetrics.selectionFlowPeriod;
-    final step = (elapsed - _last).inMicroseconds;
-    _last = elapsed;
-    _idle = widget.fast ? 0 : _idle + step;
-    final left = _idleLimit - _idle;
-    final fade = MotionMetrics.selectionFlowFadeOut.inMicroseconds;
-    _frame.value = (
-      phase: (_frame.value.phase + step / period.inMicroseconds) % 1,
-      opacity: (left / fade).clamp(0.0, 1.0),
-    );
-    if (left <= 0) _ticker.stop();
-  }
-
-  /// 无参数；从头开始一轮流动（已在流动时只重置定下计时）。
-  void _restart() {
-    _idle = 0;
-    _frame.value = (phase: _frame.value.phase, opacity: 1.0);
-    if (_ticker.isActive) return;
-    _last = Duration.zero;
-    _ticker.start();
-  }
-
-  /// 无参数；挂载即开始一轮流动。
-  @override
-  void initState() {
-    super.initState();
-    _restart();
-  }
-
-  /// oldWidget 为上一配置；选区、拖动状态或触发值变化时重新流动。
-  @override
-  void didUpdateWidget(covariant SelectionFlow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.rect != oldWidget.rect ||
-        widget.fast != oldWidget.fast ||
-        widget.trigger != oldWidget.trigger) {
-      _restart();
-    }
-  }
-
-  /// 无参数；停止计时并释放帧状态。
-  @override
-  void dispose() {
-    _ticker.dispose();
-    _frame.dispose();
-    super.dispose();
-  }
-
-  /// context 提供无障碍设置；返回铺满父级的流光画布，减少动态效果时为空。
-  @override
-  Widget build(BuildContext context) {
-    if (AppMotion.reduced(context)) return const SizedBox.shrink();
-    return CustomPaint(
-      painter: _SelectionFlowPainter(
-        rect: widget.rect,
-        color: widget.color,
-        frame: _frame,
-      ),
-    );
-  }
-}
-
-/// 流光画笔：rect 为选区，color 为强调色，frame 为光段起点相位与整体不透明度（变化时重画）。
-class _SelectionFlowPainter extends CustomPainter {
-  _SelectionFlowPainter({
-    required this.rect,
-    required this.color,
-    required this.frame,
-  }) : super(repaint: frame);
-
-  final Rect rect;
-  final Color color;
-  final ValueNotifier<({double phase, double opacity})> frame;
-
-  /// canvas/size 为显示画布；先画外发光再画实线光段，跨过路径终点时分两段。
-  @override
-  void paint(Canvas canvas, Size size) {
-    final opacity = frame.value.opacity;
-    if (rect.width < 1 || rect.height < 1 || opacity <= 0) return;
-    final glow = Paint()
-      ..color = color.withValues(alpha: color.a * 0.6 * opacity)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = MotionMetrics.selectionFlowStroke
-      ..maskFilter = const MaskFilter.blur(
-        BlurStyle.normal,
-        MotionMetrics.selectionFlowGlow / 2,
-      );
-    final line = Paint()
-      ..color = color.withValues(alpha: color.a * opacity)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = MotionMetrics.selectionFlowStroke
-      ..strokeCap = StrokeCap.round;
-    for (final metric in (Path()..addRect(rect)).computeMetrics()) {
-      final start = metric.length * frame.value.phase;
-      final end = start + metric.length * MotionMetrics.selectionFlowArc;
-      final pieces = [
-        metric.extractPath(start, math.min(end, metric.length)),
-        if (end > metric.length) metric.extractPath(0, end - metric.length),
-      ];
-      for (final piece in pieces) {
-        canvas.drawPath(piece, glow);
-        canvas.drawPath(piece, line);
-      }
-    }
-  }
-
-  /// oldDelegate 为上一画笔；选区或颜色变化时重画，相位变化由 repaint 驱动。
-  @override
-  bool shouldRepaint(covariant _SelectionFlowPainter oldDelegate) =>
-      oldDelegate.rect != rect || oldDelegate.color != color;
 }
 
 /// 工具栏液态展开（#142，#67 第 10 条）：items 各按钮从 anchor（父级按钮）位置沿物理弹簧（420ms、阻尼 0.62）

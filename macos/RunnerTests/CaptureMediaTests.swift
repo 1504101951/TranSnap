@@ -134,6 +134,41 @@ final class CaptureMediaTests: XCTestCase {
 
     }
 
+    /// 无参数；区域录制在非减少动态效果时叠加 22%/78% 虚线相位流光、暂停冻住 speed、恢复延续且窗口遮罩或减少动态效果时不创建图层（#142）。
+    @MainActor
+    func testRegionRecordingFlowLayerTracksDashPauseAndWindowExclusion() throws {
+        var reduceMotion = false
+        let shade = CaptureShadeView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        shade.isReduceMotion = { reduceMotion }
+        shade.selection = NSRect(x: 50, y: 40, width: 101, height: 61)
+        XCTAssertNil(shade.flowLayer)
+
+        shade.flowsBorder = true
+        let flow = try XCTUnwrap(shade.flowLayer)
+        // inset 0.5pt 后矩形宽 100、高 60，周长 320，22% 为 70.4，78% 为 249.6。
+        let pattern = try XCTUnwrap(flow.lineDashPattern).map(\.doubleValue)
+        XCTAssertEqual(pattern.count, 2)
+        XCTAssertEqual(pattern[0], 70.4, accuracy: 0.01)
+        XCTAssertEqual(pattern[1], 249.6, accuracy: 0.01)
+        XCTAssertEqual(flow.lineWidth, 2)
+        XCTAssertEqual(flow.shadowRadius, 4)
+        XCTAssertEqual(flow.speed, 1)
+
+        shade.flowPaused = true
+        XCTAssertEqual(flow.speed, 0)
+        shade.flowPaused = false
+        XCTAssertEqual(flow.speed, 1)
+
+        // 窗口录制设置 contentRects 后立即移除流光图层；减少动态效果开启时同样不创建。
+        shade.contentRects = [NSRect(x: 10, y: 10, width: 100, height: 100)]
+        XCTAssertNil(shade.flowLayer)
+
+        shade.contentRects = nil
+        reduceMotion = true
+        shade.syncFlowLayer()
+        XCTAssertNil(shade.flowLayer)
+    }
+
     /// 无参数；长截图过程提示依次尝试选区上、下、左、右并离选区8pt，避开面板与缩略图，都放不下才居中且不超过选区宽减16pt；1000ms后移除。
     @MainActor
     func testScrollHintAvoidsSelectionThenFallsBackToCenterAndExpires() async throws {
@@ -280,22 +315,22 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(NSApp.isActive, wasActive)
     }
 
-    /// 无参数；853×434媒体占925×450内容区，系统标题栏计入窗口边界，全屏及宽/高极值均须完整容纳。
+    /// 无参数；853×434 媒体占 869×498 内容区，系统标题栏计入窗口边界，全屏及宽/高极值均须完整容纳且不裁掉 356×65 工具栏。
     @MainActor
     func testVideoResultBoundsDoNotCreateAnInvisibleDesktopOverlay() {
         let visible = NSRect(x: -1920, y: 24, width: 1920, height: 1056)
         let ordinary = CaptureWindowController.resultFrame(pixels: NSSize(width: 1706, height: 868), scale: 2, visible: visible)
         let content = NSWindow.contentRect(forFrameRect: ordinary, styleMask: AppConstants.captureResultWindowStyle)
-        XCTAssertEqual(content.size, NSSize(width: 925, height: 450))
+        XCTAssertEqual(content.size, NSSize(width: 869, height: 498))
         XCTAssertGreaterThan(ordinary.height, content.height)
         XCTAssertFalse(ordinary.contains(NSPoint(x: visible.minX + 1, y: visible.minY + 1)))
         for pixels in [NSSize(width: 72, height: 48), NSSize(width: 20000, height: 1000),
                        NSSize(width: 720, height: 4800), NSSize(width: 3840, height: 2160)] {
             let frame = CaptureWindowController.resultFrame(pixels: pixels, scale: 2, visible: visible)
             XCTAssertTrue(visible.contains(frame))
-            XCTAssertGreaterThanOrEqual(frame.width, 73)
-            // 内容至少容纳六个操作的268pt工具栏与上下8pt外边距，再加系统标题栏（#110）。
-            XCTAssertGreaterThan(frame.height, 284)
+            XCTAssertGreaterThanOrEqual(frame.width, 356)
+            // 内容至少容纳底部 48pt 工具栏、上下各 8pt 间距与至少 1pt 视频（356×65），再加系统标题栏（#142）。
+            XCTAssertGreaterThan(frame.height, 65)
         }
     }
 
@@ -1823,6 +1858,70 @@ final class CaptureMediaTests: XCTestCase {
         ))
     }
 
+    /// 无参数/返回值；验证逐字显影批基准（首次/追加/替换/相同/Emoji）、600ms 错峰上限与单字进度/模糊边界（#142）。
+    func testCharRevealBatchCalculation() {
+        // 首次出现从 0 开始整段显影；内容不变返回全长以免重播；紧接旧前缀追加仅显影增量部分。
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "", current: "你好世界"), 0)
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "你好世界"), 4)
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好", current: "你好世界"), 2)
+        // 内容被替换或截断时从头重新显影；清空返回 0。
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "再见"), 0)
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "你好"), 0)
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好", current: ""), 0)
+        // 按 grapheme cluster（Character）计数，Emoji 不被拆分成代理对。
+        XCTAssertEqual(CharRevealBatch.batchBase(previous: "😀👍", current: "😀👍新词"), 2)
+
+        // 短段落沿用 18ms 错峰；长段落压低单字错峰使同批总错峰不超过 600ms 上限。
+        XCTAssertEqual(CharRevealBatch.stagger(revealingCount: 0), 0)
+        XCTAssertEqual(CharRevealBatch.stagger(revealingCount: 10), AppConstants.charRevealStagger, accuracy: 0.0001)
+        let longCount = 100
+        let cappedStagger = CharRevealBatch.stagger(revealingCount: longCount)
+        XCTAssertEqual(cappedStagger, 0.006, accuracy: 0.0001)
+        XCTAssertLessThan(cappedStagger * Double(longCount - 1), AppConstants.charRevealMaxSpread)
+        XCTAssertEqual(
+            CharRevealBatch.totalDuration(revealingCount: 1),
+            AppConstants.charRevealDuration,
+            accuracy: 0.0001
+        )
+
+        // 单字进度钳位 0...1，模糊半径按 3 * (1 - t) 同步退至 0。
+        XCTAssertEqual(CharRevealBatch.progress(elapsed: 0.0, index: 1, stagger: 0.018), 0, accuracy: 0.0001)
+        XCTAssertEqual(CharRevealBatch.progress(elapsed: 0.148, index: 1, stagger: 0.018), 0.5, accuracy: 0.001)
+        XCTAssertEqual(CharRevealBatch.progress(elapsed: 1.0, index: 1, stagger: 0.018), 1, accuracy: 0.0001)
+        XCTAssertEqual(CharRevealBatch.blurRadius(progress: 0), AppConstants.charRevealBlur, accuracy: 0.0001)
+        XCTAssertEqual(CharRevealBatch.blurRadius(progress: 0.5), 1.5, accuracy: 0.0001)
+        XCTAssertEqual(CharRevealBatch.blurRadius(progress: 1.5), 0, accuracy: 0.0001)
+    }
+
+    /// 无参数/返回值；验证复制视频临时文件命名、同秒冲突顺延与启动清空剪贴板子目录仅移除内部残留（#68 第 10 条、#142）。
+    func testClipboardVideoDirectoryNamingAndStartupCleanup() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipboardVideoTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone.current
+        components.year = 2026
+        components.month = 11
+        components.day = 20
+        components.hour = 18
+        components.minute = 30
+        components.second = 5
+        let date = try XCTUnwrap(components.date)
+
+        let first = try CaptureWindowController.clipboardVideoURL(date: date, in: root)
+        XCTAssertEqual(first.lastPathComponent, "录屏-20261120-183005.mp4")
+        try Data("mp4-1".utf8).write(to: first)
+
+        let second = try CaptureWindowController.clipboardVideoURL(date: date, in: root)
+        XCTAssertEqual(second.lastPathComponent, "录屏-20261120-183005-2.mp4")
+        try Data("mp4-2".utf8).write(to: second)
+
+        CaptureWindowController.clearRecordingClipboardDirectory(at: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.path))
+    }
 
 }
 

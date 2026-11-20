@@ -54,16 +54,6 @@ abstract final class MotionMetrics {
   static const charRevealMaxSpread = Duration(milliseconds: 600);
   static const charRevealBlur = 3.0;
 
-  /// 截图选区流光边框（#67 第 9 条）：光段占周长比例、常态与拖动时的流动周期、线宽、外发光半径，
-  /// 选区定下后继续流动的圈数与最后的淡出时长。
-  static const selectionFlowLaps = 2;
-  static const selectionFlowFadeOut = Duration(milliseconds: 600);
-  static const selectionFlowArc = 0.22;
-  static const selectionFlowPeriod = Duration(milliseconds: 2400);
-  static const selectionFlowFastPeriod = Duration(milliseconds: 800);
-  static const selectionFlowStroke = 2.0;
-  static const selectionFlowGlow = 8.0;
-
   /// 工具栏液态展开（#67 第 10 条）：各按钮错峰、粘连模糊半径、液滴不透明度。
   static const liquidStagger = Duration(milliseconds: 40);
   static const liquidBlur = 5.0;

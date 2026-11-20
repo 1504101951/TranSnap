@@ -379,22 +379,14 @@ class _HistoryAppState extends State<HistoryApp> {
               material: true,
               child: TextButton(
                 onPressed: () => _pickDate(context, start: true),
-                child: Text(
-                  _from == null
-                      ? '起始日期'
-                      : '起始 ${dateText(_from!)}',
-                ),
+                child: Text(_from == null ? '起始日期' : '起始 ${dateText(_from!)}'),
               ),
             ),
             NativeGlassSurface(
               material: true,
               child: TextButton(
                 onPressed: () => _pickDate(context, start: false),
-                child: Text(
-                  _to == null
-                      ? '结束日期'
-                      : '结束 ${dateText(_to!)}',
-                ),
+                child: Text(_to == null ? '结束日期' : '结束 ${dateText(_to!)}'),
               ),
             ),
             NativeGlassSurface(
@@ -561,6 +553,7 @@ class _HistoryAppState extends State<HistoryApp> {
               NativeGlassSwitch(
                 label: '记录翻译历史',
                 value: _recording ?? false,
+                busy: _savingRecording,
                 onChanged: _recording == null || _savingRecording
                     ? null
                     : _setRecording,

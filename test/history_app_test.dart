@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/history/history_app.dart';
 import 'package:translate_app/src/history/history_requests.dart';
 import 'package:translate_app/src/history/translation_history.dart';
@@ -347,5 +348,35 @@ void main() {
     expect(store.retentionConfirmed, isTrue);
     expect(store.page(), hasLength(1));
     expect(find.text('旧记录'), findsOneWidget);
+  });
+
+  testWidgets('历史窗口切换记录历史等待期间开关外圈显示进度环，完成后收起（#142）', (tester) async {
+    // 作用：验证 setHistoryRecording 事务进行中时，记录开关的 BusyRing.active 为真、结束后为假。
+    // 边界：切换期间异步保存挂起，BusyRing.active=true；释放并回包后恢复为 false。
+    final pending = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == MethodNames.setHistoryRecording) {
+            await pending.future;
+          }
+          return handleHistoryRequest(store, call);
+        });
+    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpAndSettle();
+
+    final toggle = find.byType(NativeGlassSwitch);
+    BusyRing ring() => tester.widget<BusyRing>(
+      find.descendant(of: toggle, matching: find.byType(BusyRing)).first,
+    );
+    expect(ring().active, isFalse);
+
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(ring().active, isTrue);
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(ring().active, isFalse);
+    expect(tester.takeException(), isNull);
   });
 }

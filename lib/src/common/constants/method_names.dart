@@ -19,6 +19,9 @@ abstract final class MethodNames {
   static const cancelCapture = 'cancelCapture';
   static const saveRecording = 'saveRecording';
 
+  /// 将当前录制结果（已裁剪时输出裁剪片段）复制到系统剪贴板。
+  static const copyRecording = 'copyRecording';
+
   /// 从裁剪起点播放到终点；未裁剪时播放完整视频。
   static const previewRecording = 'previewRecording';
   static const exportRecordingGIF = 'exportRecordingGIF';
@@ -49,6 +52,7 @@ abstract final class MethodNames {
   static const setBrushCursor = 'setBrushCursor';
   static const screenshotTextInput = 'screenshotTextInput';
   static const screenshotToolbarChanged = 'screenshotToolbarChanged';
+
   /// 原生截图面板转来的格位快捷键：{id, modifiers, digit}，digit 为 1–6，由截图引擎按网格解析（#141）。
   static const screenshotToolbarSlot = 'screenshotToolbarSlot';
 

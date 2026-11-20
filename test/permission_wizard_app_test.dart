@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/settings/permission_wizard_app.dart';
 
 /// 无参数；验证单页双权限与「进入应用」可点条件。
@@ -133,5 +136,49 @@ void main() {
     await tester.pump();
     expect(finished, isTrue);
     expect(closed, isTrue);
+  });
+
+  testWidgets('申请权限等待期间仅对应按钮显示进度环，完成后收起（#142）', (tester) async {
+    // 作用：验证共享材料按钮在异步授权请求期间只让被点击的按钮显示进度环。
+    // 边界：点击「申请录屏权限」时其 BusyRing.active 为真，「授权辅助功能」为假；请求完成后为假。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final pending = Completer<void>();
+    var screen = false;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.permissionWizardStatus:
+          return {
+            'accessibility': false,
+            'screenAccess': screen,
+            'finishedOrSkipped': false,
+          };
+        case MethodNames.requestScreenAccess:
+          await pending.future;
+          screen = true;
+          return {'screenAccess': true};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const PermissionWizardApp());
+    await tester.pumpAndSettle();
+    BusyRing ringFor(String label) => tester.widget<BusyRing>(
+      find
+          .ancestor(of: find.text(label), matching: find.byType(BusyRing))
+          .first,
+    );
+
+    await tester.tap(find.text('申请录屏权限'));
+    await tester.pump();
+    expect(ringFor('申请录屏权限').active, isTrue);
+    expect(ringFor('授权辅助功能').active, isFalse);
+
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(ringFor('已完成').active, isFalse);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -47,9 +47,22 @@ abstract final class GlassMetrics {
   static const bodyLine = 18.0;
   static const captionFont = 12.0;
   static const captionLine = 17.0;
+
+  /// 设置页静态样式数值（#67 第 14 条）：行间细线、状态标签与侧边栏图标块。
+  static const groupDividerThickness = 0.5;
+  static const statusHeight = 18.0;
+  static const statusRadius = 9.0;
+  static const statusPaddingX = 8.0;
+  static const statusDotSize = 6.0;
+  static const statusDotGap = 5.0;
+  static const statusFont = 11.0;
+  static const sidebarIconBox = 22.0;
+  static const sidebarIconRadius = 6.0;
+  static const sidebarIconSize = 12.0;
+  static const sidebarSelectionInset = 6.0;
   static const toolbarPadding = 8.0;
   static const toolbarThickness = hitSize + toolbarPadding * 2;
-  // 视频结果的右侧纵向操作间距，按Spec #67与原生承载尺寸保持一致。
+  // 采集结果工具栏相邻操作间距（视频结果为底部横排、长截图为右侧纵排），按Spec #67与原生承载尺寸保持一致。
   static const captureResultActionGap = 12.0;
   static const toastGap = 8.0;
   static const feedbackDuration = Duration(milliseconds: 1000);
