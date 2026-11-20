@@ -128,11 +128,12 @@ class LiveOcrSample {
 
 /// 原生盖层与悬浮条绘制所用的业务快照。不含密钥、凭据或调度中间态。
 class LiveRegionView {
-  /// phase 为会话阶段；status 为悬浮条显示的进度或原因；
+  /// phase 为会话阶段；status 为悬浮条显示的进度或原因；failed 为 status 是否为翻译失败原因；
   /// overlays 为盖层译文，metrics 为批次计时；均为原生盖层与悬浮条读取的字段（#124）。
   const LiveRegionView({
     required this.phase,
     required this.status,
+    this.failed = false,
     this.overlays = const [],
     this.metrics = const [],
   });
@@ -141,6 +142,9 @@ class LiveRegionView {
 
   final LiveRegionPhase phase;
   final String status;
+
+  /// status 为服务级停止或段落最终失败的原因时为真；截图翻译据此让提示不自动消失（#138）。
+  final bool failed;
 
   /// 只包含已经能归属到段落块的译文。坐标与输入段落块相同。
   final List<Map<String, Object>> overlays;
@@ -155,6 +159,7 @@ class LiveRegionView {
   Map<String, Object?> toMap() => {
     'phase': phase.name,
     'status': status,
+    'failed': failed,
     'overlays': overlays,
     'metrics': metrics,
   };
@@ -872,6 +877,9 @@ class LiveRegionSession {
     ];
   }
 
+  /// status 为 _status 的结果；返回它是否为翻译失败原因（服务级停止或最近的段落失败），进度与识别提示不算。
+  bool _isFailure(String status) => status == _halt || status == _lastError;
+
   /// 无参数；返回控制条显示的状态。
   String _status() {
     if (_halt != null) return _halt!;
@@ -925,9 +933,11 @@ class LiveRegionSession {
     if (_streamTimer != null) {
       _streamPending = true;
       // view 保持最新但不取走计时，计时随下一次真正发布交出。
+      final status = _status();
       view = LiveRegionView(
         phase: _phase,
-        status: _status(),
+        status: status,
+        failed: _isFailure(status),
         overlays: _overlayMaps(),
       );
       return;
@@ -944,9 +954,11 @@ class LiveRegionSession {
     final metrics = _metrics;
     _metrics = [];
     final previous = _sent;
+    final status = _status();
     view = LiveRegionView(
       phase: _phase,
-      status: _status(),
+      status: status,
+      failed: _isFailure(status),
       overlays: _overlayMaps(),
       metrics: metrics,
     );

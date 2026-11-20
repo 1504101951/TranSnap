@@ -67,7 +67,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 - `ServiceConfig` 保存服务类型、名称、Base URL、模型、独立提示词及语义对照选项；凭据独立传给 Swift，按配置 ID 存入用户 Keychain。
 - 打开设置仅查询 Keychain 凭据存在状态，禁止查询触发授权 UI。保存普通配置不读取密钥；有凭据变更时 Swift 才读取对应账户的回滚快照。凭据、登录项与快捷键配置成功后才保存普通偏好；同一服务 ID 不可更换协议。
 - 默认服务支持非官方 Google、Google Cloud v2、百度通用翻译、OpenAI-compatible Chat Completions、DeepSeek、Anthropic Messages 与 Apple 系统翻译。协议、百度签名、SSE 解析均由 Dart 实现。各模式的提示词与思考开关在 `AppSettings.prompts`、`AppSettings.thinking`（偏好 `PreferenceKeys.prompts`、`PreferenceKeys.thinking`），全部模型服务共用，缺省提示词为 `defaultPrompts`、思考缺省关闭；`ApiTranslationProvider` 由构造参数接收本模式的 `prompt` 与 `thinking`。DeepSeek 类型及官方域名按开关发送 `thinking.type=enabled/disabled`，Anthropic 开启时发送 `thinking`（`budget_tokens` 为 `NetworkLimits.anthropicThinkingBudget`，最大输出不大于预算时连接前报错），OpenAI 官方与其他兼容端点不发送思考参数；段落模式另向 DeepSeek 发送 `response_format.type=json_object`。
-- Apple 系统翻译为内置服务（`ServiceConfig.systemId`），无端点、无凭据，不进入服务列表。`AppleTranslationProvider` 把每个分片的非空段落一次交给 `SystemTranslationService`，以下标对应原段并由 `pairParagraph` 套回原文分隔；Swift 按语言对创建只用已安装语言包的无界面 `TranslationSession`，单篇翻译传高保真策略、实时翻译传低延迟策略（macOS 26.4 以下不传）。取消按请求 ID 停止原生会话；语言包未安装与语言对不支持为服务级失败，原文语言未知为单段失败。设置窗口打开通用页时经 `checkSystemTranslation` 查询主次语言双向的安装状态。
+- Apple 系统翻译为内置服务（`ServiceConfig.systemId`），无端点、无凭据，不进入服务列表。`AppleTranslationProvider` 把每个分片的非空段落一次交给 `SystemTranslationService`，以下标对应原段并由 `pairParagraph` 套回原文分隔；Swift 按语言对创建只用已安装语言包的无界面 `TranslationSession`，单篇翻译传高保真策略、实时翻译传低延迟策略（macOS 26.4 以下不传）。取消按请求 ID 停止原生会话；语言包未安装、语言对不支持与原文语言未知都是单段失败：实时与截图翻译只放弃被识别为该语言的段落，其他段落照常发送。设置窗口打开通用页时经 `checkSystemTranslation` 查询主次语言双向的安装状态。
 - 翻译请求共用应用级 `translationHttpClient`（`lib/src/translation/translation_http.dart`，连接超时 `NetworkLimits.connectionTimeout`、空闲保持 `NetworkLimits.idleTimeout`），同一服务的连续请求复用连接，实时翻译与截图翻译会话也使用它；取消只中止本次请求并停止读取响应，不关闭该客户端。截图「翻译文字」开始识别时与实时翻译开始时，主引擎按 `translationOrigin` 对默认服务发送不含原文的 HEAD（`prewarmTranslationConnection`），握手与本地识别并行，Apple 系统翻译不预热；请求不跟随重定向，失败信息不回显响应正文或密钥，也不自动切换服务。
 - 模型段落对照一次接收全文上下文：本地按非空行分段并给出连续编号，模型仅返回各编号与完整译文。编号数量、顺序、整数类型和非空译文均需通过校验，再与本地原文配对；不使用模型回传的原文，不接受整篇高亮兜底。损坏 JSON、流中断和长度截断不算成功。
 - 卡片按 `SelectionSession.definition` 与 `sourceIsTarget`（翻译模式下识别语言等于输出语言）在词典、同语言单栏与普通双栏三种布局间选择；正文区填充主题 `cardTheme.color` 阅读底色，不随玻璃透明度变化。
@@ -114,7 +114,7 @@ AX 读取优先使用文本标记范围获取跨节点选区，再读取普通�
 
 应用联合画布编码器将首个实际写入帧的时间固定为零，后续主机经过时间量化到 600 刻度，只写入严格递增的帧时间。首帧成功写入才确认录制就绪；无有效帧时结束明确失败，放弃直接取消写入。
 
-输入翻译通过系统日志 `subsystem=TranslateApp`、`category=Performance` 分段记录耗时（阶段名与毫秒，不含文本）：`input-read`（原生从开始采集到发出选区事件）、`input-first-token`（Dart 从发起翻译到首段非空译文）、`input-complete`（到翻译完整成功）、`input-replace`（`replaceSelection` 粘贴替换）；后三项由 `perfMark` 交原生写入。原生处理 `detectLanguage` 与 `readCredentials` 时另记 `translate-detect`（设备语言识别）与 `credentials-read`（钥匙串读取），所有翻译入口共用。`LanguageDetection` 负责识别：首位置信度不足 0.5 时取前 3 名中的用户语言，仍没有且原文为纯 ASCII、用户只有一种拉丁文字语言时取该语言，中文按用户简繁写法做字形转换判断。
+输入翻译通过系统日志 `subsystem=TranslateApp`、`category=Performance` 分段记录耗时（阶段名与毫秒，不含文本）：`input-read`（原生从开始采集到发出选区事件）、`input-first-token`（Dart 从发起翻译到首段非空译文）、`input-complete`（到翻译完整成功）、`input-replace`（`replaceSelection` 粘贴替换）；后三项由 `perfMark` 交原生写入。原生处理 `detectLanguage` 与 `readCredentials` 时另记 `translate-detect`（设备语言识别）与 `credentials-read`（钥匙串读取），所有翻译入口共用。`LanguageDetection` 负责识别：识别器先验中可识别的 57 种语言权重 1、热门语言 3、用户语言 30，首位置信度不足 0.5 时取前 3 名中的用户语言，仍没有且原文为纯 ASCII、用户只有一种拉丁文字语言时取该语言，中文按用户简繁写法做字形转换判断。
 
 录制启动通过系统日志 `subsystem=TranslateApp`、`category=CaptureStartup` 记录界面同步工作、来源配置、系统流资源创建、异步启动及实际开始写入的耗时；仅包含固定步骤名和毫秒时长，不包含截图、窗口标题或文件路径。
 

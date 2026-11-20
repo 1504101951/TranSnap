@@ -687,6 +687,21 @@ void main() {
     expect(find.text('世界'), findsOneWidget);
     expect(find.text('零宽'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
+
+    // 边界：进度状态 1000ms 后消失；failed 为真的失败原因超过 1000ms 仍显示（#138）。
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(find.text('已完成'), findsNothing);
+    const reason = 'Apple 系统翻译不支持「ro → 简体中文」。';
+    await _publishTranslation(tester, channel, {
+      'id': 'shot-ocr-overlay',
+      'phase': 'running',
+      'status': reason,
+      'failed': true,
+      'overlays': <Object>[],
+      'metrics': <Object>[],
+    });
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text(reason), findsOneWidget);
   });
 
   test('译文浮层字号取能放进矩形的最大值，下限为 1（#67 截图译文浮层）', () {

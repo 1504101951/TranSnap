@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:translate_app/src/common/constants/error_codes.dart';
 import 'package:translate_app/src/common/constants/live_region.dart';
+import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 import 'package:translate_app/src/settings/service_config.dart';
 import 'package:translate_app/src/translation/live_region_session.dart';
+import 'package:translate_app/src/translation/providers/apple_translation_provider.dart';
 import 'package:translate_app/src/translation/translation_types.dart';
 
 /// 测试用单调时钟。elapse 只前进到目标时刻，并按截止点顺序触发回调。
@@ -464,6 +469,38 @@ void main() {
     session.start(_settings(), 2);
     await session.onOcr(_frame(2, ['A']));
     expect(provider.requests, hasLength(2));
+  });
+
+  test('Apple 系统翻译不支持某段的语言对时只放弃该段，其余段落照常翻译', () async {
+    // 作用：短英文被误判成罗马尼亚语时，不支持的语言对不再停掉整次截图或实时翻译（#138）。
+    // 边界：Salut 识别为 ro、原生对 ro 返回不支持；Hello 识别为 en 正常翻译。最终只有 Hello 有译文，状态为该段的原因。
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel(ChannelNames.platform);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.cancelSystemTranslation) return null;
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
+      if (arguments['source'] == 'ro') {
+        throw PlatformException(code: ErrorCodes.translationUnsupported);
+      }
+      return [for (final text in arguments['texts'] as List) '译:$text'];
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final clock = ManualClock();
+    final session = LiveRegionSession(
+      providerFor: (_) => AppleTranslationProvider(),
+      detectLanguage: (text) async => text == 'Salut' ? 'ro' : 'en',
+      clock: clock,
+    );
+    session.start(_settings(), 1);
+    await session.onOcr(_frame(1, ['Salut', 'Hello']));
+    for (var round = 0; round < 6; round++) {
+      clock.elapse(_halfSecond);
+      await _delivered(session);
+    }
+    expect(_overlayTexts(session), ['译:Hello']);
+    expect(session.view.status, 'Apple 系统翻译不支持「ro → 简体中文」。');
   });
 
   test('段落级明确错误：多段批次各自单独补发，单段不再发送', () async {

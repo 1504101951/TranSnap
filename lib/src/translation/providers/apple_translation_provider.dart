@@ -180,16 +180,17 @@ class AppleTranslationProvider implements BatchTranslationProvider {
       );
       return translations!;
     } on PlatformException catch (error) {
-      // 语言包缺失与语言对不支持对后续请求同样成立，归为服务级；其余为可重试的临时失败。
+      // 语言包缺失与语言对不支持只涉及被识别为该语言的段落，归为段落级：
+      // 一段被误判成其他语言时，实时与截图翻译的其他段落照常发送；其余为可重试的临时失败。
       final label = pairLabel(source, target);
       throw switch (error.code) {
         ErrorCodes.translationNotInstalled => _SystemFailure(
           '缺少「$label」语言包，$downloadHint',
-          TranslationFailureKind.service,
+          TranslationFailureKind.paragraph,
         ),
         ErrorCodes.translationUnsupported => _SystemFailure(
           'Apple 系统翻译不支持「$label」。',
-          TranslationFailureKind.service,
+          TranslationFailureKind.paragraph,
         ),
         _ => const _SystemFailure(
           'Apple 系统翻译失败，请重试。',

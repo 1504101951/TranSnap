@@ -84,8 +84,8 @@ void main() {
     expect(failure.kind, TranslationFailureKind.paragraph);
   });
 
-  test('语言包未安装时提示缺少的语言对与下载位置，实时翻译按服务级停止', () async {
-    // 边界：notInstalled 对同一语言对的后续请求同样成立，因此必须是服务级而非可重试。
+  test('语言包未安装时提示缺少的语言对与下载位置，实时翻译只放弃该段', () async {
+    // 边界：notInstalled 只涉及被识别为该语言的段落，为段落级而非服务级或可重试。
     nativeTranslate(
       (_) async =>
           throw PlatformException(code: ErrorCodes.translationNotInstalled),
@@ -115,10 +115,10 @@ void main() {
         .toList();
     final failure = batch.single as BatchFailure;
     expect(failure.message, message);
-    expect(failure.kind, TranslationFailureKind.service);
+    expect(failure.kind, TranslationFailureKind.paragraph);
   });
 
-  test('不支持的语言对为服务级失败，其余原生错误为可重试的临时失败', () async {
+  test('不支持的语言对为段落级失败，其余原生错误为可重试的临时失败', () async {
     // 边界：简体与繁体中文互译是系统明确不支持的语言对；未知错误码代表框架内部失败。
     final client = HttpClient();
     addTearDown(client.close);
@@ -138,7 +138,7 @@ void main() {
         .toList();
     final rejected = unsupported.single as BatchFailure;
     expect(rejected.message, 'Apple 系统翻译不支持「简体中文 → 繁體中文」。');
-    expect(rejected.kind, TranslationFailureKind.service);
+    expect(rejected.kind, TranslationFailureKind.paragraph);
 
     nativeTranslate(
       (_) async => throw PlatformException(code: ErrorCodes.translateFailed),

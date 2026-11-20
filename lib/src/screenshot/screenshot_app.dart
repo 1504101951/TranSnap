@@ -377,8 +377,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             for (final item in map['overlays'] as List)
               _OcrOverlay.fromMap(item as Map, _translationOrigin),
           ];
-          // 会话状态（正在翻译、等待翻译、已完成或错误原因）统一以普通样式提示。
+          // 会话状态（正在翻译、等待翻译、已完成或错误原因）统一以普通样式提示；
+          // 失败原因不自动消失，保留到下一条提示或截图关闭（#138）。
           _message = status.isEmpty ? null : status;
+          if (map['failed'] == true) _feedbackTimer?.cancel();
           _failed = false;
         });
       } else if (call.method == MethodNames.screenshotToolbarSlot) {
