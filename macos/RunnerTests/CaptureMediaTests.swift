@@ -1721,6 +1721,54 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
+    /// 录屏点击特效配置解析、作用范围门控、局部坐标边界、合成事件过滤与启停生命周期（#143）。
+    @MainActor
+    func testRecordingClickOverlayConfigAndLifecycle() throws {
+        // 缺省与非法值安全回落到 off，区分右键默认开启。
+        let defaults = RecordingClickOverlay.resolvedConfig(preferences: [:])
+        XCTAssertEqual(defaults.effect, .off)
+        XCTAssertTrue(defaults.rightDistinct)
+        let invalid = RecordingClickOverlay.resolvedConfig(preferences: [
+            AppConstants.recordingClickEffectKey: "unknown",
+            AppConstants.recordingClickRightDistinctKey: false,
+        ])
+        XCTAssertEqual(invalid.effect, .off)
+        XCTAssertFalse(invalid.rightDistinct)
+
+        // 只有非应用录制且选用自定义光学特效时才渲染透明覆盖窗。
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .off, isApplicationTarget: false))
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .system, isApplicationTarget: false))
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .optical, isApplicationTarget: true))
+        for effect in [RecordingClickEffect.optical, .liquid, .spotlight, .prism, .minimal] {
+            XCTAssertTrue(RecordingClickOverlay.shouldRenderOverlay(effect: effect, isApplicationTarget: false))
+        }
+
+        // 局部坐标只接受录制窗口框内的点。
+        let frame = NSRect(x: 100, y: 200, width: 300, height: 180)
+        XCTAssertEqual(RecordingClickOverlay.localPoint(globalPoint: NSPoint(x: 150, y: 260), in: frame), CGPoint(x: 50, y: 60))
+        XCTAssertNil(RecordingClickOverlay.localPoint(globalPoint: NSPoint(x: 99, y: 260), in: frame))
+        XCTAssertTrue(RecordingClickOverlay.isRightClick(.rightMouseDown))
+        XCTAssertFalse(RecordingClickOverlay.isRightClick(.leftMouseDown))
+
+        // 本应用合成的鼠标事件必须被过滤。
+        let rawCG = try XCTUnwrap(CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: .zero, mouseButton: .left))
+        let rawEvent = try XCTUnwrap(NSEvent(cgEvent: rawCG))
+        XCTAssertTrue(RecordingClickOverlay.shouldAcceptMonitorEvent(rawEvent))
+        let markedCG = try XCTUnwrap(CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: .zero, mouseButton: .left))
+        SyntheticEvent.mark(markedCG)
+        let markedEvent = try XCTUnwrap(NSEvent(cgEvent: markedCG))
+        XCTAssertFalse(RecordingClickOverlay.shouldAcceptMonitorEvent(markedEvent))
+
+        // 启动自定义光学特效后处于运行态，应用录制或 stop 后彻底卸载不残留。
+        let overlay = RecordingClickOverlay()
+        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: false)
+        XCTAssertTrue(overlay.isRunning)
+        overlay.stop()
+        XCTAssertFalse(overlay.isRunning)
+        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: true)
+        XCTAssertFalse(overlay.isRunning)
+    }
+
     /// width/height为像素尺寸，offset为正文位移，variant改变6×6固定徽标，bodyRevision重排正文；返回RGBA图。
     private func animatedFrame(
         width: Int = 96,

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:translate_app/src/settings/service_config.dart';
+import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/common/constants/text_mode.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -344,5 +346,31 @@ void main() {
     expect(restored.shortcutKeyCode, 15);
     expect(restored.shortcutLabel, 'R');
     expect(restored.direction.resolve('ja').targetLanguage, 'en');
+  });
+
+  test('录屏点击特效默认关闭且区分右键默认开启，7种枚举可往返保存，未知样式拒绝（#143）', () {
+    // 边界：缺省配置下特效为 off、右键区分为 true；所有枚举往返一致，非法协议值抛出 FormatException。
+    final defaults = AppSettings.fromMap({'primaryLanguage': 'zh-CN'});
+    expect(defaults.recordingClickEffect, RecordingClickEffect.off);
+    expect(defaults.recordingClickRightDistinct, isTrue);
+
+    for (final effect in RecordingClickEffect.values) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        recordingClickEffect: effect,
+        recordingClickRightDistinct: false,
+      );
+      final restored = AppSettings.fromMap(settings.toMap());
+      expect(restored.recordingClickEffect, effect);
+      expect(restored.recordingClickRightDistinct, isFalse);
+    }
+
+    expect(
+      () => AppSettings.fromMap({
+        'primaryLanguage': 'zh-CN',
+        PreferenceKeys.recordingClickEffect: 'rainbowNeon',
+      }),
+      throwsFormatException,
+    );
   });
 }

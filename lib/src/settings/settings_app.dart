@@ -1214,12 +1214,26 @@ class _SettingsPageState extends State<_SettingsPage>
                                 () => settings.screenshotIncludesCursor = v,
                               ),
                             ),
-                            // 区域与显示器录制由系统在点击处绘制高亮（#110）。
-                            NativeGlassSwitchTile(
-                              title: '录制时显示鼠标点击',
-                              value: settings.recordingShowsClicks,
+                            // 区域与全屏录制在鼠标点击处绘制对应特效（#143）。
+                            const SizedBox(height: 8),
+                            NativeGlassDropdown<RecordingClickEffect>(
+                              label: '录制点击特效',
+                              value: settings.recordingClickEffect,
+                              items: {
+                                for (final effect
+                                    in RecordingClickEffect.values)
+                                  effect: effect.label,
+                              },
                               onChanged: (v) => _edit(
-                                () => settings.recordingShowsClicks = v,
+                                () => settings.recordingClickEffect = v,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            NativeGlassSwitchTile(
+                              title: '区分右键与拖动轨迹',
+                              value: settings.recordingClickRightDistinct,
+                              onChanged: (v) => _edit(
+                                () => settings.recordingClickRightDistinct = v,
                               ),
                             ),
                           ],

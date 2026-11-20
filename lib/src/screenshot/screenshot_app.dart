@@ -123,9 +123,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 正在拖动的贴纸：控制点与拖动开始时的位置和角度；没有拖动时为 null（#103）。
   ({BoxHandle handle, BoxFrame start})? _stickerDrag;
 
-  /// 「录制选项」的已保存值：开始前倒计时秒数与是否显示鼠标点击，随快照与工具栏变更通知更新（#129）。
+  /// 「录制选项」的已保存值：开始前倒计时秒数与鼠标点击特效样式，随快照与工具栏变更通知更新（#129、#143）。
   int _recordingDelay = 0;
-  bool _recordingShowsClicks = false;
+  RecordingClickEffect _recordingClickEffect = RecordingClickEffect.off;
   Map<Object?, Object?>? _recordingApplication;
   List<Map<Object?, Object?>> _recordingApplications = [];
   bool _loadingApplications = false;
@@ -488,8 +488,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               map[PreferenceKeys.screenshotConfirmAction] as String?,
             );
             _recordingDelay = map[PreferenceKeys.recordingDelay] as int? ?? 0;
-            _recordingShowsClicks =
-                map[PreferenceKeys.recordingShowsClicks] as bool? ?? false;
+            _recordingClickEffect = RecordingClickEffect.parse(
+              map[PreferenceKeys.recordingClickEffect] as String?,
+            );
             _readStickers(map);
           });
         }
@@ -631,8 +632,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         value[PreferenceKeys.screenshotConfirmAction] as String?,
       );
       _recordingDelay = value[PreferenceKeys.recordingDelay] as int? ?? 0;
-      _recordingShowsClicks =
-          value[PreferenceKeys.recordingShowsClicks] as bool? ?? false;
+      _recordingClickEffect = RecordingClickEffect.parse(
+        value[PreferenceKeys.recordingClickEffect] as String?,
+      );
       _readStickers(value);
       _drawing = DrawingPreferences.fromMap(
         value[PreferenceKeys.screenshotDrawing] as Map?,
@@ -1170,11 +1172,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// delay为开始前倒计时秒数，showsClicks为是否显示鼠标点击；经主引擎设置队列保存「录制选项」，
-  /// 保存期间禁止开始录制，成功后更新本地选项，失败显示错误并保留原选项，返回保存结束的 Future（#129）。
+  /// delay为开始前倒计时秒数，clickEffect为鼠标点击特效样式；经主引擎设置队列保存「录制选项」，
+  /// 保存期间禁止开始录制，成功后更新本地选项，失败显示错误并保留原选项，返回保存结束的 Future（#129、#143）。
   Future<void> _saveRecordingOptions({
     required int delay,
-    required bool showsClicks,
+    required RecordingClickEffect clickEffect,
   }) async {
     if (_busy) return;
     setState(() {
@@ -1187,13 +1189,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         MethodNames.saveRecordingOptions,
         {
           PreferenceKeys.recordingDelay: delay,
-          PreferenceKeys.recordingShowsClicks: showsClicks,
+          PreferenceKeys.recordingClickEffect: clickEffect.name,
         },
       );
       if (!mounted) return;
       setState(() {
         _recordingDelay = delay;
-        _recordingShowsClicks = showsClicks;
+        _recordingClickEffect = clickEffect;
       });
     } on PlatformException catch (error) {
       if (mounted) {
@@ -3317,7 +3319,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               selected: _recordingTarget == target.key,
             ),
           if (!_liveExpanded)
-            // 录制选项：延时单选与显示鼠标点击，选择即保存并关闭菜单（#129）。
+            // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
             MenuAnchor(
               style: NativeGlassMenuPanel.anchorStyle,
               menuChildren: [
@@ -3329,21 +3331,24 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                         checked: delay == _recordingDelay,
                         onPressed: () => _saveRecordingOptions(
                           delay: delay,
-                          showsClicks: _recordingShowsClicks,
+                          clickEffect: _recordingClickEffect,
                         ),
                       ),
                     const Divider(height: 9, thickness: 1),
-                    NativeGlassMenuItem(
-                      label: '显示鼠标点击',
-                      checked: _recordingShowsClicks,
-                      // 应用录制不含指针，不显示点击。
-                      onPressed: _recordingTarget == CaptureTarget.application
-                          ? null
-                          : () => _saveRecordingOptions(
-                              delay: _recordingDelay,
-                              showsClicks: !_recordingShowsClicks,
-                            ),
-                    ),
+                    for (final effect in RecordingClickEffect.values)
+                      NativeGlassMenuItem(
+                        label: effect == RecordingClickEffect.off
+                            ? '点击特效：关闭'
+                            : effect.label,
+                        checked: effect == _recordingClickEffect,
+                        // 应用录制不含指针，不显示点击特效。
+                        onPressed: _recordingTarget == CaptureTarget.application
+                            ? null
+                            : () => _saveRecordingOptions(
+                                delay: _recordingDelay,
+                                clickEffect: effect,
+                              ),
+                      ),
                   ],
                 ),
               ],
@@ -3353,7 +3358,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                     : '录制选项：延时 $_recordingDelay 秒',
                 const Icon(Icons.tune, size: 16),
                 () => controller.isOpen ? controller.close() : controller.open(),
-                selected: _recordingDelay != 0,
+                selected:
+                    _recordingDelay != 0 ||
+                    _recordingClickEffect != RecordingClickEffect.off,
               ),
             ),
           captureButton(

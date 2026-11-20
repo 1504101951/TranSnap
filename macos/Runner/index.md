@@ -40,3 +40,4 @@ macOS应用生命周期、系统能力与窗口控制器。
 36. [WebMExporter.swift](WebMExporter.swift)：按裁剪区间读取录制的NV12帧并转为BT.601矩阵，经不挂窗口的WebKit编码VP8并写成保持原分辨率与原帧时间的WebM，编码器丢帧时报错。
 37. [AutoScroll.swift](AutoScroll.swift)：长截图自动滚动的步进状态机，以及经辅助功能接口读写选区中心来源窗口纵向滚动条的目标。
 38. [WindowEngine.swift](WindowEngine.swift)：附属窗口共用的 Flutter 引擎与窗口装配：建引擎与通道、运行入口、注册插件与原生玻璃，建窗口、前置与启动失败提示。
+39. [RecordingClickOverlay.swift](RecordingClickOverlay.swift)：管理区域与全屏录制期间的透明穿透浮层，用原生 CALayer 绘制 5 种光学点击特效、右键区分与拖动轨迹，并过滤合成事件。

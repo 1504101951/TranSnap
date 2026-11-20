@@ -42,6 +42,8 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
     private var recordingCompletionWaiters: [CheckedContinuation<Void, Never>] = []
     private var timer: Timer?
     private var startedAt: Date?
+    /// 区域与全屏录制期间的自绘光学鼠标点击特效覆盖层（#143）。
+    private let clickOverlay = RecordingClickOverlay()
     /// 当前分段请求到真正开始写入的单调时钟起点，只用于本地启动诊断。
     private var recordingRequestedAt: ContinuousClock.Instant?
     private(set) var phase = CapturePhase.idle
@@ -179,10 +181,9 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         config.height = height
         config.minimumFrameInterval = CMTime(value: 1, timescale: AppConstants.recordingFramesPerSecond)
         config.showsCursor = video
-        // 「录制时显示鼠标点击」由设置页写入偏好字典，默认关闭；静帧截图不绘制点击（#110）。
-        config.showMouseClicks = video && AppPreferences.current[
-            AppConstants.recordingShowsClicksKey
-        ] as? Bool == true
+        // 「录制点击特效」选为系统原生时由 ScreenCaptureKit 绘制点击；光学特效由 RecordingClickOverlay 原生绘制入画，静帧截图不绘制（#143）。
+        let clickConfig = RecordingClickOverlay.resolvedConfig(preferences: AppPreferences.current)
+        config.showMouseClicks = video && clickConfig.effect == .system
         config.capturesAudio = false
         config.captureMicrophone = false
         config.scalesToFit = false
@@ -423,6 +424,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         }
         let token = id
         // 系统编码完成前保持pausing，防止恢复动作复用未完成的输出。
+        clickOverlay.stop()
         if let startedAt { recordedElapsed += Date().timeIntervalSince(startedAt) }
         startedAt = nil
         timer?.invalidate()
@@ -453,6 +455,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         }
         guard phase == .recording, let stream else { return }
         let token = id
+        clickOverlay.stop()
         update(.finalizing)
         timer?.invalidate()
         timer = nil
@@ -511,6 +514,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
     /// 无参数；释放计时器与本会话文件，保留用户的选区和已保存文件。
     /// 文件任务运行期间只能经 cancel 进入；cancel 等待不可中断的暂存复制结束后才调用本方法。
     private func clear() {
+        clickOverlay.stop()
         stopWatchingScrollTakeover()
         autoScrollAvailable = false
         autoScrollActive = false
@@ -542,6 +546,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
     /// error为系统实际错误；停止占用资源并保留原因，不交付损坏MP4。
     private func fail(_ error: Error) async {
         let token = id
+        clickOverlay.stop()
         if let recorder = applicationRecorder {
             applicationRecorder = nil
             try? await recorder.finish(discard: true)
@@ -564,6 +569,11 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         DispatchQueue.main.async { [weak self] in
             guard let self, self.recordingOutput.map(ObjectIdentifier.init) == identity, self.phase == .preparing else { return }
             self.startedAt = Date()
+            self.clickOverlay.start(
+                frame: self.captureFrame,
+                preferences: AppPreferences.current,
+                isApplicationTarget: self.recordingArguments["kind"] as? String == CaptureTarget.application.rawValue
+            )
             self.update(.recording, ["elapsed": self.recordedElapsed])
             self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 Task { @MainActor in
@@ -588,6 +598,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
             guard let self, self.recordingOutput === output, let video = self.video else { return }
             self.stream = nil
             self.recordingOutput = nil
+            self.clickOverlay.stop()
             self.timer?.invalidate()
             self.timer = nil
             if self.discardRecording { self.clear(); return }

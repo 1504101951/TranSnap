@@ -41,7 +41,7 @@ abstract final class MethodNames {
   /// 更新各工具独立的绘制偏好。
   static const saveDrawingPreferences = 'saveDrawingPreferences';
 
-  /// 截图工具栏「录制选项」保存录制延时与点击高亮；参数 {recordingDelay, recordingShowsClicks}（#129）。
+  /// 截图工具栏「录制选项」保存录制延时与点击特效；参数 {recordingDelay, recordingClickEffect}（#129、#143）。
   static const saveRecordingOptions = 'saveRecordingOptions';
 
   /// 激活截图引擎的原生对角拉伸光标。

@@ -98,3 +98,28 @@ abstract final class RecordingOptions {
   /// 开始录制前可选的倒计时秒数，0 为不延时；与 Swift AppConstants.recordingDelays 同步（#129）。
   static const delays = [0, 3, 5, 10];
 }
+
+/// 区域与显示器录制的鼠标点击特效样式；name 为偏好协议值，与原生 RecordingClickEffect 一致，缺省为关闭（#143）。
+enum RecordingClickEffect {
+  off('关闭'),
+  optical('光学涟漪'),
+  liquid('液态弹波'),
+  spotlight('聚光微点'),
+  prism('星芒微烁'),
+  minimal('极简双对比环'),
+  system('系统原生');
+
+  const RecordingClickEffect(this.label);
+
+  /// 设置与录制选项菜单展示的中文名称。
+  final String label;
+
+  /// wire 为偏好原文；返回对应特效枚举，缺省为 off，未知值抛出 FormatException。
+  static RecordingClickEffect parse(String? wire) {
+    if (wire == null) return off;
+    for (final value in values) {
+      if (value.name == wire) return value;
+    }
+    throw FormatException('无效的录屏点击特效：$wire');
+  }
+}

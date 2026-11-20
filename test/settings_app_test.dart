@@ -6,6 +6,7 @@ import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -816,8 +817,8 @@ void main() {
     expect(state[PreferenceKeys.scrollCaptureMode], 'automatic');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图子页「截图包含鼠标指针」「录制时显示鼠标点击」默认关闭，打开后自动保存到偏好', (tester) async {
-    // 边界：偏好缺省为关闭；开关只在按钮上响应，打开后偏好值为 true（#105、#110）。
+  testWidgets('截图录制页：指针开关默认关闭，点击特效下拉7项可选，右键与拖动区分默认开启并可自动保存（#105、#143）', (tester) async {
+    // 边界：缺省时截图包含指针为 false、点击特效为 off、区分右键为 true；切换下拉与开关后各自写入规范偏好值。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -844,25 +845,57 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '录制');
-    for (final (title, key) in [
-      ('截图包含鼠标指针', PreferenceKeys.screenshotIncludesCursor),
-      ('录制时显示鼠标点击', PreferenceKeys.recordingShowsClicks),
-    ]) {
-      final tile = find.byWidgetPredicate(
-        (w) => w is NativeGlassSwitchTile && w.title == title,
-      );
-      await tester.scrollUntilVisible(
-        tile,
-        200,
-        scrollable: settingsContentScrollable(),
-      );
-      expect(tester.widget<NativeGlassSwitchTile>(tile).value, isFalse);
-      await tester.tap(
-        find.descendant(of: tile, matching: find.byType(NativeGlassSwitch)),
-      );
-      await tester.pumpAndSettle();
-      expect(state[key], isTrue);
+
+    final cursorTile = find.byWidgetPredicate(
+      (w) => w is NativeGlassSwitchTile && w.title == '截图包含鼠标指针',
+    );
+    await tester.scrollUntilVisible(
+      cursorTile,
+      200,
+      scrollable: settingsContentScrollable(),
+    );
+    expect(tester.widget<NativeGlassSwitchTile>(cursorTile).value, isFalse);
+    await tester.tap(
+      find.descendant(of: cursorTile, matching: find.byType(NativeGlassSwitch)),
+    );
+    await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.screenshotIncludesCursor], isTrue);
+
+    final effectDropdown = find.byWidgetPredicate(
+      (w) => w is NativeGlassDropdown<RecordingClickEffect>,
+    );
+    await tester.scrollUntilVisible(
+      effectDropdown,
+      200,
+      scrollable: settingsContentScrollable(),
+    );
+    expect(
+      tester.widget<NativeGlassDropdown<RecordingClickEffect>>(effectDropdown).value,
+      RecordingClickEffect.off,
+    );
+    await tester.tap(find.descendant(of: effectDropdown, matching: find.text('关闭')));
+    await tester.pumpAndSettle();
+    for (final effect in RecordingClickEffect.values) {
+      expect(find.text(effect.label), findsWidgets);
     }
+    await tester.tap(find.text('光学涟漪').last);
+    await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.recordingClickEffect], 'optical');
+
+    final distinctTile = find.byWidgetPredicate(
+      (w) => w is NativeGlassSwitchTile && w.title == '区分右键与拖动轨迹',
+    );
+    await tester.scrollUntilVisible(
+      distinctTile,
+      200,
+      scrollable: settingsContentScrollable(),
+    );
+    expect(tester.widget<NativeGlassSwitchTile>(distinctTile).value, isTrue);
+    await tester.tap(
+      find.descendant(of: distinctTile, matching: find.byType(NativeGlassSwitch)),
+    );
+    await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.recordingClickRightDistinct], isFalse);
   });
 
   testWidgets('默认翻译服务下拉固定先列谷歌翻译与 Apple 系统翻译，选中 Apple 保存内置 ID，服务列表不出现 Apple', (

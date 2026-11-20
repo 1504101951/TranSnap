@@ -97,7 +97,7 @@ enum AppConstants {
     static let cancelRecordingExportMethod = "cancelRecordingExport"
     static let captureFailedError = "capture_failed"
     static let saveDrawingPreferencesMethod = "saveDrawingPreferences"
-    /// saveRecordingOptions 协议值；截图引擎经主引擎设置队列保存录制延时与点击高亮（#129），与Dart常量同步。
+    /// saveRecordingOptions 协议值；截图引擎经主引擎设置队列保存录制延时与点击特效（#129、#143），与Dart常量同步。
     static let saveRecordingOptionsMethod = "saveRecordingOptions"
     static let screenshotDrawingKey = "screenshotDrawing"
     /// screenshotConfirmAction 偏好键；确认截图时的动作，随截图快照与工具栏变更通知交给截图引擎（#111），与Dart常量同步。
@@ -162,8 +162,23 @@ enum AppConstants {
         "fa", "pl", "pt", "pa-Guru", "ro", "ru", "zh-Hans", "si", "sk", "es", "sv", "ta", "te", "th", "bo", "zh-Hant",
         "tr", "uk", "ur", "vi",
     ]
-    /// recordingShowsClicks 协议值；区域与显示器录制是否由系统绘制鼠标点击高亮，Dart 设置写入、开始录制时读取（#110）。与Dart常量同步。
-    static let recordingShowsClicksKey = "recordingShowsClicks"
+    /// recordingClickEffect / recordingClickRightDistinct 协议值；区域与显示器录制点击特效样式与右键/拖动区分（#143），与Dart常量同步。
+    static let recordingClickEffectKey = "recordingClickEffect"
+    static let recordingClickRightDistinctKey = "recordingClickRightDistinct"
+    /// 录屏鼠标点击特效规范数值（#67、#143）：左键 #007AFF、右键 #FF9500、半径/描边/时长与拖动轨迹。
+    static let clickEffectLeftColor = NSColor(srgbRed: 0, green: 0x7A / 255.0, blue: 1, alpha: 1)
+    static let clickEffectRightColor = NSColor(srgbRed: 1, green: 0x95 / 255.0, blue: 0, alpha: 1)
+    static let clickEffectBaseRadius: CGFloat = 8
+    static let clickEffectExpandRadius: CGFloat = 36
+    static let clickEffectMinimalStartRadius: CGFloat = 11
+    static let clickEffectMinimalEndRadius: CGFloat = 30
+    static let clickEffectPressRadius: CGFloat = 13
+    static let clickEffectStrokeWidth: CGFloat = 1.75
+    static let clickEffectMinimalStrokeWidth: CGFloat = 2.2
+    static let clickEffectDuration: CFTimeInterval = 0.56
+    static let clickEffectMinimalDuration: CFTimeInterval = 0.42
+    static let clickEffectTrailDuration: CFTimeInterval = 0.36
+    static let clickEffectTrailMinDistance: CGFloat = 5
     /// scrollCaptureMode 偏好键；长截图滚动方式 manual/automatic，开始长截图时读取（#112），与Dart常量同步。
     static let scrollCaptureModeKey = "scrollCaptureMode"
     /// recordingDelay 偏好键；开始录制前的倒计时秒数，随截图快照与工具栏变更通知交给截图引擎（#129），与Dart常量同步。
@@ -705,4 +720,15 @@ enum MCPDetail: String, Codable, CaseIterable {
         case .standard: 1568
         }
     }
+}
+
+/// 区域与显示器录制的鼠标点击特效样式；rawValue 与 Dart RecordingClickEffect 一致（#143）。
+enum RecordingClickEffect: String, CaseIterable {
+    case off
+    case optical
+    case liquid
+    case spotlight
+    case prism
+    case minimal
+    case system
 }

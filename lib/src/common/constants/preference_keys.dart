@@ -21,8 +21,9 @@ abstract final class PreferenceKeys {
   /// 区域截图冻结帧是否包含鼠标指针；Swift 冻结画面时读取（#105）。
   static const screenshotIncludesCursor = 'screenshotIncludesCursor';
 
-  /// 区域与显示器录制是否由系统绘制鼠标点击高亮；Swift 开始录制时读取（#110）。
-  static const recordingShowsClicks = 'recordingShowsClicks';
+  /// 区域与显示器录制点击特效样式与右键/拖动区分；Swift 开始录制时读取（#143）。
+  static const recordingClickEffect = 'recordingClickEffect';
+  static const recordingClickRightDistinct = 'recordingClickRightDistinct';
 
   /// 开始录制前的倒计时秒数，取值见 RecordingOptions.delays；截图工具栏「录制选项」写入（#129）。
   static const recordingDelay = 'recordingDelay';

@@ -33,6 +33,7 @@
 		A14C00000000000000000004 /* ScreenshotWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14C00000000000000000003 /* ScreenshotWindowController.swift */; };
 		A14C00000000000000000002 /* ScreenshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14C00000000000000000001 /* ScreenshotStorage.swift */; };
 		A28000000000000000000008 /* CaptureWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000007 /* CaptureWindowController.swift */; };
+		A14300000000000000000002 /* RecordingClickOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14300000000000000000001 /* RecordingClickOverlay.swift */; };
 		A28000000000000000000006 /* MediaCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000005 /* MediaCaptureService.swift */; };
 		A24C00000000000000000002 /* LiveRegionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24C00000000000000000001 /* LiveRegionCapture.swift */; };
 		A24D00000000000000000002 /* LiveRegionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24D00000000000000000001 /* LiveRegionCoordinator.swift */; };
@@ -138,6 +139,7 @@
 		A14C00000000000000000003 /* ScreenshotWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotWindowController.swift; sourceTree = "<group>"; };
 		A14C00000000000000000001 /* ScreenshotStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotStorage.swift; sourceTree = "<group>"; };
 		A28000000000000000000007 /* CaptureWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureWindowController.swift; sourceTree = "<group>"; };
+		A14300000000000000000001 /* RecordingClickOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingClickOverlay.swift; sourceTree = "<group>"; };
 		A28000000000000000000005 /* MediaCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCaptureService.swift; sourceTree = "<group>"; };
 		A24C00000000000000000001 /* LiveRegionCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRegionCapture.swift; sourceTree = "<group>"; };
 		A24D00000000000000000001 /* LiveRegionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRegionCoordinator.swift; sourceTree = "<group>"; };
@@ -296,6 +298,7 @@
 				A14C00000000000000000003 /* ScreenshotWindowController.swift */,
 				A14C00000000000000000001 /* ScreenshotStorage.swift */,
 				A28000000000000000000007 /* CaptureWindowController.swift */,
+				A14300000000000000000001 /* RecordingClickOverlay.swift */,
 				A28000000000000000000005 /* MediaCaptureService.swift */,
 				A24C00000000000000000001 /* LiveRegionCapture.swift */,
 				A24D00000000000000000001 /* LiveRegionCoordinator.swift */,
@@ -554,6 +557,7 @@
 				A14C00000000000000000004 /* ScreenshotWindowController.swift in Sources */,
 				A14C00000000000000000002 /* ScreenshotStorage.swift in Sources */,
 				A28000000000000000000008 /* CaptureWindowController.swift in Sources */,
+				A14300000000000000000002 /* RecordingClickOverlay.swift in Sources */,
 				A28000000000000000000006 /* MediaCaptureService.swift in Sources */,
 				A24C00000000000000000002 /* LiveRegionCapture.swift in Sources */,
 				A24D00000000000000000002 /* LiveRegionCoordinator.swift in Sources */,

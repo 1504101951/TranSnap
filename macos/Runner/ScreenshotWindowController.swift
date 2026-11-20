@@ -461,7 +461,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
     /// 缺省值由Dart领域对象提供。
     private func toolbarPreferences() -> [String: Any] {
         let preferences = AppPreferences.current
-        return preferences.filter { [AppConstants.screenshotToolbarColumnsKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingShowsClicksKey, AppConstants.stickersKey].contains($0.key) }
+        return preferences.filter { [AppConstants.screenshotToolbarColumnsKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingClickEffectKey, AppConstants.stickersKey].contains($0.key) }
             .merging([AppConstants.stickerDirectoryKey: AppConstants.stickersURL.path]) { current, _ in current }
     }
 
@@ -596,7 +596,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             // routeWindowRequest把绘图偏好交给唯一设置提交入口。
             MacPlatformBridge.Shared.instance?.routeWindowRequest(call, result: result)
         case AppConstants.saveRecordingOptionsMethod:
-            // routeWindowRequest交给唯一设置提交入口；成功后刷新设置页，使「录制时显示鼠标点击」同步（#129）。
+            // routeWindowRequest交给唯一设置提交入口；成功后刷新设置页，使「录制点击特效」同步（#129、#143）。
             MacPlatformBridge.Shared.instance?.routeWindowRequest(call) { value in
                 // Flutter在主线程回调结果。
                 if !(value is FlutterError) { MainActor.assumeIsolated { StatusBarController.shared.refreshSettings?() } }

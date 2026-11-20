@@ -7,6 +7,7 @@ import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/error_codes.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/platform/settings_platform.dart';
 import 'package:translate_app/src/settings/app_settings.dart';
 import 'package:translate_app/src/settings/settings_controller.dart';
@@ -76,29 +77,39 @@ void main() {
     });
   });
 
-  test('录制选项：截图工具栏保存延时与点击高亮，其他设置保持不变，非法延时不提交（#129）', () async {
-    // 边界：5 秒与显示点击写入后修订加一、主语言不变；4 秒不在 0/3/5/10 中，校验失败且保留上一修订的值。
+  test('录制选项：截图工具栏保存延时与点击特效，其他设置保持不变，非法延时或特效不提交（#129、#143）', () async {
+    // 边界：5 秒与光学涟漪写入后修订加一、主语言与右键区分保持不变；4 秒或未知特效校验失败且保留上一修订的值。
     final committed = await controller.handle(
       MethodCall(MethodNames.saveRecordingOptions, {
         PreferenceKeys.recordingDelay: 5,
-        PreferenceKeys.recordingShowsClicks: true,
+        PreferenceKeys.recordingClickEffect: RecordingClickEffect.optical.name,
       }),
     ) as Map;
     expect(committed['revision'], 1);
     expect(controller.current.recordingDelay, 5);
-    expect(controller.current.recordingShowsClicks, isTrue);
+    expect(controller.current.recordingClickEffect, RecordingClickEffect.optical);
+    expect(controller.current.recordingClickRightDistinct, isTrue);
     expect(controller.current.primaryLanguage, 'zh-CN');
     await expectLater(
       controller.handle(
         MethodCall(MethodNames.saveRecordingOptions, {
           PreferenceKeys.recordingDelay: 4,
-          PreferenceKeys.recordingShowsClicks: false,
+          PreferenceKeys.recordingClickEffect: RecordingClickEffect.off.name,
+        }),
+      ),
+      throwsFormatException,
+    );
+    await expectLater(
+      controller.handle(
+        MethodCall(MethodNames.saveRecordingOptions, {
+          PreferenceKeys.recordingDelay: 5,
+          PreferenceKeys.recordingClickEffect: 'invalidEffect',
         }),
       ),
       throwsFormatException,
     );
     expect(controller.current.recordingDelay, 5);
-    expect(controller.current.recordingShowsClicks, isTrue);
+    expect(controller.current.recordingClickEffect, RecordingClickEffect.optical);
   });
 
   test('存储目录不可用时不发布配置，修复目录后下一次提交成功', () async {

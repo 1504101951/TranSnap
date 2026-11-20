@@ -9,6 +9,7 @@ import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
+import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
 import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:translate_app/src/common/constants/toolbar_grid.dart';
@@ -920,9 +921,9 @@ void main() {
     expect(find.text('正在准备采集…'), findsOneWidget);
   });
 
-  testWidgets('录制选项：选择延时即保存，开始录制携带所选延时，窗口目标禁用显示鼠标点击（#129）', (tester) async {
-    // 边界：快照中延时为 0 时按钮未选中；选「延时 5 秒」后保存参数为 5 且保留点击设置 true，
-    // 按钮提示变为「录制选项：延时 5 秒」，开始录制的 delay 为 5；切到窗口目标后「显示鼠标点击」不可用。
+  testWidgets('录制选项：选择延时与点击特效即保存，开始录制携带所选延时，窗口目标禁用点击特效（#129、#143）', (tester) async {
+    // 边界：快照延时 0、点击特效 optical 时选「延时 5 秒」保留 optical；选「液态弹波」保存 liquid；
+    // 开始录制的 delay 为 5；切到窗口目标后全部 7 项点击特效菜单均不可用。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/recording-options');
@@ -939,7 +940,7 @@ void main() {
             'canCaptureMedia': true,
             'cropActive': true,
             PreferenceKeys.recordingDelay: 0,
-            PreferenceKeys.recordingShowsClicks: true,
+            PreferenceKeys.recordingClickEffect: RecordingClickEffect.optical.name,
           };
         case MethodNames.saveRecordingOptions:
           saved = call.arguments as Map;
@@ -963,17 +964,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('不延时'), findsOneWidget);
     expect(find.text('延时 10 秒'), findsOneWidget);
+    expect(find.text('点击特效：关闭'), findsOneWidget);
     await tester.tap(find.text('延时 5 秒'));
     await tester.pumpAndSettle();
     expect(saved, {
       PreferenceKeys.recordingDelay: 5,
-      PreferenceKeys.recordingShowsClicks: true,
+      PreferenceKeys.recordingClickEffect: RecordingClickEffect.optical.name,
     });
     expect(find.text('不延时'), findsNothing);
     await tester.tap(find.byTooltip('录制选项：延时 5 秒'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('延时 5 秒'));
+    await tester.tap(find.text('液态弹波'));
     await tester.pumpAndSettle();
+    expect(saved, {
+      PreferenceKeys.recordingDelay: 5,
+      PreferenceKeys.recordingClickEffect: RecordingClickEffect.liquid.name,
+    });
     await tester.tap(find.byTooltip('开始录制'));
     await tester.pumpAndSettle();
     expect(started!['delay'], 5);
@@ -982,17 +988,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('录制选项：延时 5 秒'));
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<MenuItemButton>(
-            find.ancestor(
-              of: find.text('显示鼠标点击'),
-              matching: find.byType(MenuItemButton),
-            ),
-          )
-          .onPressed,
-      isNull,
-    );
+    for (final effect in RecordingClickEffect.values) {
+      final label = effect == RecordingClickEffect.off
+          ? '点击特效：关闭'
+          : effect.label;
+      expect(
+        tester
+            .widget<MenuItemButton>(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(MenuItemButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 

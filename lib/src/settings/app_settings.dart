@@ -33,7 +33,8 @@ class AppSettings {
     this.gifFramesPerSecond = 10,
     this.liveRecording = false,
     this.screenshotIncludesCursor = false,
-    this.recordingShowsClicks = false,
+    this.recordingClickEffect = RecordingClickEffect.off,
+    this.recordingClickRightDistinct = true,
     this.recordingDelay = 0,
     this.screenshotConfirmAction = ScreenshotConfirmAction.copy,
     this.scrollCaptureMode = ScrollCaptureMode.manual,
@@ -103,8 +104,9 @@ class AppSettings {
   /// 区域截图的冻结帧是否包含鼠标指针；默认不含，不影响 MCP 截图与录屏（#105）。
   bool screenshotIncludesCursor;
 
-  /// 区域与显示器录制是否显示鼠标点击高亮；默认关闭，应用录制不含指针因此不显示（#110）。
-  bool recordingShowsClicks;
+  /// 区域与全屏录制的鼠标点击特效样式与右键/拖动区分；应用录制不含指针不显示点击（#143）。
+  RecordingClickEffect recordingClickEffect;
+  bool recordingClickRightDistinct;
 
   /// 开始录制前的倒计时秒数，取值见 RecordingOptions.delays，默认 0 不延时（#129）。
   int recordingDelay;
@@ -210,8 +212,11 @@ class AppSettings {
       liveRecording: map[PreferenceKeys.liveRecording] as bool? ?? false,
       screenshotIncludesCursor:
           map[PreferenceKeys.screenshotIncludesCursor] as bool? ?? false,
-      recordingShowsClicks:
-          map[PreferenceKeys.recordingShowsClicks] as bool? ?? false,
+      recordingClickEffect: RecordingClickEffect.parse(
+        map[PreferenceKeys.recordingClickEffect] as String?,
+      ),
+      recordingClickRightDistinct:
+          map[PreferenceKeys.recordingClickRightDistinct] as bool? ?? true,
       recordingDelay: map[PreferenceKeys.recordingDelay] as int? ?? 0,
       screenshotConfirmAction: ScreenshotConfirmAction.parse(
         map[PreferenceKeys.screenshotConfirmAction] as String?,
@@ -380,7 +385,8 @@ class AppSettings {
     PreferenceKeys.gifFramesPerSecond: gifFramesPerSecond,
     PreferenceKeys.liveRecording: liveRecording,
     PreferenceKeys.screenshotIncludesCursor: screenshotIncludesCursor,
-    PreferenceKeys.recordingShowsClicks: recordingShowsClicks,
+    PreferenceKeys.recordingClickEffect: recordingClickEffect.name,
+    PreferenceKeys.recordingClickRightDistinct: recordingClickRightDistinct,
     PreferenceKeys.recordingDelay: recordingDelay,
     PreferenceKeys.screenshotConfirmAction: screenshotConfirmAction.name,
     PreferenceKeys.scrollCaptureMode: scrollCaptureMode.name,
