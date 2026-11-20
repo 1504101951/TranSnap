@@ -307,9 +307,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         .toList();
     final inserted = <_ToolbarCells>[
       for (final (index, cells) in chunk(_visibleChildren).indexed)
-        (key: 'screenshot-children-group-$index', cells: <String?>[...cells], slots: false),
+        (key: 'screenshot-children-group-$index', cells: <String?>[...cells], label: null),
       for (final (index, cells) in chunk(attributes).indexed)
-        (key: 'screenshot-attributes-group-$index', cells: <String?>[...cells], slots: false),
+        (key: 'screenshot-attributes-group-$index', cells: <String?>[...cells], label: null),
     ];
     final anchor = _group ?? _activeId;
     final groups = <_ToolbarCells>[];
@@ -323,14 +323,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (anchorGroup == null && column.slots.contains(anchor)) {
         anchorGroup = groups.length;
       }
-      groups.add((key: 'screenshot-grid-group-$index', cells: cells, slots: true));
+      final label = column.modifiers == 0
+          ? '无'
+          : ToolbarModifiers.label(column.modifiers);
+      groups.add((key: 'screenshot-grid-group-$index', cells: cells, label: label));
     }
     final status = [
       if (actions.containsKey(ScreenshotActions.reveal)) ScreenshotActions.reveal,
       if (_busy) _busyCell,
     ];
     if (status.isNotEmpty) {
-      groups.add((key: 'screenshot-status-group', cells: status, slots: false));
+      groups.add((key: 'screenshot-status-group', cells: status, label: null));
     }
     final lines = pair(groups);
     // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
@@ -364,7 +367,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   /// actions 为当前可用动作，perLine 为每行并排的组数；返回供 _EditorSurface 计算工具栏尺寸的各行长度（pt）：
   /// lengths 为各行沿主轴的长度，grouped 为组行中最长的一行（附加行可滚动，不计入）。
-  /// 组长为格数×32 加 4pt 间距，同行两组之间至少 ToolbarGrid.groupGap；附加行按其按钮数计算（#67）。
+  /// 组长为组合标签（或同尺寸空位）加格数×32 与 4pt 间距，同行两组之间至少 ToolbarGrid.groupGap；附加行按其按钮数计算（#67）。
+  /// 标签按横放宽度 28pt 计入；竖放时标签只占 20pt，工具栏末端多留最多两组的 8pt 空白，不影响按钮位置。
   ({List<double> lengths, double grouped}) _lineLengths(
     Map<String, VoidCallback?> actions,
     int perLine,
@@ -373,7 +377,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final strips = _strips();
     final lines = _toolbarLines(actions, perLine);
     double length(_ToolbarLine line) => line.strip == null
-        ? line.groups.fold(0.0, (sum, group) => sum + run(group.cells.length)) +
+        ? line.groups.fold(
+                0.0,
+                (sum, group) =>
+                    sum + ToolbarGrid.groupLabelWidth + 4 + run(group.cells.length),
+              ) +
               (line.groups.length - 1) * ToolbarGrid.groupGap
         : run(strips[line.strip]!);
     return (
@@ -2936,8 +2944,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
     };
     // 模式按钮不产生hover层；普通操作保留主题反馈，属性不进入顶层排序。
-    // badge 为格位键位文字，配置列中的按钮在右下角显示（#67「截图工具栏网格」）。
-    Widget button(String id, {String? badge}) {
+    Widget button(String id) {
       final mode =
           id.startsWith(ScreenshotActions.shapePrefix) ||
           id.startsWith(ScreenshotActions.brushPrefix);
@@ -2948,7 +2955,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           id == '${ScreenshotActions.shapePrefix}${_styleShape.name}' ||
           id ==
               '${ScreenshotActions.brushPrefix}${(_styleSelection?.shapeMode ?? _shapeMode).name}';
-      Widget child = SizedBox(
+      final child = SizedBox(
         width: 32,
         height: 32,
         child: IconButton(
@@ -2989,29 +2996,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           icon: Icon(icons[id] ?? Icons.circle, size: 16),
         ),
       );
-      if (badge != null) {
-        child = Stack(
-          children: [
-            child,
-            Positioned(
-              right: 2,
-              bottom: 2,
-              child: IgnorePointer(
-                child: Text(
-                  badge,
-                  key: Key('toolbar-badge-$id'),
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    height: 1,
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      }
       // 每个模式同样需要材料承载；外层工具栏保持透明。
       final surface = NativeGlassSurface(material: true, child: child);
       // 贴纸按钮挂锚点，供贴纸下拉框定位。
@@ -3019,15 +3003,34 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       return KeyedSubtree(key: _stickerAnchor, child: surface);
     }
 
-    // 每组沿工具栏方向排 6 格（横放从左到右、竖放自上而下），空位留出 32×32pt（#141）。
-    /// group 为一组格；返回沿工具栏方向排列的格子，插入的子级、属性与状态组带弹簧入场（#142）。
+    // 每组沿工具栏方向先放组合标签（横放在左、竖放在上），再排 6 格；空位留出 32×32pt（#141）。
+    /// group 为一组格；返回沿工具栏方向排列的标签与格子，插入的子级、属性与状态组标签处留空并带弹簧入场（#142）。
     Widget groupOf(_ToolbarCells group) {
+      final label = group.label;
       final row = Flex(
         key: Key(group.key),
         direction: axis,
         mainAxisSize: MainAxisSize.min,
         spacing: 4,
         children: [
+          SizedBox(
+            width: axis == Axis.horizontal ? ToolbarGrid.groupLabelWidth : 32,
+            height: axis == Axis.horizontal ? 32 : ToolbarGrid.groupLabelHeight,
+            child: label == null
+                ? null
+                : Center(
+                    child: Text(
+                      label,
+                      key: Key('toolbar-group-label-${group.key}'),
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: ToolbarGrid.groupLabelFont,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+          ),
           for (final id in group.cells)
             if (id == null)
               const SizedBox(width: 32, height: 32)
@@ -3038,13 +3041,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 child: Icon(Icons.hourglass_top, size: 14),
               )
             else
-              button(
-                id,
-                badge: group.slots ? _toolbar.shortcutLabel(id) : null,
-              ),
+              button(id),
         ],
       );
-      if (group.slots) return row;
+      if (label != null) return row;
       return BouncyPresence(
         key: ValueKey('presence-${group.key}'),
         fromScale: 0.90,
@@ -4226,8 +4226,9 @@ class _OverlayPainter extends CustomPainter {
   }
 }
 
-/// 截图工具栏的一组格：key 为组身份，cells 为按顺序的功能（null 为空位），slots 为真表示配置组（#141）。
-typedef _ToolbarCells = ({String key, List<String?> cells, bool slots});
+/// 截图工具栏的一组格：key 为组身份，cells 为按顺序的功能（null 为空位），
+/// label 为配置组的组合标签（无修饰为「无」），插入的子级、属性与状态组为 null（#141）。
+typedef _ToolbarCells = ({String key, List<String?> cells, String? label});
 
 /// 截图工具栏的一行（竖放为一列）：groups 为并排的组，strip 为附加行的键；两者只有一个非空（#141）。
 typedef _ToolbarLine = ({List<_ToolbarCells> groups, String? strip});

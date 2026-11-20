@@ -292,14 +292,15 @@ void main() {
 
     testWidgets('全局快捷键占用的空格不可放入并说明用途；与系统快捷键相同的格子标红说明系统优先', (tester) async {
       // 作用：防冲突在编辑入口可见。
-      // 边界：⌥5 被全局翻译占用，拖入关闭后配置不变；⌘1（画笔）与系统快捷键相同时键位说明为「⌘1 系统优先」。
+      // 边界：⌥5 被全局翻译占用，空格写明「已用于全局翻译」，拖入关闭后配置不变；
+      // ⌘1（画笔）与系统快捷键相同时名称下方写「系统优先」，没有冲突的光标不写。
       final saved = await pumpEditor(
         tester,
         ScreenshotToolbarPreferences(),
         reserved: {(modifiers: opt, digit: 5): '全局翻译'},
         systemSlots: {(modifiers: cmd, digit: 1)},
       );
-      expect(find.text('⌥5 已用于全局翻译'), findsOneWidget);
+      expect(find.text('已用于全局翻译'), findsOneWidget);
       await drag(
         tester,
         ScreenshotActions.close,
@@ -310,11 +311,17 @@ void main() {
         tester
             .widget<Text>(
               find.byKey(
-                const ValueKey('toolbar-key-${ScreenshotActions.brush}'),
+                const ValueKey('toolbar-conflict-${ScreenshotActions.brush}'),
               ),
             )
             .data,
-        '⌘1 系统优先',
+        '系统优先',
+      );
+      expect(
+        find.byKey(
+          const ValueKey('toolbar-conflict-${ScreenshotActions.cursor}'),
+        ),
+        findsNothing,
       );
     });
 
@@ -343,19 +350,22 @@ void main() {
       expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
     });
 
-    testWidgets('格子显示键位；拖到有工具的格子交换，拖到空格留下原位空格', (tester) async {
-      // 作用：格位决定快捷键，拖动即改变快捷键且不会出现重复。
-      // 边界：光标（1）拖到画笔（⌘1）交换；关闭（⌥4）拖到空格 ⌥6 后原格 ⌥4 变空。
+    testWidgets('表头标出 1–6；拖到有工具的格子交换，拖到空格留下原位空格', (tester) async {
+      // 作用：格位决定快捷键（组合 + 表头数字），拖动即改变快捷键且不会出现重复。
+      // 边界：表头恰好 1–6 六个数字，第 1 列数字与光标格水平居中对齐；
+      // 光标（1）拖到画笔（⌘1）交换；关闭（⌥4）拖到空格 ⌥6 后原格 ⌥4 变空。
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+      final digits = find.descendant(
+        of: find.byKey(const ValueKey('toolbar-digits')),
+        matching: find.byType(Text),
+      );
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(
-                const ValueKey('toolbar-key-${ScreenshotActions.brush}'),
-              ),
-            )
-            .data,
-        '⌘1',
+        [for (final text in tester.widgetList<Text>(digits)) text.data],
+        ['1', '2', '3', '4', '5', '6'],
+      );
+      expect(
+        tester.getCenter(digits.first).dx,
+        tester.getCenter(find.byKey(const ValueKey('toolbar-slot-0-0'))).dx,
       );
       await drag(
         tester,

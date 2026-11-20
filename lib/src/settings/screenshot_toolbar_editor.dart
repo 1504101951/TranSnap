@@ -7,7 +7,8 @@ import '../common/constants/toolbar_grid.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_toolbar_preferences.dart';
 
-/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格编辑器」）：每组一行，左侧组头选修饰键组合，6 个紧凑格位从左到右，格位即快捷键；
+/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格编辑器」）：顶部表头标 1–6，每组一行，左侧组头选修饰键组合，
+/// 6 个紧凑格位从左到右，格位即快捷键（组合 + 表头数字）；
 /// 整格拖到格位获得键位，同格交换；选中可承载子级的工具后在网格下方编辑其子级；仅修改偏好，不注册全局热键。
 class ScreenshotToolbarEditor extends StatefulWidget {
   const ScreenshotToolbarEditor({
@@ -34,9 +35,10 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   static const headerGap = 8.0;
   static const rowGap = 8.0;
 
-  /// 格内名称与键位字号，眼睛图标与命中区（#67）。
+  /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（#67）。
+  static const headerRowHeight = 20.0;
   static const labelFont = 11.0;
-  static const keyFont = 10.0;
+  static const noteFont = 10.0;
   static const eyeIcon = 14.0;
   static const eyeHit = 20.0;
 
@@ -286,6 +288,41 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: ScreenshotToolbarEditor.rowGap,
             children: [
+              // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
+              Row(
+                key: const ValueKey('toolbar-digits'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width:
+                        ScreenshotToolbarEditor.headerWidth +
+                        ScreenshotToolbarEditor.headerGap,
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: ScreenshotToolbarEditor.cellGap,
+                    children: [
+                      for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
+                        SizedBox(
+                          width: ScreenshotToolbarEditor.cellWidth,
+                          height: ScreenshotToolbarEditor.headerRowHeight,
+                          child: Center(
+                            child: Text(
+                              '$digit',
+                              style: TextStyle(
+                                fontSize: ScreenshotToolbarEditor.labelFont,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
               for (final (index, column) in _value.columns.indexed)
                 _column(context, index, column),
               if (_value.columns.length < ToolbarGrid.maxColumns)
@@ -479,7 +516,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
 
   /// at 为格位，modifiers 为所在组组合，id 为格中功能（空格为 null）；返回可放下的格子。
   Widget _cell(BuildContext context, _Slot at, int modifiers, String? id) {
-    final key = '${ToolbarModifiers.label(modifiers)}${at.slot + 1}';
     final slot = (modifiers: modifiers, digit: at.slot + 1);
     // 全局快捷键占用的格位不可放入；与系统快捷键相同的格位可放但标红提示（#141）。
     final reservedFor = widget.reserved[slot];
@@ -510,32 +546,29 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
               ? BorderSide(color: colors.primary)
               : BorderSide.none,
         );
-        // 空格居中显示键位，被全局快捷键占用时注明用途，长说明在格内换行。
+        // 空格只有虚线框；被全局快捷键占用时居中注明用途，长说明在格内换行。
         final content = id == null
             ? CustomPaint(
                 painter: _DashedBorder(colors.outlineVariant),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Text(
-                      reservedFor == null ? key : '$key 已用于$reservedFor',
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ScreenshotToolbarEditor.keyFont,
-                        color: colors.onSurfaceVariant,
+                child: reservedFor == null
+                    ? const SizedBox.expand()
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Text(
+                            '已用于$reservedFor',
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ScreenshotToolbarEditor.noteFont,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
               )
-            : _toolCell(
-                context,
-                id,
-                systemConflict ? '$key 系统优先' : key,
-                conflict: systemConflict,
-              );
+            : _toolCell(context, id, conflict: systemConflict);
         return Container(
           width: ScreenshotToolbarEditor.cellWidth,
           height: ScreenshotToolbarEditor.cellHeight,
@@ -546,14 +579,10 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id 为格中功能，key 为格位键位文字，conflict 为与系统快捷键冲突；返回可整格拖动的紧凑格：
-  /// 自上而下为图标、名称与键位，右上角为眼睛按钮。点按可承载子级的工具时选中它，网格下方显示其子级。
-  Widget _toolCell(
-    BuildContext context,
-    String id,
-    String key, {
-    required bool conflict,
-  }) {
+  /// id 为格中功能，conflict 为与系统快捷键冲突；返回可整格拖动的紧凑格：
+  /// 自上而下为图标与名称（冲突时名称下方注明「系统优先」），右上角为眼睛按钮。
+  /// 点按可承载子级的工具时选中它，网格下方显示其子级。
+  Widget _toolCell(BuildContext context, String id, {required bool conflict}) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
     final colors = Theme.of(context).colorScheme;
@@ -574,18 +603,16 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             color: visible ? null : colors.onSurfaceVariant,
           ),
         ),
-        Text(
-          key,
-          key: ValueKey('toolbar-key-$id'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: ScreenshotToolbarEditor.keyFont,
-            color: conflict
-                ? ScreenshotToolbarEditor.conflictRed
-                : colors.onSurfaceVariant,
+        if (conflict)
+          Text(
+            '系统优先',
+            key: ValueKey('toolbar-conflict-$id'),
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: ScreenshotToolbarEditor.noteFont,
+              color: ScreenshotToolbarEditor.conflictRed,
+            ),
           ),
-        ),
       ],
     );
     final cell = GestureDetector(

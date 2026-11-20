@@ -45,6 +45,11 @@ abstract final class ToolbarGrid {
   static const groupsPerLine = 2;
   static const groupGap = 12.0;
 
+  /// 截图工具栏组合标签的尺寸：横放时宽（高同按钮 32），竖放时高（宽同按钮 32），字号（#67）。
+  static const groupLabelWidth = 28.0;
+  static const groupLabelHeight = 20.0;
+  static const groupLabelFont = 11.0;
+
   /// 默认列的组合：无、⌘、⌥。
   static const defaultModifiers = [
     0,

@@ -713,10 +713,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('工具栏按组排列：隐藏工具留空位，整组隐藏不显示，按钮标注键位（#141）', (tester) async {
+  testWidgets('工具栏按组排列：隐藏工具留空位，整组隐藏不显示，组左侧标注组合（#141）', (tester) async {
     // 作用：位置与快捷键对应关系在截图编辑器中保持不变。
-    // 边界：工具栏横放在选区下方，每组为一行；⌘ 组第 2 格隐藏时，第 1 格与第 3 格水平相隔两格（72pt）；⌥ 组全部隐藏时该行不显示；
-    // 裸数字列按钮标注「1」，⌘ 列第 3 格标注「⌘3」。
+    // 边界：工具栏横放在选区下方；⌘ 组第 2 格隐藏时，第 1 格与第 3 格水平相隔两格（72pt）；⌥ 组全部隐藏时该组不显示；
+    // 无修饰组标签为「无」、⌘ 组为「⌘」，标签在组内第一格左侧；按钮不再有键位角标。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     final defaults = ScreenshotToolbarPreferences();
@@ -758,25 +758,26 @@ void main() {
     );
     expect(find.byKey(const Key('screenshot-grid-group-1')), findsOneWidget);
     expect(find.byKey(const Key('screenshot-grid-group-2')), findsNothing);
-    expect(
-      tester
-          .widget<Text>(
-            find.byKey(const Key('toolbar-badge-${ScreenshotActions.cursor}')),
-          )
-          .data,
-      '1',
+    final none = find.byKey(
+      const Key('toolbar-group-label-screenshot-grid-group-0'),
     );
-    expect(
-      tester.widget<Text>(find.byKey(Key('toolbar-badge-$third'))).data,
-      '⌘3',
+    final command = find.byKey(
+      const Key('toolbar-group-label-screenshot-grid-group-1'),
     );
+    expect(tester.widget<Text>(none).data, '无');
+    expect(tester.widget<Text>(command).data, '⌘');
+    expect(
+      tester.getCenter(command).dx,
+      lessThan(tester.getTopLeft(find.byKey(Key(first))).dx),
+    );
+    expect(find.byKey(Key('toolbar-badge-$third')), findsNothing);
   });
 
   testWidgets('工具栏每行两组两端对齐，三级行插在父级所在行之后，放不下时每行一组（#141）', (tester) async {
     // 作用：两组并排节省厚度；录制目标等附加行紧跟父级所在行，不落到工具栏最底部。
     // 边界：默认 3 组时无修饰组与 ⌘ 组同行，⌘ 组右缘贴工具栏右内边距 8pt，两组间距不小于 12pt，⌥ 组在下一行；
     // 截图（无修饰第 2 格）的子级组与录制目标行依次插在第一行与 ⌥ 组之间；
-    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 452pt，改为每行一组。
+    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 516pt，改为每行一组。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-lines');
