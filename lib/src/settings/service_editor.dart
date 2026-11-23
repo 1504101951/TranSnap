@@ -1,5 +1,6 @@
-import '../common/constants/method_names.dart';
 import '../common/constants/channel_names.dart';
+import '../common/constants/glass_metrics.dart';
+import '../common/constants/method_names.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,7 +38,12 @@ class _ServiceEditorState extends State<ServiceEditor> {
   late String _kind;
   bool _semantic = false;
   bool _testing = false;
+  bool _nameEdited = false;
+  bool _baseEdited = false;
+  bool _obscureKey = true;
+  bool _obscureAppId = true;
   String? _message;
+  bool _messageIsError = false;
 
   /// 无参数；读取非敏感配置和本窗口草稿，不从 Keychain 取回密钥，无返回值。
   @override
@@ -46,6 +52,8 @@ class _ServiceEditorState extends State<ServiceEditor> {
     final config = widget.config;
     _id = config?.id ?? 'service-${DateTime.now().microsecondsSinceEpoch}';
     _kind = config?.kind ?? 'baidu';
+    _nameEdited = config != null;
+    _baseEdited = config != null;
     _name.text = config?.displayName ?? ServiceConfig.kinds[_kind]!;
     _base.text = config?.baseUrl ?? ServiceConfig.endpoints[_kind]!;
     _model.text = config?.model ?? '';
@@ -88,6 +96,7 @@ class _ServiceEditorState extends State<ServiceEditor> {
 
   /// test 决定测试草稿还是返回表单结果；测试只发送示例文本，不保存设置。
   Future<void> _submit({required bool test}) async {
+    if (_testing) return;
     try {
       // 收集经过验证的草稿，凭据始终与普通配置分开传递。
       final draft = _draft();
@@ -98,29 +107,57 @@ class _ServiceEditorState extends State<ServiceEditor> {
       setState(() {
         _testing = true;
         _message = null;
+        _messageIsError = false;
       });
       final translation = await const MethodChannel(ChannelNames.settings)
           .invokeMethod<String>(MethodNames.testService, {
             'config': draft.config.toMap(),
             'credentials': draft.credentials,
           });
-      if (mounted) setState(() => _message = '连接成功：$translation');
+      if (mounted) {
+        setState(() {
+          _message = '连接成功：$translation';
+          _messageIsError = false;
+        });
+      }
     } catch (error) {
       if (mounted) {
-        setState(
-          () => _message = switch (error) {
-            PlatformException(:final message) => message,
+        setState(() {
+          _message = switch (error) {
+            PlatformException(:final message) => message ?? '操作失败，请重试。',
             FormatException(:final message) => message,
             _ => '操作失败，请重试。',
-          },
-        );
+          };
+          _messageIsError = true;
+        });
       }
     } finally {
       if (mounted) setState(() => _testing = false);
     }
   }
 
-  /// context 为对话框上下文；返回服务字段和可验证的连接测试入口。
+  /// obscure/tooltip/onToggle 为显隐状态、提示与切换回调；生成密码框右侧可见性切换装饰。
+  InputDecoration _secretDecoration({
+    required bool obscure,
+    required String tooltip,
+    required VoidCallback onToggle,
+  }) => InputDecoration(
+    suffixIconConstraints: const BoxConstraints(
+      minWidth: GlassMetrics.hitSize,
+      minHeight: GlassMetrics.hitSize,
+    ),
+    suffixIcon: IconButton(
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      iconSize: GlassMetrics.icon,
+      icon: Icon(
+        obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+      ),
+      onPressed: _testing ? null : onToggle,
+    ),
+  );
+
+  /// context 为对话框上下文；返回服务字段、显隐切换、语义横幅与带忙碌态的测试连接入口。
   @override
   Widget build(BuildContext context) {
     final isModel = ServiceConfig.isModelKind(_kind);
@@ -128,122 +165,149 @@ class _ServiceEditorState extends State<ServiceEditor> {
       canPop: !_testing,
       child: NativeGlassDialog(
         title: Text(widget.config == null ? '添加翻译服务' : '编辑翻译服务'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                NativeGlassDropdown<String>(
-                  label: '服务类型',
-                  value: _kind,
-                  items: widget.config == null
-                      ? ServiceConfig.selectableKinds
-                      : {_kind: ServiceConfig.kinds[_kind]!},
-                  onChanged: widget.config != null || _testing
-                      ? null
-                      : (value) => setState(() {
-                          _kind = value;
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NativeGlassDropdown<String>(
+                label: '服务类型',
+                value: _kind,
+                items: widget.config == null
+                    ? ServiceConfig.selectableKinds
+                    : {_kind: ServiceConfig.kinds[_kind]!},
+                onChanged: widget.config != null || _testing
+                    ? null
+                    : (value) => setState(() {
+                        final previousKind = _kind;
+                        _kind = value;
+                        // 仅当名称或地址仍为默认模板或留空时跟随切换，保留用户手工填写的值（U-24）。
+                        if (!_nameEdited ||
+                            _name.text.trim().isEmpty ||
+                            _name.text.trim() ==
+                                ServiceConfig.kinds[previousKind]) {
                           _name.text = ServiceConfig.kinds[_kind]!;
+                          _nameEdited = false;
+                        }
+                        if (!_baseEdited ||
+                            _base.text.trim().isEmpty ||
+                            _base.text.trim() ==
+                                ServiceConfig.endpoints[previousKind]) {
                           _base.text = ServiceConfig.endpoints[_kind]!;
-                          _message = null;
-                        }),
+                          _baseEdited = false;
+                        }
+                        _message = null;
+                        _messageIsError = false;
+                      }),
+              ),
+              NativeGlassField(
+                label: '配置名称',
+                child: TextField(
+                  key: const ValueKey('配置名称'),
+                  controller: _name,
+                  enabled: !_testing,
+                  onChanged: (_) => _nameEdited = true,
+                  decoration: const InputDecoration(),
                 ),
+              ),
+              NativeGlassField(
+                label: 'API Base URL',
+                helper: '填写服务根地址；模型接口通常以 /v1 结尾。',
+                child: TextField(
+                  key: const ValueKey('API Base URL'),
+                  controller: _base,
+                  enabled: !_testing,
+                  onChanged: (_) => _baseEdited = true,
+                  decoration: const InputDecoration(),
+                ),
+              ),
+              if (isModel)
                 NativeGlassField(
-                  label: '配置名称',
+                  label: '模型名称',
                   child: TextField(
-                    key: ValueKey('配置名称'),
-                    controller: _name,
+                    key: const ValueKey('模型名称'),
+                    controller: _model,
                     enabled: !_testing,
-                    decoration: InputDecoration(),
+                    decoration: const InputDecoration(hintText: '填写服务商提供的模型 ID'),
                   ),
                 ),
-                  NativeGlassField(
-                    label: 'API Base URL',
-                    helper: '填写服务根地址；模型接口通常以 /v1 结尾。',
-                    child: TextField(
-                      key: ValueKey('API Base URL'),
-                      controller: _base,
-                      enabled: !_testing,
-                      decoration: InputDecoration(),
+              if (_kind == 'baidu')
+                NativeGlassField(
+                  label: '百度 App ID',
+                  helper: widget.hasCredentials ? '已保存，留空保留。' : null,
+                  child: TextField(
+                    key: const ValueKey('百度 App ID'),
+                    controller: _appId,
+                    enabled: !_testing,
+                    obscureText: _obscureAppId,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: _secretDecoration(
+                      obscure: _obscureAppId,
+                      tooltip: _obscureAppId ? '显示 App ID' : '隐藏 App ID',
+                      onToggle: () =>
+                          setState(() => _obscureAppId = !_obscureAppId),
                     ),
                   ),
-                if (isModel)
-                  NativeGlassField(
-                    label: '模型名称',
-                    child: TextField(
-                      key: ValueKey('模型名称'),
-                      controller: _model,
-                      enabled: !_testing,
-                      decoration: InputDecoration(hintText: '填写服务商提供的模型 ID'),
-                    ),
+                ),
+              NativeGlassField(
+                label: _kind == 'baidu' ? '百度密钥' : 'API Key',
+                // 模型服务的 API Key 可留空（#123）。
+                helper: widget.hasCredentials
+                    ? '已保存，留空保留；凭据保存在 macOS 钥匙串。'
+                    : isModel
+                    ? '可留空；凭据保存在 macOS 钥匙串。'
+                    : '凭据保存在 macOS 钥匙串。',
+                child: TextField(
+                  key: ValueKey(_kind == 'baidu' ? '百度密钥' : 'API Key'),
+                  controller: _key,
+                  enabled: !_testing,
+                  obscureText: _obscureKey,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: _secretDecoration(
+                    obscure: _obscureKey,
+                    tooltip: _obscureKey ? '显示密钥' : '隐藏密钥',
+                    onToggle: () => setState(() => _obscureKey = !_obscureKey),
                   ),
-                if (_kind == 'baidu')
-                  NativeGlassField(
-                    label: '百度 App ID',
-                    helper: widget.hasCredentials ? '已保存，留空保留。' : null,
-                    child: TextField(
-                      key: ValueKey('百度 App ID'),
-                      controller: _appId,
-                      enabled: !_testing,
-                      obscureText: true,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(),
-                    ),
-                  ),
-                  NativeGlassField(
-                    label: _kind == 'baidu' ? '百度密钥' : 'API Key',
-                    // 模型服务的 API Key 可留空（#123）。
-                    helper: widget.hasCredentials
-                        ? '已保存，留空保留；凭据保存在 macOS 钥匙串。'
-                        : isModel
-                        ? '可留空；凭据保存在 macOS 钥匙串。'
-                        : '凭据保存在 macOS 钥匙串。',
-                    child: TextField(
-                      key: ValueKey(_kind == 'baidu' ? '百度密钥' : 'API Key'),
-                      controller: _key,
-                      enabled: !_testing,
-                      obscureText: true,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(),
-                    ),
-                  ),
-                if (isModel) ...[
-                  NativeGlassSwitchTile(
-                    title: '按段落双语对照',
-                    subtitle: '结合全文逐段翻译；段落缺失或乱序时提示重试。',
-                    value: _semantic,
-                    onChanged: _testing
-                        ? null
-                        : (value) => setState(() => _semantic = value),
-                  ),
-                ],
-                if (_kind == 'anthropic')
-                  NativeGlassField(
-                    label: '最大输出 Token 数',
-                    child: TextField(
-                      key: ValueKey('最大输出 Token 数'),
-                      controller: _tokens,
-                      enabled: !_testing,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(),
-                    ),
-                  ),
-                if (_message != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: SelectableText(_message!),
-                  ),
+                ),
+              ),
+              if (isModel) ...[
+                NativeGlassSwitchTile(
+                  title: '按段落双语对照',
+                  subtitle: '结合全文逐段翻译；段落缺失或乱序时提示重试。',
+                  value: _semantic,
+                  onChanged: _testing
+                      ? null
+                      : (value) => setState(() => _semantic = value),
+                ),
               ],
-            ),
+              if (_kind == 'anthropic')
+                NativeGlassField(
+                  label: '最大输出 Token 数',
+                  child: TextField(
+                    key: const ValueKey('最大输出 Token 数'),
+                    controller: _tokens,
+                    enabled: !_testing,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(),
+                  ),
+                ),
+              if (_message != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: GlassMetrics.space12),
+                  child: NativeGlassBanner(
+                    message: _message!,
+                    isError: _messageIsError,
+                  ),
+                ),
+            ],
           ),
         ),
         actions: [
           NativeGlassSurface(
             material: true,
+            busy: _testing,
             child: TextButton(
               onPressed: _testing ? null : () => _submit(test: true),
               child: Text(_testing ? '正在测试…' : '测试连接'),

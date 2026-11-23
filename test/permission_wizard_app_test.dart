@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/permission_wizard_app.dart';
 
 /// 无参数；验证单页双权限与「进入应用」可点条件。
@@ -179,6 +180,55 @@ void main() {
     pending.complete();
     await tester.pumpAndSettle();
     expect(ringFor('已完成').active, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('小尺寸窗口正文可滚动且无溢出，授权失败报错在重试后清除（#144）', (tester) async {
+    // 作用：验证矮窗口下向导正文独立滚动不溢出，权限申请失败通过横幅呈现并在下次重试前清空。
+    // 边界：480×260 视口零 RenderFlex overflow；重试前触发一次失败，成功后旧错误文案消失。
+    tester.view.physicalSize = const Size(480, 260);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var accessibility = false;
+    var failOpen = true;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.permissionWizardStatus:
+          return {
+            'accessibility': accessibility,
+            'screenAccess': false,
+            'finishedOrSkipped': false,
+          };
+        case MethodNames.openAccessibility:
+          if (failOpen) {
+            throw PlatformException(code: 'perm_err', message: '无法打开辅助功能设置');
+          }
+          accessibility = true;
+          return null;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const PermissionWizardApp());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('授权辅助功能'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NativeGlassBanner), findsOneWidget);
+    expect(find.text('无法打开辅助功能设置'), findsOneWidget);
+
+    failOpen = false;
+    await tester.tap(find.text('授权辅助功能'));
+    await tester.pumpAndSettle();
+    expect(find.text('无法打开辅助功能设置'), findsNothing);
+    expect(find.text('已完成'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

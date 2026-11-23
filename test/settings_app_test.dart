@@ -614,6 +614,14 @@ void main() {
     expect(restore('纠错').onPressed, isNull);
     await tester.tap(find.byKey(const ValueKey('恢复默认-润色')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('取消').last);
+    await tester.pumpAndSettle();
+    expect(restore('润色').onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('恢复默认-润色')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '恢复默认'));
+    await tester.pumpAndSettle();
     expect(restore('润色').onPressed, isNull);
 
     await tester.enterText(find.byKey(const ValueKey('提示词-纠错')), '');
@@ -767,6 +775,14 @@ void main() {
     expect((saved().first as Map)['translation'], '接口');
 
     await tester.tap(find.byTooltip('删除 Kubernetes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(saved(), hasLength(2));
+
+    await tester.tap(find.byTooltip('删除 Kubernetes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(saved(), [
       {'term': 'API', 'translation': '接口', 'language': 'zh-CN'},

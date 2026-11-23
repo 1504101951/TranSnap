@@ -66,30 +66,42 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     }
   }
 
-  /// 无参数；读取当前授权；不因未点「进入应用」而关窗。
+  /// 无参数；读取当前授权，异常时展示提示；不因未点「进入应用」而关窗。
   Future<void> _refresh() async {
-    final status = await widget.channel.invokeMapMethod<Object?, Object?>(
-      MethodNames.permissionWizardStatus,
-    );
-    if (!mounted || status == null) return;
-    setState(() {
-      _accessibility = status['accessibility'] == true;
-      _screenAccess = status['screenAccess'] == true;
-    });
+    try {
+      final status = await widget.channel.invokeMapMethod<Object?, Object?>(
+        MethodNames.permissionWizardStatus,
+      );
+      if (!mounted || status == null) return;
+      setState(() {
+        _accessibility = status['accessibility'] == true;
+        _screenAccess = status['screenAccess'] == true;
+        // 两项权限均就绪后清除残留错误横幅，保持完成态清晰。
+        if (_accessibility && _screenAccess) _message = null;
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      setState(() => _message = error.message ?? '无法读取权限状态');
+    }
   }
 
-  /// alreadyGranted 为该项当前状态；method 为对应系统申请。
+  /// alreadyGranted 为该项当前状态，method 为对应系统申请；申请前清空旧错误并锁定并发点击。
   Future<void> _request(bool alreadyGranted, String method) async {
+    if (_busy) return;
     if (alreadyGranted) {
+      setState(() => _message = null);
       await _refresh();
       return;
     }
-    setState(() => _busyMethod = method);
+    setState(() {
+      _busyMethod = method;
+      _message = null;
+    });
     try {
       await widget.channel.invokeMethod<void>(method);
       await _refresh();
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _message = error.message);
+      if (mounted) setState(() => _message = error.message ?? '申请权限失败，请重试。');
     } finally {
       if (mounted) setState(() => _busyMethod = null);
     }
@@ -97,13 +109,14 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
 
   /// 无参数；关闭向导，下次启动若仍缺权限会再弹出。
   Future<void> _skip() async {
+    if (_busy) return;
     await widget.channel.invokeMethod<void>(MethodNames.finishPermissionWizard);
     await widget.channel.invokeMethod<void>(MethodNames.closePermissionWizard);
   }
 
   /// 无参数；两项都成功后进入菜单栏使用。
   Future<void> _enter() async {
-    if (!_canEnter) return;
+    if (_busy || !_canEnter) return;
     await widget.channel.invokeMethod<void>(MethodNames.finishPermissionWizard);
     await widget.channel.invokeMethod<void>(MethodNames.closePermissionWizard);
   }
@@ -115,65 +128,69 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     super.dispose();
   }
 
-  /// context 为窗口上下文；返回单页双按钮向导。
+  /// context 为窗口上下文；返回主体可滚动且底部操作固定的单页双按钮向导。
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
+      title: 'TranslateApp 权限向导',
       home: NativeGlassWindowPage(
         child: Scaffold(
           body: Padding(
             padding: const EdgeInsets.all(GlassMetrics.pagePadding),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  '使用前需要两项权限',
-                  style: TextStyle(
-                    fontSize: 20,
-                    height: 26 / 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text('授权后 TranslateApp 会出现在系统列表中。都完成后即可进入应用。'),
-                const SizedBox(height: 20),
-                _PermissionRow(
-                  title: '辅助功能',
-                  granted: _accessibility,
-                  buttonLabel: '授权辅助功能',
-                  busy: _busyMethod == MethodNames.openAccessibility,
-                  onPressed: _busy
-                      ? null
-                      : () => _request(
-                          _accessibility,
-                          MethodNames.openAccessibility,
+                // 矮窗口或大字号下仅正文区滚动，底部取消与主操作保持固定可达（U-14）。
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '使用前需要两项权限',
+                          style: TextStyle(
+                            fontSize: 20,
+                            height: 26 / 20,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                ),
-                const SizedBox(height: 12),
-                _PermissionRow(
-                  title: '屏幕录制',
-                  granted: _screenAccess,
-                  buttonLabel: '申请录屏权限',
-                  busy: _busyMethod == MethodNames.requestScreenAccess,
-                  onPressed: _busy
-                      ? null
-                      : () => _request(
-                          _screenAccess,
-                          MethodNames.requestScreenAccess,
+                        const SizedBox(height: GlassMetrics.space8),
+                        const Text('授权后 TranslateApp 会出现在系统列表中。都完成后即可进入应用。'),
+                        const SizedBox(height: GlassMetrics.space20),
+                        _PermissionRow(
+                          title: '辅助功能',
+                          granted: _accessibility,
+                          buttonLabel: '授权辅助功能',
+                          busy: _busyMethod == MethodNames.openAccessibility,
+                          onPressed: _busy
+                              ? null
+                              : () => _request(
+                                  _accessibility,
+                                  MethodNames.openAccessibility,
+                                ),
                         ),
-                ),
-                if (_message != null) ...[
-                  const SizedBox(height: 12),
-                  Builder(
-                    builder: (context) => Text(
-                      _message!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                        const SizedBox(height: GlassMetrics.space12),
+                        _PermissionRow(
+                          title: '屏幕录制',
+                          granted: _screenAccess,
+                          buttonLabel: '申请录屏权限',
+                          busy: _busyMethod == MethodNames.requestScreenAccess,
+                          onPressed: _busy
+                              ? null
+                              : () => _request(
+                                  _screenAccess,
+                                  MethodNames.requestScreenAccess,
+                                ),
+                        ),
+                        if (_message != null) ...[
+                          const SizedBox(height: GlassMetrics.space12),
+                          NativeGlassBanner(message: _message!, isError: true),
+                        ],
+                      ],
                     ),
                   ),
-                ],
-                const Spacer(),
+                ),
+                const SizedBox(height: GlassMetrics.space16),
                 Row(
                   children: [
                     NativeGlassSurface(
@@ -218,7 +235,7 @@ class _PermissionRow extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool busy;
 
-  /// context 为布局上下文；返回一行状态与申请按钮。
+  /// context 为布局上下文；返回一行状态与次级申请按钮（主行动留给底部「进入应用」）。
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -228,16 +245,16 @@ class _PermissionRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
+              const SizedBox(height: GlassMetrics.space4),
               NativeGlassStatus(granted: granted),
             ],
           ),
         ),
-        // 权限动作复用共享材料和32pt主要按钮，语义禁用仍由标准按钮承担。
+        // 单行申请使用描边次级按钮，避免与底部「进入应用」主按钮视觉平级冲突（U-21）。
         NativeGlassSurface(
           material: true,
           busy: busy,
-          child: FilledButton.tonal(
+          child: OutlinedButton(
             onPressed: granted ? null : onPressed,
             child: Text(granted ? '已完成' : buttonLabel),
           ),

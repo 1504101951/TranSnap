@@ -37,14 +37,17 @@ class _GlossaryManagerState extends State<GlossaryManager> {
   late final List<GlossaryEntry> _entries = [...widget.glossary];
   String? _workingAction;
   String? _message;
+  bool _messageIsError = false;
 
   bool get _working => _workingAction != null;
 
   /// 无参数；经系统面板选取文件并打开预览，取消不改动列表，返回操作结束的 Future。
   Future<void> _import() async {
+    if (_working) return;
     setState(() {
       _workingAction = 'import';
       _message = null;
+      _messageIsError = false;
     });
     try {
       final file = await widget.channel.invokeMapMethod<String, String>(
@@ -75,7 +78,12 @@ class _GlossaryManagerState extends State<GlossaryManager> {
         ),
       );
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _message = error.message ?? '无法读取术语文件。');
+      if (mounted) {
+        setState(() {
+          _message = error.message ?? '无法读取术语文件。';
+          _messageIsError = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _workingAction = null);
     }
@@ -83,11 +91,13 @@ class _GlossaryManagerState extends State<GlossaryManager> {
 
   /// 无参数；选择 CSV/JSON 后用系统面板保存当前术语，取消不产生文件，返回操作结束的 Future。
   Future<void> _export() async {
+    if (_working) return;
     final format = await showDialog<String>(
       context: context,
       builder: (context) => NativeGlassDialog(
+        maxWidth: 420,
         title: const Text('导出术语表'),
-        content: const SizedBox(width: 520, child: Text('选择导出格式。')),
+        content: const Text('选择导出格式。'),
         actions: [
           for (final (value, label) in [
             (null, '取消'),
@@ -108,6 +118,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     setState(() {
       _workingAction = 'export';
       _message = null;
+      _messageIsError = false;
     });
     try {
       // exportGlossaryFile 只序列化术语字段，不读取服务设置或凭据。
@@ -116,9 +127,19 @@ class _GlossaryManagerState extends State<GlossaryManager> {
         MethodNames.saveTextFile,
         {'text': text, 'suggestedName': 'TranslateApp 术语表.$format'},
       );
-      if (mounted && path != null) setState(() => _message = '已导出到 $path');
+      if (mounted && path != null) {
+        setState(() {
+          _message = '已导出到 $path';
+          _messageIsError = false;
+        });
+      }
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _message = error.message ?? '导出失败，请重试。');
+      if (mounted) {
+        setState(() {
+          _message = error.message ?? '导出失败，请重试。';
+          _messageIsError = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _workingAction = null);
     }
@@ -128,6 +149,20 @@ class _GlossaryManagerState extends State<GlossaryManager> {
   void _change(VoidCallback change) {
     setState(change);
     widget.onChanged([..._entries]);
+  }
+
+  /// index 为待删除术语的下标；经破坏性确认后删除条目，避免误删。
+  Future<void> _confirmDelete(int index) async {
+    final entry = _entries[index];
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '删除术语',
+      message: '确定删除术语“${entry.term}”吗？此操作不可撤销。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    _change(() => _entries.removeAt(index));
   }
 
   /// index 为待编辑术语的下标，新增时为空；确定后更新列表，取消不改变，返回编辑结束的 Future。
@@ -155,75 +190,86 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     });
   }
 
-  /// context 为弹窗上下文；返回生效范围说明、术语列表与添加/完成操作。
+  /// context 为弹窗上下文；返回生效范围说明、状态横幅、术语列表与添加/完成操作。
   @override
   Widget build(BuildContext context) => NativeGlassDialog(
     title: const Text('术语表'),
-    content: SizedBox(
-      width: 520,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '只对模型服务（OpenAI、DeepSeek、Anthropic）的翻译生效；译法留空表示保留原文不译。',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          if (_message != null) Text(_message!),
-          if (_entries.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text('暂无术语'),
-            )
-          else
-            // 条目多时只在弹窗内滚动，标题与操作保持可见。
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final (index, entry) in _entries.indexed)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        entry.translation.isEmpty
-                            ? '${entry.term}（保留原文）'
-                            : '${entry.term} → ${entry.translation}',
-                      ),
-                      subtitle: Text(
-                        AppSettings.languages[entry.language] ?? entry.language,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          NativeGlassSurface(
-                            material: true,
-                            child: IconButton(
-                              tooltip: '编辑 ${entry.term}',
-                              icon: const Icon(Icons.edit_outlined),
-                              onPressed: _working ? null : () => _edit(index),
-                            ),
-                          ),
-                          const SizedBox(width: GlassMetrics.actionGap),
-                          NativeGlassSurface(
-                            material: true,
-                            child: IconButton(
-                              tooltip: '删除 ${entry.term}',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: _working
-                                  ? null
-                                  : () =>
-                                        _change(() => _entries.removeAt(index)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '只对模型服务（OpenAI、DeepSeek、Anthropic）的翻译生效；译法留空表示保留原文不译。',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: GlassMetrics.space8),
+        if (_message != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: GlassMetrics.space8),
+            child: NativeGlassBanner(
+              message: _message!,
+              isError: _messageIsError,
             ),
-        ],
-      ),
+          ),
+        if (_entries.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: GlassMetrics.space16),
+            child: Text('暂无术语'),
+          )
+        else
+          // 条目多时只在弹窗内滚动，标题与操作保持可见。
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final (index, entry) in _entries.indexed)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      entry.translation.isEmpty
+                          ? '${entry.term}（保留原文）'
+                          : '${entry.term} → ${entry.translation}',
+                    ),
+                    subtitle: Text(
+                      AppSettings.languages[entry.language] ?? entry.language,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        NativeGlassSurface(
+                          material: true,
+                          child: IconButton(
+                            tooltip: '编辑 ${entry.term}',
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              size: GlassMetrics.icon,
+                            ),
+                            visualDensity: VisualDensity.standard,
+                            onPressed: _working ? null : () => _edit(index),
+                          ),
+                        ),
+                        const SizedBox(width: GlassMetrics.actionGap),
+                        NativeGlassSurface(
+                          material: true,
+                          child: IconButton(
+                            tooltip: '删除 ${entry.term}',
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: GlassMetrics.icon,
+                            ),
+                            visualDensity: VisualDensity.standard,
+                            onPressed: _working
+                                ? null
+                                : () => _confirmDelete(index),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     ),
     actions: [
       NativeGlassSurface(
@@ -316,7 +362,7 @@ class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
     }
   }
 
-  /// context 提供主题；返回受窗口约束的 520pt 预览与内部滚动列表，错误存在时禁用确认。
+  /// context 提供主题；返回受统一对话框宽限约束的预览与内部滚动列表，错误存在时禁用确认。
   @override
   Widget build(BuildContext context) {
     final draft = widget.draft;
@@ -327,64 +373,62 @@ class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
       canPop: !_saving,
       child: NativeGlassDialog(
         title: const Text('导入术语表'),
-        content: SizedBox(
-          width: 520,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(widget.name),
-              const SizedBox(height: 8),
-              Text(
-                '新增 $added · 重复 ${duplicates.length} · 错误 ${draft.errorCount}',
-              ),
-              NativeGlassDropdown<bool>(
-                label: '重复术语',
-                value: _overwrite,
-                items: const {false: '保留已有值', true: '覆盖已有值'},
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() => _overwrite = value),
-              ),
-              Text(
-                '按文件顺序处理；保留取首条，覆盖取最后一条。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final row in draft.rows)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          row.error ??
-                              '${row.entry!.term} → ${row.entry!.translation.isEmpty ? '（保留原文）' : row.entry!.translation}',
-                          style: row.error == null
-                              ? null
-                              : TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                        ),
-                        subtitle: Text(
-                          '位置 ${row.position} · ${row.error != null
-                              ? '错误'
-                              : duplicates.contains(row.position)
-                              ? '重复'
-                              : '新增'}${row.entry == null ? '' : ' · ${row.entry!.language}'}',
-                        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.name),
+            const SizedBox(height: GlassMetrics.space8),
+            Text(
+              '新增 $added · 重复 ${duplicates.length} · 错误 ${draft.errorCount}',
+            ),
+            NativeGlassDropdown<bool>(
+              label: '重复术语',
+              value: _overwrite,
+              items: const {false: '保留已有值', true: '覆盖已有值'},
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _overwrite = value),
+            ),
+            const SizedBox(height: GlassMetrics.space4),
+            Text(
+              '按文件顺序处理；保留取首条，覆盖取最后一条。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: GlassMetrics.space8),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final row in draft.rows)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        row.error ??
+                            '${row.entry!.term} → ${row.entry!.translation.isEmpty ? '（保留原文）' : row.entry!.translation}',
+                        style: row.error == null
+                            ? null
+                            : TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
                       ),
-                  ],
-                ),
+                      subtitle: Text(
+                        '位置 ${row.position} · ${row.error != null
+                            ? '错误'
+                            : duplicates.contains(row.position)
+                            ? '重复'
+                            : '新增'}${row.entry == null ? '' : ' · ${row.entry!.language}'}',
+                      ),
+                    ),
+                ],
               ),
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-            ],
-          ),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: GlassMetrics.space8),
+                child: NativeGlassBanner(message: _error!, isError: true),
+              ),
+          ],
         ),
         actions: [
           NativeGlassSurface(
@@ -467,18 +511,19 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
     Navigator.pop(context, entry);
   }
 
-  /// context 为弹窗上下文；返回术语字段、目标语言下拉与取消/确定操作。
+  /// context 为弹窗上下文；返回可滚动的术语字段、目标语言下拉与取消/确定操作。
   @override
   Widget build(BuildContext context) => NativeGlassDialog(
     title: Text(widget.entry == null ? '添加术语' : '编辑术语'),
-    content: SizedBox(
-      width: 520,
+    content: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 重复术语错误直接关联到原文输入框，提供报错边框与错误图标（U-13）。
           NativeGlassField(
             label: '原文术语',
+            errorText: _duplicate ? '该目标语言下已有此术语。' : null,
             child: TextField(
               key: const ValueKey('原文术语'),
               controller: _term,
@@ -510,11 +555,6 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
               _duplicate = false;
             }),
           ),
-          if (_duplicate)
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Text('该目标语言下已有此术语。'),
-            ),
         ],
       ),
     ),

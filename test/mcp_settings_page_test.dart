@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/mcp_platforms.dart';
+import 'package:translate_app/src/settings/mcp_settings_page.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
@@ -26,12 +29,17 @@ class _FakeMcpService extends McpPlatformService {
   /// 安装时抛出的错误原文，按平台设置。
   final failures = <String, String>{};
 
+  /// 等待挂起的安装事务，按平台 id 控制异步完成时机。
+  final pendingInstalls = <String, Completer<void>>{};
+
   @override
   Future<McpInstallState> detect(McpPlatform platform) async =>
       states[platform.id] ?? McpInstallState.notInstalled;
 
   @override
   Future<void> install(McpPlatform platform) async {
+    final pending = pendingInstalls[platform.id];
+    if (pending != null) await pending.future;
     final failure = failures[platform.id];
     if (failure != null) throw McpPlatformException(failure);
     states[platform.id] = McpInstallState.installed;
@@ -272,5 +280,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(rowText('codex', '未安装'), findsOneWidget);
     expect(enabled(tester, 'mcp-remove-codex'), isFalse);
+  });
+
+  testWidgets('MCP 安装进行中仅激活对应平台按钮的进度环并锁定重复操作（#144）', (tester) async {
+    // 作用：验证平台安装挂起时当前安装按钮激活 BusyRing，同时锁定同平台动作而不干扰其他平台。
+    // 边界：codex 挂起期间仅 mcp-install-codex 的 BusyRing active=true，mcp-remove-codex 禁用且非忙碌。
+    final pendingInstall = Completer<void>();
+    final service = _FakeMcpService(helperPath)
+      ..pendingInstalls['codex'] = pendingInstall;
+    await open(tester, service: service);
+
+    BusyRing ringFor(String key) => tester.widget<BusyRing>(
+      find
+          .ancestor(of: find.byKey(ValueKey(key)), matching: find.byType(BusyRing))
+          .first,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('mcp-install-codex')));
+    await tester.pump();
+    expect(ringFor('mcp-install-codex').active, isTrue);
+    expect(ringFor('mcp-remove-codex').active, isFalse);
+    expect(ringFor('mcp-install-claude-code').active, isFalse);
+    expect(enabled(tester, 'mcp-install-codex'), isFalse);
+    expect(enabled(tester, 'mcp-remove-codex'), isFalse);
+
+    pendingInstall.complete();
+    await tester.pumpAndSettle();
+    expect(ringFor('mcp-install-codex').active, isFalse);
+    expect(rowText('codex', '已安装'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('helper 路径读取失败时显示错误横幅并支持重试恢复（#144）', (tester) async {
+    // 作用：验证 mcpHelperPath 抛 PlatformException 时呈现错误横幅和「重试加载」，恢复后加载平台列表。
+    // 边界：首次调用抛错展示 NativeGlassBanner；恢复路径并点击重试后平台项正常渲染。
+    const pageChannel = MethodChannel('test/mcp-helper-retry');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var failHelper = true;
+    messenger.setMockMethodCallHandler(pageChannel, (call) async {
+      if (call.method == MethodNames.mcpHelperPath) {
+        if (failHelper) {
+          throw PlatformException(code: 'helper_missing', message: '未找到 MCP 组件');
+        }
+        return helperPath;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(pageChannel, null));
+
+    await tester.pumpWidget(
+      NativeGlassApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: McpSettingsPage(
+              enabled: false,
+              onChanged: (_) {},
+              controlEnabled: false,
+              onControlChanged: (_) {},
+              channel: pageChannel,
+              createService: (path) => _FakeMcpService(path),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(NativeGlassBanner), findsOneWidget);
+    expect(find.text('未找到 MCP 组件'), findsOneWidget);
+
+    failHelper = false;
+    await tester.tap(find.text('重试加载'));
+    await tester.pumpAndSettle();
+    expect(find.text('未找到 MCP 组件'), findsNothing);
+    expect(find.byKey(const ValueKey('mcp-platform-codex')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

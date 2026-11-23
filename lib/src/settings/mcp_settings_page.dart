@@ -59,6 +59,8 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
 
   String? _helperPath;
   McpPlatformService? _service;
+  bool _loadingHelper = true;
+  String? _loadError;
   bool _copied = false;
   Timer? _feedback;
 
@@ -71,30 +73,57 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
   /// 安装或删除成功后需提示重启客户端的配置文件式平台。
   final Set<String> _restartHints = {};
 
-  /// 正在安装或删除的平台，期间两个按钮不可用。
-  final Set<String> _working = {};
+  /// 正在安装（'install'）或删除（'remove'）的平台，期间禁用两个按钮并为当前按钮激活进度环（U-24）。
+  final Map<String, String> _workingActions = {};
 
   /// 无参数；读取 helper 路径后创建平台服务并检测全部平台。
   @override
   void initState() {
     super.initState();
-    widget.channel.invokeMethod<String>(MethodNames.mcpHelperPath).then((path) {
-      if (!mounted) return;
-      setState(() {
-        _helperPath = path;
-        _service = widget.createService(path!);
-      });
-      for (final platform in mcpPlatforms) {
-        _detect(platform);
-      }
-    });
+    _loadHelper();
   }
 
-  /// 无参数；取消未结束的复制反馈计时。
+  /// 无参数；解除复制反馈计时器，防止页面销毁后回调触发 setState。
   @override
   void dispose() {
     _feedback?.cancel();
     super.dispose();
+  }
+
+  /// 无参数；读取 MCP helper 路径并在成功时探测全部已注册平台，失败时提供可重试提示。
+  Future<void> _loadHelper() async {
+    setState(() {
+      _loadingHelper = true;
+      _loadError = null;
+    });
+    try {
+      final path = await widget.channel.invokeMethod<String>(
+        MethodNames.mcpHelperPath,
+      );
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        setState(() {
+          _loadingHelper = false;
+          _loadError = '未获取到 MCP helper 路径';
+        });
+        return;
+      }
+      setState(() {
+        _helperPath = path;
+        _service = widget.createService(path);
+        _loadingHelper = false;
+        _loadError = null;
+      });
+      for (final platform in mcpPlatforms) {
+        _detect(platform);
+      }
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingHelper = false;
+        _loadError = error.message ?? '无法读取 MCP helper 路径';
+      });
+    }
   }
 
   /// 作用：检测一个平台并刷新该行。参数 platform：注册项。
@@ -111,14 +140,16 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     if (mounted) setState(() => _states[platform.id] = state);
   }
 
-  /// 作用：执行安装或删除后重新检测。参数 platform：注册项；action：安装或删除操作。
+  /// 作用：执行安装或删除后重新检测。参数 platform：注册项；actionKey：操作类型（'install'/'remove'）；action：执行回调。
   /// 失败原文显示在该行下方；配置文件式平台成功后提示重启客户端。
   Future<void> _perform(
     McpPlatform platform,
+    String actionKey,
     Future<void> Function(McpPlatform) action,
   ) async {
+    if (_workingActions.containsKey(platform.id)) return;
     setState(() {
-      _working.add(platform.id);
+      _workingActions[platform.id] = actionKey;
       _errors.remove(platform.id);
       _restartHints.remove(platform.id);
     });
@@ -129,37 +160,21 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
       _errors[platform.id] = error.message;
     }
     if (!mounted) return;
-    setState(() => _working.remove(platform.id));
+    setState(() => _workingActions.remove(platform.id));
     await _detect(platform);
   }
 
-  /// 作用：二次确认后删除。参数 platform：注册项。
+  /// 作用：二次确认后删除（使用破坏性主按钮样式）。参数 platform：注册项。
   Future<void> _confirmRemove(McpPlatform platform) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await NativeGlassDialog.confirm(
       context: context,
-      builder: (context) => NativeGlassDialog(
-        title: Text('从 ${platform.name} 删除 TranslateApp？'),
-        content: const Text('只移除该平台中的 translateapp 条目，可随时重新安装。'),
-        actions: [
-          NativeGlassSurface(
-            material: true,
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          NativeGlassSurface(
-            material: true,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除'),
-            ),
-          ),
-        ],
-      ),
+      title: '从 ${platform.name} 删除 TranslateApp？',
+      message: '只移除该平台中的 translateapp 条目，可随时重新安装。',
+      confirmLabel: '删除',
+      destructive: true,
     );
-    if (confirmed == true && mounted) {
-      await _perform(platform, _service!.remove);
+    if (confirmed && mounted) {
+      await _perform(platform, 'remove', _service!.remove);
     }
   }
 
@@ -176,30 +191,26 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     });
   }
 
-  /// 作用：生成 28pt 普通文字按钮，并在外层提供 32pt 命中高度。
-  /// 参数 key：按钮键；label：按钮内容；onPressed：点击动作，null 为不可用。返回：按钮控件。
-  Widget _textButton(Key key, Widget label, VoidCallback? onPressed) =>
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: SizedBox(
-          height: GlassMetrics.hitSize,
-          child: Center(
-            widthFactor: 1,
-            child: NativeGlassSurface(
-              material: true,
-              child: TextButton(key: key, onPressed: onPressed, child: label),
-            ),
-          ),
-        ),
-      );
+  /// 作用：生成统一玻璃材料与忙碌进度环的文字按钮，避免外层额外 GestureDetector 导致重复语义节点（U-25）。
+  /// 参数 key：按钮键；label：按钮内容；onPressed：点击动作，null 为不可用；busy：是否显示 BusyRing 进度环。返回：按钮控件。
+  Widget _textButton(
+    Key key,
+    Widget label,
+    VoidCallback? onPressed, {
+    bool busy = false,
+  }) => NativeGlassSurface(
+    material: true,
+    busy: busy,
+    child: TextButton(key: key, onPressed: onPressed, child: label),
+  );
 
   /// 作用：生成一个平台行。参数 platform：注册项。返回：最小高 60 的行及其下方的失败原文。
   Widget _platformRow(McpPlatform platform) {
     final theme = Theme.of(context);
     final caption = theme.textTheme.bodySmall;
     final state = _states[platform.id] ?? McpInstallState.checking;
-    final idle = !_working.contains(platform.id);
+    final workingAction = _workingActions[platform.id];
+    final idle = workingAction == null;
     final registered =
         state == McpInstallState.installed ||
         state == McpInstallState.pathChanged;
@@ -230,24 +241,41 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
               _textButton(
                 ValueKey('mcp-install-${platform.id}'),
                 Text(registered ? '重新安装' : '安装'),
-                canInstall ? () => _perform(platform, _service!.install) : null,
+                canInstall
+                    ? () => _perform(platform, 'install', _service!.install)
+                    : null,
+                busy: workingAction == 'install',
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: GlassMetrics.actionGap),
               _textButton(
                 ValueKey('mcp-remove-${platform.id}'),
                 const Text('删除'),
                 idle && registered ? () => _confirmRemove(platform) : null,
+                busy: workingAction == 'remove',
               ),
             ],
           ),
         ),
         if (error != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              error,
-              key: ValueKey('mcp-error-${platform.id}'),
-              style: caption?.copyWith(color: theme.colorScheme.error),
+            padding: const EdgeInsets.only(bottom: GlassMetrics.space8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: GlassMetrics.icon,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: GlassMetrics.space4),
+                Expanded(
+                  child: Text(
+                    error,
+                    key: ValueKey('mcp-error-${platform.id}'),
+                    style: caption?.copyWith(color: theme.colorScheme.error),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -269,7 +297,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                   'MCP 接口',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: GlassMetrics.space8),
                 NativeGlassSwitchTile(
                   title: '允许 agent 截图',
                   value: widget.enabled,
@@ -296,7 +324,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                     key: const ValueKey('mcp-helper-path'),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: GlassMetrics.space8),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: _textButton(
@@ -321,8 +349,53 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
         ),
         NativeGlassGroup(
           children: [
-            if (_service == null)
-              const Text('接入平台', style: TextStyle(fontWeight: FontWeight.w600))
+            if (_loadError != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '接入平台',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: GlassMetrics.space8),
+                  NativeGlassBanner(
+                    message: _loadError!,
+                    isError: true,
+                    action: NativeGlassSurface(
+                      material: true,
+                      child: TextButton(
+                        onPressed: _loadHelper,
+                        child: const Text('重试加载'),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else if (_service == null && _loadingHelper)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '接入平台',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: GlassMetrics.space8),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: GlassMetrics.space8),
+                      Text(
+                        '正在检测接入平台…',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ],
+              )
             else
               for (final (index, platform) in mcpPlatforms.indexed)
                 if (index == 0)
@@ -333,7 +406,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                         '接入平台',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: GlassMetrics.space8),
                       _platformRow(platform),
                     ],
                   )
