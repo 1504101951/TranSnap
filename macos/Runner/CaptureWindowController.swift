@@ -534,9 +534,11 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
                 shade.level = .floating
                 shade.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
                 shade.contentView = CaptureShadeView(frame: NSRect(origin: .zero, size: screen.frame.size))
+                NativeGlassFactory.applyAppearance(to: shade)
                 captureShades[displayID] = shade
                 shade.orderFrontRegardless()
             }
+            NativeGlassFactory.applyAppearance(to: shade)
             shade.setFrame(screen.frame, display: false)
             let view = shade.contentView as! CaptureShadeView
             view.selection = frame.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
@@ -597,10 +599,11 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// error为实际业务或系统错误；通过原生提示展示原因，不创建采集准备页面。
+    /// error为实际业务或系统错误；通过原生提示展示原因并同步应用明暗外观，不创建采集准备页面（#144 U-18）。
     private func showError(_ error: Error) {
         guard !shuttingDown else { return }
-        let alert = NSAlert()
+        let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
+        alert.alertStyle = .warning
         alert.messageText = "无法完成采集操作"
         alert.informativeText = error.localizedDescription
         alert.runModal()
@@ -926,7 +929,7 @@ final class CaptureShadeView: NSView {
     var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private(set) var flowLayer: CAShapeLayer?
     private var flowSize = NSSize.zero
-    private(set) var hintView: NSGlassEffectView?
+    private(set) var hintView: NativeGlassContainerView?
     private var hintGeneration = 0
 
     /// 无参数；外观变化时把最新系统强调色同步到区域录制流光层，无返回值。
@@ -1016,36 +1019,86 @@ final class CaptureShadeView: NSView {
         }
     }
 
-    /// text为长截图过程提示，isError选择错误语义色；visible为本屏可用区、avoiding为控制面板和缩略图（均为本视图坐标）。
-    /// 按选区上、下、左、右寻找距选区8pt的位置，都放不下才放在选区正中央；显示1000ms。
-    /// 样式沿用#67文字反馈：原生玻璃r8、padding水平12/垂直5、正文13/18、最大宽240pt，居中时不超过选区宽减16pt。
+    /// text为长截图过程提示，isError选择错误语义色并附加错误图标；visible为本屏可用区、avoiding为控制面板和缩略图（均为本视图坐标）。
+    /// 按选区上、下、左、右寻找距选区8pt的位置，都放不下才放在选区正中央；错误提示显示2000ms、普通提示显示1000ms，极窄选区回退可用区宽度（#144 U-32）。
     func showHint(_ text: String, isError: Bool, visible: NSRect? = nil, avoiding: [NSRect] = []) {
         hintView?.removeFromSuperview()
         let padding = AppConstants.scrollHintPadding
-        let outside = Self.hintTextSize(text, width: AppConstants.scrollHintMaxWidth - padding.width * 2)
-        let centeredWidth = min(AppConstants.scrollHintMaxWidth, selection.width - AppConstants.captureControlGap * 2)
-        let inside = Self.hintTextSize(text, width: max(1, centeredWidth - padding.width * 2))
-        let frame = Self.hintFrame(
-            outside: NSSize(width: outside.width + padding.width * 2, height: outside.height + padding.height * 2),
-            inside: NSSize(width: inside.width + padding.width * 2, height: inside.height + padding.height * 2),
-            selection: selection, visible: visible ?? bounds, avoiding: avoiding)
-        let textSize = NSSize(width: frame.width - padding.width * 2, height: frame.height - padding.height * 2)
+        let iconSize = isError ? AppConstants.inputFailureIconSize : 0
+        let iconSpacing = isError ? AppConstants.inputFailureIconSpacing : 0
+        let iconExtra = isError ? (iconSize + iconSpacing) : 0
+        let outsideMaxTextWidth = max(1, AppConstants.scrollHintMaxWidth - padding.width * 2 - iconExtra)
+        let outside = Self.hintTextSize(text, width: outsideMaxTextWidth)
+        let outsideSize = NSSize(
+            width: min(AppConstants.scrollHintMaxWidth, outside.width + padding.width * 2 + iconExtra),
+            height: max(outside.height, iconSize) + padding.height * 2
+        )
+
+        let effectiveVisible = visible ?? bounds
+        let rawInside = selection.width - AppConstants.captureControlGap * 2
+        // 极窄选区不压成 1pt 竖条；保持常规窄选区宽度不越出选区，极端狭小则退回可用区域宽。
+        let centeredWidth = rawInside >= AppConstants.scrollHintMinCenteredWidth
+            ? min(AppConstants.scrollHintMaxWidth, rawInside)
+            : min(AppConstants.scrollHintMaxWidth, max(AppConstants.scrollHintMinCenteredWidth, effectiveVisible.width - AppConstants.captureControlGap * 2))
+        let insideMaxTextWidth = max(1, centeredWidth - padding.width * 2 - iconExtra)
+        let inside = Self.hintTextSize(text, width: insideMaxTextWidth)
+        let insideSize = NSSize(
+            width: min(centeredWidth, inside.width + padding.width * 2 + iconExtra),
+            height: max(inside.height, iconSize) + padding.height * 2
+        )
+
+        let frame = Self.hintFrame(outside: outsideSize, inside: insideSize, selection: selection, visible: effectiveVisible, avoiding: avoiding)
+        let textSize = NSSize(
+            width: max(1, frame.width - padding.width * 2 - iconExtra),
+            height: max(18, frame.height - padding.height * 2)
+        )
         let label = NSTextField(wrappingLabelWithString: text)
-        label.attributedStringValue = Self.hintText(text, isError: isError)
-        label.frame = NSRect(origin: NSPoint(x: padding.width, y: padding.height), size: textSize)
+        if isError {
+            let styled = NSMutableAttributedString(attributedString: Self.hintText(text, isError: true))
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.minimumLineHeight = 18
+            paragraph.maximumLineHeight = 18
+            paragraph.alignment = .left
+            styled.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: styled.length))
+            label.attributedStringValue = styled
+        } else {
+            label.attributedStringValue = Self.hintText(text, isError: false)
+        }
+        label.frame = NSRect(
+            origin: NSPoint(x: padding.width + iconExtra, y: ((frame.height - textSize.height) / 2).rounded()),
+            size: textSize
+        )
         let content = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        if isError {
+            let icon = NSImageView(frame: NSRect(
+                x: padding.width,
+                y: ((frame.height - iconSize) / 2).rounded(),
+                width: iconSize,
+                height: iconSize
+            ))
+            icon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "错误")
+            icon.contentTintColor = .systemRed
+            icon.imageScaling = .scaleProportionallyDown
+            content.addSubview(icon)
+        }
         content.addSubview(label)
-        let glass = NSGlassEffectView(frame: frame)
-        glass.cornerRadius = AppConstants.scrollHintRadius
-        glass.contentView = content
-        addSubview(glass)
-        hintView = glass
-        NSAccessibility.post(element: glass, notification: .announcementRequested,
-                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        let container = NativeGlassFactory.makeGlassContainer(
+            content: content,
+            size: frame.size,
+            cornerRadius: AppConstants.scrollHintRadius
+        )
+        container.frame = frame
+        addSubview(container)
+        hintView = container
+        // 常规滚动引导使用中等播报优先级避免持续打断；错误提示维持高优先级。
+        let priority = isError ? NSAccessibilityPriorityLevel.high.rawValue : NSAccessibilityPriorityLevel.medium.rawValue
+        NSAccessibility.post(element: container, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: priority])
         hintGeneration += 1
         let generation = hintGeneration
+        let durationMs = isError ? AppConstants.scrollErrorHintDurationMs : AppConstants.scrollHintDurationMs
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(AppConstants.scrollHintDurationMs))
+            try? await Task.sleep(for: .milliseconds(durationMs))
             guard let self, self.hintGeneration == generation else { return }
             self.hintView?.removeFromSuperview()
             self.hintView = nil
@@ -1053,7 +1106,7 @@ final class CaptureShadeView: NSView {
     }
 
     /// outside/inside为选区外与居中时的提示外框尺寸；返回第一个完整位于可用区、离选区8pt且不压住避让区的位置，
-    /// 顺序为上、下、左、右，均不可用时居中于选区。坐标为AppKit本视图坐标。
+    /// 顺序为上、下、左、右，均不可用时居中于选区并夹紧进可用区，避免极端窄选区推出屏外（#144 U-32）。
     static func hintFrame(outside: NSSize, inside: NSSize, selection: NSRect, visible: NSRect, avoiding: [NSRect]) -> NSRect {
         let gap = AppConstants.captureControlGap
         let width = outside.width
@@ -1074,8 +1127,14 @@ final class CaptureShadeView: NSView {
             && !avoiding.contains(where: { $0.intersects(candidate) }) {
             return candidate
         }
-        return NSRect(x: (selection.midX - inside.width / 2).rounded(), y: (selection.midY - inside.height / 2).rounded(),
-                      width: inside.width, height: inside.height)
+        let maxX = max(visible.minX, visible.maxX - inside.width)
+        let maxY = max(visible.minY, visible.maxY - inside.height)
+        return NSRect(
+            x: min(max((selection.midX - inside.width / 2).rounded(), visible.minX), maxX),
+            y: min(max((selection.midY - inside.height / 2).rounded(), visible.minY), maxY),
+            width: inside.width,
+            height: inside.height
+        )
     }
 
     /// text/isError为提示内容与语义；返回正文13/18、居中的富文本；输入翻译失败气泡共用（#99）。
@@ -1125,17 +1184,21 @@ final class CaptureShadeView: NSView {
     }
 }
 
-/// 长截图实时缩略图：原生玻璃r8、4pt内边距，图像圆角4pt，回退目标用2pt错误语义色框标出；不接收鼠标。
+/// 长截图实时缩略图：统一 NativeGlassContainerView（r8，同步透明度与减少透明度降级）、4pt内边距，图像圆角4pt，回退目标用2pt错误语义色框标出；不接收鼠标（#144 U-32）。
 final class ScrollPreviewView: NSView {
-    private let glass = NSGlassEffectView()
+    private let glassContainer: NativeGlassContainerView
     private let content = NSView()
     let imageView = NSImageView()
     let targetView = NSView()
 
-    /// 无参数；创建空缩略图，update后才有尺寸。
+    /// 无参数；创建空缩略图容器，update后才有尺寸。
     init() {
+        glassContainer = NativeGlassFactory.makeGlassContainer(
+            content: content,
+            size: .zero,
+            cornerRadius: AppConstants.scrollHintRadius
+        )
         super.init(frame: .zero)
-        glass.cornerRadius = AppConstants.scrollHintRadius
         imageView.imageScaling = .scaleAxesIndependently
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = AppConstants.scrollPreviewImageRadius
@@ -1145,8 +1208,7 @@ final class ScrollPreviewView: NSView {
         targetView.isHidden = true
         content.addSubview(imageView)
         content.addSubview(targetView)
-        glass.contentView = content
-        addSubview(glass)
+        addSubview(glassContainer)
     }
 
     required init?(coder: NSCoder) { fatalError("ScrollPreviewView requires programmatic initialization") }
@@ -1157,8 +1219,8 @@ final class ScrollPreviewView: NSView {
         let inset = AppConstants.scrollPreviewInset
         let size = NSSize(width: CGFloat(preview.image.width) / scale, height: CGFloat(preview.image.height) / scale)
         setFrameSize(NSSize(width: size.width + inset * 2, height: size.height + inset * 2))
-        glass.frame = bounds
-        content.frame = glass.bounds
+        glassContainer.frame = bounds
+        glassContainer.layoutSubtreeIfNeeded()
         imageView.frame = NSRect(x: inset, y: inset, width: size.width, height: size.height)
         imageView.image = NSImage(cgImage: preview.image, size: size)
         if let target = preview.target, !target.isEmpty {

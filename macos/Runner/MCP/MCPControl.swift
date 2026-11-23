@@ -366,7 +366,14 @@ final class MCPControl {
                 guard let self else { return }
                 self.lastUserInputAt = Date()
                 if self.borrowingSince != nil { self.userInterrupted = true }
-                if escape { self.endSession() }
+                if escape {
+                    if MCPControlApproval.isAsking {
+                        // 授权弹窗可见时，Esc 只拒绝本次应用授权而不直接销毁整个操控会话（#144 U-26）。
+                        MCPControlApproval.dismiss()
+                    } else {
+                        self.endSession()
+                    }
+                }
             }
         }
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -583,14 +590,18 @@ enum MCPControlBorder {
     }
 }
 
-/// 授权面板（#67「电脑操控提示」）：不激活应用的浮动面板，「拒绝」与「本次会话允许」，超时按拒绝。
+/// 授权面板（#67「电脑操控提示」、#144 U-18/U-26）：非激活原生玻璃浮动面板，「拒绝」与「本次会话允许」，带 30 秒倒计时提示，超时或 Esc 按拒绝处理。
 @MainActor
 enum MCPControlApproval {
     private static var panel: NSPanel?
     private static var pending: CheckedContinuation<Bool, Never>?
+    private static var countdownTask: Task<Void, Never>?
 
-    /// 作用：显示面板并等待用户回应。参数 appName：目标应用名；detail：动作目标；near：落点全局点，决定显示在哪块显示器。
-    /// 返回：用户点「本次会话允许」为 true；拒绝、超时或会话结束为 false。
+    /// 无参数；返回当前是否正在展示授权确认面板。
+    static var isAsking: Bool { panel != nil }
+
+    /// 作用：显示面板并等待用户回应，每秒刷新剩余倒计时。参数 appName：目标应用名；detail：动作目标；near：落点全局点，决定显示在哪块显示器。
+    /// 返回：用户点「本次会话允许」为 true；拒绝、Esc 取消、超时或会话结束为 false。
     static func ask(appName: String, detail: String, near point: CGPoint?) async -> Bool {
         dismiss()
         let screen = point.flatMap { location in
@@ -599,7 +610,10 @@ enum MCPControlApproval {
         } ?? NSScreen.main ?? NSScreen.screens[0]
         return await withCheckedContinuation { continuation in
             pending = continuation
-            let panel = makePanel(appName: appName, detail: detail)
+            let totalSeconds = max(1, Int(AppConstants.controlApprovalTimeout.rounded()))
+            let built = makePanel(appName: appName, detail: detail, initialSeconds: totalSeconds)
+            let panel = built.panel
+            let countdownLabel = built.countdownLabel
             let visible = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(
                 x: visible.midX - panel.frame.width / 2,
@@ -607,9 +621,16 @@ enum MCPControlApproval {
             ))
             panel.orderFrontRegardless()
             self.panel = panel
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(AppConstants.controlApprovalTimeout))
-                if self.panel === panel { finish(false) }
+            countdownTask = Task { @MainActor in
+                for remaining in stride(from: totalSeconds - 1, through: 0, by: -1) {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled, self.panel === panel else { return }
+                    if remaining == 0 {
+                        finish(false)
+                        return
+                    }
+                    countdownLabel.stringValue = countdownText(remaining)
+                }
             }
         }
     }
@@ -617,42 +638,76 @@ enum MCPControlApproval {
     /// 无参数；关闭面板并按拒绝结束等待中的询问。
     static func dismiss() { finish(false) }
 
-    /// 作用：结束询问。参数 allowed：是否允许。
+    /// remaining 为剩余秒数；返回带等宽数字提示的倒计时与 Esc 指引文案，无副作用。
+    private static func countdownText(_ remaining: Int) -> String {
+        "将在 \(remaining) 秒后自动拒绝 · 按 Esc 拒绝本次"
+    }
+
+    /// 作用：结束询问并取消倒计时任务。参数 allowed：是否允许。
     private static func finish(_ allowed: Bool) {
+        countdownTask?.cancel()
+        countdownTask = nil
         panel?.orderOut(nil)
         panel = nil
         pending?.resume(returning: allowed)
         pending = nil
     }
 
-    /// 作用：用系统标准控件搭建面板。参数 appName、detail：标题与正文内容。返回：未显示的面板。
-    private static func makePanel(appName: String, detail: String) -> NSPanel {
-        let panel = NSPanel(
-            contentRect: CGRect(x: 0, y: 0, width: AppConstants.controlPanelWidth, height: 120),
-            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false
+    /// 作用：用原生玻璃容器和标准按钮搭建面板。参数 appName、detail：标题与正文内容；initialSeconds：初始倒计时秒数。
+    /// 返回：未显示的面板与每秒刷新的倒计时标签。
+    private static func makePanel(
+        appName: String,
+        detail: String,
+        initialSeconds: Int
+    ) -> (panel: NSPanel, countdownLabel: NSTextField) {
+        let panel = ApprovalPanel(
+            contentRect: CGRect(x: 0, y: 0, width: AppConstants.controlPanelWidth, height: 140),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
         )
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.level = .floating
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        NativeGlassFactory.applyAppearance(to: panel)
+
         let title = NSTextField(labelWithString: "允许模型操作 \(appName)？")
         title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        title.textColor = .labelColor
+
         let body = NSTextField(wrappingLabelWithString: "动作：\(detail)")
+        body.font = .systemFont(ofSize: NSFont.systemFontSize)
+        body.textColor = .labelColor
+
+        let countdownLabel = NSTextField(labelWithString: countdownText(initialSeconds))
+        countdownLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        countdownLabel.textColor = .secondaryLabelColor
+
         let deny = NSButton(title: "拒绝", target: Handler.shared, action: #selector(Handler.deny))
+        deny.bezelStyle = .rounded
+        deny.keyEquivalent = "\u{1b}"
         let allow = NSButton(title: "本次会话允许", target: Handler.shared, action: #selector(Handler.allow))
+        allow.bezelStyle = .rounded
         allow.keyEquivalent = "\r"
+
         let buttons = NSStackView(views: [NSView(), deny, allow])
         buttons.orientation = .horizontal
-        let stack = NSStackView(views: [title, body, buttons])
+        buttons.spacing = 8
+
+        let stack = NSStackView(views: [title, body, countdownLabel, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
+        stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(
             top: AppConstants.controlPanelPadding, left: AppConstants.controlPanelPadding,
             bottom: AppConstants.controlPanelPadding, right: AppConstants.controlPanelPadding
         )
         stack.translatesAutoresizingMaskIntoConstraints = false
+
         let content = NSView()
         content.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -663,9 +718,26 @@ enum MCPControlApproval {
             content.widthAnchor.constraint(equalToConstant: AppConstants.controlPanelWidth),
             buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -2 * AppConstants.controlPanelPadding),
         ])
-        panel.contentView = content
-        panel.setContentSize(content.fittingSize)
-        return panel
+        content.layoutSubtreeIfNeeded()
+        let size = content.fittingSize
+        panel.contentView = NativeGlassFactory.makeGlassContainer(
+            content: content,
+            size: size,
+            cornerRadius: AppConstants.controlPanelCornerRadius
+        )
+        panel.setContentSize(size)
+        return (panel, countdownLabel)
+    }
+
+    /// 无边框非激活授权面板；用户直接点击或聚焦时支持 Esc 取消。
+    private final class ApprovalPanel: NSPanel {
+        override var canBecomeKey: Bool { true }
+        override var canBecomeMain: Bool { false }
+
+        /// sender 为系统取消事件；转发给「拒绝本次」路径，不销毁整个操控会话。
+        override func cancelOperation(_ sender: Any?) {
+            MCPControlApproval.finish(false)
+        }
     }
 
     /// 按钮动作的接收者；NSButton 需要 Objective-C 对象作为 target，按钮动作在主线程触发。

@@ -160,32 +160,55 @@ final class LiveFitTextView: NSView {
         needsDisplay = true
     }
 
-    /// dirtyRect 为需要重画的区域。白底盖住原文，黑色半粗体缩进框内，逐字显影期用透明度与同色阴影柔和渐入。
+    /// dirtyRect 为需要重画的区域。按当前外观与高对比度配置绘制圆角半透阅读底板并保持最小可读字号与内边距，逐字显影期用透明度与同色阴影柔和渐入（#144 U-31）。
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0xCC / 255).setFill()
-        bounds.fill()
-        guard !text.isEmpty, bounds.width > 1, bounds.height > 1 else { return }
+        let colors = overlayColors()
+        let radius = min(AppConstants.liveOverlayCornerRadius, min(bounds.width, bounds.height) / 2)
+        let cardPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
+        colors.background.setFill()
+        cardPath.fill()
+        if bounds.width > 4 && bounds.height > 4 {
+            colors.border.setStroke()
+            let strokePath = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: max(0, radius - 0.5), yRadius: max(0, radius - 0.5))
+            strokePath.lineWidth = 1
+            strokePath.stroke()
+        }
+
+        let padX = min(AppConstants.liveOverlayPadding.width, bounds.width * 0.12)
+        let padY = min(AppConstants.liveOverlayPadding.height, bounds.height * 0.12)
+        let contentRect = bounds.insetBy(dx: padX, dy: padY)
+        guard !text.isEmpty, contentRect.width > 1, contentRect.height > 1 else { return }
+
         // 字号与居中边界始终按完整文本测算，避免显影期间文字换行跳动。
-        let fitted = fittedFont()
+        let fitted = fittedFont(in: contentRect.size)
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byWordWrapping
         let baseAttributes: [NSAttributedString.Key: Any] = [
             .font: fitted,
-            .foregroundColor: NSColor.black,
+            .foregroundColor: colors.text,
             .paragraphStyle: style,
         ]
         let measured = (text as NSString).boundingRect(
-            with: NSSize(width: bounds.width, height: 10_000),
+            with: NSSize(width: contentRect.width, height: 10_000),
             options: [.usesLineFragmentOrigin],
             attributes: baseAttributes
         )
-        let origin = NSPoint(
-            x: 0,
-            y: max(0, (bounds.height - measured.height) / 2)
-        )
-        let drawRect = NSRect(origin: origin, size: NSSize(width: bounds.width, height: bounds.height))
+        let drawRect: NSRect
+        if measured.height <= contentRect.height {
+            let originY = contentRect.minY + (contentRect.height - measured.height) / 2
+            drawRect = NSRect(
+                x: contentRect.minX,
+                y: originY,
+                width: contentRect.width,
+                height: max(1, contentRect.maxY - originY)
+            )
+        } else {
+            // 达到可读字号下限仍超框时从内容顶部绘制并允许末行截断，防止缩成 1pt 细线。
+            drawRect = contentRect
+        }
 
+        let drawOptions: NSString.DrawingOptions = [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
         let animatingElapsed: TimeInterval? = {
             guard !isReduceMotion(),
                   revealedBase < text.count,
@@ -199,10 +222,14 @@ final class LiveFitTextView: NSView {
             return elapsed
         }()
 
+        NSGraphicsContext.saveGraphicsState()
+        cardPath.addClip()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+
         guard let elapsed = animatingElapsed else {
             (text as NSString).draw(
                 with: drawRect,
-                options: [.usesLineFragmentOrigin],
+                options: drawOptions,
                 attributes: baseAttributes
             )
             return
@@ -215,7 +242,7 @@ final class LiveFitTextView: NSView {
             let next = text.index(after: cursor)
             let range = NSRange(cursor..<next, in: text)
             let t = CharRevealBatch.progress(elapsed: elapsed, index: offset, stagger: batchStagger)
-            let color = NSColor.black.withAlphaComponent(t)
+            let color = colors.text.withAlphaComponent(t)
             attributed.addAttribute(.foregroundColor, value: color, range: range)
             let blur = CharRevealBatch.blurRadius(progress: t)
             if blur > 0.01 && t > 0.001 {
@@ -228,26 +255,53 @@ final class LiveFitTextView: NSView {
             cursor = next
             offset += 1
         }
-        attributed.draw(with: drawRect, options: [.usesLineFragmentOrigin])
+        attributed.draw(with: drawRect, options: drawOptions)
     }
 
-    /// 无参数。返回能把整段留在当前矩形里的最大半粗体字号；文字与尺寸都没变时沿用上次结果。
-    private func fittedFont() -> NSFont {
-        if let fitted, fitted.text == text, fitted.size == bounds.size { return fitted.font }
-        var low = 1.0
-        var high = max(1, bounds.height)
-        var best = low
+    /// 无参数；随系统或窗口有效外观切换即时重绘，无返回值（#144 U-31）。
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    /// 无参数；按当前有效明暗外观与系统无障碍设置返回高对比背景、前景色与轻描边色（#144 U-31）。
+    private func overlayColors() -> (background: NSColor, text: NSColor, border: NSColor) {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let highContrast = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+            || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let alpha: CGFloat = highContrast ? 0.96 : 0.88
+        if dark {
+            return (
+                NSColor(srgbRed: 28.0 / 255.0, green: 28.0 / 255.0, blue: 30.0 / 255.0, alpha: alpha),
+                NSColor(srgbRed: 0.96, green: 0.96, blue: 0.97, alpha: 1),
+                NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.14)
+            )
+        }
+        return (
+            NSColor(srgbRed: 249.0 / 255.0, green: 249.0 / 255.0, blue: 251.0 / 255.0, alpha: alpha),
+            NSColor(srgbRed: 0.08, green: 0.08, blue: 0.10, alpha: 1),
+            NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.10)
+        )
+    }
+
+    /// availableSize 为扣除内边距后的可用绘制区域；返回兼顾框高与最低可读下限的半粗体字号（#144 U-31）。
+    private func fittedFont(in availableSize: NSSize) -> NSFont {
+        if let fitted, fitted.text == text, fitted.size == availableSize { return fitted.font }
+        let floorSize = min(AppConstants.liveOverlayMinFontSize, max(6, availableSize.height * 0.85))
+        var low = floorSize
+        var high = max(floorSize, availableSize.height)
+        var best = floorSize
         while high - low > 0.5 {
             let size = (low + high) / 2
             let font = NSFont.systemFont(ofSize: size, weight: .semibold)
             let style = NSMutableParagraphStyle()
             style.lineBreakMode = .byWordWrapping
             let rect = (text as NSString).boundingRect(
-                with: NSSize(width: bounds.width, height: 10_000),
+                with: NSSize(width: availableSize.width, height: 10_000),
                 options: [.usesLineFragmentOrigin],
                 attributes: [.font: font, .paragraphStyle: style]
             )
-            if rect.height <= bounds.height + 0.5, rect.width <= bounds.width + 0.5 {
+            if rect.height <= availableSize.height + 0.5, rect.width <= availableSize.width + 0.5 {
                 best = size
                 low = size
             } else {
@@ -255,7 +309,7 @@ final class LiveFitTextView: NSView {
             }
         }
         let font = NSFont.systemFont(ofSize: best, weight: .semibold)
-        fitted = (text, bounds.size, font)
+        fitted = (text, availableSize, font)
         return font
     }
 }
@@ -265,8 +319,15 @@ final class LiveFitTextView: NSView {
 @MainActor
 final class LiveTextOverlay {
     private var panels: [(screen: NSRect, panel: NSPanel)] = []
+    private var appearanceObserver: NSObjectProtocol?
 
-    /// 无参数。在每个显示器上铺一个空的透明窗口并显示；会话开始时调用。
+    deinit {
+        if let observer = appearanceObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// 无参数。在每个显示器上铺一个空的透明窗口并监听外观切换，会话开始时调用。
     func open() {
         close()
         for screen in NSScreen.screens {
@@ -274,11 +335,64 @@ final class LiveTextOverlay {
             panel.orderFrontRegardless()
             panels.append((screen.frame, panel))
         }
+        appearanceObserver = NotificationCenter.default.addObserver(
+            forName: AppConstants.appearanceChangedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.syncAppearance()
+        }
     }
 
-    /// chips 为已归属译文的屏幕矩形。按矩形中心所在的显示器放进对应窗口；空列表撤掉全部译文。
+    /// 无参数；将应用手动浅/深模式变更实时推送给全部盖层面板并重绘文本块（#144 U-31）。
+    private func syncAppearance() {
+        for item in panels {
+            NativeGlassFactory.applyAppearance(to: item.panel)
+            for case let label as LiveFitTextView in item.panel.contentView?.subviews ?? [] {
+                label.needsDisplay = true
+            }
+        }
+    }
+
+    /// previousFrames/previousTexts 为当前可见段落槽位状态，newItems 为新一帧段落列表；
+    /// 按文本相关性与空间距离做一对一稳定匹配，避免 OCR 重排触发无关段落重播 CharReveal，返回每项命中的旧槽位下标（#144 U-31）。
+    nonisolated static func matchSlots(
+        previousFrames: [NSRect],
+        previousTexts: [String],
+        newItems: [(text: String, rect: NSRect)]
+    ) -> [Int?] {
+        var candidates: [(newIndex: Int, oldIndex: Int, score: Double)] = []
+        for (newIdx, item) in newItems.enumerated() {
+            for (oldIdx, oldFrame) in previousFrames.enumerated() {
+                let threshold = max(max(oldFrame.width, item.rect.width), max(oldFrame.height, item.rect.height)) * 0.65
+                let dist = hypot(item.rect.midX - oldFrame.midX, item.rect.midY - oldFrame.midY)
+                let overlaps = !oldFrame.intersection(item.rect).isEmpty
+                guard overlaps || dist <= threshold else { continue }
+                let oldText = oldIdx < previousTexts.count ? previousTexts[oldIdx] : ""
+                // 优先保留相同或续写前缀段落，其次选几何中心最贴近的旧槽位。
+                let textBonus: Double
+                if !oldText.isEmpty && oldText == item.text {
+                    textBonus = 10_000
+                } else if !oldText.isEmpty && (item.text.hasPrefix(oldText) || oldText.hasPrefix(item.text)) {
+                    textBonus = 5_000
+                } else {
+                    textBonus = 0
+                }
+                candidates.append((newIdx, oldIdx, textBonus - dist))
+            }
+        }
+        candidates.sort { $0.score > $1.score }
+        var assigned = Array<Int?>(repeating: nil, count: newItems.count)
+        var usedOld = Set<Int>()
+        for candidate in candidates {
+            guard assigned[candidate.newIndex] == nil, !usedOld.contains(candidate.oldIndex) else { continue }
+            assigned[candidate.newIndex] = candidate.oldIndex
+            usedOld.insert(candidate.oldIndex)
+        }
+        return assigned
+    }
+
+    /// chips 为已归属译文的屏幕矩形。按矩形中心所在的显示器放进对应窗口并稳定复用视图槽位；空列表撤掉全部译文（#144 U-31）。
     func apply(_ chips: [[String: Any]]) {
-        var grouped: [[(String, NSRect)]] = panels.map { _ in [] }
+        var grouped: [[(text: String, rect: NSRect)]] = panels.map { _ in [] }
         for chip in chips {
             guard let text = chip["text"] as? String,
                   let x = chip["x"] as? Double,
@@ -294,20 +408,37 @@ final class LiveTextOverlay {
         }
         for (index, items) in grouped.enumerated() {
             guard let canvas = panels[index].panel.contentView else { continue }
-            // 复用已有的段落视图，只补建不够的部分。
-            while canvas.subviews.count < items.count {
-                canvas.addSubview(LiveFitTextView(frame: .zero))
+            let allViews = canvas.subviews.compactMap { $0 as? LiveFitTextView }
+            let activeViews = allViews.filter { !$0.isHidden }
+            var idleViews = allViews.filter(\.isHidden)
+
+            let matches = Self.matchSlots(
+                previousFrames: activeViews.map(\.frame),
+                previousTexts: activeViews.map(\.text),
+                newItems: items
+            )
+            let usedOldIndices = Set(matches.compactMap { $0 })
+            for (oldIdx, view) in activeViews.enumerated() where !usedOldIndices.contains(oldIdx) {
+                view.reset()
+                view.isHidden = true
+                idleViews.append(view)
             }
-            for (position, view) in canvas.subviews.enumerated() {
-                guard position < items.count, let label = view as? LiveFitTextView else {
-                    (view as? LiveFitTextView)?.reset()
-                    view.isHidden = true
-                    continue
+
+            for (newIdx, item) in items.enumerated() {
+                let targetView: LiveFitTextView
+                if let matchedIdx = matches[newIdx] {
+                    targetView = activeViews[matchedIdx]
+                } else if let recycled = idleViews.popLast() {
+                    recycled.reset()
+                    targetView = recycled
+                } else {
+                    let created = LiveFitTextView(frame: .zero)
+                    canvas.addSubview(created)
+                    targetView = created
                 }
-                // 位置与文字没变的段落块不触发重画。
-                if label.frame != items[position].1 { label.frame = items[position].1 }
-                label.text = items[position].0
-                label.isHidden = false
+                if targetView.frame != item.rect { targetView.frame = item.rect }
+                targetView.text = item.text
+                targetView.isHidden = false
             }
         }
     }
@@ -319,6 +450,10 @@ final class LiveTextOverlay {
 
     /// 无参数。关闭全部盖层窗口并停止显影链路；会话结束时调用。
     func close() {
+        if let observer = appearanceObserver {
+            NotificationCenter.default.removeObserver(observer)
+            appearanceObserver = nil
+        }
         for item in panels {
             for case let label as LiveFitTextView in item.panel.contentView?.subviews ?? [] {
                 label.reset()
@@ -328,7 +463,7 @@ final class LiveTextOverlay {
         panels = []
     }
 
-    /// frame 为显示器的屏幕矩形。返回铺满该显示器、不接收鼠标、不成为 key 的透明窗口。
+    /// frame 为显示器的屏幕矩形。返回铺满该显示器、同步应用外观、不接收鼠标、不成为 key 的透明窗口（#144 U-31）。
     private func makePanel(frame: NSRect) -> NSPanel {
         let panel = NSPanel(
             contentRect: frame,
@@ -346,6 +481,7 @@ final class LiveTextOverlay {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        NativeGlassFactory.applyAppearance(to: panel)
         return panel
     }
 }

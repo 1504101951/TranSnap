@@ -59,11 +59,13 @@ enum AppConstants {
     static let recordingFlowGlow: CGFloat = 8
     static let recordingFlowPeriod: CFTimeInterval = 2.4
     static let recordingFlowShadowOpacity: Float = 0.85
-    /// Issue #87长截图过程提示：沿用#67文字反馈的最大宽、内边距与圆角，距选区8pt，显示1000ms。
+    /// Issue #87长截图过程提示：沿用#67文字反馈的最大宽、内边距与圆角，距选区8pt，常规提示1000ms、错误提示2000ms，极窄居中最小宽88pt（#144 U-32）。
     static let scrollHintMaxWidth: CGFloat = 240
+    static let scrollHintMinCenteredWidth: CGFloat = 88
     static let scrollHintPadding = NSSize(width: 12, height: 5)
     static let scrollHintRadius: CGFloat = 8
     static let scrollHintDurationMs = 1000
+    static let scrollErrorHintDurationMs = 2000
     /// Issue #87实时缩略图：外框宽160pt含4pt内边距，图像最大高240pt、圆角4pt，回退目标框2pt。
     static let scrollPreviewWidth: CGFloat = 160
     static let scrollPreviewInset: CGFloat = 4
@@ -579,6 +581,10 @@ enum AppConstants {
     static let charRevealStagger: TimeInterval = 0.018
     static let charRevealMaxSpread: TimeInterval = 0.60
     static let charRevealBlur: CGFloat = 3
+    /// 实时翻译盖层块最小可读字号（pt）、内边距与圆角（#144 U-31）。
+    static let liveOverlayMinFontSize: CGFloat = 10
+    static let liveOverlayPadding = NSSize(width: 4, height: 2)
+    static let liveOverlayCornerRadius: CGFloat = 4
     /// 操控会话的时长上限与空闲上限，单位秒（#140：30 分钟、5 分钟）。
     static let controlSessionLimit: TimeInterval = 30 * 60
     static let controlIdleLimit: TimeInterval = 5 * 60
@@ -600,6 +606,7 @@ enum AppConstants {
     static let controlPanelWidth: CGFloat = 360
     static let controlPanelPadding: CGFloat = 16
     static let controlPanelTopInset: CGFloat = 48
+    static let controlPanelCornerRadius: CGFloat = 14
     /// 本地操作日志文件名，位于 Application Support 数据目录；只记录时间、应用、动作与目标，不记录输入文字。
     static let controlLogFileName = "control.log"
     /// find 未给出任何筛选条件时的错误。

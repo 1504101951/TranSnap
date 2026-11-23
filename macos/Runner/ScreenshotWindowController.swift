@@ -148,7 +148,8 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         guard !capturing, window?.attachedSheet == nil else { return }
         guard let source = (pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage])?.first,
               let data = source.tiffRepresentation else {
-            let alert = NSAlert()
+            let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
+            alert.alertStyle = .informational
             alert.messageText = "剪贴板中没有可读取的图片"
             alert.informativeText = "请先复制图片，再从剪贴板打开。"
             NSApp.activate()
@@ -818,7 +819,10 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         let frame = compact
             ? NSRect(x: displayFrame.midX - 220, y: displayFrame.midY - 90, width: 440, height: 180)
             : overlay ? displayFrame : Self.imageResultFrame(pixels: pixels, scale: selectedScale, visible: displayFrame)
-        window?.setFrame(frame, display: true)
+        if let window {
+            NativeGlassFactory.applyAppearance(to: window)
+            window.setFrame(frame, display: true)
+        }
         installFreezeImage(compact: compact)
         window?.displayIfNeeded()
         channel?.invokeMethod(AppConstants.screenshotChangedMethod, arguments: snapshot())
@@ -900,12 +904,22 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         panel.animationBehavior = .none
         panel.hidesOnDeactivate = false
         panel.isOpaque = !overlay
-        panel.backgroundColor = overlay ? .clear : .windowBackgroundColor
+        if overlay {
+            panel.backgroundColor = .clear
+        } else {
+            // 普通图片窗沿用与 NativeReadingCanvas 同源的浅/深阅读底色，消除手动明暗切换接缝（#144 U-18）。
+            panel.backgroundColor = NSColor(name: nil) { appearance in
+                let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                let value: CGFloat = dark ? 23.0 / 255.0 : 247.0 / 255.0
+                return NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
+            }
+        }
         panel.hasShadow = !overlay
         if !overlay { panel.contentMinSize = NSSize(width: 320, height: 240) }
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         panel.contentViewController = content
+        NativeGlassFactory.applyAppearance(to: panel)
         return panel
     }
 

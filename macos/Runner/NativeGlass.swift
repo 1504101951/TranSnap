@@ -236,7 +236,7 @@ final class NativeReadingCanvas: NSView {
 final class NativeGlassContainerView: NSView {
     let glassView: NativeGlassView
     let contentHolder: NSView
-    private let cornerRadius: CGFloat
+    let cornerRadius: CGFloat
     private var appearanceObserver: NSObjectProtocol?
     private var accessibilityObserver: NSObjectProtocol?
 

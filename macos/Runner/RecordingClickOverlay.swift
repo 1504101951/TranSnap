@@ -16,6 +16,8 @@ final class RecordingClickOverlay {
     private var activePressLayers: [Int: [CALayer]] = [:]
     private var lastTrailPoints: [Int: CGPoint] = [:]
 
+    /// 读取系统「减少动态效果」设置；测试可覆写以隔离系统偏好（#144 U-33）。
+    var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private(set) var isRunning = false
 
     deinit {
@@ -144,9 +146,16 @@ final class RecordingClickOverlay {
         isRunning = false
     }
 
-    /// type 为事件类型，globalPoint 为全局鼠标坐标；按当前特效样式驱动按下、拖动轨迹与释放动画。
+    /// globalPoint 为 AppKit 屏幕坐标；读取指针当前所在显示器的真实像素倍率，避免跨屏 DPI 失配（#144 U-33）。
+    private func screenScale(for globalPoint: NSPoint) -> CGFloat {
+        let matched = NSScreen.screens.first { $0.frame.contains(globalPoint) }?.backingScaleFactor
+        return max(1, matched ?? panel?.backingScaleFactor ?? backingScale)
+    }
+
+    /// type 为事件类型，globalPoint 为全局鼠标坐标；按当前特效样式与减少动态偏好驱动按下、拖动轨迹与释放动画。
     private func handleMouse(type: NSEvent.EventType, globalPoint: NSPoint) {
         guard isRunning, let rootLayer = hostLayer else { return }
+        backingScale = screenScale(for: globalPoint)
         let right = Self.isRightClick(type)
         let buttonKey = right ? 2 : 0
         let distinctRight = right && rightDistinct
@@ -167,7 +176,7 @@ final class RecordingClickOverlay {
                 for layer in layers { layer.position = point }
                 CATransaction.commit()
             }
-            if rightDistinct {
+            if rightDistinct && !isReduceMotion() {
                 if let last = lastTrailPoints[buttonKey] {
                     let distance = hypot(point.x - last.x, point.y - last.y)
                     if distance >= AppConstants.clickEffectTrailMinDistance {
@@ -199,31 +208,35 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// isRight 表示是否为区分后的右键；返回主高亮色及双对比衬线色。
+    /// isRight 表示是否为区分后的右键；返回主高亮色及强对比双衬线色（#144 U-33）。
     private func colors(isRight: Bool) -> (accent: NSColor, contrastDark: NSColor, contrastLight: NSColor) {
         let accent = isRight ? AppConstants.clickEffectRightColor : AppConstants.clickEffectLeftColor
         return (
             accent,
-            NSColor.black.withAlphaComponent(0.32),
+            NSColor.black.withAlphaComponent(0.55),
             NSColor.white.withAlphaComponent(0.92)
         )
     }
 
-    /// point 为层内点坐标，isRight 为右键区分标记，rootLayer 为宿主根图层；创建按下收缩提示图层并返回以便跟随或清除。
+    /// point 为层内点坐标，isRight 为右键区分标记，rootLayer 为宿主根图层；创建按下收缩提示图层并返回，减弱动态效果下直接展示静态高对比环。
     private func makePressLayers(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) -> [CALayer] {
         let palette = colors(isRight: isRight)
         var created: [CALayer] = []
         let startR = effect == .minimal ? AppConstants.clickEffectMinimalStartRadius : AppConstants.clickEffectPressRadius
         let endR = effect == .prism ? 7.0 : (effect == .minimal ? 10.5 : AppConstants.clickEffectBaseRadius)
+        let reduceMotion = isReduceMotion()
+        let initialR = reduceMotion ? endR : startR
 
-        let contrastRing = makeCircleShape(at: point, radius: startR, stroke: palette.contrastDark, lineWidth: 2.6, dashed: isRight && effect == .minimal)
-        let mainRing = makeCircleShape(at: point, radius: startR, stroke: effect == .minimal ? palette.contrastLight : palette.accent, lineWidth: 1.6, dashed: isRight && effect == .minimal)
+        let contrastRing = makeCircleShape(at: point, radius: initialR, stroke: palette.contrastDark, lineWidth: 2.6, dashed: isRight && effect == .minimal)
+        let mainRing = makeCircleShape(at: point, radius: initialR, stroke: effect == .minimal ? palette.contrastLight : palette.accent, lineWidth: 1.6, dashed: isRight && effect == .minimal)
         if effect == .spotlight || effect == .liquid {
             mainRing.fillColor = palette.accent.withAlphaComponent(effect == .spotlight ? 0.30 : 0.22).cgColor
         }
         rootLayer.addSublayer(contrastRing)
         rootLayer.addSublayer(mainRing)
         created.append(contentsOf: [contrastRing, mainRing])
+
+        guard !reduceMotion else { return created }
 
         // 按下平滑微缩蓄力。
         let startPath = circlePath(radius: startR)
@@ -267,8 +280,13 @@ final class RecordingClickOverlay {
         CATransaction.commit()
     }
 
-    /// point 为松开点坐标，isRight 为右键标记，rootLayer 为宿主图层；按所选光学特效生成完整释放动画并自动销毁图层。
+    /// point 为松开点坐标，isRight 为右键标记，rootLayer 为宿主图层；开启减少动态效果时统一降级为纯透明度静态提示（#144 U-33）。
     private func emitReleaseEffect(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
+        guard effect != .off, effect != .system else { return }
+        if isReduceMotion() {
+            emitReducedMotionRelease(at: point, isRight: isRight, in: rootLayer)
+            return
+        }
         switch effect {
         case .off, .system:
             break
@@ -282,6 +300,33 @@ final class RecordingClickOverlay {
             emitPrism(at: point, isRight: isRight, in: rootLayer)
         case .minimal:
             emitMinimal(at: point, isRight: isRight, in: rootLayer)
+        }
+    }
+
+    /// point 为松开点坐标，isRight 为右键标记，rootLayer 为宿主图层；静止双对比环淡出，避免弹簧过冲与闪烁射线（#144 U-33）。
+    private func emitReducedMotionRelease(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
+        let palette = colors(isRight: isRight)
+        let radius: CGFloat = 18
+        let outer = makeCircleShape(at: point, radius: radius, stroke: palette.contrastDark, lineWidth: 2.8, dashed: isRight)
+        let innerColor = effect == .minimal ? palette.contrastLight : palette.accent
+        let inner = makeCircleShape(at: point, radius: radius, stroke: innerColor, lineWidth: 1.8, dashed: isRight)
+        if effect == .spotlight || effect == .liquid {
+            inner.fillColor = palette.accent.withAlphaComponent(0.18).cgColor
+        }
+        rootLayer.addSublayer(outer)
+        rootLayer.addSublayer(inner)
+        for layer in [outer, inner] {
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { [weak layer] in layer?.removeFromSuperlayer() }
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.9
+            fade.toValue = 0.0
+            fade.duration = 0.28
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            fade.fillMode = .forwards
+            fade.isRemovedOnCompletion = false
+            layer.add(fade, forKey: "reducedFade")
+            CATransaction.commit()
         }
     }
 
@@ -337,16 +382,26 @@ final class RecordingClickOverlay {
 
         addExpandingRing(
             at: point, from: 10, to: AppConstants.clickEffectExpandRadius + 6,
+            stroke: palette.contrastDark, fromWidth: isRight ? 3.0 : 2.5, toWidth: 1.4,
+            fromOpacity: 0.42, duration: duration, in: rootLayer
+        )
+        addExpandingRing(
+            at: point, from: 10, to: AppConstants.clickEffectExpandRadius + 6,
             stroke: palette.accent, fromWidth: isRight ? 1.8 : 1.25, toWidth: 0.8,
             fromOpacity: 0.62, duration: duration, in: rootLayer
         )
     }
 
-    /// 3. 聚光微点：柔和光片绽放扩散 + 右键外弧提示。
+    /// 3. 聚光微点：柔和光片绽放扩散 + 双对比环外衬 + 右键外弧提示。
     private func emitSpotlight(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectDuration
-        let disc = makeCircleShape(at: point, radius: 9, stroke: palette.accent.withAlphaComponent(0.58), lineWidth: 1.3)
+        addExpandingRing(
+            at: point, from: 9, to: AppConstants.clickEffectExpandRadius,
+            stroke: palette.contrastDark, fromWidth: 2.4, toWidth: 1.2,
+            fromOpacity: 0.40, duration: duration, in: rootLayer
+        )
+        let disc = makeCircleShape(at: point, radius: 9, stroke: palette.accent.withAlphaComponent(0.68), lineWidth: 1.4)
         disc.fillColor = palette.accent.withAlphaComponent(0.26).cgColor
         rootLayer.addSublayer(disc)
 
