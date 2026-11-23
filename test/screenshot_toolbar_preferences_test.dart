@@ -472,5 +472,164 @@ void main() {
       await tester.pumpAndSettle();
       expect(saved().shortcutLabel(ScreenshotActions.cursor), '⌘2');
     });
+
+    testWidgets('方向键移动与修改组组合在冲突全局快捷键时拒绝保存并展示横幅（#144）', (tester) async {
+      // 作用：验证键盘移位与修改组修饰键均执行 reserved 冲突校验，阻断进入无法保存状态。
+      // 边界：(无, 2) 空格与 (⌃, 1) 被全局快捷键占用时，右移光标与切换组修饰键为 ⌃ 均提示横幅并保持原配置。
+      final base = ScreenshotToolbarPreferences();
+      final customColumns = [
+        ToolbarColumn(0, [
+          ScreenshotActions.cursor,
+          null,
+          ...base.columns[0].slots.skip(2),
+        ]),
+        base.columns[1],
+        base.columns[2].withSlot(4, ScreenshotActions.crop),
+      ];
+      final custom = base.copyWith(columns: customColumns);
+      final saved = await pumpEditor(
+        tester,
+        custom,
+        reserved: {
+          (modifiers: 0, digit: 2): '全局截图',
+          (modifiers: ctrl, digit: 1): '全局翻译',
+        },
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('drag-${ScreenshotActions.cursor}')),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(find.byType(NativeGlassBanner), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(NativeGlassBanner),
+          matching: find.textContaining('全局截图'),
+        ),
+        findsOneWidget,
+      );
+      expect(saved().shortcutLabel(ScreenshotActions.cursor), '1');
+
+      await tester.tap(find.byKey(const ValueKey('toolbar-modifiers-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, '⌃').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(NativeGlassBanner),
+          matching: find.textContaining('全局翻译'),
+        ),
+        findsOneWidget,
+      );
+      expect(saved().columns.first.modifiers, 0);
+    });
+
+    testWidgets('Enter/Space 展开子级面板、键盘按钮移出与移入子级工作正常（#144）', (tester) async {
+      // 作用：验证纯键盘通过 Enter/Space 切换子级面板，以及不依赖拖拽按钮完成子级升出与移入。
+      // 边界：crop 聚焦按 Enter 展开子级，Space 收起、再 Space 展开；record 移出占首个空位 ⌥5，pin 移入 crop 子级。
+      final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+
+      Focus.of(
+        tester.element(
+          find.byKey(const ValueKey('drag-${ScreenshotActions.crop}')),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      expect(find.text('截图的子级'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('截图的子级'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(find.text('截图的子级'), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(find.text('截图的子级'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('promote-child-${ScreenshotActions.record}')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('promote-child-${ScreenshotActions.record}')),
+      );
+      await tester.pumpAndSettle();
+      expect(saved().shortcutLabel(ScreenshotActions.record), '⌥5');
+      expect(
+        saved().children[ScreenshotActions.crop],
+        isNot(contains(ScreenshotActions.record)),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('toolbar-add-child-${ScreenshotActions.crop}')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('toolbar-add-child-${ScreenshotActions.crop}')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('贴图').last);
+      await tester.pumpAndSettle();
+      expect(
+        saved().children[ScreenshotActions.crop],
+        contains(ScreenshotActions.pin),
+      );
+      expect(saved().shortcutLabel(ScreenshotActions.pin), isNull);
+    });
+
+    testWidgets('恢复默认空闲时禁用，编辑后需确认且恢复出厂排布（#144）', (tester) async {
+      // 作用：验证「恢复默认」只在存在自定义差异时启用，点击后经破坏性确认回到默认排布并禁用按钮。
+      // 边界：默认布局时 onPressed 为 null；隐藏一个工具后可点，取消不恢复，确认「恢复默认」后清空隐藏列表。
+      final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+      TextButton resetButton() => tester.widget<TextButton>(
+        find.byKey(const ValueKey('toolbar-reset-default')),
+      );
+      expect(resetButton().onPressed, isNull);
+
+      await tester.tap(
+        find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
+      );
+      await tester.pumpAndSettle();
+      expect(resetButton().onPressed, isNotNull);
+
+      await tester.tap(find.byKey(const ValueKey('toolbar-reset-default')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(saved().hidden, {ScreenshotActions.cursor});
+
+      await tester.tap(find.byKey(const ValueKey('toolbar-reset-default')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '恢复默认'));
+      await tester.pumpAndSettle();
+      expect(saved().hidden, isEmpty);
+      expect(resetButton().onPressed, isNull);
+    });
+
+    testWidgets('眼睛按钮命中区至少 24pt 且系统冲突文本使用高对比配色（#144）', (tester) async {
+      // 作用：验证工具格内嵌视觉小图标满足 WCAG 2.5.8 最小 24×24pt 命中面积，冲突文字随主题高对比渲染。
+      // 边界：眼睛开关 size >= 24；深色主题下系统冲突文字颜色等于 conflictColor(context)。
+      await pumpEditor(
+        tester,
+        ScreenshotToolbarPreferences(),
+        systemSlots: {(modifiers: cmd, digit: 1)},
+      );
+      final eyeSize = tester.getSize(
+        find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
+      );
+      expect(eyeSize.width, greaterThanOrEqualTo(24));
+      expect(eyeSize.height, greaterThanOrEqualTo(24));
+
+      final conflictText = find.byKey(
+        const ValueKey('toolbar-conflict-${ScreenshotActions.brush}'),
+      );
+      final element = tester.element(conflictText);
+      expect(
+        tester.widget<Text>(conflictText).style!.color,
+        ScreenshotToolbarEditor.conflictColor(element),
+      );
+    });
   });
 }

@@ -35,18 +35,21 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   static const headerGap = 8.0;
   static const rowGap = 8.0;
 
-  /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（#67）。
+  /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（≥24pt 无障碍下限）（#67、#144）。
   static const headerRowHeight = 20.0;
   static const labelFont = 11.0;
   static const noteFont = 10.0;
   static const eyeIcon = 14.0;
-  static const eyeHit = 20.0;
+  static const eyeHit = GlassMetrics.minTouchTarget;
 
   /// 子级列表的行最小高度（#67）。
   static const childRowHeight = 40.0;
 
-  /// 与系统快捷键冲突的格子边框与说明颜色（#67）。
-  static const conflictRed = Color(0xFFFF3B30);
+  /// context 提供明暗外观；返回满足 WCAG AA（≥ 4.5:1）的系统快捷键冲突提示色。
+  static Color conflictColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFFF6961)
+      : const Color(0xFFB3261E);
 
   /// 原生克制风格（#67）：工具格与组合下拉的平面底色、0.5pt 细线颜色（浅/深），选中工具的强调色描边宽度。
   static const cellFillLight = Color(0xFFFFFFFF);
@@ -82,15 +85,19 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   /// 选中的可承载子级的一级工具；非 null 时网格下方显示其子级列表。
   String? _selected;
 
+  /// 横向滚动控制器；绑定可见滚动条便于窄窗口察看多列工具（U-26）。
+  final ScrollController _gridScroll = ScrollController();
+
   /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
   final Map<String, FocusNode> _handles = {};
 
   /// 各组拖拽手柄的焦点；按组合保存（组合各组唯一），组移动后焦点仍跟随该组。
   final Map<int, FocusNode> _columnHandles = {};
 
-  /// 无参数；释放手柄焦点。
+  /// 无参数；释放手柄焦点与网格滚动控制器。
   @override
   void dispose() {
+    _gridScroll.dispose();
     for (final node in [..._handles.values, ..._columnHandles.values]) {
       node.dispose();
     }
@@ -188,7 +195,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return _value.copyWith(columns: columns, children: children);
   }
 
-  /// id 为格位中的功能，dColumn/dSlot 为方向键位移（上下跨组、左右在组内）；与相邻格交换，越界不动。
+  /// id 为格位中的功能，dColumn/dSlot 为方向键位移（上下跨组、左右在组内）；校验全局快捷键保留与越界后交换。
   void _moveByKey(String id, int dColumn, int dSlot) {
     final from = _slotOf(id)!;
     final column = from.column + dColumn;
@@ -197,6 +204,17 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         column >= _value.columns.length ||
         slot < 0 ||
         slot >= ToolbarGrid.slots) {
+      return;
+    }
+    final targetSlot = (
+      modifiers: _value.columns[column].modifiers,
+      digit: slot + 1,
+    );
+    // 键盘方向键与鼠标拖拽共享同一全局保留格位校验，阻止进入不可保存状态（U-16）。
+    if (widget.reserved.containsKey(targetSlot)) {
+      setState(
+        () => _error = '该格位已被全局快捷键“${widget.reserved[targetSlot]}”占用，无法移入。',
+      );
       return;
     }
     final next = _placeInSlot(id, (column: column, slot: slot));
@@ -221,6 +239,145 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _handles[id]?.requestFocus(),
     );
+  }
+
+  /// 无参数；查找当前网格中第一个未被全局快捷键保留的空格位，无可用空格返回 null。
+  _Slot? _firstAvailableSlot() {
+    for (final (columnIndex, column) in _value.columns.indexed) {
+      for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
+        final key = (modifiers: column.modifiers, digit: slot + 1);
+        if (column.slots[slot] == null && !widget.reserved.containsKey(key)) {
+          return (column: columnIndex, slot: slot);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// id 为子级功能；将其从子级列表中移出并放入第一个可用的一级非保留空格位（U-16）。
+  void _promoteChild(String id) {
+    final target = _firstAvailableSlot();
+    if (target == null) {
+      setState(() => _error = '当前网格没有可用的非保留空格位，请先添加组或腾出格位。');
+      return;
+    }
+    final next = _placeInSlot(id, target);
+    if (next != null) _submit(next);
+  }
+
+  /// id 为一级功能，parent 为目标父级；将该工具移入父级的子级列表末尾（U-16）。
+  void _demoteToChild(String id, String parent) {
+    final next = _placeAsChild(
+      id,
+      parent,
+      (_value.children[parent] ?? const []).length,
+    );
+    if (next != null) _submit(next);
+  }
+
+  /// parent 为目标父级，movable 为可移入的一级工具集合；弹出可键盘聚焦的选择窗完成移入。
+  Future<void> _pickChildToDemote(String parent, List<String> movable) async {
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => NativeGlassDialog(
+        maxWidth: 420,
+        title: Text('移入到“${ScreenshotActions.labels[parent]}”子级'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final id in movable)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: GlassMetrics.space4),
+                  child: NativeGlassSurface(
+                    material: true,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, id),
+                      child: Row(
+                        children: [
+                          Icon(
+                            ScreenshotActions.icons[id],
+                            size: GlassMetrics.icon,
+                          ),
+                          const SizedBox(width: GlassMetrics.space8),
+                          Text(ScreenshotActions.labels[id]!),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          NativeGlassSurface(
+            material: true,
+            child: TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (chosen != null && mounted) _demoteToChild(chosen, parent);
+  }
+
+  /// 无参数；判断当前工具栏配置是否与默认分组、格位、子级及隐藏集合完全一致。
+  bool get _isDefault {
+    final defaults = ScreenshotToolbarPreferences();
+    if (_value.columns.length != defaults.columns.length) return false;
+    for (var i = 0; i < _value.columns.length; i++) {
+      final current = _value.columns[i];
+      final baseline = defaults.columns[i];
+      if (current.modifiers != baseline.modifiers) return false;
+      for (var s = 0; s < ToolbarGrid.slots; s++) {
+        if (current.slots[s] != baseline.slots[s]) return false;
+      }
+    }
+    if (_value.children.length != defaults.children.length) return false;
+    for (final entry in defaults.children.entries) {
+      final currentList = _value.children[entry.key];
+      if (currentList == null || currentList.length != entry.value.length) {
+        return false;
+      }
+      for (var i = 0; i < entry.value.length; i++) {
+        if (currentList[i] != entry.value[i]) return false;
+      }
+    }
+    return _value.hidden.length == defaults.hidden.length &&
+        _value.hidden.containsAll(defaults.hidden);
+  }
+
+  /// 无参数；经破坏性二次确认并检查全局快捷键冲突后，恢复工具栏为出厂默认排布（U-26）。
+  Future<void> _confirmReset() async {
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '恢复默认工具栏',
+      message: '确定将截图工具栏恢复为默认分组与快捷键吗？当前自定义排列将被替换。',
+      confirmLabel: '恢复默认',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    final defaults = ScreenshotToolbarPreferences();
+    for (final column in defaults.columns) {
+      for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
+        if (column.slots[slot] == null) continue;
+        final owner = widget.reserved[(
+          modifiers: column.modifiers,
+          digit: slot + 1,
+        )];
+        if (owner != null) {
+          setState(
+            () => _error = '默认布局中的部分格位已被全局快捷键“$owner”占用，无法直接恢复默认。',
+          );
+          return;
+        }
+      }
+    }
+    _submit(defaults);
+    setState(() => _selected = null);
   }
 
   /// 无参数；用第一个未使用的组合新增一个空组，已有 8 组时不出现入口。
@@ -261,8 +418,18 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     _submit(_value.copyWith(columns: [..._value.columns]..removeAt(column)));
   }
 
-  /// column 为组下标，modifiers 为新组合；改变该组的组合，格位与工具不变。
+  /// column 为组下标，modifiers 为新组合；检查已有工具格位是否与全局快捷键冲突后改变组合（U-16）。
   void _setModifiers(int column, int modifiers) {
+    for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
+      if (_value.columns[column].slots[slot] == null) continue;
+      final owner = widget.reserved[(modifiers: modifiers, digit: slot + 1)];
+      if (owner != null) {
+        setState(
+          () => _error = '切换到该修饰键会与全局快捷键“$owner”冲突，请先腾出对应格位。',
+        );
+        return;
+      }
+    }
     final columns = [..._value.columns];
     columns[column] = ToolbarColumn(modifiers, columns[column].slots);
     _submit(_value.copyWith(columns: columns));
@@ -280,7 +447,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// context 为页面主题；每组一行自上而下，超出宽度时在页内横向滚动，子级列表随设置正文滚动。
+  /// context 为页面主题；每组一行自上而下，超出宽度时显示横向滚动条，底部操作与子级区随设置正文滚动。
   @override
   Widget build(BuildContext context) {
     final selected = _selected != null && _slotOf(_selected!) != null
@@ -291,65 +458,86 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_error != null)
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          Padding(
+            padding: const EdgeInsets.only(bottom: GlassMetrics.space8),
+            child: NativeGlassBanner(message: _error!, isError: true),
           ),
-        SingleChildScrollView(
-          key: const ValueKey('toolbar-grid'),
-          scrollDirection: Axis.horizontal,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: ScreenshotToolbarEditor.rowGap,
-            children: [
-              // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
-              Row(
-                key: const ValueKey('toolbar-digits'),
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width:
-                        ScreenshotToolbarEditor.headerWidth +
-                        ScreenshotToolbarEditor.headerGap,
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: ScreenshotToolbarEditor.cellGap,
-                    children: [
-                      for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
-                        SizedBox(
-                          width: ScreenshotToolbarEditor.cellWidth,
-                          height: ScreenshotToolbarEditor.headerRowHeight,
-                          child: Center(
-                            child: Text(
-                              '$digit',
-                              style: TextStyle(
-                                fontSize: ScreenshotToolbarEditor.labelFont,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
+        Scrollbar(
+          controller: _gridScroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            key: const ValueKey('toolbar-grid'),
+            controller: _gridScroll,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(bottom: GlassMetrics.space12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: ScreenshotToolbarEditor.rowGap,
+              children: [
+                // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
+                Row(
+                  key: const ValueKey('toolbar-digits'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width:
+                          ScreenshotToolbarEditor.headerWidth +
+                          ScreenshotToolbarEditor.headerGap,
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: ScreenshotToolbarEditor.cellGap,
+                      children: [
+                        for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
+                          SizedBox(
+                            width: ScreenshotToolbarEditor.cellWidth,
+                            height: ScreenshotToolbarEditor.headerRowHeight,
+                            child: Center(
+                              child: Text(
+                                '$digit',
+                                style: TextStyle(
+                                  fontSize: ScreenshotToolbarEditor.labelFont,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-              for (final (index, column) in _value.columns.indexed)
-                _column(context, index, column),
-              if (_value.columns.length < ToolbarGrid.maxColumns)
-                NativeGlassSurface(
-                  material: true,
-                  child: TextButton(
-                    key: const ValueKey('toolbar-add-column'),
-                    onPressed: _addColumn,
-                    child: const Text('添加组'),
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
-            ],
+                for (final (index, column) in _value.columns.indexed)
+                  _column(context, index, column),
+              ],
+            ),
           ),
+        ),
+        const SizedBox(height: GlassMetrics.space8),
+        Wrap(
+          spacing: GlassMetrics.actionGap,
+          runSpacing: GlassMetrics.space8,
+          children: [
+            if (_value.columns.length < ToolbarGrid.maxColumns)
+              NativeGlassSurface(
+                material: true,
+                child: TextButton(
+                  key: const ValueKey('toolbar-add-column'),
+                  onPressed: _addColumn,
+                  child: const Text('添加组'),
+                ),
+              ),
+            NativeGlassSurface(
+              material: true,
+              child: TextButton(
+                key: const ValueKey('toolbar-reset-default'),
+                onPressed: _isDefault ? null : _confirmReset,
+                child: const Text('恢复默认'),
+              ),
+            ),
+          ],
         ),
         if (selected != null) ...[
           const SizedBox(height: GlassMetrics.actionGap),
@@ -565,8 +753,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   width: ScreenshotToolbarEditor.targetBorder,
                 )
               : systemConflict
-              ? const BorderSide(
-                  color: ScreenshotToolbarEditor.conflictRed,
+              ? BorderSide(
+                  color: ScreenshotToolbarEditor.conflictColor(context),
                   width: ScreenshotToolbarEditor.targetBorder,
                 )
               : id == _selected
@@ -622,7 +810,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
 
   /// id 为格中功能，conflict 为与系统快捷键冲突；返回可整格拖动的紧凑格：
   /// 自上而下为图标与名称（冲突时名称下方注明「系统优先」），右上角为眼睛按钮。
-  /// 点按可承载子级的工具时选中它，网格下方显示其子级。
+  /// 点按或键盘 Enter/Space 触发可承载子级的工具时选中它，网格下方显示其子级。
   Widget _toolCell(BuildContext context, String id, {required bool conflict}) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
@@ -649,9 +837,9 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             '系统优先',
             key: ValueKey('toolbar-conflict-$id'),
             maxLines: 1,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: ScreenshotToolbarEditor.noteFont,
-              color: ScreenshotToolbarEditor.conflictRed,
+              color: ScreenshotToolbarEditor.conflictColor(context),
             ),
           ),
       ],
@@ -684,7 +872,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         ],
       ),
     );
-    // 整格作为拖拽来源；方向键上下跨组、左右在组内与相邻格交换。
+    // 整格作为拖拽来源；方向键上下跨组、左右在组内与相邻格交换，Enter/Space 展开可承载子级的面板（U-16）。
     final draggable = _handle(
       context,
       id,
@@ -694,6 +882,9 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         LogicalKeyboardKey.arrowDown => () => _moveByKey(id, 1, 0),
         LogicalKeyboardKey.arrowLeft => () => _moveByKey(id, 0, -1),
         LogicalKeyboardKey.arrowRight => () => _moveByKey(id, 0, 1),
+        LogicalKeyboardKey.enter || LogicalKeyboardKey.space
+            when ScreenshotActions.composable[id]!.hostsChildren =>
+          () => setState(() => _selected = _selected == id ? null : id),
         _ => null,
       },
       child: cell,
@@ -704,16 +895,40 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         : draggable;
   }
 
-  /// parent 为选中的父级；返回「〈名称〉的子级」列表，可拖入拖出网格与排序。
+  /// parent 为选中的父级；返回「〈名称〉的子级」列表与键盘可访问的移入工具入口，可拖入拖出网格与排序。
   Widget _childrenList(BuildContext context, String parent) {
     final children = _value.children[parent] ?? const <String>[];
     final title = '${ScreenshotActions.labels[parent]}的子级';
+    final movable = <String>[
+      for (final column in _value.columns)
+        for (final id in column.slots)
+          if (id != null && id != parent && _canBeChild(id)) id,
+    ];
     return Column(
       key: ValueKey('toolbar-children-$parent'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (movable.isNotEmpty)
+              NativeGlassSurface(
+                material: true,
+                child: TextButton(
+                  key: ValueKey('toolbar-add-child-$parent'),
+                  onPressed: () => _pickChildToDemote(parent, movable),
+                  child: const Text('移入工具…'),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: GlassMetrics.space4),
         for (final (index, id) in children.indexed)
           _childRow(context, parent, index, id),
         // 末尾落点：拖到这里排到子级末尾；没有子级时同样作为第一个子级的落点。
@@ -750,7 +965,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// parent 为父级，index 为子级下标，id 为子级；返回可拖动、可在其前方放下的一行。
+  /// parent 为父级，index 为子级下标，id 为子级；返回可拖动、支持键盘移出一级并可在其前方放下的一行。
   Widget _childRow(BuildContext context, String parent, int index, String id) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
@@ -802,6 +1017,18 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 ),
               ),
             ),
+            // 键盘可直达的移出替代手段：点击即可升回第一个非保留的一级空格位（U-16）。
+            NativeGlassSurface(
+              material: true,
+              child: IconButton(
+                key: ValueKey('promote-child-$id'),
+                tooltip: '移出到一级工具栏',
+                icon: const Icon(Icons.arrow_upward, size: GlassMetrics.icon),
+                visualDensity: VisualDensity.standard,
+                onPressed: () => _promoteChild(id),
+              ),
+            ),
+            const SizedBox(width: GlassMetrics.actionGap),
             _eye(id, label, visible),
           ],
         ),

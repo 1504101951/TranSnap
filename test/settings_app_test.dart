@@ -233,6 +233,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('删除 百度翻译'), warnIfMissed: false);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.services], hasLength(1));
+
+    await tester.tap(find.byTooltip('删除 百度翻译'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
     expect(state[PreferenceKeys.services], isEmpty);
     expect(state[PreferenceKeys.defaultServiceId], 'unofficial-google');
   });
@@ -515,6 +523,14 @@ void main() {
     addTearDown(mouse.removePointer);
     await tester.pump();
     await tester.tap(find.byTooltip('删除贴纸'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(settings[PreferenceKeys.stickers], hasLength(1));
+
+    await tester.tap(find.byTooltip('删除贴纸'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(settings[PreferenceKeys.stickers], isEmpty);
     expect(deleted, saved);
@@ -1033,5 +1049,131 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('日语 → 简体中文 语言包未安装'), findsOneWidget);
     expect(find.text('正在检查语言包…'), findsNothing);
+  });
+
+  testWidgets('全局与输入快捷键录制状态隔离，切页取消录制且不阻塞非快捷键按钮（#144）', (tester) async {
+    // 作用：验证双快捷键各自独立展示等待提示、切页自动中止录制且丢弃迟到热键结果。
+    // 边界：点击「全局翻译快捷键」仅该钮变为等待态，离开到「通用」仍可申请权限，迟到回包不触发保存。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final pendingShortcut = Completer<Map<String, Object>?>();
+    var saved = false;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true, 'screenAccess': false};
+        case MethodNames.getSettings:
+          return {'revision': 0};
+        case MethodNames.recordShortcut:
+          return pendingShortcut.future;
+        case MethodNames.saveSettings:
+          saved = true;
+          return {'revision': 1};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '快捷键');
+
+    await tester.tap(find.byKey(const ValueKey('全局翻译快捷键')));
+    await tester.pump();
+    expect(find.text('请按下组合键，Esc 取消…'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(find.byKey(const ValueKey('输入翻译快捷键')))
+          .onPressed,
+      isNull,
+    );
+
+    await openSettingsPage(tester, '通用');
+    expect(
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '申请权限')).onPressed,
+      isNotNull,
+    );
+
+    pendingShortcut.complete({
+      'keyCode': 1,
+      'modifiers': 256,
+      'label': '⌘ S',
+    });
+    await tester.pumpAndSettle();
+    expect(saved, isFalse);
+
+    await openSettingsPage(tester, '快捷键');
+    expect(find.text('请按下组合键，Esc 取消…'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('服务与排除应用空态提示、录屏特效联动禁用及 GIF 最大宽度就地校验（#144）', (tester) async {
+    // 作用：验证列表空态引导文案、关闭录屏点击特效时随动禁用衍生开关，以及 GIF 宽度就地内联报错。
+    // 边界：services 与 excludedApps 为空展示引导；off 态禁用「区分右键与拖动轨迹」；输入 0 展示内联 errorText。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var state = <String, Object?>{'revision': 0};
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true, 'screenAccess': true};
+        case MethodNames.getSettings:
+          return state;
+        case MethodNames.saveSettings:
+          final draft = Map<String, Object?>.from(call.arguments as Map)
+            ..remove('credentials');
+          state = {...draft, 'revision': (state['revision'] as int) + 1};
+          return state;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+
+    await openSettingsPage(tester, '服务列表');
+    expect(find.text('暂无自定义翻译服务；默认使用谷歌翻译或 Apple 系统翻译。'), findsOneWidget);
+
+    await openSettingsPage(tester, '排除应用');
+    expect(find.text('暂无排除应用；添加后在这些应用中不会自动触发选区翻译。'), findsOneWidget);
+
+    await openSettingsPage(tester, '录制');
+    NativeGlassSwitch distinctSwitch() => tester.widget<NativeGlassSwitch>(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is NativeGlassSwitchTile && w.title == '区分右键与拖动轨迹',
+        ),
+        matching: find.byType(NativeGlassSwitch),
+      ),
+    );
+    expect(distinctSwitch().onChanged, isNull);
+
+    await tester.tap(find.text(RecordingClickEffect.off.label));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, RecordingClickEffect.optical.label));
+    await tester.pumpAndSettle();
+    expect(distinctSwitch().onChanged, isNotNull);
+
+    await openSettingsPage(tester, '保存与导出');
+    final width = find.byKey(const Key('gif-maximum-width'));
+    await tester.ensureVisible(width);
+    await tester.enterText(width, '0');
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is NativeGlassField &&
+            w.label == '最大宽度（像素）' &&
+            w.errorText == '请输入大于 0 的整数像素宽度，留空表示不限制。',
+      ),
+      findsOneWidget,
+    );
   });
 }

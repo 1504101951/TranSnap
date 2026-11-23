@@ -84,7 +84,9 @@ class _SettingsPageState extends State<_SettingsPage>
   String? _message;
   bool _saving = false;
   Completer<bool>? _saveCompletion;
-  bool _recording = false;
+
+  /// 当前正在录制的热键标题；null 表示未在录制，避免双快捷键共用同一布尔态（U-17）。
+  String? _recordingTarget;
   bool _failed = false;
   bool _dirty = false;
   bool _conflicted = false;
@@ -148,9 +150,17 @@ class _SettingsPageState extends State<_SettingsPage>
     throw StateError('侧边栏缺少子页 $page');
   }
 
-  /// page 为点选的子页；切换展示，进入通用页时重新查询语言包状态，无返回值。
+  /// page 为点选的子页；切换展示并中止未完成的热键录制、清理已提交页的非持久化提示，无返回值。
   void _openPage(SettingsPage page) {
-    setState(() => _page = page);
+    setState(() {
+      _page = page;
+      _recordingTarget = null;
+      // 离开已稳定页时清除一次性状态说明，避免跨子页残留误导；活跃校验失败与冲突仍保留（U-17）。
+      if (!_dirty && !_conflicted) {
+        _message = null;
+        _failed = false;
+      }
+    });
     // _checkLanguagePacks 按已提交的主次语言查询，语言设置改动后回到通用页即可看到新状态。
     if (page == SettingsPage.general) _checkLanguagePacks();
     // _loadSystemShortcuts 每次进入工具栏页重新读取，系统设置中的修改随即生效（#141）。
@@ -262,6 +272,19 @@ class _SettingsPageState extends State<_SettingsPage>
         'id': sticker.id,
       }),
     );
+  }
+
+  /// sticker 为待删除贴纸；经破坏性二次确认后再移除记录与本地 PNG 文件（U-11）。
+  Future<void> _confirmRemoveSticker(StickerEntry sticker) async {
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '删除贴纸',
+      message: '确定删除这张贴纸吗？本地贴纸文件将被永久移除，且无法撤销。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    _removeSticker(sticker);
   }
 
   /// 无参数；解除引擎内的回调和生命周期监听，无返回值。
@@ -405,8 +428,10 @@ class _SettingsPageState extends State<_SettingsPage>
     return !_dirty && !_conflicted;
   }
 
-  /// apply 把录制到的键码、修饰键与显示名写入对应快捷键；录制一次按键，取消保留当前组合，无返回值。
+  /// target 为正在录制的热键标题，apply 把录制到的键码、修饰键与显示名写入对应快捷键；
+  /// 切换页面后自动放弃迟到回包，避免覆盖其他快捷键（U-17）。
   Future<void> _recordShortcut(
+    String target,
     void Function(
       AppSettings settings,
       int keyCode,
@@ -415,12 +440,13 @@ class _SettingsPageState extends State<_SettingsPage>
     )
     apply,
   ) async {
-    setState(() => _recording = true);
+    if (_recordingTarget != null) return;
+    setState(() => _recordingTarget = target);
     try {
       final key = await _channel.invokeMapMethod<Object?, Object?>(
         MethodNames.recordShortcut,
       );
-      if (!mounted || key == null) return;
+      if (!mounted || key == null || _recordingTarget != target) return;
       _edit(
         () => apply(
           _settings!,
@@ -430,14 +456,16 @@ class _SettingsPageState extends State<_SettingsPage>
         ),
       );
     } on PlatformException catch (error) {
-      if (mounted) {
+      if (mounted && _recordingTarget == target) {
         setState(() {
           _message = error.message;
           _failed = true;
         });
       }
     } finally {
-      if (mounted) setState(() => _recording = false);
+      if (mounted && _recordingTarget == target) {
+        setState(() => _recordingTarget = null);
+      }
     }
   }
 
@@ -492,6 +520,25 @@ class _SettingsPageState extends State<_SettingsPage>
     });
     // 同一时刻只有一个事务；正在保存时由回包后的循环提交最新草稿。
     if (submit) _save();
+  }
+
+  /// service 为待删除翻译服务；经破坏性二次确认后从列表移除并标记删除对应钥匙串凭据（U-11）。
+  Future<void> _confirmDeleteService(ServiceConfig service) async {
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '删除翻译服务',
+      message: '确定删除“${service.displayName}”吗？关联的钥匙串凭据将一并清除，且无法撤销。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    _edit(() {
+      _settings!.services.remove(service);
+      _credentials[service.id] = null;
+      if (_settings!.defaultServiceId == service.id) {
+        _settings!.defaultServiceId = ServiceConfig.builtinId;
+      }
+    });
   }
 
   /// config 为已有配置或空；确认后自动提交完整服务事务，取消不写入配置或凭据。
@@ -615,48 +662,65 @@ class _SettingsPageState extends State<_SettingsPage>
     );
   }
 
-  /// title 为按钮标题，code/label 为当前组合，apply 把录制结果写入对应快捷键；返回热键录制区块。
+  /// title 为按钮标题，code/label 为当前组合，apply 把录制结果写入对应快捷键；只对当前正在录制的按钮展示等待文案与忙碌环。
   List<Widget> _shortcutBlock({
     required String title,
     required int code,
     required String label,
     required void Function(AppSettings, int, int, String) apply,
-  }) => [
-    // 同一行保留标题和录制命中区，不通过常驻说明增加页面高度。
-    ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 12),
-          NativeGlassSurface(
-            material: true,
-            child: OutlinedButton.icon(
-              key: ValueKey(title),
-              onPressed: _recording ? null : () => _recordShortcut(apply),
-              icon: const Icon(Icons.keyboard_outlined),
-              label: Text(
-                _recording
-                    ? '请按下组合键，Esc 取消…'
-                    : [
-                        if (code & ShortcutKeys.control != 0) '⌃',
-                        if (code & ShortcutKeys.option != 0) '⌥',
-                        if (code & ShortcutKeys.shift != 0) '⇧',
-                        if (code & ShortcutKeys.command != 0) '⌘',
-                        label,
-                      ].join(' '),
+  }) {
+    final isThisRecording = _recordingTarget == title;
+    return [
+      // 同一行保留标题和录制命中区，不通过常驻说明增加页面高度。
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: GlassMetrics.space12),
+            NativeGlassSurface(
+              material: true,
+              busy: isThisRecording,
+              child: OutlinedButton.icon(
+                key: ValueKey(title),
+                onPressed: _recordingTarget != null
+                    ? null
+                    : () => _recordShortcut(title, apply),
+                icon: const Icon(Icons.keyboard_outlined),
+                label: Text(
+                  isThisRecording
+                      ? '请按下组合键，Esc 取消…'
+                      : [
+                          if (code & ShortcutKeys.control != 0) '⌃',
+                          if (code & ShortcutKeys.option != 0) '⌥',
+                          if (code & ShortcutKeys.shift != 0) '⇧',
+                          if (code & ShortcutKeys.command != 0) '⌘',
+                          label,
+                        ].join(' '),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  ];
+    ];
+  }
+
+  /// 无参数；就地校验 GIF 最大宽度输入框内容，留空或正整数返回 null，否则返回行内纠错文案（U-24）。
+  String? get _gifWidthError {
+    final text = _gifMaximumWidth.text.trim();
+    if (text.isEmpty) return null;
+    final parsed = int.tryParse(text);
+    if (parsed == null || parsed <= 0) {
+      return '请输入大于 0 的整数像素宽度，留空表示不限制。';
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -666,18 +730,22 @@ class _SettingsPageState extends State<_SettingsPage>
         body: Center(
           child: _message == null
               ? const CircularProgressIndicator()
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_message!),
-                    NativeGlassSurface(
-                      material: true,
-                      child: TextButton(
-                        onPressed: _load,
-                        child: const Text('重新加载'),
+              : ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NativeGlassBanner(message: _message!, isError: true),
+                      const SizedBox(height: GlassMetrics.space12),
+                      NativeGlassSurface(
+                        material: true,
+                        child: FilledButton(
+                          onPressed: _load,
+                          child: const Text('重新加载'),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
         ),
       );
@@ -802,9 +870,7 @@ class _SettingsPageState extends State<_SettingsPage>
                               trailing: NativeGlassSurface(
                                 material: true,
                                 child: TextButton(
-                                  onPressed: _recording
-                                      ? null
-                                      : _requestScreenAccess,
+                                  onPressed: _requestScreenAccess,
                                   child: Text(
                                     _status['screenAccess'] == true
                                         ? '重新检查'
@@ -1008,6 +1074,16 @@ class _SettingsPageState extends State<_SettingsPage>
                                 ],
                               ),
                             ),
+                            if (settings.services.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: GlassMetrics.space8,
+                                ),
+                                child: Text(
+                                  '暂无自定义翻译服务；默认使用谷歌翻译或 Apple 系统翻译。',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
                             for (final service in settings.services)
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -1033,15 +1109,8 @@ class _SettingsPageState extends State<_SettingsPage>
                                       material: true,
                                       child: IconButton(
                                         tooltip: '删除 ${service.displayName}',
-                                        onPressed: () => _edit(() {
-                                          settings.services.remove(service);
-                                          _credentials[service.id] = null;
-                                          if (settings.defaultServiceId ==
-                                              service.id) {
-                                            settings.defaultServiceId =
-                                                ServiceConfig.builtinId;
-                                          }
-                                        }),
+                                        onPressed: () =>
+                                            _confirmDeleteService(service),
                                         icon: const Icon(Icons.delete_outline),
                                       ),
                                     ),
@@ -1114,6 +1183,16 @@ class _SettingsPageState extends State<_SettingsPage>
                                 ],
                               ),
                             ),
+                            if (settings.excludedApps.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: GlassMetrics.space8,
+                                ),
+                                child: Text(
+                                  '暂无排除应用；添加后在这些应用中不会自动触发选区翻译。',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
                             for (final app in settings.excludedApps.entries)
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -1162,9 +1241,8 @@ class _SettingsPageState extends State<_SettingsPage>
                                       NativeGlassSurface(
                                         material: true,
                                         child: TextButton(
-                                          onPressed: _recording
-                                              ? null
-                                              : _chooseScreenshotDirectory,
+                                          onPressed:
+                                              _chooseScreenshotDirectory,
                                           child: const Text('选择…'),
                                         ),
                                       ),
@@ -1184,7 +1262,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   'GIF 导出',
                                   style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: GlassMetrics.space8),
                                 NativeGlassDropdown<int>(
                                   label: '帧率',
                                   value: settings.gifFramesPerSecond,
@@ -1199,9 +1277,12 @@ class _SettingsPageState extends State<_SettingsPage>
                               ],
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(top: 12),
+                              padding: const EdgeInsets.only(
+                                top: GlassMetrics.space12,
+                              ),
                               child: NativeGlassField(
                                 label: '最大宽度（像素）',
+                                errorText: _gifWidthError,
                                 child: TextField(
                                   key: const Key('gif-maximum-width'),
                                   controller: _gifMaximumWidth,
@@ -1251,12 +1332,18 @@ class _SettingsPageState extends State<_SettingsPage>
                                 () => settings.recordingClickEffect = v,
                               ),
                             ),
+                            // 关闭点击特效时右键与拖动区分开关不生效，随动禁用以保持清晰因果（U-24）。
                             NativeGlassSwitchTile(
                               title: '区分右键与拖动轨迹',
                               value: settings.recordingClickRightDistinct,
-                              onChanged: (v) => _edit(
-                                () => settings.recordingClickRightDistinct = v,
-                              ),
+                              onChanged:
+                                  settings.recordingClickEffect ==
+                                      RecordingClickEffect.off
+                                  ? null
+                                  : (v) => _edit(
+                                      () => settings
+                                          .recordingClickRightDistinct = v,
+                                    ),
                             ),
                           ],
                         ),
@@ -1349,120 +1436,112 @@ class _SettingsPageState extends State<_SettingsPage>
                                         .bodySmall,
                                   )
                                 else
-                                  Wrap(
-                                    spacing: StickerMetrics.thumbnailGap,
-                                    runSpacing: StickerMetrics.thumbnailGap,
-                                    children: [
-                                      for (final sticker in settings.stickers)
-                                        _StickerThumbnail(
-                                          key: ValueKey(
-                                            'sticker-${sticker.id}',
+                                    Wrap(
+                                      spacing: StickerMetrics.thumbnailGap,
+                                      runSpacing: StickerMetrics.thumbnailGap,
+                                      children: [
+                                        for (final sticker in settings.stickers)
+                                          _StickerThumbnail(
+                                            key: ValueKey(
+                                              'sticker-${sticker.id}',
+                                            ),
+                                            path: _stickerDirectory == null
+                                                ? null
+                                                : '$_stickerDirectory/${sticker.id}.png',
+                                            onDelete: () =>
+                                                _confirmRemoveSticker(sticker),
                                           ),
-                                          path: _stickerDirectory == null
-                                              ? null
-                                              : '$_stickerDirectory/${sticker.id}.png',
-                                          onDelete: _recording
-                                              ? null
-                                              : () => _removeSticker(sticker),
-                                        ),
-                                    ],
-                                  ),
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton(
-                                      onPressed: _recording
-                                          ? null
-                                          : _addSticker,
-                                      child: const Text('添加图片…'),
+                                      ],
+                                    ),
+                                  const SizedBox(height: GlassMetrics.space8),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: NativeGlassSurface(
+                                      material: true,
+                                      child: TextButton(
+                                        onPressed: _addSticker,
+                                        child: const Text('添加图片…'),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.toolbar) ...[
-                        NativeGlassGroup(
-                          children: [
-                            ScreenshotToolbarEditor(
-                              value: settings.screenshotToolbar,
-                              onChanged: (value) => _edit(
-                                () => _settings!.screenshotToolbar = value,
+                                ],
                               ),
-                              // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
-                              reserved: settings.globalShortcutSlots,
-                              systemSlots: _systemShortcutSlots,
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.mcp) ...[
-                        // McpSettingsPage 提供 MCP 开关、helper 路径、配置复制与接入平台列表；开关走同一自动保存。
-                        McpSettingsPage(
-                          enabled: settings.mcpEnabled,
-                          onChanged: (v) =>
-                              _edit(() => settings.mcpEnabled = v),
-                          controlEnabled: settings.mcpControlEnabled,
-                          onControlChanged: (v) =>
-                              _edit(() => settings.mcpControlEnabled = v),
-                          channel: _channel,
-                          createService: widget.createMcpService,
-                        ),
+                            ],
+                          ),
+                        ] else if (_page == SettingsPage.toolbar) ...[
+                          NativeGlassGroup(
+                            children: [
+                              ScreenshotToolbarEditor(
+                                value: settings.screenshotToolbar,
+                                onChanged: (value) => _edit(
+                                  () => _settings!.screenshotToolbar = value,
+                                ),
+                                // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
+                                reserved: settings.globalShortcutSlots,
+                                systemSlots: _systemShortcutSlots,
+                              ),
+                            ],
+                          ),
+                        ] else if (_page == SettingsPage.mcp) ...[
+                          // McpSettingsPage 提供 MCP 开关、helper 路径、配置复制与接入平台列表；开关走同一自动保存。
+                          McpSettingsPage(
+                            enabled: settings.mcpEnabled,
+                            onChanged: (v) =>
+                                _edit(() => settings.mcpEnabled = v),
+                            controlEnabled: settings.mcpControlEnabled,
+                            onControlChanged: (v) =>
+                                _edit(() => settings.mcpControlEnabled = v),
+                            channel: _channel,
+                            createService: widget.createMcpService,
+                          ),
+                        ],
+                        // 只在有冲突、自动保存失败或一次性状态提示时渲染，正常无错误状态不占高度（#67）。
+                        if (_conflicted ||
+                            (_failed && _dirty) ||
+                            (_message != null && !_saving)) ...[
+                          const SizedBox(height: GlassMetrics.space16),
+                          NativeGlassBanner(
+                            message:
+                                _message ??
+                                (_conflicted
+                                    ? '设置已在其他位置更新，请重新加载。'
+                                    : '自动保存失败，请重试。'),
+                            isError: _failed || _conflicted,
+                            action: _conflicted
+                                ? NativeGlassSurface(
+                                    material: true,
+                                    child: TextButton(
+                                      onPressed: () {
+                                        _dirty = false;
+                                        _load();
+                                      },
+                                      child: const Text('重新加载设置'),
+                                    ),
+                                  )
+                                : (_failed && _dirty)
+                                ? NativeGlassSurface(
+                                    material: true,
+                                    child: TextButton(
+                                      onPressed: _save,
+                                      child: const Text('重试自动保存'),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ],
                       ],
-                      // 只在下方有重试、重新加载或说明时留出间距，正常状态不预留高度（#67）。
-                      if ((_failed && _dirty && !_conflicted) ||
-                          _conflicted ||
-                          (_message != null && !_saving))
-                        const SizedBox(height: 16),
-                      if (_failed && _dirty && !_conflicted)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: NativeGlassSurface(
-                            material: true,
-                            child: TextButton(
-                              onPressed: _save,
-                              child: const Text('重试自动保存'),
-                            ),
-                          ),
-                        ),
-                      if (_conflicted)
-                        NativeGlassSurface(
-                          material: true,
-                          child: TextButton(
-                            onPressed: () {
-                              _dirty = false;
-                              _load();
-                            },
-                            child: const Text('重新加载设置'),
-                          ),
-                        ),
-                      if (_message != null && !_saving)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            _message!,
-                            style: TextStyle(
-                              color: _failed
-                                  ? Theme.of(context).colorScheme.error
-                                  : Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
   }
 }
 
-/// 设置页的一张贴纸缩略图：48×48pt、圆角 6pt，悬停时右上角显示删除按钮（#103）。
+/// 设置页的一张贴纸缩略图：48×48pt、圆角 6pt，悬停或键盘聚焦时右上角显示 24pt 删除命中区（#103、U-19）。
 class _StickerThumbnail extends StatefulWidget {
   /// path 为贴纸文件路径（目录未读取时为 null），onDelete 为删除动作（为空时禁用）。
   const _StickerThumbnail({
@@ -1473,57 +1552,113 @@ class _StickerThumbnail extends StatefulWidget {
   final String? path;
   final VoidCallback? onDelete;
 
-  /// 无参数；返回持有悬停状态的状态。
+  /// 无参数；返回持有悬停与焦点状态的状态。
   @override
   State<_StickerThumbnail> createState() => _StickerThumbnailState();
 }
 
-/// 持有悬停状态，悬停时显示删除按钮。
+/// 持有悬停与焦点状态，确保键鼠均可发现与删除贴纸，并在文件损坏时显示降级占位图（U-19、U-24）。
 class _StickerThumbnailState extends State<_StickerThumbnail> {
   bool _hovered = false;
+  bool _focused = false;
 
-  /// context 为构建上下文；返回缩略图与悬停时的删除按钮。
+  /// context 为构建上下文；返回带焦点边框、损坏降级与 24pt 删除热区的缩略图。
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => _hovered = true),
-    onExit: (_) => setState(() => _hovered = false),
-    child: SizedBox.square(
-      dimension: StickerMetrics.thumbnail,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(StickerMetrics.cellRadius),
-              child: widget.path == null
-                  ? const SizedBox()
-                  : Image.file(File(widget.path!), fit: BoxFit.contain),
+  Widget build(BuildContext context) => Focus(
+    onFocusChange: (value) => setState(() => _focused = value),
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent &&
+          widget.onDelete != null &&
+          (event.logicalKey == LogicalKeyboardKey.delete ||
+              event.logicalKey == LogicalKeyboardKey.backspace)) {
+        widget.onDelete!();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        width: StickerMetrics.thumbnail,
+        height: StickerMetrics.thumbnail,
+        decoration: _focused
+            ? ShapeDecoration(
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.circular(
+                    StickerMetrics.cellRadius,
+                  ),
+                  side: BorderSide(
+                    color: NativeGlassTheme.accentOf(context),
+                    width: GlassMetrics.focusRingWidth,
+                  ),
+                ),
+              )
+            : null,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(StickerMetrics.cellRadius),
+                child: widget.path == null
+                    ? const SizedBox()
+                    : Image.file(
+                        File(widget.path!),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            ColoredBox(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                              child: const Center(
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  size: GlassMetrics.icon,
+                                ),
+                              ),
+                            ),
+                      ),
+              ),
             ),
-          ),
-          if (_hovered)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Tooltip(
-                message: '删除贴纸',
-                child: InkWell(
-                  onTap: widget.onDelete,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: const BoxDecoration(
-                      color: Color(0x99000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      size: 12,
-                      color: Colors.white,
+            if (_hovered || _focused)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Semantics(
+                  label: '删除贴纸',
+                  button: true,
+                  child: Tooltip(
+                    message: '删除贴纸',
+                    child: InkWell(
+                      onTap: widget.onDelete,
+                      borderRadius: BorderRadius.circular(
+                        GlassMetrics.minTouchTarget / 2,
+                      ),
+                      child: const SizedBox.square(
+                        dimension: GlassMetrics.minTouchTarget,
+                        child: Center(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0x99000000),
+                              shape: BoxShape.circle,
+                            ),
+                            child: SizedBox.square(
+                              dimension: 16,
+                              child: Icon(
+                                Icons.close,
+                                size: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
   );
