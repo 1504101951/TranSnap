@@ -268,7 +268,7 @@ class GentleShimmerSkeleton extends StatelessWidget {
     );
     if (AppMotion.reduced(context)) return bars;
     return _ControlledAnimate(
-      repeatCount: 15,
+      repeatCount: 60,
       effects: [
         ShimmerEffect(
           duration: MotionMetrics.shimmerDuration,
@@ -757,7 +757,10 @@ class _TranslationStatusPainter extends CustomPainter {
       old.phase != phase ||
       old.spin != spin ||
       old.progress != progress ||
-      old.primary != primary;
+      old.primary != primary ||
+      old.success != success ||
+      old.error != error ||
+      old.muted != muted;
 }
 
 /// 2. 朗读声波矢量微交互图标（#142）：未朗读保留 Icons.volume_up_rounded，朗读中切换为 5 柱光学声波。
@@ -1015,6 +1018,7 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
     with SingleTickerProviderStateMixin {
   late final AnimationController _confirmController;
   bool _transientActive = false;
+  Timer? _reducedTimer;
 
   @override
   void initState() {
@@ -1032,12 +1036,20 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
         });
   }
 
+  /// oldWidget 为上一状态；触发计数递增或确认态置位时展示复制对勾并在减少动态效果下仍保留静态确认与自动回弹（U-10）。
   @override
   void didUpdateWidget(CopyConfirmIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.trigger > oldWidget.trigger) {
+      _reducedTimer?.cancel();
       if (AppMotion.reduced(context)) {
-        setState(() => _transientActive = false);
+        _confirmController.value = 1.0;
+        setState(() => _transientActive = true);
+        // 减弱动态效果跳过描写缩放过程，但维持同等停留时长确保复制反馈可见（U-10）。
+        _reducedTimer = Timer(MotionMetrics.copyConfirmDuration, () {
+          if (!mounted) return;
+          setState(() => _transientActive = false);
+        });
       } else {
         setState(() => _transientActive = true);
         _confirmController.forward(from: 0);
@@ -1045,6 +1057,7 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
       return;
     }
     if (!oldWidget.copied && widget.copied) {
+      _reducedTimer?.cancel();
       _transientActive = false;
       if (AppMotion.reduced(context)) {
         _confirmController.value = 1.0;
@@ -1056,6 +1069,7 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
 
   @override
   void dispose() {
+    _reducedTimer?.cancel();
     _confirmController.dispose();
     super.dispose();
   }
@@ -1067,23 +1081,29 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
       return Icon(Icons.copy_rounded, size: widget.size);
     }
     final reduced = AppMotion.reduced(context);
-    const success = Color(0xFF34C759);
-    final check = SizedBox.square(
-      dimension: widget.size,
-      child: AnimatedBuilder(
-        animation: _confirmController,
-        builder: (context, _) {
-          // 前 26% 时长完成描边打勾与扩散微环，其余时间保持清晰对勾直至回弹。
-          final drawProgress = reduced
-              ? 1.0
-              : (_confirmController.value / 0.26).clamp(0.0, 1.0);
-          return CustomPaint(
-            painter: _CopyConfirmPainter(
-              progress: drawProgress,
-              color: success,
-            ),
-          );
-        },
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    // 遵循 #144 WCAG AA 语义绿，确保浅深色图标均有高对比度。
+    final success = dark ? const Color(0xFF32D74B) : const Color(0xFF126326);
+    final check = Semantics(
+      liveRegion: true,
+      label: '已复制',
+      child: SizedBox.square(
+        dimension: widget.size,
+        child: AnimatedBuilder(
+          animation: _confirmController,
+          builder: (context, _) {
+            // 前 26% 时长完成描边打勾与扩散微环，其余时间保持清晰对勾直至回弹。
+            final drawProgress = reduced
+                ? 1.0
+                : (_confirmController.value / 0.26).clamp(0.0, 1.0);
+            return CustomPaint(
+              painter: _CopyConfirmPainter(
+                progress: drawProgress,
+                color: success,
+              ),
+            );
+          },
+        ),
       ),
     );
     if (reduced) return check;
@@ -1508,7 +1528,7 @@ class _CharRevealState extends State<CharReveal>
   late final _controller = AnimationController(vsync: this)
     ..addListener(() => setState(() {}));
 
-  /// 本批之前已完整显示的字数；本批显影的是 [_base, text.length) 这些字。
+  /// 本批之前已完整显示的字形（grapheme）计数；含 Emoji 时亦与视觉字形一一对应。
   int _base = 0;
 
   /// 本批各字之间的错峰（毫秒），保证同段错峰总长不超过上限。
@@ -1521,18 +1541,21 @@ class _CharRevealState extends State<CharReveal>
     _start(0);
   }
 
-  /// oldWidget 为上一配置；文字在原内容后追加时只显影追加部分，被替换时整段重新显影。
+  /// oldWidget 为上一配置；文字在原内容后追加时按真实字形序列只显影追加部分，被替换时整段重新显影（U-27）。
   @override
   void didUpdateWidget(covariant CharReveal oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.text == oldWidget.text) return;
-    _start(widget.text.startsWith(oldWidget.text) ? oldWidget.text.length : 0);
+    final appended = widget.text.startsWith(oldWidget.text);
+    _start(appended ? oldWidget.text.characters.length : 0);
   }
 
-  /// base 为已完整显示的字数；以剩余字数计算错峰并从头播放本批显影。
+  /// base 为已完整显示的视觉字形计数；以剩余字形数计算错峰并从头播放本批显影。
   void _start(int base) {
-    _base = base;
-    final count = widget.text.length - base;
+    final chars = widget.text.characters;
+    final total = chars.length;
+    _base = base.clamp(0, total);
+    final count = total - _base;
     if (count <= 0) return;
     final spread = MotionMetrics.charRevealMaxSpread.inMilliseconds;
     _stagger = math.min(
@@ -1555,11 +1578,12 @@ class _CharRevealState extends State<CharReveal>
     super.dispose();
   }
 
-  /// context 提供无障碍设置；返回 builder 构建的文字，显影中的字带各自的透明度与模糊。
+  /// context 提供无障碍设置；返回 builder 构建的文字，显影中的字形带各自的透明度与模糊。
   @override
   Widget build(BuildContext context) {
     final text = widget.text;
-    final animating = _controller.isAnimating && _base < text.length;
+    final chars = text.characters.toList();
+    final animating = _controller.isAnimating && _base < chars.length;
     if (AppMotion.reduced(context) || !animating) {
       return widget.builder(context, TextSpan(text: text, style: widget.style));
     }
@@ -1567,15 +1591,15 @@ class _CharRevealState extends State<CharReveal>
     final elapsed =
         _controller.value * _controller.duration!.inMilliseconds.toDouble();
     final duration = MotionMetrics.charRevealDuration.inMilliseconds;
-    // 每个字从自己的错峰起点开始，在单字时长内由透明、模糊变为清晰。
-    final chars = text.substring(_base).characters.toList();
+    // 每个视觉字形（包含复合 Emoji）从各自错峰起点开始，在单字时长内由透明、模糊变为清晰。
+    final prefix = chars.take(_base).join();
     return widget.builder(
       context,
       TextSpan(
         style: widget.style,
         children: [
-          TextSpan(text: text.substring(0, _base)),
-          for (final (index, char) in chars.indexed)
+          TextSpan(text: prefix),
+          for (final (index, char) in chars.skip(_base).indexed)
             (() {
               final t = ((elapsed - index * _stagger) / duration).clamp(
                 0.0,

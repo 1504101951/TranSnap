@@ -55,3 +55,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 49. [glossary_import_test.dart](glossary_import_test.dart)：验证术语文件预览、重复处理、整批拒绝、导出、串行保存与失败后取消不污染设置。
 50. [translation_http_test.dart](translation_http_test.dart)：验证连接预热发送不含原文的 HEAD、后续翻译请求复用同一条连接，以及预热失败不抛出。
 51. [app_motion_test.dart](app_motion_test.dart)：验证界面动效公共组件的无障碍降级、光学棱镜着色器回退、五组纯 Dart 矢量状态机及侧边栏物理弹簧滑块。
+52. [toolbar_feedback_test.dart](toolbar_feedback_test.dart)：验证工具栏反馈气泡的错误语义图标、悬停保活回调、关闭按钮、极窄视口安全夹紧及 liveRegion 开关。

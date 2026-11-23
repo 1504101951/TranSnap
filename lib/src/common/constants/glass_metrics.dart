@@ -66,7 +66,24 @@ abstract final class GlassMetrics {
   static const captureResultActionGap = 12.0;
   static const toastGap = 8.0;
   static const feedbackDuration = Duration(milliseconds: 1000);
+
+  /// 错误提示气泡默认停留时长；悬停期间暂停并在移开后重计（#144）。
+  static const errorFeedbackDuration = Duration(milliseconds: 2000);
   static const transition = Duration(milliseconds: 120);
   static const hoverOpacity = 0.06;
   static const pressedOpacity = 0.12;
+
+  /// 全局 4pt 间距阶梯、按钮按下微缩比例、焦点框与最小触控/滚动约束（#67、#144）。
+  static const space4 = 4.0;
+  static const space8 = 8.0;
+  static const space12 = 12.0;
+  static const space16 = 16.0;
+  static const space20 = 20.0;
+  static const space24 = 24.0;
+  static const buttonPressedScale = 0.96;
+  static const focusRingWidth = 2.0;
+  static const minTouchTarget = 24.0;
+  static const menuMaxHeight = 320.0;
+  static const sliderOverlayRadius = 14.0;
+  static const sliderThumbBorderWidth = 1.5;
 }

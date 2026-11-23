@@ -7,10 +7,12 @@ import '../constants/motion_metrics.dart';
 import '../constants/appearance_modes.dart';
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:motor/motor.dart';
 
 import 'app_motion.dart';
@@ -47,29 +49,54 @@ class NativeGlassSurface extends StatelessWidget {
   /// 为 true 时在材料外扩 2pt 绘制强调色进度环；内部结构恒定，不重建原生材料（#142）。
   final bool busy;
 
+  /// child 为传入前景；穿透透明包装层递归识别底层按钮与启用回调，返回按钮标记、实底标记及回调。
+  static ({bool isButton, bool isFilled, VoidCallback? onPressed})
+  _inspectButton(Widget child) {
+    Widget current = child;
+    while (true) {
+      if (current is ButtonStyleButton) {
+        return (
+          isButton: true,
+          isFilled: current is FilledButton,
+          onPressed: current.onPressed,
+        );
+      }
+      if (current is IconButton) {
+        return (
+          isButton: true,
+          isFilled: false,
+          onPressed: current.onPressed,
+        );
+      }
+      if (current is Semantics && current.child != null) {
+        current = current.child!;
+      } else if (current is SizedBox && current.child != null) {
+        current = current.child!;
+      } else if (current is ConstrainedBox && current.child != null) {
+        current = current.child!;
+      } else if (current is Tooltip && current.child != null) {
+        current = current.child!;
+      } else if (current is KeyedSubtree) {
+        current = current.child;
+      } else if (current is Padding && current.child != null) {
+        current = current.child!;
+      } else {
+        return (isButton: false, isFilled: false, onPressed: null);
+      }
+    }
+  }
+
   /// context 提供主题；返回原生材料与前景的有序叠放，材料不抢占手势。
   @override
   Widget build(BuildContext context) {
+    final button = _inspectButton(child);
     final radius =
         this.radius ??
         (material
-            ? (child is FilledButton
+            ? (button.isFilled
                   ? GlassMetrics.primaryRadius
                   : GlassMetrics.controlRadius)
             : GlassMetrics.panelRadius);
-    final isButton = child is ButtonStyleButton || child is IconButton;
-    final onPressed = switch (child) {
-      ButtonStyleButton(:final onPressed) => onPressed,
-      IconButton(:final onPressed) => onPressed,
-      _ => null,
-    };
-    final foreground = isButton
-        ? _GlassButtonFeedback(
-            radius: radius,
-            enabled: onPressed != null,
-            child: child,
-          )
-        : child;
     // 材料配置也是依赖；只改透明度时主题颜色可能不变，仍需更新原生视图。
     context.dependOnInheritedWidgetOfExactType<_GlassAppearanceScope>();
     final brightness = Theme.of(context).brightness;
@@ -79,8 +106,14 @@ class NativeGlassSurface extends StatelessWidget {
     if (material &&
         context.dependOnInheritedWidgetOfExactType<_GlassMaterialScope>() !=
             null) {
-      // 下拉已选项等共享父材料；弹出路由脱离此scope后才创建自己的玻璃。
-      return foreground;
+      // 下拉已选项等共享父材料；弹出路由脱离此scope后才创建自己的玻璃，按钮仍保留微交互与焦点环。
+      return button.isButton
+          ? NativeGlassButtonFeedback(
+              radius: radius,
+              enabled: button.onPressed != null,
+              child: child,
+            )
+          : child;
     }
     if (!material) {
       return ClipRSuperellipse(
@@ -92,6 +125,53 @@ class NativeGlassSurface extends StatelessWidget {
         ),
       );
     }
+    final glass = ClipRSuperellipse(
+      borderRadius: BorderRadius.circular(radius),
+      child: Stack(
+        children: [
+          if (!activeLayer)
+            Positioned.fill(
+              child: ColoredBox(color: Theme.of(context).colorScheme.surface),
+            )
+          else
+            Positioned.fill(
+              // 原生材料只绘图，Flutter平台视图包装层也必须退出键盘遍历。
+              child: ExcludeFocus(
+                child: ExcludeSemantics(
+                  child: AppKitView(
+                    key: ValueKey((
+                      brightness,
+                      highContrast,
+                      radius,
+                      GlassAppearance.current.value.opacity,
+                    )),
+                    viewType: PlatformViewTypes.nativeGlass,
+                    creationParams: {
+                      'cornerRadius': radius,
+                      'brightness': brightness.name,
+                      'highContrast': highContrast,
+                      'opacity': GlassAppearance.current.value.opacity,
+                    },
+                    creationParamsCodec: const StandardMessageCodec(),
+                    hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+                  ),
+                ),
+              ),
+            ),
+          Material(
+            type: MaterialType.transparency,
+            child: _GlassMaterialScope(child: child),
+          ),
+        ],
+      ),
+    );
+    final interactiveGlass = button.isButton
+        ? NativeGlassButtonFeedback(
+            radius: radius,
+            enabled: button.onPressed != null,
+            child: glass,
+          )
+        : glass;
     // 放松列表的横向紧约束，让材料跟随前景尺寸；输入框/滑块自身仍填满可用宽度。
     // 外层始终包一层 BusyRing 保持子树结构恒定，等待态切换不重建底层 AppKitView（#142）。
     final surface = Align(
@@ -102,57 +182,15 @@ class NativeGlassSurface extends StatelessWidget {
         active: busy,
         color: NativeGlassTheme.accentOf(context),
         radius: radius + MotionMetrics.busyRingOutset,
-        child: ClipRSuperellipse(
-          borderRadius: BorderRadius.circular(radius),
-          child: Stack(
-            children: [
-              if (!activeLayer)
-                Positioned.fill(
-                  child: ColoredBox(
-                    color: Theme.of(context).colorScheme.surface,
-                  ),
-                )
-              else
-                Positioned.fill(
-                  // 原生材料只绘图，Flutter平台视图包装层也必须退出键盘遍历。
-                  child: ExcludeFocus(
-                    child: ExcludeSemantics(
-                      child: AppKitView(
-                        key: ValueKey((
-                          brightness,
-                          highContrast,
-                          radius,
-                          GlassAppearance.current.value.opacity,
-                        )),
-                        viewType: PlatformViewTypes.nativeGlass,
-                        creationParams: {
-                          'cornerRadius': radius,
-                          'brightness': brightness.name,
-                          'highContrast': highContrast,
-                          'opacity': GlassAppearance.current.value.opacity,
-                        },
-                        creationParamsCodec: const StandardMessageCodec(),
-                        hitTestBehavior:
-                            PlatformViewHitTestBehavior.transparent,
-                      ),
-                    ),
-                  ),
-                ),
-              Material(
-                type: MaterialType.transparency,
-                child: _GlassMaterialScope(child: foreground),
-              ),
-            ],
-          ),
-        ),
+        child: interactiveGlass,
       ),
     );
-    if (!isButton) return surface;
+    if (!button.isButton) return surface;
     // 可见按钮保持28/30pt，外围透明命中区域至少32pt；标准按钮仍处理自身语义和键盘。
     return GestureDetector(
       excludeFromSemantics: true,
       behavior: HitTestBehavior.opaque,
-      onTap: onPressed,
+      onTap: button.onPressed,
       child: ConstrainedBox(
         constraints: const BoxConstraints(
           minWidth: GlassMetrics.hitSize,
@@ -169,36 +207,49 @@ class NativeGlassSurface extends StatelessWidget {
   }
 }
 
-/// 复用标准按钮的动作/语义，只统一数值化的悬停、按下和焦点绘制。
-class _GlassButtonFeedback extends StatefulWidget {
-  /// child 为原有可操作控件，enabled决定是否绘制反馈；inset供菜单留出2pt行间命中空间。
-  const _GlassButtonFeedback({
+/// 复用标准按钮的动作与语义，统一提供悬停高光、按下弹性微缩及强调色焦点环（#67、#144）。
+class NativeGlassButtonFeedback extends StatefulWidget {
+  /// child 为可操作控件或完整玻璃胶囊，radius 为超椭圆圆角，enabled 决定是否响应交互反馈，
+  /// inset 为外围命中与描边留白，hoverFeedback 控制悬停视觉层，pressScale 为按下缩放比例，
+  /// accentHighlight 控制悬停边框是否使用强调色高光。
+  const NativeGlassButtonFeedback({
+    super.key,
     required this.child,
     required this.radius,
     required this.enabled,
     this.inset = EdgeInsets.zero,
     this.hoverFeedback = true,
+    this.pressScale = GlassMetrics.buttonPressedScale,
+    this.accentHighlight = false,
   });
+
   final Widget child;
   final double radius;
   final bool enabled;
   final EdgeInsets inset;
   final bool hoverFeedback;
-  @override
+  final double pressScale;
+  final bool accentHighlight;
+
   /// 无参数；创建按钮瞬时交互状态，不持有业务数据。
-  State<_GlassButtonFeedback> createState() => _GlassButtonFeedbackState();
+  @override
+  State<NativeGlassButtonFeedback> createState() =>
+      _NativeGlassButtonFeedbackState();
 }
 
-/// 维护控件悬停、按下和焦点绘制；业务动作仍由标准按钮处理。
-class _GlassButtonFeedbackState extends State<_GlassButtonFeedback> {
+/// 维护控件悬停、按下微缩和焦点绘制；业务动作仍由标准按钮处理。
+class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
   bool _hovered = false;
   bool _pressed = false;
   bool _focused = false;
 
-  /// context 提供主题与动态效果偏好；状态层不拦截按钮的原有事件。
+  /// context 提供主题与动态效果偏好；抑制子按钮内置 Material 叠色与焦点边后统一绘制悬停、微缩与强调色焦点环。
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final outerTheme = Theme.of(context);
+    final colors = outerTheme.colorScheme;
+    final accent = NativeGlassTheme.accentOf(context);
+    final reduced = AppMotion.reduced(context);
     final alpha = !widget.enabled
         ? 0.0
         : _pressed
@@ -208,6 +259,54 @@ class _GlassButtonFeedbackState extends State<_GlassButtonFeedback> {
         : _hovered && widget.hoverFeedback
         ? GlassMetrics.hoverOpacity
         : 0.0;
+    final BorderSide side;
+    if (_focused && widget.enabled) {
+      side = BorderSide(color: accent, width: GlassMetrics.focusRingWidth);
+    } else if (_hovered && widget.enabled && widget.hoverFeedback) {
+      side = BorderSide(
+        color: widget.accentHighlight
+            ? accent.withValues(alpha: 0.45)
+            : colors.onSurface.withValues(alpha: 0.14),
+        width: 1,
+      );
+    } else {
+      side = BorderSide.none;
+    }
+
+    const transparentOverlay = WidgetStatePropertyAll(Colors.transparent);
+    final noneSide = const WidgetStatePropertyAll(BorderSide.none);
+    // 屏蔽内层 ButtonStyle 自带叠色与默认焦点边，避免与外层统一玻璃反馈重影。
+    final cleanChild = Theme(
+      data: outerTheme.copyWith(
+        filledButtonTheme: FilledButtonThemeData(
+          style: outerTheme.filledButtonTheme.style?.copyWith(
+            overlayColor: transparentOverlay,
+            side: noneSide,
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: outerTheme.outlinedButtonTheme.style?.copyWith(
+            overlayColor: transparentOverlay,
+            side: WidgetStatePropertyAll(BorderSide(color: colors.outlineVariant)),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: outerTheme.textButtonTheme.style?.copyWith(
+            overlayColor: transparentOverlay,
+            side: noneSide,
+          ),
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: outerTheme.iconButtonTheme.style?.copyWith(
+            overlayColor: transparentOverlay,
+            side: noneSide,
+          ),
+        ),
+      ),
+      child: widget.child,
+    );
+
+    final duration = reduced ? Duration.zero : GlassMetrics.transition;
     return Focus(
       canRequestFocus: false,
       onFocusChange: (value) => setState(() => _focused = value),
@@ -219,6 +318,9 @@ class _GlassButtonFeedbackState extends State<_GlassButtonFeedback> {
         return KeyEventResult.ignored;
       },
       child: MouseRegion(
+        cursor: widget.enabled
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() {
           _hovered = false;
@@ -228,31 +330,34 @@ class _GlassButtonFeedbackState extends State<_GlassButtonFeedback> {
           onPointerDown: (_) => setState(() => _pressed = true),
           onPointerUp: (_) => setState(() => _pressed = false),
           onPointerCancel: (_) => setState(() => _pressed = false),
-          child: Stack(
-            children: [
-              widget.child,
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Padding(
-                    padding: widget.inset,
-                    child: AnimatedContainer(
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : GlassMetrics.transition,
-                      decoration: ShapeDecoration(
-                        color: colors.onSurface.withValues(alpha: alpha),
-                        shape: RoundedSuperellipseBorder(
-                          borderRadius: BorderRadius.circular(widget.radius),
-                          side: _focused && widget.enabled
-                              ? BorderSide(color: colors.primary, width: 2)
-                              : BorderSide.none,
+          child: AnimatedScale(
+            scale: _pressed && widget.enabled && !reduced
+                ? widget.pressScale
+                : 1.0,
+            duration: duration,
+            curve: Curves.easeOutCubic,
+            child: Stack(
+              children: [
+                cleanChild,
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Padding(
+                      padding: widget.inset,
+                      child: AnimatedContainer(
+                        duration: duration,
+                        decoration: ShapeDecoration(
+                          color: colors.onSurface.withValues(alpha: alpha),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: BorderRadius.circular(widget.radius),
+                            side: side,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -260,17 +365,23 @@ class _GlassButtonFeedbackState extends State<_GlassButtonFeedback> {
   }
 }
 
-/// 字段标题和说明位于材料外，避免浮动标签越过原生视图裁剪边界。
+/// 字段标题、行内校验错误和说明位于材料外，避免浮动元素越过原生视图裁剪边界。
 class NativeGlassField extends StatefulWidget {
-  /// label 是可访问名称，helper 为补充说明；child 是不带浮动标签的输入或选择控件。
+  /// label 为可选字段标题，semanticLabel 在无可见标题时补足语义名，helper 为补充说明，
+  /// errorText 为行内校验错误信息；child 是不带浮动标签的输入或选择控件。
   const NativeGlassField({
     super.key,
-    required this.label,
+    this.label,
     required this.child,
     this.helper,
+    this.semanticLabel,
+    this.errorText,
   });
-  final String label;
+
+  final String? label;
   final String? helper;
+  final String? semanticLabel;
+  final String? errorText;
   final Widget child;
 
   /// 无参数；创建仅跟踪键盘焦点的状态，不持有业务输入。
@@ -282,22 +393,33 @@ class NativeGlassField extends StatefulWidget {
 class _NativeGlassFieldState extends State<NativeGlassField> {
   bool _focused = false;
 
-  /// context 提供主题；返回外置标题、连续圆角焦点边框及说明，保留输入子树状态。
+  /// context 提供主题；返回外置标题、连续圆角焦点/报错边框、报错行与说明，保留输入子树状态。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final hasError = widget.errorText != null && widget.errorText!.isNotEmpty;
+    final borderColor = hasError
+        ? colors.error
+        : (_focused
+              ? NativeGlassTheme.accentOf(context)
+              : colors.outlineVariant);
+    final borderWidth = _focused
+        ? GlassMetrics.focusRingWidth
+        : (hasError ? 1.5 : 1.0);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: GlassMetrics.space12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            widget.label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
+          if (widget.label != null) ...[
+            Text(
+              widget.label!,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: GlassMetrics.labelGap),
+          ],
           Semantics(
-            label: widget.label,
+            label: widget.semanticLabel ?? widget.label,
             child: Focus(
               canRequestFocus: false,
               onFocusChange: (focused) => setState(() => _focused = focused),
@@ -309,12 +431,7 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
                       borderRadius: BorderRadius.circular(
                         GlassMetrics.controlRadius,
                       ),
-                      side: BorderSide(
-                        color: _focused
-                            ? colors.primary
-                            : colors.outlineVariant,
-                        width: _focused ? 2 : 1,
-                      ),
+                      side: BorderSide(color: borderColor, width: borderWidth),
                     ),
                   ),
                   // 标题由外层承担；移除输入框自带圆弧边框，焦点只绘制一层连续曲线。
@@ -338,8 +455,33 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
               ),
             ),
           ),
+          if (hasError) ...[
+            const SizedBox(height: GlassMetrics.space4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.error_outline,
+                    size: 13,
+                    color: colors.error,
+                  ),
+                ),
+                const SizedBox(width: GlassMetrics.space4),
+                Expanded(
+                  child: Text(
+                    widget.errorText!,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colors.error),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (widget.helper != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: GlassMetrics.labelGap),
             Text(widget.helper!, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
@@ -510,7 +652,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
               children: [
                 Expanded(
                   child: Text(
-                    items[value]!,
+                    items[value] ?? (items.isNotEmpty ? items.values.first : ''),
                     textAlign: TextAlign.left,
                     maxLines: widget.dense ? 1 : null,
                     overflow: widget.dense ? TextOverflow.ellipsis : null,
@@ -526,19 +668,28 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
     );
   }
 
-  /// trigger 为下拉触发按钮；flat 非空时返回平面装饰包装，否则返回独立玻璃材料包装。
+  /// trigger 为下拉触发按钮；flat 非空时返回带悬停、微缩与焦点反馈的平面按钮包装，否则返回独立玻璃材料包装。
   Widget _surface(Widget trigger) {
     final flat = widget.flat;
     if (flat == null) return NativeGlassSurface(material: true, child: trigger);
-    return DecoratedBox(decoration: flat, child: trigger);
+    return NativeGlassButtonFeedback(
+      radius: GlassMetrics.controlRadius,
+      enabled: widget.onChanged != null,
+      child: DecoratedBox(decoration: flat, child: trigger),
+    );
   }
 }
 
-/// 玻璃菜单的共享材料面板；下拉菜单按钮与截图「录制选项」共用。
+/// 玻璃菜单的共享材料面板；下拉菜单按钮与截图「录制选项」共用，超出最大高度时内部滚动。
 class NativeGlassMenuPanel extends StatelessWidget {
-  /// children 为自上而下的菜单项或分隔线。
-  const NativeGlassMenuPanel({super.key, required this.children});
+  /// children 为自上而下的菜单项或分隔线，maxHeight 为面板最大高度（默认 320pt）。
+  const NativeGlassMenuPanel({
+    super.key,
+    required this.children,
+    this.maxHeight = GlassMetrics.menuMaxHeight,
+  });
   final List<Widget> children;
+  final double maxHeight;
 
   /// MenuAnchor 自身不绘制材料、阴影与内边距，外观全部由面板提供。
   static const anchorStyle = MenuStyle(
@@ -547,17 +698,19 @@ class NativeGlassMenuPanel extends StatelessWidget {
     elevation: WidgetStatePropertyAll(0),
   );
 
-  /// context 未使用；返回一层玻璃材料包裹的纵向菜单，宽度受菜单最小与最大宽度约束。
+  /// context 未使用；返回一层玻璃材料包裹的可滚动纵向菜单，宽度与高度受规格边界约束。
   @override
   Widget build(BuildContext context) => NativeGlassSurface(
     material: true,
     radius: GlassMetrics.menuRadius,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(
+      constraints: BoxConstraints(
         minWidth: GlassMetrics.menuMinWidth,
         maxWidth: GlassMetrics.menuMaxWidth,
+        maxHeight: maxHeight,
       ),
-      child: Padding(
+      child: SingleChildScrollView(
+        primary: false,
         padding: const EdgeInsets.all(4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -585,12 +738,13 @@ class NativeGlassMenuItem extends StatelessWidget {
   final bool? checked;
   final FocusNode? focusNode;
 
-  /// context 未使用；返回带统一按压反馈的菜单按钮。
+  /// context 未使用；返回带统一悬停、微缩与按压反馈的菜单按钮。
   @override
-  Widget build(BuildContext context) => _GlassButtonFeedback(
+  Widget build(BuildContext context) => NativeGlassButtonFeedback(
     radius: GlassMetrics.menuItemRadius,
     enabled: onPressed != null,
     inset: const EdgeInsets.symmetric(vertical: 2),
+    pressScale: 0.98,
     child: MenuItemButton(
       focusNode: focusNode,
       onPressed: onPressed,
@@ -685,11 +839,13 @@ class NativeGlassStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = label ?? (granted ? '已授权' : '未授权');
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // 固定语义色（#67 第 14 条）：已授权绿色、未授权橙色，不随系统强调色改变。
+    // 固定语义色（#67 第 14 条、#144）：浅色取深绿/深橙与 12% 同色底，深色取亮绿/亮橙，满足 WCAG 2.2 AA 4.5:1。
     final foreground = granted
-        ? (dark ? const Color(0xFF32D74B) : const Color(0xFF28A745))
-        : (dark ? const Color(0xFFFF9F0A) : const Color(0xFFE08600));
-    final background = foreground.withValues(alpha: granted ? 0.16 : 0.18);
+        ? (dark ? const Color(0xFF32D74B) : const Color(0xFF126326))
+        : (dark ? const Color(0xFFFF9F0A) : const Color(0xFF8A4A00));
+    final background = foreground.withValues(
+      alpha: dark ? (granted ? 0.16 : 0.18) : 0.12,
+    );
     return Semantics(
       container: true,
       label: text,
@@ -951,7 +1107,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
         child: DecoratedBox(
           key: const ValueKey('native-glass-segments-indicator'),
           decoration: ShapeDecoration(
-            color: NativeGlassTheme.accentOf(context),
+            color: NativeGlassTheme.accentFillOf(context),
             shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(radius),
             ),
@@ -959,6 +1115,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
         ),
       ),
     );
+    final onAccent = NativeGlassTheme.onAccentOf(context);
 
     return GestureDetector(
       excludeFromSemantics: true,
@@ -1006,14 +1163,15 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
                             ),
                             child: Semantics(
                               selected: widget.value == option.key,
-                              child: _GlassButtonFeedback(
+                              inMutuallyExclusiveGroup: true,
+                              child: NativeGlassButtonFeedback(
                                 radius: radius,
                                 enabled: true,
-                                hoverFeedback: false,
+                                hoverFeedback: true,
                                 child: TextButton(
                                   onPressed: () => widget.onChanged(option.key),
                                   style: TextButton.styleFrom(
-                                    // 局部foregroundColor会生成Ink悬停层，反馈仅由外层按压状态负责。
+                                    // 局部foregroundColor会生成Ink悬停层，反馈仅由外层统一玻璃反馈负责。
                                     overlayColor: Colors.transparent,
                                     // 保证每段至少为规范基线尺寸，较长文字自然横向伸展。
                                     minimumSize: Size(width, height),
@@ -1022,7 +1180,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
                                       horizontal: 10,
                                     ),
                                     foregroundColor: widget.value == option.key
-                                        ? Colors.white
+                                        ? onAccent
                                         : colors.onSurface,
                                     backgroundColor: Colors.transparent,
                                     shape: RoundedSuperellipseBorder(
@@ -1162,7 +1320,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
         child: DecoratedBox(
           key: const ValueKey('native-glass-sidebar-indicator'),
           decoration: ShapeDecoration(
-            color: NativeGlassTheme.accentOf(context),
+            color: NativeGlassTheme.accentFillOf(context),
             shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
             ),
@@ -1217,16 +1375,17 @@ class NativeGlassSidebar<T> extends StatelessWidget {
     T? target,
   }) {
     final colors = Theme.of(context).colorScheme;
+    final onAccent = NativeGlassTheme.onAccentOf(context);
     final selected = target != null && target == value;
-    // 一级分组图标放在 22×22 圆角 6 强调色方块内（自身选中时叠加半透白底以保持对比），配白色 12pt 图标（#67 第 14 条）。
+    // 一级分组图标放在 22×22 圆角 6 强调色方块内（自身选中时叠加半透前景色以保持对比），配自适应高对比 12pt 图标（#67 第 14 条、#144）。
     final content = Row(
       children: [
         if (icon != null) ...[
           DecoratedBox(
             decoration: ShapeDecoration(
               color: selected
-                  ? Colors.white.withValues(alpha: 0.22)
-                  : NativeGlassTheme.accentOf(context),
+                  ? onAccent.withValues(alpha: 0.22)
+                  : NativeGlassTheme.accentFillOf(context),
               shape: RoundedSuperellipseBorder(
                 borderRadius: BorderRadius.circular(
                   GlassMetrics.sidebarIconRadius,
@@ -1238,7 +1397,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
               child: Icon(
                 icon,
                 size: GlassMetrics.sidebarIconSize,
-                color: Colors.white,
+                color: onAccent,
               ),
             ),
           ),
@@ -1265,11 +1424,11 @@ class NativeGlassSidebar<T> extends StatelessWidget {
     } else {
       row = Semantics(
         selected: selected,
-        child: _GlassButtonFeedback(
+        child: NativeGlassButtonFeedback(
           radius: GlassMetrics.controlRadius,
           enabled: true,
-          // 导航与分段一致：悬停不着色，按下浅色8%、深色10%。
-          hoverFeedback: false,
+          hoverFeedback: true,
+          pressScale: 0.98,
           child: TextButton(
             onPressed: () => onChanged(target),
             style: TextButton.styleFrom(
@@ -1278,7 +1437,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
               fixedSize: Size.fromHeight(height),
               padding: EdgeInsets.only(left: indent + GlassMetrics.iconGap),
               alignment: Alignment.centerLeft,
-              foregroundColor: selected ? Colors.white : colors.onSurface,
+              foregroundColor: selected ? onAccent : colors.onSurface,
               backgroundColor: Colors.transparent,
               shape: RoundedSuperellipseBorder(
                 borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
@@ -1318,31 +1477,46 @@ class NativeGlassSwitch extends StatefulWidget {
   State<NativeGlassSwitch> createState() => _NativeGlassSwitchState();
 }
 
-/// 维护开关键盘焦点；将用户动作映射为值反转，不保存业务偏好。
+/// 维护开关键盘焦点、悬停与按下微缩反馈；将用户动作映射为值反转，不保存业务偏好。
 class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
   bool _focused = false;
+  bool _hovered = false;
+  bool _pressed = false;
 
   /// 无参数；仅在启用时向业务层发布反转后的值。
   void _toggle() => widget.onChanged?.call(!widget.value);
 
-  /// context 提供主题与减少动态效果；返回带键盘、语义和32pt命中高度的开关。
+  /// context 提供主题与减少动态效果；返回带键盘、悬停微光、按压微缩、语义和 32pt 命中高度的开关。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : GlassMetrics.transition;
+    final enabled = widget.onChanged != null;
+    final accent = NativeGlassTheme.accentOf(context);
+    final accentFill = NativeGlassTheme.accentFillOf(context);
+    final reduced = AppMotion.reduced(context);
+    final duration = reduced ? Duration.zero : GlassMetrics.transition;
+    final Border? border;
+    if (_focused && enabled) {
+      border = Border.all(color: accent, width: GlassMetrics.focusRingWidth);
+    } else if (_hovered && enabled) {
+      border = Border.all(
+        color: colors.onSurface.withValues(alpha: 0.28),
+        width: 1,
+      );
+    } else {
+      border = null;
+    }
     return Semantics(
       label: widget.label,
       toggled: widget.value,
-      enabled: widget.onChanged != null,
-      onTap: widget.onChanged == null ? null : _toggle,
+      enabled: enabled,
+      onTap: enabled ? _toggle : null,
       child: FocusableActionDetector(
         // 仅开关36×32命中区显示可点击手形；标题区域保持默认指针。
-        mouseCursor: widget.onChanged == null
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
-        enabled: widget.onChanged != null,
+        mouseCursor: enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        enabled: enabled,
         onShowFocusHighlight: (focused) => setState(() => _focused = focused),
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
@@ -1352,55 +1526,75 @@ class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
             },
           ),
         },
-        child: GestureDetector(
-          excludeFromSemantics: true,
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onChanged == null ? null : _toggle,
-          child: SizedBox(
-            width: GlassMetrics.switchWidth,
-            height: GlassMetrics.hitSize,
-            child: Center(
-              child: Opacity(
-                opacity: widget.onChanged == null ? 0.38 : 1,
-                child: NativeGlassSurface(
-                  material: true,
-                  radius: GlassMetrics.switchHeight / 2,
-                  busy: widget.busy,
-                  child: AnimatedContainer(
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
+          child: Listener(
+            onPointerDown: (_) {
+              if (enabled) setState(() => _pressed = true);
+            },
+            onPointerUp: (_) => setState(() => _pressed = false),
+            onPointerCancel: (_) => setState(() => _pressed = false),
+            child: GestureDetector(
+              excludeFromSemantics: true,
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled ? _toggle : null,
+              child: SizedBox(
+                width: GlassMetrics.switchWidth,
+                height: GlassMetrics.hitSize,
+                child: Center(
+                  child: AnimatedScale(
+                    scale: _pressed && enabled && !reduced ? 0.95 : 1.0,
                     duration: duration,
-                    width: GlassMetrics.switchWidth,
-                    height: GlassMetrics.switchHeight,
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: widget.value
-                          ? colors.primary
-                          : colors.outlineVariant,
-                      borderRadius: BorderRadius.circular(
-                        GlassMetrics.switchHeight / 2,
-                      ),
-                    ),
-                    foregroundDecoration: _focused
-                        ? BoxDecoration(
+                    curve: Curves.easeOutCubic,
+                    child: Opacity(
+                      opacity: enabled ? 1 : 0.38,
+                      child: NativeGlassSurface(
+                        material: true,
+                        radius: GlassMetrics.switchHeight / 2,
+                        busy: widget.busy,
+                        child: AnimatedContainer(
+                          duration: duration,
+                          width: GlassMetrics.switchWidth,
+                          height: GlassMetrics.switchHeight,
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: widget.value
+                                ? accentFill
+                                : colors.outlineVariant,
                             borderRadius: BorderRadius.circular(
                               GlassMetrics.switchHeight / 2,
                             ),
-                            border: Border.all(
-                              color: colors.onSurface,
-                              width: 2,
+                          ),
+                          foregroundDecoration: border == null
+                              ? null
+                              : BoxDecoration(
+                                  borderRadius: BorderRadius.circular(
+                                    GlassMetrics.switchHeight / 2,
+                                  ),
+                                  border: border,
+                                ),
+                          child: AnimatedAlign(
+                            alignment: widget.value
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            duration: duration,
+                            child: SizedBox.square(
+                              dimension: GlassMetrics.switchThumb,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    width: 0.5,
+                                  ),
+                                ),
+                              ),
                             ),
-                          )
-                        : null,
-                    child: AnimatedAlign(
-                      alignment: widget.value
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      duration: duration,
-                      child: const SizedBox.square(
-                        dimension: GlassMetrics.switchThumb,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
                           ),
                         ),
                       ),
@@ -1431,16 +1625,54 @@ class NativeGlassDialog extends StatelessWidget {
   final List<Widget> actions;
   final double maxWidth;
 
+  /// 弹出统一规范的二次确认玻璃弹窗；title 为确认标题，message 为不可逆影响说明，
+  /// confirmLabel/cancelLabel 为主次按钮文案，destructive 为真时主按钮使用错误语义实底；返回用户是否确认。
+  static Future<bool> confirm({
+    required BuildContext context,
+    required String title,
+    required String message,
+    String confirmLabel = '确认',
+    String cancelLabel = '取消',
+    bool destructive = false,
+  }) async {
+    final colors = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => NativeGlassDialog(
+        maxWidth: 420,
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(cancelLabel),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: colors.error,
+                    foregroundColor: colors.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   /// context 提供主题；返回宽度受限、可容纳长表单的独立玻璃弹窗。
   @override
   Widget build(BuildContext context) => Dialog(
     // 弹窗使用95%阅读底色，避免底层设置文字透过表单干扰阅读。
     backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-    insetPadding: const EdgeInsets.all(24),
+    insetPadding: const EdgeInsets.all(GlassMetrics.space24),
     child: ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(GlassMetrics.space24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1449,13 +1681,13 @@ class NativeGlassDialog extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall!,
               child: title,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: GlassMetrics.space20),
             Flexible(child: content),
-            const SizedBox(height: 20),
+            const SizedBox(height: GlassMetrics.space20),
             OverflowBar(
               alignment: MainAxisAlignment.end,
-              spacing: 8,
-              overflowSpacing: 8,
+              spacing: GlassMetrics.space8,
+              overflowSpacing: GlassMetrics.space8,
               children: actions,
             ),
           ],
@@ -1463,6 +1695,72 @@ class NativeGlassDialog extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// 页内统一语义提示横幅（#144）；集中呈现错误或提醒文案及可选重试操作。
+class NativeGlassBanner extends StatelessWidget {
+  /// message 为明确提示内容，isError 为真时使用错误语义色与图标，否则使用主题提示色与图标，action 为右侧可选内联操作。
+  const NativeGlassBanner({
+    super.key,
+    required this.message,
+    this.isError = true,
+    this.action,
+  });
+
+  final String message;
+  final bool isError;
+  final Widget? action;
+
+  /// context 提供明暗外观与强调色；返回具备 ≥ 4.5:1 前景对比度的语义横幅。
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final accent = NativeGlassTheme.accentOf(context);
+    final foreground = isError
+        ? (dark ? const Color(0xFFFF6961) : const Color(0xFFB3261E))
+        : (dark ? const Color(0xFFCCCCCC) : const Color(0xFF1C1C1E));
+    final tint = isError ? foreground : accent;
+    return Semantics(
+      liveRegion: isError,
+      container: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: GlassMetrics.space12,
+          vertical: GlassMetrics.space8,
+        ),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: dark ? 0.16 : 0.10),
+          borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+          border: Border.all(
+            color: tint.withValues(alpha: dark ? 0.40 : 0.28),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.info_outline,
+              size: GlassMetrics.icon,
+              color: foreground,
+            ),
+            const SizedBox(width: GlassMetrics.space8),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: foreground),
+              ),
+            ),
+            if (action != null) ...[
+              const SizedBox(width: GlassMetrics.space8),
+              action!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Material默认将激活轨道增高2pt；统一轨道厚度使两侧均符合6pt规格。
@@ -1498,24 +1796,145 @@ class _UniformSliderTrack extends RoundedRectSliderTrackShape {
   );
 }
 
+/// 强调色滑点：绘制白色圆点、轻投影与系统强调色描边，使滑点与轨道一体响应系统强调色（#67、#144）。
+class _AccentSliderThumbShape extends SliderComponentShape {
+  /// borderColor 为描边强调色，固定采用 GlassMetrics.sliderThumbRadius（8pt）。
+  const _AccentSliderThumbShape({required this.borderColor});
+
+  final Color borderColor;
+
+  /// isEnabled/isDiscrete 为控件可用与分段标记；返回固定 16×16 布局占用尺寸。
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      const Size.fromRadius(GlassMetrics.sliderThumbRadius);
+
+  /// center 为滑点中心；依次绘制柔阴影、不透明白芯与 1.5pt 系统强调色外圈，禁用时淡出边框。
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    const radius = GlassMetrics.sliderThumbRadius;
+    final enabledAlpha = enableAnimation.value.clamp(0.35, 1.0);
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.14 * enabledAlpha)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(center.translate(0, 1), radius, shadowPaint);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..color = sliderTheme.thumbColor ?? Colors.white,
+    );
+    const stroke = GlassMetrics.sliderThumbBorderWidth;
+    canvas.drawCircle(
+      center,
+      radius - stroke / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = borderColor.withValues(alpha: enabledAlpha),
+    );
+  }
+}
+
 /// 五类窗口共用的语义主题；材料保持系统原生，内容区域以普通颜色保证可读性。
 abstract final class NativeGlassTheme {
-  /// context 为主题内的位置；返回当前明暗外观下的系统强调色，用于选中实底（配白字）、拖放目标、选区与进度环（#142）。
+  /// a/b 为任意不透明色彩；按 WCAG 2.2 sRGB 相对亮度返回 1.0–21.0 对比度比值。
+  static double contrastRatio(Color a, Color b) {
+    final l1 = a.computeLuminance();
+    final l2 = b.computeLuminance();
+    return (math.max(l1, l2) + 0.05) / (math.min(l1, l2) + 0.05);
+  }
+
+  /// accent 为系统强调色；返回满足 WCAG 2.2 AA（>= 4.5:1）的实底填充与自适应前景字色（#67、#144）。
+  static ({Color fill, Color foreground}) accentColorsFor(Color accent) {
+    if (contrastRatio(Colors.white, accent) >= 4.5) {
+      return (fill: accent, foreground: Colors.white);
+    }
+    const darkInk = Color(0xFF1C1C1E);
+    // 仅浅亮强调色（如亮黄/绿/橙）保留原色配深字；中深蓝与品红适度向黑压暗以维持高雅白字。
+    if (accent.computeLuminance() >= 0.27 &&
+        contrastRatio(darkInk, accent) >= 4.5) {
+      return (fill: accent, foreground: darkInk);
+    }
+    var low = 0.0;
+    var high = 1.0;
+    var best = Colors.black;
+    for (var i = 0; i < 16; i++) {
+      final mid = (low + high) / 2;
+      final candidate = Color.lerp(accent, Colors.black, mid)!;
+      if (contrastRatio(Colors.white, candidate) >= 4.55) {
+        best = candidate;
+        high = mid;
+      } else {
+        low = mid;
+      }
+    }
+    return (fill: best, foreground: Colors.white);
+  }
+
+  /// context 为主题内的位置；返回当前明暗外观下的原始系统强调色（用于选区框、滑块、焦点框与进度环，#142）。
   static Color accentOf(BuildContext context) =>
       Theme.of(context).extension<GlassAccent>()?.color ??
       Theme.of(context).colorScheme.primary;
 
+  /// context 为主题内的位置；返回用于选中实底按钮、滑块指示条与开态轨道的 ≥4.5:1 对比实底色。
+  static Color accentFillOf(BuildContext context) =>
+      Theme.of(context).extension<GlassAccent>()?.fill ??
+      accentColorsFor(accentOf(context)).fill;
+
+  /// context 为主题内的位置；返回与 accentFillOf 配对的高对比前景文字或图标色。
+  static Color onAccentOf(BuildContext context) =>
+      Theme.of(context).extension<GlassAccent>()?.onAccent ??
+      accentColorsFor(accentOf(context)).foreground;
+
+  /// base 为基础按钮样式，hoverOverlay/pressedOverlay 指定叠加色，focusedSide/restingSide 定义聚焦与常规描边。
+  static ButtonStyle _withButtonStates(
+    ButtonStyle base, {
+    required Color overlayBase,
+    required double hoverAlpha,
+    required double pressedAlpha,
+    required BorderSide focusedSide,
+    BorderSide restingSide = BorderSide.none,
+  }) => base.copyWith(
+    overlayColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return Colors.transparent;
+      if (states.contains(WidgetState.pressed)) {
+        return overlayBase.withValues(alpha: pressedAlpha);
+      }
+      if (states.contains(WidgetState.hovered)) {
+        return overlayBase.withValues(alpha: hoverAlpha);
+      }
+      return Colors.transparent;
+    }),
+    side: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.focused) ? focusedSide : restingSide,
+    ),
+  );
+
   /// brightness 为当前明暗模式，appearance 为视觉快照（取对应外观的系统强调色，默认系统蓝）；
-  /// 返回统一控件、输入框、卡片与弹窗的 Material 主题，accent 与 primary 只在这里定义（#67）。
+  /// 返回统一控件、输入框、卡片与弹窗的 Material 主题，accent 与 primary 只在这里定义（#67、#144）。
   static ThemeData data(
     Brightness brightness, [
     GlassAppearance appearance = const GlassAppearance(),
   ]) {
     final dark = brightness == Brightness.dark;
     final accent = dark ? appearance.accentDark : appearance.accentLight;
+    final accentPair = accentColorsFor(accent);
     final colors =
         ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0A84FF),
+          seedColor: accent,
           brightness: brightness,
         ).copyWith(
           surface: dark ? const Color(0xFF171717) : const Color(0xFFF7F7F7),
@@ -1525,8 +1944,8 @@ abstract final class NativeGlassTheme {
               : const Color(0xFF454545),
           outline: dark ? const Color(0xFF929292) : const Color(0xFF696969),
           outlineVariant: dark
-              ? const Color(0xFF505050)
-              : const Color(0xFFC5C5C5),
+              ? const Color(0xFF76767A)
+              : const Color(0xFF848489),
           // 文字与图标强调需要比实底更高的对比度：浅色向黑、深色向白混合（系统蓝时约 #005BC5 / #64ACFF）。
           primary: dark
               ? Color.lerp(accent, Colors.white, 0.35)
@@ -1544,6 +1963,10 @@ abstract final class NativeGlassTheme {
     final typography = Typography.material2021(platform: TargetPlatform.macOS);
     final baseText = dark ? typography.white : typography.black;
     final content = dark ? const Color(0xF2232323) : const Color(0xF2FFFFFF);
+    final focusSide = BorderSide(
+      color: accent,
+      width: GlassMetrics.focusRingWidth,
+    );
     return ThemeData(
       useMaterial3: true,
       platform: TargetPlatform.macOS,
@@ -1551,8 +1974,16 @@ abstract final class NativeGlassTheme {
       textTheme: baseText.copyWith(
         bodyLarge: text,
         bodyMedium: text,
-        labelLarge: text,
-        titleMedium: text,
+        labelLarge: text.copyWith(
+          fontSize: GlassMetrics.captionFont,
+          height: GlassMetrics.captionLine / GlassMetrics.captionFont,
+          fontWeight: FontWeight.w500,
+        ),
+        titleMedium: text.copyWith(
+          fontSize: 15,
+          height: 22 / 15,
+          fontWeight: FontWeight.w600,
+        ),
         bodySmall: text.copyWith(
           fontSize: GlassMetrics.captionFont,
           height: GlassMetrics.captionLine / GlassMetrics.captionFont,
@@ -1603,70 +2034,94 @@ abstract final class NativeGlassTheme {
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(GlassMetrics.primaryRadius),
+        style: _withButtonStates(
+          FilledButton.styleFrom(
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.primaryRadius),
+            ),
+            minimumSize: const Size(
+              GlassMetrics.primaryMinWidth,
+              GlassMetrics.primaryHeight,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            textStyle: text.copyWith(fontWeight: FontWeight.w500),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            animationDuration: GlassMetrics.transition,
+            foregroundColor: accentPair.foreground,
+            backgroundColor: accentPair.fill,
+            disabledBackgroundColor: colors.onSurface.withValues(alpha: 0.12),
+            disabledForegroundColor: colors.onSurface.withValues(alpha: 0.38),
+            shadowColor: Colors.transparent,
+            elevation: 0,
           ),
-          minimumSize: const Size(
-            GlassMetrics.primaryMinWidth,
-            GlassMetrics.primaryHeight,
+          overlayBase: accentPair.foreground,
+          hoverAlpha: 0.08,
+          pressedAlpha: 0.16,
+          focusedSide: BorderSide(
+            color: colors.onSurface,
+            width: GlassMetrics.focusRingWidth,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          textStyle: text,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          animationDuration: GlassMetrics.transition,
-          overlayColor: Colors.transparent,
-          foregroundColor: colors.onPrimary,
-          backgroundColor: colors.primary,
-          disabledBackgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          shape: controlShape,
-          minimumSize: const Size(
-            GlassMetrics.buttonMinWidth,
-            GlassMetrics.buttonHeight,
+        style: _withButtonStates(
+          OutlinedButton.styleFrom(
+            shape: controlShape,
+            minimumSize: const Size(
+              GlassMetrics.buttonMinWidth,
+              GlassMetrics.buttonHeight,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            textStyle: text,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            animationDuration: GlassMetrics.transition,
+            foregroundColor: colors.onSurface,
+            backgroundColor: Colors.transparent,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          textStyle: text,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          animationDuration: GlassMetrics.transition,
-          overlayColor: Colors.transparent,
-          foregroundColor: colors.onSurface,
-          backgroundColor: Colors.transparent,
-          side: BorderSide(color: colors.outlineVariant),
+          overlayBase: colors.onSurface,
+          hoverAlpha: GlassMetrics.hoverOpacity,
+          pressedAlpha: GlassMetrics.pressedOpacity,
+          focusedSide: focusSide,
+          restingSide: BorderSide(color: colors.outlineVariant),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: colors.onSurface,
-          minimumSize: const Size(
-            GlassMetrics.buttonMinWidth,
-            GlassMetrics.buttonHeight,
+        style: _withButtonStates(
+          TextButton.styleFrom(
+            foregroundColor: colors.onSurface,
+            minimumSize: const Size(
+              GlassMetrics.buttonMinWidth,
+              GlassMetrics.buttonHeight,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            textStyle: text,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            animationDuration: GlassMetrics.transition,
+            shape: controlShape,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          textStyle: text,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          animationDuration: GlassMetrics.transition,
-          overlayColor: Colors.transparent,
-          shape: controlShape,
+          overlayBase: colors.onSurface,
+          hoverAlpha: GlassMetrics.hoverOpacity,
+          pressedAlpha: GlassMetrics.pressedOpacity,
+          focusedSide: focusSide,
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          minimumSize: const Size.square(GlassMetrics.hitSize),
-          maximumSize: const Size.square(GlassMetrics.hitSize),
-          iconSize: GlassMetrics.icon,
-          padding: EdgeInsets.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          animationDuration: GlassMetrics.transition,
-          overlayColor: Colors.transparent,
-          shape: controlShape,
-          foregroundColor: colors.onSurface,
-          backgroundColor: Colors.transparent,
+        style: _withButtonStates(
+          IconButton.styleFrom(
+            minimumSize: const Size.square(GlassMetrics.hitSize),
+            maximumSize: const Size.square(GlassMetrics.hitSize),
+            iconSize: GlassMetrics.icon,
+            padding: EdgeInsets.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            animationDuration: GlassMetrics.transition,
+            shape: controlShape,
+            foregroundColor: colors.onSurface,
+            backgroundColor: Colors.transparent,
+          ),
+          overlayBase: colors.onSurface,
+          hoverAlpha: GlassMetrics.hoverOpacity,
+          pressedAlpha: GlassMetrics.pressedOpacity,
+          focusedSide: focusSide,
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
@@ -1691,26 +2146,54 @@ abstract final class NativeGlassTheme {
         thumbColor: WidgetStatePropertyAll(colors.onSurface),
         trackColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? colors.primary.withValues(alpha: 0.65)
-              : colors.outlineVariant.withValues(alpha: 0.35),
+              ? accentPair.fill
+              : colors.outlineVariant,
         ),
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: accent,
-        inactiveTrackColor: colors.onSurface.withValues(alpha: 0.20),
+        inactiveTrackColor: colors.onSurface.withValues(
+          alpha: dark ? 0.24 : 0.18,
+        ),
         thumbColor: Colors.white,
+        overlayColor: accent.withValues(alpha: 0.24),
         trackHeight: GlassMetrics.sliderTrack,
         trackShape: const _UniformSliderTrack(),
-        thumbShape: const RoundSliderThumbShape(
-          enabledThumbRadius: GlassMetrics.sliderThumbRadius,
-          disabledThumbRadius: GlassMetrics.sliderThumbRadius,
-          elevation: 0,
-          pressedElevation: 0,
+        thumbShape: _AccentSliderThumbShape(borderColor: accent),
+        overlayShape: const RoundSliderOverlayShape(
+          overlayRadius: GlassMetrics.sliderOverlayRadius,
         ),
-        overlayShape: SliderComponentShape.noOverlay,
         tickMarkShape: SliderTickMarkShape.noTickMark,
         showValueIndicator: ShowValueIndicator.never,
       ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? accentPair.fill
+              : Colors.transparent,
+        ),
+        checkColor: WidgetStatePropertyAll(accentPair.foreground),
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => (states.contains(WidgetState.focused) ||
+                  states.contains(WidgetState.hovered))
+              ? accent.withValues(alpha: 0.18)
+              : Colors.transparent,
+        ),
+        side: WidgetStateBorderSide.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) return focusSide;
+          if (states.contains(WidgetState.selected)) {
+            return BorderSide(color: accentPair.fill, width: 1.5);
+          }
+          return BorderSide(color: colors.outlineVariant, width: 1.5);
+        }),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionColor: accent.withValues(alpha: 0.28),
+        selectionHandleColor: accent,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: accent),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.transparent,
@@ -1720,7 +2203,7 @@ abstract final class NativeGlassTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
-          borderSide: BorderSide(color: colors.primary, width: 2),
+          borderSide: BorderSide(color: accent, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
@@ -1841,13 +2324,16 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
     super.dispose();
   }
 
-  /// context 为当前引擎；仅重建主题，home的元素身份保持不变。
+  /// context 为当前引擎；仅重建主题与中文本地化委托，home的元素身份保持不变。
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<GlassAppearance>(
     valueListenable: GlassAppearance.current,
     builder: (context, appearance, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       title: widget.title,
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       themeMode: appearance.themeMode,
       theme: NativeGlassTheme.data(Brightness.light, appearance),
       darkTheme: NativeGlassTheme.data(Brightness.dark, appearance),
@@ -1875,11 +2361,17 @@ class _GlassMaterialScope extends InheritedWidget {
   bool updateShouldNotify(_GlassMaterialScope oldWidget) => false;
 }
 
-/// 主题携带的系统强调色（#142）；经 NativeGlassTheme.accentOf 读取，明暗切换时随主题插值。
+/// 主题携带的系统强调色（#142）；经 NativeGlassTheme.accentOf 读取，明暗切换时随主题插值，并派生满足 WCAG AA 的实底与前景色。
 class GlassAccent extends ThemeExtension<GlassAccent> {
   /// color 为当前外观下解析的系统强调色。
   const GlassAccent(this.color);
   final Color color;
+
+  /// 无参数；返回适配 WCAG 2.2 AA（>= 4.5:1）的选中实底颜色。
+  Color get fill => NativeGlassTheme.accentColorsFor(color).fill;
+
+  /// 无参数；返回与 fill 配对的前景字色。
+  Color get onAccent => NativeGlassTheme.accentColorsFor(color).foreground;
 
   /// color 为替换值；返回新的强调色扩展。
   @override

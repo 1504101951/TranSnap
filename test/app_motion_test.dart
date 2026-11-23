@@ -379,4 +379,70 @@ void main() {
     expect(find.byKey(const Key('item-2')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('CopyConfirmIcon 在减弱动态效果下仍显示静态绿色对勾并于 1.3s 后复原（U-10）', (
+    tester,
+  ) async {
+    // 作用：验证开启系统「减少动态效果」时复制操作依然给出静态视觉确认且计时结束后正常还原、卸载不漏 Timer。
+    // 边界：trigger 从 0 -> 1 后立即呈现绿色 CustomPaint 对勾（无 Copy 图标）；满 copyConfirmDuration 后切回 Icons.copy_rounded。
+    var trigger = 0;
+    late StateSetter setHostState;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: MaterialApp(
+          theme: NativeGlassTheme.data(Brightness.light),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                setHostState = setState;
+                return CopyConfirmIcon(trigger: trigger);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+
+    setHostState(() => trigger = 1);
+    await tester.pump();
+    expect(find.byIcon(Icons.copy_rounded), findsNothing);
+    expect(find.bySemanticsLabel('已复制'), findsOneWidget);
+
+    await tester.pump(MotionMetrics.copyConfirmDuration);
+    await tester.pump();
+    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+
+    // 边界：再次触发后未到期前直接卸载组件，FakeAsync 中不得残留待处理 Timer。
+    setHostState(() => trigger = 2);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('CharReveal 包含复合 Emoji 追加与切片不越界（U-27）', (tester) async {
+    // 作用：验证流式译文含 UTF-16 代理对 / ZWJ Emoji 时按真实字形计数切片，不出现乱码拆字或越界。
+    // 边界：前缀「🚀」占 2 个 UTF-16 code units 但为 1 个字形，追加「完成」后前缀仍完整保留 1 个「🚀」、后缀只显影 2 个新字。
+    late TextSpan span;
+    Widget host(String text) => MaterialApp(
+      home: CharReveal(
+        text: text,
+        style: const TextStyle(color: Colors.black),
+        builder: (context, value) {
+          span = value;
+          return Text.rich(value);
+        },
+      ),
+    );
+    await tester.pumpWidget(host('🚀'));
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pumpWidget(host('🚀完成'));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect((span.children!.first as TextSpan).text, '🚀');
+    expect(span.children!.length, 1 + 2);
+    await tester.pump(const Duration(seconds: 1));
+    expect(span.text, '🚀完成');
+    expect(tester.takeException(), isNull);
+  });
 }
