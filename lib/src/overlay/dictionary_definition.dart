@@ -149,13 +149,15 @@ class DictionaryDefinitionView extends StatelessWidget {
               DefinitionLineKind.headword => Text.rich(
                 TextSpan(
                   text: line.text,
-                  style: style(14, 22, colors.onSurface, FontWeight.w500),
+                  style: style(16, 24, colors.onSurface, FontWeight.w600),
                   children: [
-                    const WidgetSpan(child: SizedBox(width: 6)),
-                    TextSpan(
-                      text: line.phonetic,
-                      style: style(12, 22, colors.onSurfaceVariant),
-                    ),
+                    if (line.phonetic?.isNotEmpty ?? false) ...[
+                      const TextSpan(text: '  '),
+                      TextSpan(
+                        text: line.phonetic,
+                        style: style(12, 22, colors.onSurfaceVariant),
+                      ),
+                    ],
                   ],
                 ),
               ),

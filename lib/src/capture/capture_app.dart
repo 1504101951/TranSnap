@@ -36,6 +36,7 @@ class _CaptureAppState extends State<CaptureApp> {
   String? _pendingMethod;
   String? _feedback;
   bool _feedbackIsError = false;
+  bool _feedbackHovered = false;
   Timer? _feedbackTimer;
 
   CapturePhase get _phase => CapturePhase.parse(_state['phase'] as String);
@@ -74,6 +75,8 @@ class _CaptureAppState extends State<CaptureApp> {
     if (state['id'] != previous['id']) {
       _feedbackTimer?.cancel();
       _feedback = null;
+      _feedbackIsError = false;
+      _feedbackHovered = false;
     }
     if (state['error'] != null && state['error'] != previous['error']) {
       _showFeedback(state['error'] as String, isError: true);
@@ -96,29 +99,71 @@ class _CaptureAppState extends State<CaptureApp> {
     }
   }
 
-  /// message为操作结果；显示1000ms，isError只影响前景语义色，不改变媒体状态。
+  /// message 为操作结果；普通提示显示 1000ms，isError 为 true 时采用错误样式并保持 2000ms、
+  /// 支持悬停暂停与手动关闭，不改变媒体状态（#144）。
   void _showFeedback(String message, {bool isError = false}) {
     _feedbackTimer?.cancel();
     setState(() {
       _feedback = message;
       _feedbackIsError = isError;
+      if (!isError) _feedbackHovered = false;
     });
-    _feedbackTimer = Timer(GlassMetrics.feedbackDuration, () {
-      if (mounted) setState(() => _feedback = null);
+    _startFeedbackTimer();
+  }
+
+  /// 无参数；在非悬停状态启动提示倒计时（错误 2s、普通 1s），无返回值。
+  void _startFeedbackTimer() {
+    _feedbackTimer?.cancel();
+    if (_feedback == null || (_feedbackIsError && _feedbackHovered)) return;
+    final duration = _feedbackIsError
+        ? GlassMetrics.errorFeedbackDuration
+        : GlassMetrics.feedbackDuration;
+    _feedbackTimer = Timer(duration, () {
+      if (!mounted) return;
+      setState(() {
+        _feedback = null;
+        _feedbackIsError = false;
+        _feedbackHovered = false;
+      });
     });
   }
 
-  /// method/arguments 为已知采集命令及参数；返回命令是否成功完成（未抛出平台异常），错误只显示在当前窗口。
+  /// hovered 为鼠标是否停留在错误气泡上；悬停期间暂停倒计时，移开后重计 2s，无返回值（#144）。
+  void _onFeedbackHoverChanged(bool hovered) {
+    if (_feedbackHovered == hovered) return;
+    _feedbackHovered = hovered;
+    if (!_feedbackIsError) return;
+    if (hovered) {
+      _feedbackTimer?.cancel();
+    } else {
+      _startFeedbackTimer();
+    }
+  }
+
+  /// 无参数；手动关闭当前提示气泡并重置状态，无返回值（#144）。
+  void _dismissFeedback() {
+    if (_feedback == null) return;
+    _feedbackTimer?.cancel();
+    setState(() {
+      _feedback = null;
+      _feedbackIsError = false;
+      _feedbackHovered = false;
+    });
+  }
+
+  /// method/arguments 为已知采集命令及参数；并发等待时忽略重入，返回命令是否成功完成（未抛出平台异常），错误只显示在当前窗口。
   Future<bool> _invoke(
     String method, [
     Map<String, Object?> arguments = const {},
   ]) async {
-    if (!mounted) return false;
+    if (!mounted || _pending) return false;
     setState(() {
       _pending = true;
       _pendingMethod = method;
       _feedbackTimer?.cancel();
       _feedback = null;
+      _feedbackIsError = false;
+      _feedbackHovered = false;
     });
     try {
       final value = await widget.channel.invokeMapMethod<String, dynamic>(
@@ -252,7 +297,7 @@ class _CaptureAppState extends State<CaptureApp> {
               ConstrainedBox(
                 constraints: const BoxConstraints(
                   minWidth: GlassMetrics.buttonMinWidth,
-                  maxWidth: 196,
+                  maxWidth: 188,
                   minHeight: GlassMetrics.hitSize,
                 ),
                 child: Padding(
@@ -290,7 +335,7 @@ class _CaptureAppState extends State<CaptureApp> {
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         action(
           1,
           paused ? '开始' : '暂停',
@@ -300,7 +345,7 @@ class _CaptureAppState extends State<CaptureApp> {
               : null,
           busy: _pending && _pendingMethod == MethodNames.setCapturePaused,
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         action(
           2,
           '结束',
@@ -308,7 +353,7 @@ class _CaptureAppState extends State<CaptureApp> {
           editable ? () => _invoke(MethodNames.stopCapture) : null,
           busy: _pending && _pendingMethod == MethodNames.stopCapture,
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: GlassMetrics.actionGap),
         action(
           3,
           '放弃',
@@ -500,6 +545,13 @@ class _CaptureAppState extends State<CaptureApp> {
                         ? '正在保存…'
                         : '正在转换 ${((_state['progress'] as num).toDouble() * 100).round()}%'),
                 isError: _feedback != null && _feedbackIsError,
+                onHoverChanged: _feedback != null && _feedbackIsError
+                    ? _onFeedbackHoverChanged
+                    : null,
+                onDismiss: _feedback != null && _feedbackIsError
+                    ? _dismissFeedback
+                    : null,
+                liveRegion: _feedback != null || saving,
               ),
           ],
         );
@@ -596,9 +648,11 @@ class _CaptureAppState extends State<CaptureApp> {
             Positioned.fromRect(
               rect: viewport,
               child: SingleChildScrollView(
+                primary: false,
                 scrollDirection: Axis.horizontal,
                 child: SingleChildScrollView(
                   key: const Key('long-image-scroll'),
+                  primary: false,
                   scrollDirection: Axis.vertical,
                   child: SizedBox(
                     width: math.max(viewport.width, logical.width),
@@ -659,6 +713,10 @@ class _CaptureAppState extends State<CaptureApp> {
                 toolbar: toolbar,
                 message: _feedback!,
                 isError: _feedbackIsError,
+                onHoverChanged: _feedbackIsError
+                    ? _onFeedbackHoverChanged
+                    : null,
+                onDismiss: _feedbackIsError ? _dismissFeedback : null,
               ),
           ],
         );
@@ -668,13 +726,49 @@ class _CaptureAppState extends State<CaptureApp> {
 
   /// context 为窗口上下文；使用项目统一原生玻璃主题与窗口背景。
   @override
-  Widget build(BuildContext context) =>
-      NativeGlassApp(home: Builder(builder: _buildPage));
+  Widget build(BuildContext context) => NativeGlassApp(
+    title: 'TranslateApp 采集',
+    home: Builder(builder: _buildPage),
+  );
 
   /// context为内部主题；录制与长截图共用状态条，完成后分别展示视频或长图结果。
   Widget _buildPage(BuildContext context) {
-    if ([CapturePhase.idle, CapturePhase.failed].contains(_phase)) {
+    if (_phase == CapturePhase.idle) {
       return const SizedBox.shrink();
+    }
+    if (_phase == CapturePhase.failed) {
+      if (_feedback == null) return const SizedBox.shrink();
+      return Material(
+        type: MaterialType.transparency,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Stack(
+            children: [
+              ToolbarFeedback(
+                toolbar: Rect.fromLTWH(
+                  GlassMetrics.toolbarPadding,
+                  math.max(
+                    GlassMetrics.toolbarPadding,
+                    constraints.maxHeight -
+                        GlassMetrics.toolbarPadding -
+                        GlassMetrics.hitSize,
+                  ),
+                  math.max(
+                    0.0,
+                    constraints.maxWidth - GlassMetrics.toolbarPadding * 2,
+                  ),
+                  GlassMetrics.hitSize,
+                ),
+                message: _feedback!,
+                isError: _feedbackIsError,
+                onHoverChanged: _feedbackIsError
+                    ? _onFeedbackHoverChanged
+                    : null,
+                onDismiss: _feedbackIsError ? _dismissFeedback : null,
+              ),
+            ],
+          ),
+        ),
+      );
     }
     if ([
       CapturePhase.preparing,
@@ -712,6 +806,10 @@ class _CaptureAppState extends State<CaptureApp> {
                   ),
                   message: _feedback!,
                   isError: _feedbackIsError,
+                  onHoverChanged: _feedbackIsError
+                      ? _onFeedbackHoverChanged
+                      : null,
+                  onDismiss: _feedbackIsError ? _dismissFeedback : null,
                 ),
             ],
           ),

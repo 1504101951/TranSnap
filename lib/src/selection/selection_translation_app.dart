@@ -58,6 +58,10 @@ class _TranslateAppState extends State<TranslateApp> {
   /// 由输入翻译快捷键发起的会话 ID；完整成功后用译文替换来源输入框，其他会话为 null。
   String? _replaceSessionId;
 
+  /// 当前正在朗读的栏位来源（true 原文/词典，false 结果栏，null 未朗读）及请求序号。
+  bool? _speakingSource;
+  int _speechRequest = 0;
+
   /// 无参数；订阅原生事件与会话状态，无返回值。
   @override
   void initState() {
@@ -96,8 +100,8 @@ class _TranslateAppState extends State<TranslateApp> {
           return;
         }
         _sourceAppName = sourceAppName;
-        // 新选区替换卡片内容，停止朗读旧内容。
-        unawaited(widget.speech.stopSpeech());
+        // 新选区替换卡片内容，停止朗读旧内容并重置栏头高亮。
+        _resetSpeech();
         // 输入翻译会话在完整成功后用译文替换来源输入框中的原文。
         _replaceSessionId = gesture == SelectionGestureTypes.inputHotkey
             ? sessionId
@@ -257,45 +261,74 @@ class _TranslateAppState extends State<TranslateApp> {
     _dismiss();
   }
 
-  /// 无参数；把卡片的单词、译文与词典释义加入生词本，同一单词已存在时更新，无返回值。
+  /// 无参数；把卡片的单词、译文与词典释义加入生词本，同一单词已存在时更新；持久化失败时保持未保存态，无返回值。
   void _addVocabulary() {
     final session = widget.session;
     final definition = session.definition;
     if (definition == null) return;
-    widget.vocabulary.add(
-      VocabularyEntry(
-        word: session.snapshot.sourceText.trim(),
-        translation: session.snapshot.translatedText,
-        definition: definition,
-        addedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
-    // markSavedToVocabulary 置位并通知卡片把按钮改为已加入。
-    session.markSavedToVocabulary();
+    try {
+      widget.vocabulary.add(
+        VocabularyEntry(
+          word: session.snapshot.sourceText.trim(),
+          translation: session.snapshot.translatedText,
+          definition: definition,
+          addedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      // 仅在持久化成功后置位并通知卡片把按钮改为已加入。
+      session.markSavedToVocabulary();
+    } catch (error) {
+      debugPrint('保存生词失败: $error');
+    }
   }
 
-  /// source 为 true 时朗读原文栏，否则朗读结果栏；按该栏语言朗读，同一栏再次点击停止，无返回值。
-  void _speak(bool source) {
+  /// 是否重建卡片状态由 rebuild 控制；重置当前朗读来源并通知原生停止朗读，使迟到切换结果失效。
+  void _resetSpeech({bool rebuild = true}) {
+    _speechRequest++;
+    unawaited(widget.speech.stopSpeech());
+    if (_speakingSource == null) return;
+    if (rebuild && mounted) {
+      setState(() => _speakingSource = null);
+    } else {
+      _speakingSource = null;
+    }
+  }
+
+  /// source 为 true 时朗读原文/词典，否则朗读结果栏；与原生 toggleSpeech 结果保持同步，无返回值（#101、#144）。
+  Future<void> _speak(bool source) async {
     final snapshot = widget.session.snapshot;
     final primary = widget.session.activeLanguage.primaryCode;
     // 原文用识别出的语言，结果栏用本次请求的输出语言；缺失时按主要语言朗读。
     final language = source
         ? snapshot.detectedLanguage ?? primary
         : widget.session.outputLanguage ?? primary;
-    unawaited(
-      widget.speech.toggleSpeech(
+    final request = ++_speechRequest;
+    // 立即按用户点击意图切换状态，避免异步等待期间界面停留在旧栏；词典与原文共用 source=true。
+    final optimistic = _speakingSource == source ? null : source;
+    setState(() => _speakingSource = optimistic);
+    try {
+      final active = await widget.speech.toggleSpeech(
         text: source ? snapshot.sourceText : snapshot.translatedText,
         language: language,
-      ),
-    );
+      );
+      if (!mounted || _speechRequest != request) return;
+      final synced = active ? source : null;
+      if (_speakingSource != synced) {
+        setState(() => _speakingSource = synced);
+      }
+    } catch (_) {
+      if (mounted && _speechRequest == request && _speakingSource != null) {
+        setState(() => _speakingSource = null);
+      }
+    }
   }
 
   /// mode 为卡片菜单选择的处理模式；对当前原文重新处理，翻译模式成功时记录历史，返回结束的 Future。
   Future<void> _switchMode(TextMode mode) async {
     final id = widget.session.sessionId;
     if (id == null) return;
-    // 原文结果都会被替换，先停止朗读旧内容。
-    unawaited(widget.speech.stopSpeech());
+    // 原文结果都会被替换，先停止朗读旧内容并同步清除栏头朗读态。
+    _resetSpeech();
     final sourceLabel = _sourceAppName;
     await widget.session.switchMode(mode);
     _record(
@@ -310,8 +343,8 @@ class _TranslateAppState extends State<TranslateApp> {
   Future<void> _switchService(String serviceId) async {
     final id = widget.session.sessionId;
     if (id == null) return;
-    // 结果会被替换，先停止朗读旧内容。
-    unawaited(widget.speech.stopSpeech());
+    // 结果会被替换，先停止朗读旧内容并同步清除栏头朗读态。
+    _resetSpeech();
     final sourceLabel = _sourceAppName;
     await widget.session.switchService(serviceId);
     _record(
@@ -355,7 +388,7 @@ class _TranslateAppState extends State<TranslateApp> {
   void _dismiss() {
     final id = widget.session.sessionId;
     // 关闭卡片即停止朗读；取消业务请求后，用关闭前的会话 ID 隐藏窗口。
-    unawaited(widget.speech.stopSpeech());
+    _resetSpeech(rebuild: false);
     widget.session.dismiss();
     if (id != null) {
       widget.overlay.hideOverlay(sessionId: id);
@@ -366,13 +399,15 @@ class _TranslateAppState extends State<TranslateApp> {
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
+      title: 'TranslateApp',
       home: TranslationOverlay(
         session: widget.session,
+        speakingSource: _speakingSource,
         onActivate: _activate,
         onDismiss: _dismiss,
         onMode: (mode) => unawaited(_switchMode(mode)),
         onService: (serviceId) => unawaited(_switchService(serviceId)),
-        onSpeak: _speak,
+        onSpeak: (source) => unawaited(_speak(source)),
         onAddVocabulary: _addVocabulary,
         onDrag: () {
           final id = widget.session.sessionId;

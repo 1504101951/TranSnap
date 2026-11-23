@@ -16,6 +16,8 @@ import 'package:translate_app/src/history/translation_history.dart';
 import 'package:translate_app/src/history/vocabulary.dart';
 import 'package:translate_app/src/platform/channel_platform_bridge.dart';
 import 'package:translate_app/src/translation/language_direction.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:translate_app/src/overlay/dictionary_definition.dart';
 import 'package:translate_app/src/overlay/translation_overlay.dart';
 import 'package:translate_app/src/selection/selection_session.dart';
 import 'package:translate_app/src/translation/translation_types.dart';
@@ -551,4 +553,175 @@ void main() {
     expect(session.snapshot.phase, TranslationPhase.completed);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('译文为空的失败卡片在正文展示 NativeGlassBanner 及单一重试入口（#144）', (
+    tester,
+  ) async {
+    // 作用：验证失败且无译文时错误原因显示在正文横向提示条并保留单一重试按钮。
+    // 边界：canRetry 为真时正文提示条展示原文案与「重试」且标题栏不重复出现第二个「重试」。
+    tester.view.physicalSize = const Size(720, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final session = SelectionSession(
+      provider: _FailProvider(),
+      detectLanguage: (_) async => 'en',
+      language: const LanguageDirection(primaryCode: 'zh-CN'),
+    );
+    addTearDown(session.dispose);
+    var retries = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranslationOverlay(
+          session: session,
+          onActivate: () => retries += 1,
+          onDismiss: () {},
+          onDrag: () {},
+          onMode: (_) {},
+          onService: (_) {},
+          onSpeak: (_) {},
+          onAddVocabulary: () {},
+        ),
+      ),
+    );
+    session.begin(sessionId: 'fail-banner', text: 'Hello');
+    await session.activate();
+    await tester.pumpAndSettle();
+
+    expect(session.canRetry, isTrue);
+    expect(find.byType(NativeGlassBanner), findsOneWidget);
+    expect(find.text('服务连接超时'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    await tester.tap(find.text('重试'));
+    await tester.pump();
+    expect(retries, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('词典与原文栏统一按 speakSource 同步朗读切换与外部 speakingSource 状态（#144）', (
+    tester,
+  ) async {
+    // 作用：验证词典栏与原文栏共用 source 朗读状态、不发生状态反转，且支持外部 speakingSource 受控同步。
+    // 边界：词典视图点击「朗读词典」后词典与原文两栏均切换为「停止朗读」，译文栏保持「朗读译文」。
+    tester.view.physicalSize = const Size(720, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+      language: const LanguageDirection(
+        primaryCode: 'zh-CN',
+        secondaryCode: 'en',
+      ),
+      lookupDefinition: (_) async => 'pot | BrE pɒt | A. noun ① 锅 guō',
+    );
+    addTearDown(session.dispose);
+    session.begin(sessionId: 'dict-speak', text: 'pot');
+    final spoken = <bool>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranslationOverlay(
+          session: session,
+          onActivate: () {},
+          onDismiss: () {},
+          onDrag: () {},
+          onMode: session.switchMode,
+          onService: session.switchService,
+          onSpeak: spoken.add,
+          onAddVocabulary: () {},
+        ),
+      ),
+    );
+    await session.activate();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('朗读词典'));
+    await tester.pump();
+    expect(spoken, [true]);
+    expect(find.byTooltip('停止朗读'), findsNWidgets(2));
+    expect(find.byTooltip('朗读词典'), findsNothing);
+    expect(find.byTooltip('朗读原文'), findsNothing);
+    expect(find.byTooltip('朗读译文'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('停止朗读').first);
+    await tester.pump();
+    expect(spoken, [true, true]);
+    expect(find.byTooltip('朗读词典'), findsOneWidget);
+    expect(find.byTooltip('朗读原文'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranslationOverlay(
+          session: session,
+          speakingSource: false,
+          onActivate: () {},
+          onDismiss: () {},
+          onDrag: () {},
+          onMode: session.switchMode,
+          onService: session.switchService,
+          onSpeak: spoken.add,
+          onAddVocabulary: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byTooltip('停止朗读'), findsOneWidget);
+    expect(find.byTooltip('朗读译文'), findsNothing);
+    expect(find.byTooltip('朗读原文'), findsOneWidget);
+    expect(find.byTooltip('朗读词典'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('词典释义词条采用 16pt 半粗标题并用纯文本间距替代 WidgetSpan（#144）', (
+    tester,
+  ) async {
+    // 作用：验证词条标题可读字号与连续选区复制安全性。
+    // 边界：headword Span 使用 16pt / w600 / 24pt 行高，RichText 子节点中无任何 WidgetSpan。
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: DictionaryDefinitionView(
+            definition: 'pot | BrE pɒt | A. noun ① 锅 guō',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final rich = tester.widget<RichText>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText && widget.text.toPlainText().startsWith('pot'),
+      ),
+    );
+    final root = rich.text as TextSpan;
+    final headword =
+        root.text != null ? root : root.children!.first as TextSpan;
+    expect(headword.text, 'pot');
+    expect(headword.style?.fontSize, 16);
+    expect(headword.style?.fontWeight, FontWeight.w600);
+    expect(headword.style?.height, 24 / 16);
+    var hasWidgetSpan = false;
+    root.visitChildren((span) {
+      if (span is WidgetSpan) hasWidgetSpan = true;
+      return true;
+    });
+    expect(hasWidgetSpan, isFalse);
+    expect(root.toPlainText(), 'pot  BrE pɒt');
+  });
+}
+
+/// 每次翻译直接返回失败事件，用于验证失败提示条与重试状态。
+class _FailProvider implements TranslationProvider {
+  @override
+  String get id => 'local-fail';
+  @override
+  bool get usesSlidingContext => false;
+
+  /// request 为翻译请求；直接产出失败事件以触发 canRetry 状态。
+  @override
+  Stream<TranslationEvent> translate(TranslationRequest request) async* {
+    yield const TranslationFailure('服务连接超时');
+  }
 }

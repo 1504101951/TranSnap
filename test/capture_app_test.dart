@@ -103,6 +103,9 @@ void main() {
         expect(button.hitTestable(), findsOneWidget);
         expect(feedbackRect.overlaps(tester.getRect(button)), isFalse);
       }
+      // 错误提示保留 2 秒供用户阅读，1 秒时尚在界面上，满 2 秒后关闭（#144）。
+      await tester.pump(const Duration(seconds: 1));
+      expect(feedback, findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       expect(feedback, findsNothing);
       await tester.tap(find.byTooltip('暂停'));
@@ -412,11 +415,14 @@ void main() {
     for (final button in tester.widgetList<IconButton>(
       find.byType(IconButton),
     )) {
+      // 跳过错误提示气泡自身的手动关闭按钮，只校对工具栏外围操作按钮不被气泡遮挡。
+      if (button.key == const Key('toolbar-feedback-dismiss')) continue;
       final target = find.byTooltip(button.tooltip!);
       expect(tester.getRect(bubble).overlaps(tester.getRect(target)), isFalse);
       expect(target.hitTestable(), findsOneWidget);
     }
-    await tester.pump(const Duration(milliseconds: 999));
+    // 取消回调通过 state['error'] 呈现，沿用 2000ms 错误停读；随后保存成功反馈沿用 1000ms（#144）。
+    await tester.pump(const Duration(milliseconds: 1999));
     expect(bubble, findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1));
     expect(bubble, findsNothing);
@@ -1353,6 +1359,95 @@ void main() {
     expect(copyCalls, 3);
     expect(find.text('录制文件不存在，无法复制。'), findsOneWidget);
     expect(find.text('已复制视频'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('采集错误气泡悬停 2 秒暂停并在移开后重计，点击关闭按钮立即消失（#144）', (tester) async {
+    // 作用：验证 CaptureApp 错误提示遵循 2000ms 自动关闭、悬停停读与手动关闭交互。
+    // 边界：悬停期间超过 3s 仍停留；移出鼠标 1999ms 仍存在，满 2000ms 关闭；点击关闭按钮立即清空。
+    tester.view.physicalSize = const Size(380, 120);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    state = {'id': 'hover-session', 'phase': 'recording', 'elapsed': 10.0};
+    await tester.pumpWidget(const CaptureApp(channel: channel));
+    await tester.pumpAndSettle();
+
+    await notify(tester, {...state, 'error': '录制写入受限，请检查磁盘空间。'});
+    final bubble = find.byKey(const Key('toolbar-feedback-bubble'));
+    final dismiss = find.byKey(const Key('toolbar-feedback-dismiss'));
+    expect(bubble, findsOneWidget);
+    expect(dismiss, findsOneWidget);
+
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(bubble));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(bubble, findsOneWidget);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(bubble, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(bubble, findsNothing);
+
+    await notify(tester, {...state, 'error': '另一条错误提示。'});
+    expect(bubble, findsOneWidget);
+    await tester.tap(dismiss);
+    await tester.pump();
+    expect(bubble, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('采集请求进行中阻止并发重入，failed 阶段仍展示错误气泡（#144）', (tester) async {
+    // 作用：验证同一帧并发点击只发出首个请求，以及失败阶段不会退回隐藏空白页。
+    // 边界：保存请求挂起期间同帧点击导出不发出第二个原生调用；phase=failed 且带 error 时保留错误气泡。
+    tester.view.physicalSize = const Size(520, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final pendingSave = Completer<Map<String, Object?>?>();
+    final invoked = <String>[];
+    state = {
+      'id': 'reentry-session',
+      'phase': 'videoReady',
+      'width': 320,
+      'height': 240,
+      'previewScale': 1.0,
+      'duration': 2.0,
+    };
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      invoked.add(call.method);
+      if (call.method == MethodNames.saveRecording) {
+        return pendingSave.future;
+      }
+      return state;
+    });
+
+    await tester.pumpWidget(const CaptureApp(channel: channel));
+    await tester.pumpAndSettle();
+    invoked.clear();
+
+    // 同帧尚未重绘禁用态前连续点击两个操作：第二个调用被 _pending 守卫拦截。
+    await tester.tap(find.byTooltip('保存 MP4'));
+    await tester.tap(find.byTooltip('导出 GIF'));
+    expect(invoked, [MethodNames.saveRecording]);
+
+    pendingSave.complete({...state, 'savedPath': '/tmp/out.mp4'});
+    await tester.pump();
+    expect(find.text('已保存 MP4'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+
+    await notify(tester, {
+      'id': 'failed-session',
+      'phase': 'failed',
+      'error': '屏幕录制权限已失效',
+    });
+    expect(find.text('屏幕录制权限已失效'), findsOneWidget);
+    expect(find.byKey(const Key('toolbar-feedback-bubble')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

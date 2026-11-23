@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../common/constants/drawing_metrics.dart';
+import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_enums.dart';
 import '../common/widgets/native_glass.dart';
 import 'drawing_style.dart';
@@ -195,6 +196,7 @@ class _ColorPickerState extends State<ColorPicker> {
                         _start = HSVColor.fromColor(preset.from);
                         _end = HSVColor.fromColor(preset.to);
                         _direction = GradientDirection.downRight;
+                        _invalid = false;
                         _hex.text = _hexString(_hsv.toColor());
                       }),
                     ),
@@ -272,7 +274,17 @@ class _ColorPickerState extends State<ColorPicker> {
                           height: 8,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1),
+                            border: Border.all(
+                              color: Colors.white,
+                              width: GlassMetrics.sliderThumbBorderWidth,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black54,
+                                blurRadius: 2,
+                                spreadRadius: 0.5,
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -283,23 +295,46 @@ class _ColorPickerState extends State<ColorPicker> {
             ),
             const SizedBox(height: DrawingMetrics.gap),
             SizedBox(
-              height: DrawingMetrics.hueHeight,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  overlayShape: SliderComponentShape.noOverlay,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
+              height: GlassMetrics.minTouchTarget,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: GlassMetrics.space8,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFF0000),
+                          Color(0xFFFFFF00),
+                          Color(0xFF00FF00),
+                          Color(0xFF00FFFF),
+                          Color(0xFF0000FF),
+                          Color(0xFFFF00FF),
+                          Color(0xFFFF0000),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                child: Slider(
-                  key: const Key('color-hue'),
-                  min: 0,
-                  max: 360,
-                  value: _hsv.hue,
-                  semanticFormatterCallback: (v) => '色相 ${v.round()}度',
-                  onChanged: (v) => _setColor(_hsv.withHue(v)),
-                ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 6,
+                      activeTrackColor: Colors.transparent,
+                      inactiveTrackColor: Colors.transparent,
+                    ),
+                    child: Slider(
+                      key: const Key('color-hue'),
+                      min: 0,
+                      max: 360,
+                      value: _hsv.hue,
+                      semanticFormatterCallback: (v) => '色相 ${v.round()}度',
+                      onChanged: (v) => _setColor(_hsv.withHue(v)),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: DrawingMetrics.gap),
@@ -329,20 +364,30 @@ class _ColorPickerState extends State<ColorPicker> {
                   ]) ...[
                     SizedBox.square(
                       dimension: DrawingMetrics.directionButton,
-                      child: IconButton(
-                        key: Key('gradient-direction-${direction.name}'),
-                        tooltip: '渐变$label',
-                        padding: EdgeInsets.zero,
-                        iconSize: 16,
-                        onPressed: () => setState(() => _direction = direction),
-                        icon: Icon(icon),
-                        style: IconButton.styleFrom(
-                          backgroundColor: _direction == direction
-                              ? NativeGlassTheme.accentOf(context)
-                              : Colors.transparent,
-                          foregroundColor: _direction == direction
-                              ? Colors.white
-                              : null,
+                      child: NativeGlassButtonFeedback(
+                        radius: GlassMetrics.controlRadius,
+                        enabled: true,
+                        child: IconButton(
+                          key: Key('gradient-direction-${direction.name}'),
+                          tooltip: '渐变$label',
+                          padding: EdgeInsets.zero,
+                          iconSize: 16,
+                          onPressed: () =>
+                              setState(() => _direction = direction),
+                          icon: Icon(icon),
+                          style: IconButton.styleFrom(
+                            backgroundColor: _direction == direction
+                                ? NativeGlassTheme.accentFillOf(context)
+                                : Colors.transparent,
+                            foregroundColor: _direction == direction
+                                ? NativeGlassTheme.onAccentOf(context)
+                                : null,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                GlassMetrics.controlRadius,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -392,7 +437,27 @@ class _ColorPickerState extends State<ColorPicker> {
               ),
             ),
             if (_invalid)
-              const Text('请输入6位十六进制颜色', style: TextStyle(color: Colors.red)),
+              Padding(
+                padding: const EdgeInsets.only(top: GlassMetrics.space4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 13,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: GlassMetrics.space4),
+                    Text(
+                      '请输入6位十六进制颜色',
+                      style: TextStyle(
+                        fontSize: GlassMetrics.captionFont,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ?widget.footer,
             const SizedBox(height: DrawingMetrics.gap),
             Row(
@@ -400,7 +465,7 @@ class _ColorPickerState extends State<ColorPicker> {
               children: [
                 TextButton(onPressed: widget.onCancel, child: const Text('取消')),
                 const SizedBox(width: DrawingMetrics.gap),
-                TextButton(
+                FilledButton(
                   key: const Key('apply-color'),
                   onPressed: _invalid ? null : () => widget.onApply(_value),
                   child: const Text('应用'),
@@ -446,13 +511,7 @@ class _StrokeWidthPickerState extends State<StrokeWidthPicker> {
             SizedBox(
               width: 200,
               child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2,
-                  overlayShape: SliderComponentShape.noOverlay,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
-                  ),
-                ),
+                data: SliderTheme.of(context).copyWith(trackHeight: 2),
                 child: Slider(
                   key: const Key('stroke-width-slider'),
                   min: DrawingMetrics.minWidth,
@@ -467,12 +526,13 @@ class _StrokeWidthPickerState extends State<StrokeWidthPicker> {
             SizedBox(width: 40, child: Text('${_value.round()}pt')),
           ],
         ),
+        const SizedBox(height: GlassMetrics.space12),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextButton(onPressed: widget.onCancel, child: const Text('取消')),
             const SizedBox(width: DrawingMetrics.gap),
-            TextButton(
+            FilledButton(
               key: const Key('apply-stroke-width'),
               onPressed: () => widget.onApply(_value),
               child: const Text('应用'),

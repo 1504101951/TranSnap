@@ -186,21 +186,65 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 等待期间该按钮外显示进度环；没有对应按钮时为 null（#142）。
   String? _busyId;
   bool _failed = false;
+  bool _feedbackHovered = false;
+  bool _feedbackAutoDismiss = true;
   bool _textInputOpen = false;
   String? _feedbackMessage;
   Timer? _feedbackTimer;
+  final ValueNotifier<Rect> _toolbarRect = ValueNotifier(Rect.zero);
 
-  /// 无参数；返回当前一秒文字反馈，成功和失败共用同一状态。
-  String? get _message => _feedbackMessage;
-
-  /// value为响应文案；赋值方负责当前重建，计时结束仅移除文字，不修改保存路径或编辑状态。
-  set _message(String? value) {
+  /// value 为响应文案（null 时清空提示），isError 为 true 时采用错误样式并保持 2s、支持悬停暂停与手动关闭，
+  /// autoDismiss 为 false 时不自动倒计时关闭；无返回值（#138、#144）。
+  void _setFeedback(
+    String? value, {
+    bool isError = false,
+    bool autoDismiss = true,
+  }) {
     _feedbackTimer?.cancel();
     _feedbackMessage = value;
-    if (value == null) return;
-    _feedbackTimer = Timer(GlassMetrics.feedbackDuration, () {
-      if (mounted) setState(() => _feedbackMessage = null);
+    _failed = value != null && isError;
+    _feedbackAutoDismiss = value != null && autoDismiss;
+    if (value == null) _feedbackHovered = false;
+    _startFeedbackTimer();
+  }
+
+  /// 无参数；在非悬停且允许自动关闭时启动反馈计时（错误 2s、普通 1s），无返回值。
+  void _startFeedbackTimer() {
+    _feedbackTimer?.cancel();
+    if (_feedbackMessage == null ||
+        !_feedbackAutoDismiss ||
+        (_failed && _feedbackHovered)) {
+      return;
+    }
+    final duration = _failed
+        ? GlassMetrics.errorFeedbackDuration
+        : GlassMetrics.feedbackDuration;
+    _feedbackTimer = Timer(duration, () {
+      if (!mounted) return;
+      setState(() {
+        _feedbackMessage = null;
+        _failed = false;
+        _feedbackHovered = false;
+      });
     });
+  }
+
+  /// hovered 为鼠标是否停留在错误气泡上；悬停期间暂停倒计时，移开后重新计时 2s，无返回值（#144）。
+  void _onFeedbackHoverChanged(bool hovered) {
+    if (_feedbackHovered == hovered) return;
+    _feedbackHovered = hovered;
+    if (!_failed) return;
+    if (hovered) {
+      _feedbackTimer?.cancel();
+    } else {
+      _startFeedbackTimer();
+    }
+  }
+
+  /// 无参数；手动关闭当前错误提示气泡并取消计时器，无返回值（#144）。
+  void _dismissFeedback() {
+    if (_feedbackMessage == null) return;
+    setState(() => _setFeedback(null));
   }
 
   String? _savedPath;
@@ -529,9 +573,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ];
           // 会话状态（正在翻译、等待翻译、已完成或错误原因）统一以普通样式提示；
           // 失败原因不自动消失，保留到下一条提示或截图关闭（#138）。
-          _message = status.isEmpty ? null : status;
-          if (map['failed'] == true) _feedbackTimer?.cancel();
-          _failed = false;
+          _setFeedback(
+            status.isEmpty ? null : status,
+            isError: false,
+            autoDismiss: map['failed'] != true,
+          );
         });
       } else if (call.method == MethodNames.screenshotToolbarSlot) {
         final args = call.arguments as Map;
@@ -661,8 +707,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
       _textStyle = _drawing.styles[ScreenshotTool.text]!;
       _fontSize = _drawing.fontSize;
-      _message = value['error'] as String?;
-      _failed = _message != null;
+      final error = value['error'] as String?;
+      _setFeedback(
+        error,
+        isError: error != null,
+        autoDismiss: value['pixels'] != null,
+      );
       _savedPath = null;
       _busy = false;
       _dragStart = null;
@@ -1000,10 +1050,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         );
       } on PlatformException catch (error) {
         if (mounted) {
-          setState(() {
-            _message = error.message;
-            _failed = true;
-          });
+          setState(() => _setFeedback(error.message, isError: true));
         }
       }
     });
@@ -1019,10 +1066,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (_capture.isEmpty) _replace(snapshot);
     } on PlatformException catch (error) {
       if (mounted) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(
+          () => _setFeedback(
+            error.message,
+            isError: true,
+            autoDismiss: _document.hasImage,
+          ),
+        );
       }
     }
   }
@@ -1039,7 +1089,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id && _liveExpanded) {
-        setState(() => _message = error.message);
+        setState(() => _setFeedback(error.message, isError: true));
       }
     }
   }
@@ -1062,7 +1112,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
-        setState(() => _message = error.message);
+        setState(() => _setFeedback(error.message, isError: true));
       }
     }
   }
@@ -1099,7 +1149,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _recordingApplication = null;
       _recordingApplications = [];
       _loadingApplications = target == CaptureTarget.application;
-      _message = null;
+      _setFeedback(null);
     });
     await _syncRecordingPreview();
     if (target != CaptureTarget.application) return;
@@ -1119,17 +1169,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             .cast<Map>()
             .map(Map<Object?, Object?>.from)
             .toList();
-        if (_recordingApplications.isEmpty) _message = '没有可录制的应用。';
+        if (_recordingApplications.isEmpty) {
+          _setFeedback('没有可录制的应用。', isError: true);
+        }
       });
     } on PlatformException catch (error) {
       if (mounted &&
           _capture['id'] == id &&
           _recordingTarget == target &&
           request == _applicationRequest) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     } finally {
       if (mounted &&
@@ -1176,16 +1225,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       });
       if (!mounted || _capture['id'] != id) return;
       // 成功启动由原生关闭冻结画布；失败时保留当前裁剪和标注草稿。
-      setState(() {
-        _message = null;
-        _failed = false;
-      });
+      setState(() => _setFeedback(null));
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     } finally {
       if (mounted && _capture['id'] == id) setState(() => _busy = false);
@@ -1219,10 +1262,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       });
     } on PlatformException catch (error) {
       if (mounted) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1231,10 +1271,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   /// message为复制成功文案；经统一反馈入口显示一秒，不改变编辑和保存状态。
   void _showCopyFeedback(String message) {
-    setState(() {
-      _message = message;
-      _failed = false;
-    });
+    setState(() => _setFeedback(message));
   }
 
   /// 无参数；确认当前文字、开始选区采集或复制截图，返回该操作结束的 Future。
@@ -1277,8 +1314,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         'pin' => ScreenshotActions.pin,
         _ => null,
       };
-      _message = null;
-      _failed = false;
+      _setFeedback(null);
     });
     String? saved;
     try {
@@ -1309,7 +1345,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         if (!mounted || _capture['id'] != id) return;
         setState(() {
           _savedPath = saved;
-          _message = '已保存截图';
+          _setFeedback('已保存截图');
         });
         // 复制并保存在保存成功后继续走复制反馈与关闭（#111）。
         if (action == 'save') return;
@@ -1331,10 +1367,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         );
         if (!mounted || _capture['id'] != id) return;
         if (pinId == null) {
-          setState(() {
-            _message = '贴图失败';
-            _failed = true;
-          });
+          setState(() => _setFeedback('贴图失败', isError: true));
           return;
         }
         // 贴图成功即结束编辑层，只留下独立置顶图。
@@ -1356,11 +1389,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       }
     } on PlatformException catch (error) {
       if (!mounted || _capture['id'] != id) return;
-      _feedbackTimer?.cancel();
       setState(() {
         _savedPath = saved ?? _savedPath;
-        _message = error.message;
-        _failed = true;
+        _setFeedback(error.message, isError: true);
       });
     } finally {
       if (mounted && _capture['id'] == id) setState(() => _busy = false);
@@ -1421,8 +1452,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     setState(() {
       _busy = true;
       _busyId = null;
-      _message = null;
-      _failed = false;
+      _setFeedback(null);
     });
     try {
       final value = await widget.channel.invokeMethod<Object?>(method);
@@ -1432,10 +1462,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       }
     } on PlatformException catch (error) {
       if (mounted) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(
+          () => _setFeedback(
+            error.message,
+            isError: true,
+            autoDismiss: _document.hasImage,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1450,10 +1483,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final recognition = await _recognizeOcr();
     if (!mounted || _capture['id'] != id || recognition == null) return;
     if (recognition.text.trim().isEmpty && recognition.codes.isEmpty) {
-      setState(() {
-        _message = '画面中没有可识别的文字、二维码或条码';
-        _failed = true;
-      });
+      setState(
+        () => _setFeedback('画面中没有可识别的文字、二维码或条码', isError: true),
+      );
       return;
     }
     setState(() {
@@ -1472,10 +1504,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (mounted && _capture['id'] == id) _showCopyFeedback(feedback);
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     }
   }
@@ -1494,16 +1523,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         await _close();
         return;
       }
-      setState(() {
-        _message = '无法打开链接';
-        _failed = true;
-      });
+      setState(() => _setFeedback('无法打开链接', isError: true));
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     }
   }
@@ -1517,8 +1540,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     setState(() {
       _busy = true;
       _busyId = ScreenshotActions.ocrTranslate;
-      _message = null;
-      _failed = false;
+      _setFeedback(null);
     });
     // 识别期间请主引擎预热翻译连接，握手与本地识别并行；不等待结果（#68）。
     unawaited(widget.channel.invokeMethod<void>(MethodNames.prewarmTranslation));
@@ -1535,8 +1557,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (blocks!.isEmpty) {
         setState(() {
           _ocrOverlays = [];
-          _message = '画面中没有可识别的文字';
-          _failed = true;
+          _setFeedback('画面中没有可识别的文字', isError: true);
         });
         return;
       }
@@ -1551,10 +1572,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
     } finally {
       if (mounted && _capture['id'] == id) setState(() => _busy = false);
@@ -1569,8 +1587,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     setState(() {
       _busy = true;
       _busyId = ScreenshotActions.ocrCopy;
-      _message = null;
-      _failed = false;
+      _setFeedback(null);
     });
     try {
       final bytes = await _document.renderPng();
@@ -1590,10 +1607,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     } on PlatformException catch (error) {
       if (mounted) {
-        setState(() {
-          _message = error.message;
-          _failed = true;
-        });
+        setState(() => _setFeedback(error.message, isError: true));
       }
       return null;
     } finally {
@@ -2544,6 +2558,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   void dispose() {
     _feedbackTimer?.cancel();
     _picker.dispose();
+    _toolbarRect.dispose();
     _recognizedOffset.dispose();
     _document.removeListener(_onDocumentChanged);
     _document.dispose();
@@ -2563,12 +2578,22 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _syncClosing(MediaQuery.disableAnimationsOf(context), actions);
     final hasImage = _document.hasImage;
     return NativeGlassApp(
+      title: 'TranslateApp 截图',
       home: Focus(
         key: _editorKey,
         focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (_recognition != null) {
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              setState(() => _recognition = null);
+              _focusNode.requestFocus();
+              return KeyEventResult.handled;
+            }
+            // 识别结果弹窗打开时隔离编辑器单键与确认键，避免误删除或关闭截图（#144）。
+            return KeyEventResult.ignored;
+          }
           if (event.logicalKey == LogicalKeyboardKey.escape) {
             if (_expandedRow != null) {
               setState(() {
@@ -2749,8 +2774,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   // 各行长度（含插入的子级、属性、状态组与附加行）决定工具栏尺寸（#141）。
                   lines: (perLine) => _lineLengths(actions, perLine),
                   beautify: _beautify,
-                  feedbackIsError: _failed,
-                  feedback: _message,
+                  toolbarRect: _toolbarRect,
                   ocrOverlays: _ocrOverlays,
                 )
               else
@@ -2766,7 +2790,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _message ??
+                              _feedbackMessage ??
                                   (_capture['screenAccess'] == false
                                       ? '截图需要屏幕录制权限'
                                       : '正在准备截图'),
@@ -2808,32 +2832,84 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       key: const Key(ScreenshotActions.close),
                       tooltip: '关闭',
                       onPressed: _busy ? null : _close,
-                      icon: const Icon(Icons.close, color: Colors.white),
+                      icon: const Icon(Icons.close),
                     ),
                   ),
                 ),
-              // 识别结果弹窗浮在截图之上，初始居中，可拖动标题区移动。
+              // 识别结果弹窗浮在截图之上，初始居中，可拖动标题区移动；在窄视口下夹紧尺寸与位移。
               if (_recognition != null)
-                Center(
-                  // 拖动只移动弹窗，不重建截图页面与弹窗内容（#68）。
-                  child: ValueListenableBuilder<Offset>(
-                    valueListenable: _recognizedOffset,
-                    builder: (context, offset, child) =>
-                        Transform.translate(offset: offset, child: child),
-                    child: SizedBox.fromSize(
-                      size: RecognizedTextPanel.size,
-                      child: RecognizedTextPanel(
-                        text: _recognition!.text,
-                        codes: _recognition!.codes,
-                        onCopyAll: () =>
-                            _copyRecognized(_recognition!.text, '已复制文字'),
-                        onCopyCode: (payload) =>
-                            _copyRecognized(payload, '已复制内容'),
-                        onOpenLink: _openLink,
-                        onClose: () => setState(() => _recognition = null),
-                        onDrag: (delta) => _recognizedOffset.value += delta,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final panelWidth = math.min(
+                      RecognizedTextPanel.size.width,
+                      math.max(
+                        0.0,
+                        constraints.maxWidth - GlassMetrics.space16,
                       ),
-                    ),
+                    );
+                    final panelHeight = math.min(
+                      RecognizedTextPanel.size.height,
+                      math.max(
+                        0.0,
+                        constraints.maxHeight - GlassMetrics.space16,
+                      ),
+                    );
+                    final maxDx = math.max(
+                      0.0,
+                      (constraints.maxWidth - panelWidth) / 2 -
+                          GlassMetrics.space8,
+                    );
+                    final maxDy = math.max(
+                      0.0,
+                      (constraints.maxHeight - panelHeight) / 2 -
+                          GlassMetrics.space8,
+                    );
+                    Offset clampOffset(Offset value) => Offset(
+                      value.dx.clamp(-maxDx, maxDx).toDouble(),
+                      value.dy.clamp(-maxDy, maxDy).toDouble(),
+                    );
+                    return Center(
+                      // 拖动只移动弹窗，不重建截图页面与弹窗内容（#68、#144）。
+                      child: ValueListenableBuilder<Offset>(
+                        valueListenable: _recognizedOffset,
+                        builder: (context, offset, child) =>
+                            Transform.translate(
+                              offset: clampOffset(offset),
+                              child: child,
+                            ),
+                        child: SizedBox(
+                          width: panelWidth,
+                          height: panelHeight,
+                          child: RecognizedTextPanel(
+                            text: _recognition!.text,
+                            codes: _recognition!.codes,
+                            onCopyAll: () =>
+                                _copyRecognized(_recognition!.text, '已复制文字'),
+                            onCopyCode: (payload) =>
+                                _copyRecognized(payload, '已复制内容'),
+                            onOpenLink: _openLink,
+                            onClose: () {
+                              setState(() => _recognition = null);
+                              _focusNode.requestFocus();
+                            },
+                            onDrag: (delta) => _recognizedOffset.value =
+                                clampOffset(_recognizedOffset.value + delta),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              // 反馈气泡置于识别结果弹窗之上，保证复制或打开链接失败时不被弹窗遮挡（#144）。
+              if (hasImage && _feedbackMessage != null)
+                ValueListenableBuilder<Rect>(
+                  valueListenable: _toolbarRect,
+                  builder: (context, toolbarRect, _) => ToolbarFeedback(
+                    toolbar: toolbarRect,
+                    message: _feedbackMessage!,
+                    isError: _failed,
+                    onHoverChanged: _failed ? _onFeedbackHoverChanged : null,
+                    onDismiss: _failed ? _dismissFeedback : null,
                   ),
                 ),
             ],
@@ -3066,8 +3142,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       '${ScreenshotActions.brushPrefix}mosaic': Icons.grid_on,
       '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
     };
-    // 模式按钮不产生hover层；普通操作保留主题反馈，属性不进入顶层排序。
-    // 正在使用的功能、子级所属父级与当前图形/画笔模式统一为强调色实底配白色图标（#67 原生克制风格）。
+    // 普通操作由外层 NativeGlassButtonFeedback 统一提供悬停、微缩与 2pt 强调色焦点环；
+    // 选中工具及所属父级与当前图形/画笔模式统一采用高对比强调色实底配对比前景色（#67、#144）。
     Widget button(String id) {
       // 高亮正在使用的功能，以及第二行所属的父级。
       final selected =
@@ -3076,34 +3152,34 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           id == '${ScreenshotActions.shapePrefix}${_styleShape.name}' ||
           id ==
               '${ScreenshotActions.brushPrefix}${(_styleSelection?.shapeMode ?? _shapeMode).name}';
-      final child = SizedBox(
-        width: 32,
-        height: 32,
-        child: IconButton(
-          key: Key(id),
-          tooltip:
-              '${ScreenshotActions.labels[id]}${_toolbar.shortcutLabel(id) == null ? '' : ' ${_toolbar.shortcutLabel(id)}'}',
-          onPressed: actions[id],
-          style: ButtonStyle(
-            padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-            backgroundColor: WidgetStatePropertyAll(
-              selected ? NativeGlassTheme.accentOf(context) : Colors.transparent,
+      final accentFill = NativeGlassTheme.accentFillOf(context);
+      final onAccent = NativeGlassTheme.onAccentOf(context);
+      final child = Semantics(
+        selected: selected,
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            key: Key(id),
+            tooltip:
+                '${ScreenshotActions.labels[id]}${_toolbar.shortcutLabel(id) == null ? '' : ' ${_toolbar.shortcutLabel(id)}'}',
+            onPressed: actions[id],
+            style: ButtonStyle(
+              padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+              backgroundColor: WidgetStatePropertyAll(
+                selected ? accentFill : Colors.transparent,
+              ),
+              foregroundColor: WidgetStatePropertyAll(
+                selected ? onAccent : colors.onSurface,
+              ),
+              shape: WidgetStatePropertyAll(
+                RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
             ),
-            foregroundColor: WidgetStatePropertyAll(
-              selected ? Colors.white : colors.onSurface,
-            ),
-            overlayColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.pressed)
-                  ? (Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: .10)
-                        : Colors.black.withValues(alpha: .08))
-                  : Colors.transparent,
-            ),
-            shape: WidgetStatePropertyAll(
-              RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+            icon: Icon(icons[id] ?? Icons.circle, size: 16),
           ),
-          icon: Icon(icons[id] ?? Icons.circle, size: 16),
         ),
       );
       // 每个模式同样需要材料承载并由共享表面控制进度环，结构不随等待变化（#142）。
@@ -3212,31 +3288,33 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       Widget icon,
       VoidCallback? action, {
       bool selected = false,
-    }) => NativeGlassSurface(
-      material: true,
-      child: SizedBox(
-        width: 32,
-        height: 32,
-        child: MergeSemantics(
-          child: Semantics(
-            label: label,
-            selected: selected,
-            child: IconButton(
-              tooltip: label,
-              onPressed: _busy ? null : action,
-              icon: icon,
-              style: IconButton.styleFrom(
-                padding: EdgeInsets.zero,
-                backgroundColor: selected
-                    ? NativeGlassTheme.accentOf(context)
-                    : Colors.transparent,
-                foregroundColor: selected ? Colors.white : colors.onSurface,
+    }) {
+      final accentFill = NativeGlassTheme.accentFillOf(context);
+      final onAccent = NativeGlassTheme.onAccentOf(context);
+      return NativeGlassSurface(
+        material: true,
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: MergeSemantics(
+            child: Semantics(
+              label: label,
+              selected: selected,
+              child: IconButton(
+                tooltip: label,
+                onPressed: _busy ? null : action,
+                icon: icon,
+                style: IconButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: selected ? accentFill : Colors.transparent,
+                  foregroundColor: selected ? onAccent : colors.onSurface,
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
 
     /// key 为行身份、children 为按钮、anchorId 为触发该附加行的锚点按钮标识；
     /// 全部工具栏附加行均复用可滚动的 LiquidSplit 液态展开组件（#67 第 10 条、#142）。
@@ -3553,8 +3631,7 @@ class _EditorSurface extends StatefulWidget {
     this.displaySize,
     required this.lines,
     this.beautify,
-    required this.feedbackIsError,
-    required this.feedback,
+    required this.toolbarRect,
     required this.ocrOverlays,
     this.selectedText,
     this.sourceImage,
@@ -3571,7 +3648,7 @@ class _EditorSurface extends StatefulWidget {
 
   /// 本次截图的美化参数；非 null 时在选区外预览背景与阴影。
   final BeautifyStyle? beautify;
-  final bool feedbackIsError;
+  final ValueNotifier<Rect> toolbarRect;
   final MethodChannel channel;
   final EditDocument document;
   final ScreenshotTool tool;
@@ -3619,7 +3696,6 @@ class _EditorSurface extends StatefulWidget {
   /// axis 由可用空白决定，perLine 为每行并排的组数；返回具有相应方向的工具栏。
   final Widget Function(BuildContext context, Axis axis, int perLine)
   toolbarBuilder;
-  final String? feedback;
   final List<_OcrOverlay> ocrOverlays;
 
   /// 无参数；每张图片独立管理滚动位置，替换图片不会继承旧长图偏移。
@@ -3701,6 +3777,15 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             perLine = 1;
             lines = widget.lines(perLine);
             layout = placeFor(lines.lengths);
+          }
+          // 工具栏已提升至根 Stack，同步最新工具栏矩形供反馈气泡锚定（#144）。
+          final toolbarRect = layout.toolbar;
+          if (widget.toolbarRect.value != toolbarRect) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && widget.toolbarRect.value != toolbarRect) {
+                widget.toolbarRect.value = toolbarRect;
+              }
+            });
           }
           final fitted = layout.canvas;
           Rect cropDisplay = mapRectToFitted(
@@ -3804,6 +3889,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       annotations: widget.document.annotations,
                       previewAnnotation: widget.previewAnnotation,
                       imageSize: imageSize,
+                      accent: NativeGlassTheme.accentOf(context),
                     ),
                   ),
                   ),
@@ -4058,33 +4144,47 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         color: Colors.transparent,
                         child: NativeGlassSurface(
                           material: true,
-                          child: TextField(
-                            key: const Key('screenshot-text-field'),
-                            controller: widget.textController,
-                            focusNode: widget.textFocus,
-                            autofocus: true,
-                            maxLines: null,
-                            // 回车是换行；结束输入靠点击框外、Esc 或切换工具。
-                            textInputAction: TextInputAction.newline,
-                            style: TextStyle(
-                              color:
-                                  (widget.previewAnnotation ??
-                                          widget.selectedText)
-                                      ?.color ??
-                                  ScreenshotDefaults.strokeColor,
-                              fontSize:
-                                  ((widget.previewAnnotation ??
-                                              widget.selectedText)
-                                          ?.fontSize ??
-                                      ScreenshotDefaults.fontSize) *
-                                  fitted.width /
-                                  imageSize.width,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surface.withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(
+                                GlassMetrics.space4,
+                              ),
                             ),
-                            cursorColor: ScreenshotDefaults.strokeColor,
-                            // 无边框无内边距：输入时的文字位置与提交后一致，边框由文字框描边绘制。
-                            decoration: const InputDecoration.collapsed(
-                              hintText: '输入文字',
-                              hintStyle: TextStyle(color: Color(0x99FFFFFF)),
+                            child: TextField(
+                              key: const Key('screenshot-text-field'),
+                              controller: widget.textController,
+                              focusNode: widget.textFocus,
+                              autofocus: true,
+                              maxLines: null,
+                              // 回车是换行；结束输入靠点击框外、Esc 或切换工具。
+                              textInputAction: TextInputAction.newline,
+                              style: TextStyle(
+                                color:
+                                    (widget.previewAnnotation ??
+                                            widget.selectedText)
+                                        ?.color ??
+                                    ScreenshotDefaults.strokeColor,
+                                fontSize:
+                                    ((widget.previewAnnotation ??
+                                                widget.selectedText)
+                                            ?.fontSize ??
+                                        ScreenshotDefaults.fontSize) *
+                                    fitted.width /
+                                    imageSize.width,
+                              ),
+                              cursorColor: NativeGlassTheme.accentOf(context),
+                              // 无边框无内边距：输入时的文字位置与提交后一致，边框由文字框描边绘制。
+                              decoration: InputDecoration.collapsed(
+                                hintText: '输入文字',
+                                hintStyle: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -4103,12 +4203,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       maintainAnimation: true,
                       child: widget.toolbarBuilder(context, layout.axis, perLine),
                     ),
-                  ),
-                if (widget.feedback != null)
-                  ToolbarFeedback(
-                    toolbar: layout.toolbar,
-                    message: widget.feedback!,
-                    isError: widget.feedbackIsError,
                   ),
                 if (widget.selectedText != null ||
                     (widget.previewAnnotation?.kind == AnnotationKind.text))
@@ -4311,10 +4405,12 @@ class _DimPainter extends CustomPainter {
 
 /// 在源图坐标系绘制已提交标注与拖拽预览。
 class _OverlayPainter extends CustomPainter {
+  /// annotations 为已提交标注，previewAnnotation 为拖拽中预览，imageSize 为源图像素尺寸，accent 为当前强调色（#144）。
   _OverlayPainter({
     required this.annotations,
     required this.previewAnnotation,
     required this.imageSize,
+    required this.accent,
     this.sourceImage,
     this.selectedShape,
     this.stickers = const {},
@@ -4324,6 +4420,7 @@ class _OverlayPainter extends CustomPainter {
   final List<EditAnnotation> annotations;
   final EditAnnotation? previewAnnotation;
   final Size imageSize;
+  final Color accent;
   final ui.Image? sourceImage;
   final EditAnnotation? selectedShape;
 
@@ -4370,7 +4467,7 @@ class _OverlayPainter extends CustomPainter {
         : selectedShape;
     if (selected != null) {
       final stroke = Paint()
-        ..color = const Color(0xFF007AFF)
+        ..color = accent
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1 / scaleX;
       if (selected.kind == AnnotationKind.sticker) {
@@ -4433,7 +4530,8 @@ class _OverlayPainter extends CustomPainter {
         oldDelegate.selectedShape != selectedShape ||
         oldDelegate.sourceImage != sourceImage ||
         oldDelegate.pixelRatio != pixelRatio ||
-        oldDelegate.imageSize != imageSize;
+        oldDelegate.imageSize != imageSize ||
+        oldDelegate.accent != accent;
   }
 }
 

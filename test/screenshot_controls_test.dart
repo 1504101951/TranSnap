@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/utils/geometry.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
+import 'package:translate_app/src/screenshot/drawing_controls.dart';
 import 'package:translate_app/src/screenshot/edit_document.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
@@ -1892,6 +1893,209 @@ void main() {
     expect(find.byKey(const Key('toolbar-feedback-bubble')), findsNothing);
     expect(find.text('已复制文字'), findsNothing);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
+  });
+
+  test('极窄与零尺寸视口下 ScreenshotEditorLayout.place 安全夹紧且不抛异常（#144）', () {
+    // 作用：验证最小及零宽高窗口边界下工具栏与画布布局数值非负且不触发 clamp ArgumentError。
+    // 边界：分别覆盖 Size.zero 与极小窗口 Size(12, 12)。
+    for (final viewport in const [Size.zero, Size(12, 12)]) {
+      final layout = ScreenshotEditorLayout.place(
+        viewport: viewport,
+        image: const Size(200, 200),
+        crop: const Rect.fromLTWH(0, 0, 200, 200),
+      );
+      expect(layout.toolbar.width, greaterThanOrEqualTo(0));
+      expect(layout.toolbar.height, greaterThanOrEqualTo(0));
+      expect(layout.toolbar.left.isFinite, isTrue);
+      expect(layout.toolbar.top.isFinite, isTrue);
+    }
+  });
+
+  testWidgets('ColorPicker 非法 HEX 后点击渐变预设清除错误并恢复应用按钮（#144）', (
+    tester,
+  ) async {
+    // 作用：验证调色盘渐变预设重选能重置输入校错标志并重新启用主操作。
+    // 边界：输入非法字符禁用 apply-color；点击 gradient-preset-1 后错误提示消失且重新可用。
+    final results = <Object>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ColorPicker(
+            initial: (color: Colors.black, gradient: null),
+            onApply: results.add,
+            onCancel: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('渐变'));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('color-hex')), 'ZZZZ');
+    await tester.pump();
+    expect(find.text('请输入6位十六进制颜色'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('apply-color'))).onPressed,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const Key('gradient-preset-1')));
+    await tester.pump();
+    expect(find.text('请输入6位十六进制颜色'), findsNothing);
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('apply-color'))).onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(const Key('apply-color')));
+    await tester.pump();
+    expect(results, hasLength(1));
+  });
+
+  testWidgets('截图错误提示停留 2 秒并支持悬停暂停与手动关闭（#144）', (tester) async {
+    // 作用：验证截图工具栏错误反馈与采集窗口共享一致的 2000ms 停读及关闭语义。
+    // 边界：1s 后仍可见；悬停 3s 不消失；移开鼠标 1999ms 仍在、满 2000ms 消失；手动关闭立即消失。
+    tester.view.physicalSize = const Size(960, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bytes = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(bytes!));
+    const channel = MethodChannel('test/screenshot-error-feedback');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final snapshot = <String, Object?>{
+      'id': 'err-shot',
+      ...capture!,
+      'width': 320,
+      'height': 240,
+      'capturedAt': 0,
+    };
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) return snapshot;
+      if (call.method == MethodNames.copyScreenshot) {
+        throw PlatformException(code: 'copy_failed', message: '写入剪贴板失败');
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    final copyButton = find.byKey(const Key(ScreenshotActions.copy));
+    final feedback = find.byKey(const Key('toolbar-feedback-bubble'));
+    Future<void> triggerError() async {
+      await tester.ensureVisible(copyButton);
+      await tester.tap(copyButton);
+      await tester.pump();
+      for (var i = 0; i < 100; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        if (feedback.evaluate().isNotEmpty) return;
+      }
+      fail('截图错误反馈没有在限定时间内出现');
+    }
+
+    await triggerError();
+    expect(find.text('写入剪贴板失败'), findsOneWidget);
+    final dismiss = find.byKey(const Key('toolbar-feedback-dismiss'));
+    expect(dismiss, findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(feedback, findsOneWidget);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(feedback));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(feedback, findsOneWidget);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(feedback, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(feedback, findsNothing);
+
+    await triggerError();
+    expect(feedback, findsOneWidget);
+    await tester.tap(dismiss);
+    await tester.pump();
+    expect(feedback, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('识别结果弹窗隔离 Enter/Esc 快捷键、夹紧窄视口并在顶层显示反馈（#144）', (
+    tester,
+  ) async {
+    // 作用：验证识别弹窗打开时不误触截图确认导出、窄视口下完整容纳弹窗，以及反馈气泡位于弹窗之上。
+    // 边界：520×420 窄视口下弹窗宽度 <= 504pt；Enter 不触发复制关闭，Esc 仅关闭识别弹窗。
+    tester.view.physicalSize = const Size(520, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bytes = await tester.runAsync(() => _image(width: 520, height: 420));
+    final capture = await tester.runAsync(() => capturePixels(bytes!));
+    const channel = MethodChannel('test/recognition-isolation');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final calls = <String>[];
+    final snapshot = <String, Object?>{
+      'id': 'rec-iso',
+      ...capture!,
+      'width': 520,
+      'height': 420,
+      'capturedAt': 0,
+    };
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      if (call.method == MethodNames.getScreenshot) return snapshot;
+      if (call.method == MethodNames.recognizeText) {
+        return {'text': '# 标题\n\n识别正文内容', 'codes': <Object>[]};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.ocrCopy)));
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key(ScreenshotActions.ocrCopy)));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('识别正文内容'), findsOneWidget);
+    final dragRect = tester.getRect(
+      find.byKey(const ValueKey('recognized-text-drag-area')),
+    );
+    expect(dragRect.width, lessThanOrEqualTo(504));
+
+    calls.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(calls.where((m) => m == MethodNames.copyScreenshot), isEmpty);
+    expect(calls.where((m) => m == MethodNames.closeScreenshot), isEmpty);
+    expect(find.text('识别正文内容'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('复制全部'));
+    await tester.pump();
+    final bubble = find.byKey(const Key('toolbar-feedback-bubble'));
+    expect(bubble, findsOneWidget);
+    expect(bubble.hitTestable(), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('识别正文内容'), findsNothing);
+    expect(calls.where((m) => m == MethodNames.closeScreenshot), isEmpty);
+    expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
   });
 }
 

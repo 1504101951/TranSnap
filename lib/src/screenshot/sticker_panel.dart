@@ -128,6 +128,12 @@ class _StickerPanelState extends State<StickerPanel> {
             child: Image.file(
               File('${widget.directory}/${sticker.id}.png'),
               fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.broken_image_outlined,
+                size: GlassMetrics.icon,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                semanticLabel: '贴纸加载失败',
+              ),
             ),
           ),
         );
@@ -169,13 +175,16 @@ class _StickerPanelState extends State<StickerPanel> {
                 ),
                 // 「管理贴纸…」两段都显示，切换分段时下拉框高度不变。
                 const SizedBox(height: StickerMetrics.actionGap),
-                NativeGlassSurface(
-                  material: true,
-                  child: TextButton(
-                    key: const ValueKey('sticker-manage'),
-                    onPressed: () =>
-                        Navigator.pop(context, const ManageStickers()),
-                    child: const Text('管理贴纸…'),
+                SizedBox(
+                  height: GlassMetrics.hitSize,
+                  child: NativeGlassSurface(
+                    material: true,
+                    child: TextButton(
+                      key: const ValueKey('sticker-manage'),
+                      onPressed: () =>
+                          Navigator.pop(context, const ManageStickers()),
+                      child: const Text('管理贴纸…'),
+                    ),
                   ),
                 ),
               ],
@@ -202,23 +211,22 @@ class StickerPanelLayout extends SingleChildLayoutDelegate {
   /// 横向左对齐按钮并夹在窗口左右各留 4pt 内，纵向在按钮下方 4pt，下方放不下则在上方 4pt。
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final anchor = this.anchor;
-    // 无锚点时居中。
-    if (anchor == null) {
-      return Offset(
-        (size.width - childSize.width) / 2,
-        (size.height - childSize.height) / 2,
-      );
-    }
     const gap = StickerMetrics.anchorGap;
     final maxLeft = math.max(gap, size.width - childSize.width - gap);
-    final left = anchor.left.clamp(gap, maxLeft);
+    final maxTop = math.max(gap, size.height - childSize.height - gap);
+    final anchor = this.anchor;
+    // 无锚点时居中，并在窄视口下夹紧不越出边界。
+    if (anchor == null) {
+      return Offset(
+        ((size.width - childSize.width) / 2).clamp(0.0, maxLeft).toDouble(),
+        ((size.height - childSize.height) / 2).clamp(0.0, maxTop).toDouble(),
+      );
+    }
+    final left = anchor.left.clamp(gap, maxLeft).toDouble();
     final below = anchor.bottom + gap;
     final fitsBelow = below + childSize.height <= size.height - gap;
-    return Offset(
-      left,
-      fitsBelow ? below : anchor.top - gap - childSize.height,
-    );
+    final rawTop = fitsBelow ? below : anchor.top - gap - childSize.height;
+    return Offset(left, rawTop.clamp(gap, maxTop).toDouble());
   }
 
   @override

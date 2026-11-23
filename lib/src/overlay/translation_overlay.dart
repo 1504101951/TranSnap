@@ -13,7 +13,8 @@ import '../translation/translation_types.dart';
 
 /// 当前选区的触发按钮和译文卡片；窗口位置由 macOS 管理。
 class TranslationOverlay extends StatefulWidget {
-  /// session 提供状态；三个无参回调分别翻译、关闭、拖动，onMode 切换处理模式；构造浮层内容。
+  /// session 提供状态；三个无参回调分别翻译、关闭、拖动，onMode 切换处理模式，
+  /// speakingSource 指示外部朗读状态（true 原文/词典、false 译文、null 未朗读）；构造浮层内容。
   const TranslationOverlay({
     super.key,
     required this.session,
@@ -24,6 +25,7 @@ class TranslationOverlay extends StatefulWidget {
     required this.onService,
     required this.onSpeak,
     required this.onAddVocabulary,
+    this.speakingSource,
   });
 
   /// 视觉按钮84×30，透明命中窗口额外提供上下各1pt点击空间。
@@ -44,6 +46,9 @@ class TranslationOverlay extends StatefulWidget {
   /// 把当前单词、译文与词典释义加入生词本（#102）。
   final VoidCallback onAddVocabulary;
 
+  /// 外部受控朗读状态：true 原文/词典正在朗读，false 结果栏正在朗读，null 未朗读或由内部状态托管。
+  final bool? speakingSource;
+
   /// 模式菜单的选项名称，也是左栏标题；顺序即菜单顺序（#100）。
   static const modeLabels = {
     TextMode.translate: '翻译',
@@ -63,7 +68,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   TranslationPhase? _lastPhase;
   String? _lastSessionId;
   int _sweepCount = 0;
-  String? _speakingKey;
+  bool? _localSpeakingSource;
   final Map<String, int> _copyTriggers = {};
 
   @override
@@ -76,6 +81,9 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   @override
   void didUpdateWidget(TranslationOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.speakingSource != widget.speakingSource) {
+      _localSpeakingSource = null;
+    }
     if (oldWidget.session != widget.session) {
       oldWidget.session.removeListener(_onSessionChanged);
       widget.session.addListener(_onSessionChanged);
@@ -100,7 +108,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     final id = widget.session.sessionId;
     if (_lastSessionId != id || phase == TranslationPhase.idle) {
       _lastSessionId = id;
-      _speakingKey = null;
+      _localSpeakingSource = null;
       _copyTriggers.clear();
     }
     if (_lastPhase != phase) {
@@ -110,7 +118,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       }
       if (phase == TranslationPhase.translating ||
           phase == TranslationPhase.idle) {
-        _speakingKey = null;
+        _localSpeakingSource = null;
       }
     }
   }
@@ -176,12 +184,20 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     final failed =
         snap.phase == TranslationPhase.failed ||
         snap.phase == TranslationPhase.sizeLimited;
+    final statusInBanner = failed && snap.translatedText.isEmpty;
     final mode = widget.session.mode;
     final modeLabel = TranslationOverlay.modeLabels[mode]!;
+    final errorBannerText =
+        snap.message ??
+        (snap.phase == TranslationPhase.sizeLimited
+            ? '选区过长'
+            : '$modeLabel失败');
     final title = switch (snap.phase) {
       TranslationPhase.translating => '$modeLabel中…',
-      TranslationPhase.failed => snap.message ?? '$modeLabel失败',
-      TranslationPhase.sizeLimited => snap.message ?? '选区过长',
+      TranslationPhase.failed =>
+        statusInBanner ? '$modeLabel失败' : (snap.message ?? '$modeLabel失败'),
+      TranslationPhase.sizeLimited =>
+        statusInBanner ? '选区过长' : (snap.message ?? '选区过长'),
       _ => mode == TextMode.translate ? '双语对照' : '$modeLabel结果',
     };
     final colors = Theme.of(context).colorScheme;
@@ -200,6 +216,18 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       speakSource: false,
       body: busy && snap.translatedText.isEmpty
           ? const GentleShimmerSkeleton(lines: 2)
+          : statusInBanner
+          ? NativeGlassBanner(
+              message: errorBannerText,
+              isError: true,
+              action: widget.session.canRetry
+                  ? FilledButton.tonalIcon(
+                      onPressed: widget.onActivate,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('重试'),
+                    )
+                  : null,
+            )
           : _paragraphs(pairs, translated: true, large: large, failed: failed),
     );
     final sourcePane = _pane(
@@ -292,13 +320,16 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colors.onSurfaceVariant,
+                                    child: Tooltip(
+                                      message: title,
+                                      child: Text(
+                                        title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: colors.onSurfaceVariant,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -336,7 +367,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                           onChanged: busy ? null : widget.onMode,
                         ),
                       ),
-                      if (widget.session.canRetry) ...[
+                      if (widget.session.canRetry && !statusInBanner) ...[
                         const SizedBox(width: 8),
                         SizedBox(
                           height: 28,
@@ -395,7 +426,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     bool vocabulary = false,
   }) {
     final saved = widget.session.savedToVocabulary;
-    final speaking = _speakingKey == paneKey;
+    final speaking =
+        (widget.speakingSource ?? _localSpeakingSource) == speakSource;
     final copyTrigger = _copyTriggers[paneKey] ?? 0;
     final actions = [
       // 查到释义且翻译完成后可加入生词本；本卡片加入后改为已加入并禁用（#102）。
@@ -405,16 +437,18 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
           VocabularyBookmarkIcon(saved: saved, size: 14),
           saved ? null : widget.onAddVocabulary,
         ),
-      // 朗读与复制在栏为空时禁用。
+      // 朗读与复制在栏为空时禁用；词典与原文按 speakSource 共享状态。
       (
-        '朗读$title',
+        speaking ? '停止朗读' : '朗读$title',
         SpeechWaveIcon(speaking: speaking, size: 14),
         text.isEmpty
             ? null
             : () {
-                setState(() {
-                  _speakingKey = speaking ? null : paneKey;
-                });
+                if (widget.speakingSource == null) {
+                  setState(() {
+                    _localSpeakingSource = speaking ? null : speakSource;
+                  });
+                }
                 widget.onSpeak(speakSource);
               },
       ),
@@ -434,7 +468,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 栏头：上 6pt、下 4pt、高 28pt；按钮组命中区向外多出 4pt，因此右侧定位为 16−4=12pt。
+        // 栏头：上 6pt、下 4pt、高 28pt；每个 28×28 命中区居中包裹 24×24 可见按钮，间距 4pt 且无重叠。
         SizedBox(
           height: 38,
           child: Stack(
@@ -456,13 +490,13 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                 ),
               ),
               Positioned(
-                right: 12,
-                top: 4,
-                width: actions.length * 28.0 + 4,
-                height: 32,
+                right: 14,
+                top: 6,
+                width: actions.length * 28.0,
+                height: 28,
                 child: Stack(
                   children: [
-                    // 可见 24pt 按钮间距 4pt，步长 28pt；32pt 命中区相邻重叠 4pt。
+                    // 可见 24pt 按钮居中于 28pt 命中槽，相邻可见间距 4pt 且命中槽互不重叠（#144）。
                     for (final (index, action) in actions.indexed)
                       Positioned(
                         left: index * 28.0,
@@ -472,6 +506,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                           icon: action.$2,
                           onPressed: action.$3,
                           visual: 24,
+                          hitSize: 28,
                           radius: 6,
                           iconSize: 14,
                         ),
@@ -484,6 +519,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ),
         Expanded(
           child: SingleChildScrollView(
+            // 结果栏分栏独立滚动，不争抢父级 PrimaryScrollController。
+            primary: false,
             padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
             child: body,
           ),
@@ -564,14 +601,16 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   }
 }
 
-/// 卡片中的玻璃图标按钮：中心绘制 visual×visual 的可见按钮，外围 32×32 命中区同样触发动作。
+/// 卡片中的玻璃图标按钮：中心绘制 visual×visual 的可见按钮，外围 hitSize×hitSize 命中区同样触发动作。
 class _CardButton extends StatelessWidget {
-  /// tooltip 为提示与可访问名，icon 为图标组件，onPressed 为空表示禁用；visual、radius、iconSize 为可见尺寸、圆角与图标边长。
+  /// tooltip 为提示与可访问名，icon 为图标组件，onPressed 为空表示禁用；
+  /// visual、hitSize、radius、iconSize 为可见尺寸、命中区边长、圆角与图标边长。
   const _CardButton({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
     required this.visual,
+    this.hitSize = GlassMetrics.hitSize,
     required this.radius,
     required this.iconSize,
   });
@@ -579,19 +618,21 @@ class _CardButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback? onPressed;
   final double visual;
+  final double hitSize;
   final double radius;
   final double iconSize;
 
-  /// context 未使用；返回 32×32 命中区与居中的玻璃按钮。
+  /// context 未使用；返回 hitSize×hitSize 命中区与居中的玻璃按钮。
   @override
   Widget build(BuildContext context) => SizedBox.square(
-    dimension: GlassMetrics.hitSize,
+    dimension: hitSize,
     child: Stack(
       alignment: Alignment.center,
       children: [
-        // 可见按钮外的命中环；可见按钮本身在上层处理悬停、按压与提示。
+        // 可见按钮外的扩展命中区，排除重复语义，由上层可见按钮承担悬停、按压与提示。
         Positioned.fill(
           child: GestureDetector(
+            excludeFromSemantics: true,
             behavior: HitTestBehavior.opaque,
             onTap: onPressed,
           ),

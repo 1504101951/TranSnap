@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_enums.dart';
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import 'markdown_view.dart';
 
@@ -21,7 +22,7 @@ bool isOpenableLink(String payload) {
 /// 截图里“识别文字”结果的弹窗；外观与尺寸沿用翻译弹窗，正文先列出二维码与条码，再渲染识别文字 Markdown。
 ///
 /// 打开弹窗不写剪贴板：用户可以选中部分文字自行复制，或点“复制全部”复制 Markdown 原文。弹窗不自动关闭。
-class RecognizedTextPanel extends StatelessWidget {
+class RecognizedTextPanel extends StatefulWidget {
   /// text 为识别结果 Markdown 原文（可为空），codes 为按位置排序的码；onCopyAll 复制原文；
   /// onCopyCode 复制一个码的内容，onOpenLink 打开链接内容；onClose 关闭弹窗；
   /// onDrag 接收标题区拖动的位移，由调用方移动弹窗。
@@ -47,101 +48,141 @@ class RecognizedTextPanel extends StatelessWidget {
   final ValueChanged<Offset> onDrag;
 
   @override
+  State<RecognizedTextPanel> createState() => _RecognizedTextPanelState();
+}
+
+class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
+  int _copyAllTrigger = 0;
+  final Map<int, int> _codeCopyTriggers = <int, int>{};
+
+  /// context 为识别弹窗构建上下文；返回弹性进场与光学棱镜镶边的玻璃结果面板。
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return NativeGlassSurface(
-      child: Padding(
-        padding: const EdgeInsets.all(GlassMetrics.pagePadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 整块 56pt 标题区可拖动；两个按钮与正文保留各自的点击和选字手势。
-            SizedBox(
-              height: 56,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      key: const ValueKey('recognized-text-drag-area'),
-                      behavior: HitTestBehavior.opaque,
-                      onPanUpdate: (details) => onDrag(details.delta),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.drag_indicator,
-                            size: GlassMetrics.icon,
-                            color: colors.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            '识别结果',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // 只有码没有文字时，码各自复制，不显示复制全部。
-                  if (text.trim().isNotEmpty) ...[
-                    NativeGlassSurface(
-                      material: true,
-                      child: IconButton(
-                        onPressed: onCopyAll,
-                        tooltip: '复制全部',
-                        icon: const Icon(
-                          Icons.copy_rounded,
-                          size: GlassMetrics.icon,
-                        ),
-                        visualDensity: VisualDensity.standard,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  NativeGlassSurface(
-                    material: true,
-                    child: IconButton(
-                      onPressed: onClose,
-                      tooltip: '关闭',
-                      icon: const Icon(Icons.close, size: GlassMetrics.icon),
-                      visualDensity: VisualDensity.standard,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colors.surface.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SizedBox.expand(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(8),
-                    // MarkdownView 只在显示时渲染识别结果；SelectionArea 让码内容、标题、段落、列表与表格内文字都可选中复制。
-                    child: SelectionArea(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final code in codes)
-                            _CodeRow(
-                              code: code,
-                              onCopy: () => onCopyCode(code.payload),
-                              onOpen: isOpenableLink(code.payload)
-                                  ? () => onOpenLink(code.payload)
-                                  : null,
+    return BouncyPresence(
+      fromScale: 0.94,
+      child: OpticalPrismOverlay(
+        radius: GlassMetrics.panelRadius,
+        child: NativeGlassSurface(
+          child: Padding(
+            padding: const EdgeInsets.all(GlassMetrics.pagePadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 整块 44pt 标题区可拖动，悬停切换移动光标；按钮与正文保留各自手势。
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            key: const ValueKey('recognized-text-drag-area'),
+                            behavior: HitTestBehavior.opaque,
+                            onPanUpdate: (details) =>
+                                widget.onDrag(details.delta),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.drag_indicator,
+                                  size: GlassMetrics.icon,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '识别结果',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ],
                             ),
-                          if (text.trim().isNotEmpty)
-                            MarkdownView(source: text),
-                        ],
+                          ),
+                        ),
+                      ),
+                      // 只有码没有文字时，码各自复制，不显示复制全部。
+                      if (widget.text.trim().isNotEmpty) ...[
+                        NativeGlassSurface(
+                          material: true,
+                          child: IconButton(
+                            onPressed: () {
+                              setState(() => _copyAllTrigger++);
+                              widget.onCopyAll();
+                            },
+                            tooltip: '复制全部',
+                            icon: CopyConfirmIcon(
+                              trigger: _copyAllTrigger,
+                              size: GlassMetrics.icon,
+                            ),
+                            visualDensity: VisualDensity.standard,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      NativeGlassSurface(
+                        material: true,
+                        child: IconButton(
+                          onPressed: widget.onClose,
+                          tooltip: '关闭',
+                          icon: const Icon(
+                            Icons.close,
+                            size: GlassMetrics.icon,
+                          ),
+                          visualDensity: VisualDensity.standard,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(
+                  height: GlassMetrics.groupDividerThickness,
+                  thickness: GlassMetrics.groupDividerThickness,
+                ),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.surface.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SizedBox.expand(
+                      child: SingleChildScrollView(
+                        // 外层弹窗不共享页面主滚动控制器，避免触发 PrimaryScrollController 冲突（#144）。
+                        primary: false,
+                        padding: const EdgeInsets.all(8),
+                        // MarkdownView 只在显示时渲染识别结果；SelectionArea 让码内容、标题、段落、列表与表格内文字都可选中复制。
+                        child: SelectionArea(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < widget.codes.length; i++)
+                                _CodeRow(
+                                  code: widget.codes[i],
+                                  copyTrigger: _codeCopyTriggers[i] ?? 0,
+                                  onCopy: () {
+                                    setState(
+                                      () => _codeCopyTriggers[i] =
+                                          (_codeCopyTriggers[i] ?? 0) + 1,
+                                    );
+                                    widget.onCopyCode(widget.codes[i].payload);
+                                  },
+                                  onOpen:
+                                      isOpenableLink(widget.codes[i].payload)
+                                      ? () => widget.onOpenLink(
+                                          widget.codes[i].payload,
+                                        )
+                                      : null,
+                                ),
+                              if (widget.text.trim().isNotEmpty)
+                                MarkdownView(source: widget.text),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -150,10 +191,16 @@ class RecognizedTextPanel extends StatelessWidget {
 
 /// 识别结果中的一条码：类型、完整内容与复制、打开链接操作（#108）。
 class _CodeRow extends StatelessWidget {
-  /// code 为码，onCopy 复制内容，onOpen 打开链接（内容不是可打开链接时为 null，不显示按钮）。
-  const _CodeRow({required this.code, required this.onCopy, this.onOpen});
+  /// code 为码，copyTrigger 递增时播放复制确认，onCopy 复制内容，onOpen 打开链接（内容不是可打开链接时为 null，不显示按钮）。
+  const _CodeRow({
+    required this.code,
+    this.copyTrigger = 0,
+    required this.onCopy,
+    this.onOpen,
+  });
 
   final RecognizedCode code;
+  final int copyTrigger;
   final VoidCallback onCopy;
   final VoidCallback? onOpen;
 
@@ -197,7 +244,10 @@ class _CodeRow extends StatelessWidget {
             child: IconButton(
               onPressed: onCopy,
               tooltip: '复制内容',
-              icon: const Icon(Icons.copy_rounded, size: GlassMetrics.icon),
+              icon: CopyConfirmIcon(
+                trigger: copyTrigger,
+                size: GlassMetrics.icon,
+              ),
               visualDensity: VisualDensity.standard,
             ),
           ),

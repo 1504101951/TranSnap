@@ -35,67 +35,75 @@ class MeasureLayer extends StatelessWidget {
 
   /// context 为画布上下文；返回铺满画布的测量线与标签。
   @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.biggest;
-        // 截图像素按画布与截图的比例映射到显示点。
-        Offset toLocal(Offset point) => Offset(
-          point.dx / imageSize.width * size.width,
-          point.dy / imageSize.height * size.height,
-        );
-        final ruler = this.ruler;
-        final picker = this.picker;
-        final pickerColor = this.pickerColor;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            if (ruler != null) ...[
-              CustomPaint(
-                painter: _RulerPainter(
-                  start: toLocal(ruler.start),
-                  end: toLocal(ruler.end),
+  Widget build(BuildContext context) {
+    if (imageSize.width <= 0 || imageSize.height <= 0) {
+      return const SizedBox.shrink();
+    }
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.biggest;
+          // 截图像素按画布与截图的比例映射到显示点。
+          Offset toLocal(Offset point) => Offset(
+            point.dx / imageSize.width * size.width,
+            point.dy / imageSize.height * size.height,
+          );
+          final ruler = this.ruler;
+          final picker = this.picker;
+          final pickerColor = this.pickerColor;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (ruler != null) ...[
+                CustomPaint(
+                  painter: _RulerPainter(
+                    start: toLocal(ruler.start),
+                    end: toLocal(ruler.end),
+                  ),
                 ),
-              ),
-              _label(
-                anchor: toLocal(ruler.end),
-                canvas: size,
-                key: const Key('ruler-label'),
-                child: Text(rulerLabel(ruler.start, ruler.end), style: _style),
-              ),
-            ],
-            if (picker != null && pickerColor != null)
-              _label(
-                anchor: toLocal(picker),
-                canvas: size,
-                key: const Key('eyedropper-label'),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: MeasureMetrics.swatchSize,
-                      height: MeasureMetrics.swatchSize,
-                      decoration: BoxDecoration(
-                        color: pickerColor,
-                        border: Border.all(
-                          color: Colors.white,
-                          width: MeasureMetrics.swatchBorder,
-                        ),
-                        borderRadius: BorderRadius.circular(
-                          MeasureMetrics.swatchRadius,
+                _label(
+                  anchor: toLocal(ruler.end),
+                  canvas: size,
+                  key: const Key('ruler-label'),
+                  child: Text(
+                    rulerLabel(ruler.start, ruler.end),
+                    style: _style,
+                  ),
+                ),
+              ],
+              if (picker != null && pickerColor != null)
+                _label(
+                  anchor: toLocal(picker),
+                  canvas: size,
+                  key: const Key('eyedropper-label'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: MeasureMetrics.swatchSize,
+                        height: MeasureMetrics.swatchSize,
+                        decoration: BoxDecoration(
+                          color: pickerColor,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: MeasureMetrics.swatchBorder,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            MeasureMetrics.swatchRadius,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: MeasureMetrics.swatchGap),
-                    Text(colorHex(pickerColor), style: _style),
-                  ],
+                      const SizedBox(width: MeasureMetrics.swatchGap),
+                      Text(colorHex(pickerColor), style: _style),
+                    ],
+                  ),
                 ),
-              ),
-          ],
-        );
-      },
-    ),
-  );
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   /// 标签文字：白色等宽数字，字号同选区尺寸标签。
   static const _style = TextStyle(
@@ -105,7 +113,7 @@ class MeasureLayer extends StatelessWidget {
   );
 
   /// anchor 为指针或终点的画布坐标，canvas 为画布尺寸，key 为标签身份，child 为标签内容；
-  /// 返回定位后的标签：默认在锚点右下各 12pt；锚点在画布右半时放到左侧，下方放不下 12pt 加标签高度时放到上方。
+  /// 返回定位后的标签：默认在锚点右下各 12pt；锚点在画布右半时放到左侧，下方放不下 12pt 加标签高度时放到上方并夹紧边界。
   static Widget _label({
     required Offset anchor,
     required Size canvas,
@@ -115,12 +123,16 @@ class MeasureLayer extends StatelessWidget {
     const offset = MeasureMetrics.labelOffset;
     final left = anchor.dx <= canvas.width / 2;
     final below = anchor.dy + offset + CropMetrics.labelHeight <= canvas.height;
+    final rawTop = below
+        ? anchor.dy + offset
+        : anchor.dy - offset - CropMetrics.labelHeight;
+    final clampedTop = rawTop
+        .clamp(0.0, math.max(0.0, canvas.height - CropMetrics.labelHeight))
+        .toDouble();
     return Positioned(
-      left: left ? anchor.dx + offset : null,
-      right: left ? null : canvas.width - anchor.dx + offset,
-      top: below
-          ? anchor.dy + offset
-          : math.max(0, anchor.dy - offset - CropMetrics.labelHeight),
+      left: left ? math.max(0.0, anchor.dx + offset) : null,
+      right: left ? null : math.max(0.0, canvas.width - anchor.dx + offset),
+      top: clampedTop,
       child: Container(
         key: key,
         height: CropMetrics.labelHeight,

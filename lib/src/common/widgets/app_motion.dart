@@ -364,7 +364,8 @@ class _OpticalPrismOverlayState extends State<OpticalPrismOverlay>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) => MouseRegion(
-        opaque: false,
+        // 玻璃卡片叠加在画布等下层手势宿主上方时必须吞并命中测试，防止点击穿透到底层双击识别器（#144）。
+        hitTestBehavior: HitTestBehavior.opaque,
         onHover: reduced
             ? null
             : (event) => _updateHoverAngle(event, constraints.biggest),

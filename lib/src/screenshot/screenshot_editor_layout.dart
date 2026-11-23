@@ -19,6 +19,10 @@ class ScreenshotEditorLayout {
   final Rect toolbar;
   final Axis axis;
 
+  /// 将 value 夹紧到 [lo, hi]；当极窄视口导致 hi < lo 时返回 lo，避免 clamp 抛异常（U-24）。
+  static double _safeClamp(double value, double lo, double hi) =>
+      value.clamp(lo, math.max(lo, hi)).toDouble();
+
   /// viewport为窗口尺寸，image为源像素尺寸，crop为源图选区，rowCount为实际行数，available为显示器可用局部点坐标，imageRect为等比图片在视口中的矩形；
   /// 返回完整位于窗口内的工具栏；优先选区外侧，空间不足时贴选区内缘。
   factory ScreenshotEditorLayout.place({
@@ -42,19 +46,21 @@ class ScreenshotEditorLayout {
     final safe = available?.intersect(viewportRect) ?? viewportRect;
     // 已提交选区决定布局，拖动预览不改变图片坐标系。
     final selection = mapRectToFitted(crop, image, canvas);
-    final horizontalLength = math.min(
-      toolbarLength.clamp(48.0, 640.0),
-      safe.width - margin * 2,
+    final horizontalLength = math.max(
+      0.0,
+      math.min(toolbarLength.clamp(48.0, 640.0), safe.width - margin * 2),
     );
-    final verticalLength = math.min(
-      toolbarLength.clamp(48.0, 640.0),
-      safe.height - margin * 2,
+    final verticalLength = math.max(
+      0.0,
+      math.min(toolbarLength.clamp(48.0, 640.0), safe.height - margin * 2),
     );
-    final left = selection.left.clamp(
+    final left = _safeClamp(
+      selection.left,
       safe.left + margin,
       safe.right - margin - horizontalLength,
     );
-    final top = selection.top.clamp(
+    final top = _safeClamp(
+      selection.top,
       safe.top + margin,
       safe.bottom - margin - verticalLength,
     );
@@ -65,7 +71,8 @@ class ScreenshotEditorLayout {
         canvas: canvas,
         toolbar: Rect.fromLTWH(
           left,
-          (selection.bottom + gap).clamp(
+          _safeClamp(
+            selection.bottom + gap,
             safe.top + margin,
             safe.bottom - margin - thickness,
           ),
@@ -80,7 +87,8 @@ class ScreenshotEditorLayout {
         canvas: canvas,
         toolbar: Rect.fromLTWH(
           left,
-          (selection.top - gap - thickness).clamp(
+          _safeClamp(
+            selection.top - gap - thickness,
             safe.top + margin,
             safe.bottom - margin - thickness,
           ),
@@ -94,7 +102,8 @@ class ScreenshotEditorLayout {
       return ScreenshotEditorLayout(
         canvas: canvas,
         toolbar: Rect.fromLTWH(
-          (selection.right + gap).clamp(
+          _safeClamp(
+            selection.right + gap,
             safe.left + margin,
             safe.right - margin - thickness,
           ),
@@ -109,7 +118,8 @@ class ScreenshotEditorLayout {
       return ScreenshotEditorLayout(
         canvas: canvas,
         toolbar: Rect.fromLTWH(
-          (selection.left - gap - thickness).clamp(
+          _safeClamp(
+            selection.left - gap - thickness,
             safe.left + margin,
             safe.right - margin - thickness,
           ),
@@ -127,7 +137,7 @@ class ScreenshotEditorLayout {
         canvas: canvas,
         axis: Axis.vertical,
         toolbar: Rect.fromLTWH(
-          safe.right - margin - thickness,
+          math.max(safe.left + margin, safe.right - margin - thickness),
           top,
           thickness,
           verticalLength,
@@ -139,11 +149,13 @@ class ScreenshotEditorLayout {
     return ScreenshotEditorLayout(
       canvas: canvas,
       toolbar: Rect.fromLTWH(
-        (selection.right - horizontalLength).clamp(
+        _safeClamp(
+          selection.right - horizontalLength,
           safe.left + margin,
           safe.right - margin - horizontalLength,
         ),
-        (selection.bottom - gap - thickness).clamp(
+        _safeClamp(
+          selection.bottom - gap - thickness,
           safe.top + margin,
           safe.bottom - margin - thickness,
         ),

@@ -70,6 +70,8 @@ class NativeGlassSurface extends StatelessWidget {
       }
       if (current is Semantics && current.child != null) {
         current = current.child!;
+      } else if (current is MergeSemantics && current.child != null) {
+        current = current.child!;
       } else if (current is SizedBox && current.child != null) {
         current = current.child!;
       } else if (current is ConstrainedBox && current.child != null) {
