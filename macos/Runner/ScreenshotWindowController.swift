@@ -761,11 +761,14 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
                     result(FlutterError(code: AppConstants.badArgsError, message: "贴图缺少选区坐标。", details: nil))
                     return
                 }
-                window?.orderOut(nil)
-                let pinId = pins.pin(
+                guard let pinId = pins.pin(
                     png: payload,
                     origin: NSPoint(x: x.doubleValue, y: y.doubleValue)
-                )
+                ) else {
+                    result(FlutterError(code: AppConstants.saveFailedError, message: "无法解码贴图内容，请重试。", details: nil))
+                    return
+                }
+                window?.orderOut(nil)
                 recordHistory(id: id, payload: payload)
                 result(pinId)
             default:

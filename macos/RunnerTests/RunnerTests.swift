@@ -1420,12 +1420,15 @@ class RunnerTests: XCTestCase {
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         )!
         let png = rep.representation(using: .png, properties: [:])!
-        let pinId = pins.pin(png: png, origin: NSPoint(x: 120, y: 180))
+        let pinId = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 120, y: 180)))
         let panel = try XCTUnwrap(pins.firstPanel)
         XCTAssertTrue(panel.canBecomeKey)
         XCTAssertFalse(panel.canBecomeMain)
         XCTAssertEqual(panel.level, .statusBar)
         XCTAssertTrue(pins.isVisible(pinId: pinId))
+
+        // 无效字节流创建贴图失败返回 nil，不能触发崩溃（#144 U-29）。
+        XCTAssertNil(pins.pin(png: Data([0, 1, 2, 3]), origin: NSPoint(x: 120, y: 180)))
 
         overlay.show(at: NSPoint(x: 250, y: 450), size: NSSize(width: 84, height: 36), sessionId: "pin-lifecycle")
         // 选区浮层隐藏不应关闭贴图。
@@ -1433,7 +1436,7 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(pins.isVisible(pinId: pinId))
         XCTAssertEqual(pins.count, 1)
 
-        let second = pins.pin(png: png, origin: NSPoint(x: 200, y: 220))
+        let second = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 200, y: 220)))
         XCTAssertEqual(pins.count, 2)
         // 关闭贴图窗口本身即用户关闭路径，只移除这一张贴图。
         panel.close()
@@ -1445,7 +1448,7 @@ class RunnerTests: XCTestCase {
         let created = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) && $0 is PinPanel }
         XCTAssertFalse(created.isEmpty)
 
-        // 图片层接收首次拖动；右上角没有覆盖控件，Escape只关闭当前贴图。
+        // 图片层接收首次拖动；静息态关闭按钮保持隐藏，Escape只关闭当前贴图（#144 U-29）。
         let remaining = try XCTUnwrap(pins.firstPanel)
         let image = remaining.imageViewForTesting
         let beforeDrag = image.dragBeginCountForTesting
@@ -1466,7 +1469,8 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(image.dragBeginCountForTesting, beforeDrag + 1)
 
         let beforeCloseDrag = image.dragBeginCountForTesting
-        XCTAssertEqual(remaining.contentView?.subviews.count, 1)
+        XCTAssertTrue(remaining.closeButtonForTesting.isHidden)
+        XCTAssertNotNil(image.menu)
         remaining.cancelOperation(nil)
         XCTAssertEqual(image.dragBeginCountForTesting, beforeCloseDrag)
         XCTAssertEqual(pins.count, 0)
@@ -1558,9 +1562,9 @@ class RunnerTests: XCTestCase {
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         )!
         let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-        let firstId = pins.pin(png: png, origin: NSPoint(x: 80, y: 80))
+        let firstId = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 80, y: 80)))
         let firstPanel = try XCTUnwrap(pins.firstPanel)
-        let secondId = pins.pin(png: png, origin: NSPoint(x: 160, y: 160))
+        let secondId = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 160, y: 160)))
         XCTAssertEqual(pins.count, 2)
         XCTAssertTrue(firstPanel.canBecomeKey)
         // 尚未激活的贴图也必须接收第一次点击，不能先丢弃鼠标以激活应用。

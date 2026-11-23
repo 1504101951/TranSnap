@@ -597,7 +597,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             result(nil)
             // 菜单栏应用默认不在前台；先激活，提示才不会被其他应用窗口挡住（#126）。
             NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
+            let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
             alert.alertStyle = .warning
             alert.messageText = "TranslateApp 无法启动"
             // message 由 Dart 启动入口必定提供。

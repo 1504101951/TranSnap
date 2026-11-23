@@ -49,21 +49,33 @@ final class OverlayPanelController {
         panel.isVisible && panel.frame.contains(point)
     }
 
-    /// controller 为共享 Flutter 引擎的视图控制器；挂载内容，无返回值。
+    /// controller 为共享 Flutter 引擎的视图控制器；挂载内容并同步面板外观，无返回值。
     func attachFlutter(_ controller: FlutterViewController) {
+        NativeGlassFactory.applyAppearance(to: panel)
         // child controller 保持引擎及视图生命周期一致。
         host.embed(controller)
+    }
+
+    /// size 为浮层目标尺寸；触发胶囊与展开卡片采用不同宿主裁切圆角，消除与 Flutter 卡片的边角断层（#144 U-18）。
+    static func cornerRadius(for size: NSSize) -> CGFloat {
+        size.height <= AppConstants.overlayTriggerMaxHeight
+            ? AppConstants.overlayTriggerCornerRadius
+            : AppConstants.overlayCardCornerRadius
     }
 
     /// point 为选区锚点，size 为完整内容尺寸，sessionId 为会话；显示窗口，无返回值。
     func show(at point: NSPoint, size: NSSize, sessionId: String) {
         currentSessionId = sessionId
         dragStartEvent = nil
+        NativeGlassFactory.applyAppearance(to: panel)
+        host.setCornerRadius(Self.cornerRadius(for: size))
         var frame = NSRect(x: point.x + 8, y: point.y - size.height - 8, width: size.width, height: size.height)
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main {
             let visible = screen.visibleFrame.insetBy(dx: 8, dy: 8)
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - size.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - size.height)
+            let maxX = max(visible.minX, visible.maxX - size.width)
+            let maxY = max(visible.minY, visible.maxY - size.height)
+            frame.origin.x = min(max(frame.minX, visible.minX), maxX)
+            frame.origin.y = min(max(frame.minY, visible.minY), maxY)
         }
         panel.setFrame(frame, display: true)
         if NSApp.isHidden { NSApp.unhideWithoutActivation() }
@@ -93,17 +105,20 @@ final class OverlayPanelController {
         panel.orderOut(nil)
     }
 
-    /// sessionId 标识会话，size 为内容尺寸；保留左上角并夹取屏幕边界，无返回值。
+    /// sessionId 标识会话，size 为内容尺寸；保留左上角、同步动态圆角并夹取屏幕边界，无返回值。
     func resize(sessionId: String, size: NSSize) {
         // 流式译文反复通知同一尺寸，不能在系统拖动期间重新夹取窗口位置。
         guard currentSessionId == sessionId, panel.frame.size != size else { return }
+        host.setCornerRadius(Self.cornerRadius(for: size))
         var frame = panel.frame
         frame.origin.y = frame.maxY - size.height
         frame.size = size
         if let screen = panel.screen {
             let visible = screen.visibleFrame.insetBy(dx: 8, dy: 8)
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - size.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - size.height)
+            let maxX = max(visible.minX, visible.maxX - size.width)
+            let maxY = max(visible.minY, visible.maxY - size.height)
+            frame.origin.x = min(max(frame.minX, visible.minX), maxX)
+            frame.origin.y = min(max(frame.minY, visible.minY), maxY)
         }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.setFrame(frame, display: true)
@@ -143,14 +158,23 @@ final class TranslationPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Flutter 填满窗口，圆角裁切不额外占用内容空间。
+/// Flutter 填满窗口，圆角裁切按触发胶囊或展开卡片动态切换，不额外占用内容空间。
 final class OverlayHostViewController: NSViewController {
+    private var cornerRadius = AppConstants.overlayCardCornerRadius
+
     /// 无参数；创建透明圆角容器，无返回值。
     override func loadView() {
         view = NSView(frame: .zero)
         view.wantsLayer = true
-        view.layer?.cornerRadius = 9
+        view.layer?.cornerRadius = cornerRadius
         view.layer?.masksToBounds = true
+    }
+
+    /// radius 为当前窗口内容圆角（触发胶囊 10pt / 译文卡片 16pt）；实时同步容器裁切半径，无返回值（#144 U-18）。
+    func setCornerRadius(_ radius: CGFloat) {
+        cornerRadius = radius
+        guard isViewLoaded else { return }
+        view.layer?.cornerRadius = radius
     }
 
     /// controller 为 Flutter 内容；约束至容器四边，无返回值。
@@ -177,7 +201,7 @@ final class InputStatusBubble {
 
     private var panel: NSPanel?
     private var kind: Kind?
-    /// 每次显示、关闭或重新计时都递增，使旧计时（浮标延迟、失败气泡到时）失效，不影响新内容。
+    /// 每次显示、关闭、悬停或重新计时都递增，使旧计时失效。
     private var generation = 0
 
     /// anchor 为定位依据（选中区域与来源窗口，AppKit 全局坐标）；等待 inputProgressDelayMs 后仍未被收起才显示「翻译中…」浮标，忽略鼠标事件，无返回值。
@@ -211,25 +235,72 @@ final class InputStatusBubble {
         }
     }
 
-    /// message 为失败原因，anchor 为定位依据（选中区域与来源窗口，AppKit 全局坐标）；先收起进行中浮标并替换旧气泡，到时或点击后关闭，无返回值。
+    /// message 为失败原因，anchor 为定位依据（选中区域与来源窗口，AppKit 全局坐标）；先收起进行中浮标并替换旧气泡，
+    /// 停留 2000ms（悬停时暂停，鼠标移开后重新计算 2000ms），点击或到时关闭（#144 U-18、用户意见 #1）。
     func showFailure(_ message: String, anchor: InputAnchor) {
         close()
         let padding = AppConstants.scrollHintPadding
-        // hintText 与长截图提示共用文字排版：13/18、最大宽 240pt 换行。
+        let iconSize = AppConstants.inputFailureIconSize
+        let iconSpacing = AppConstants.inputFailureIconSpacing
+        let maxTextWidth = AppConstants.scrollHintMaxWidth - padding.width * 2 - iconSize - iconSpacing
+        // 与长截图提示共用基础字号/行高/错误色，并配语义图标与左对齐排版避免仅靠颜色传达错误。
+        let styled = NSMutableAttributedString(attributedString: CaptureShadeView.hintText(message, isError: true))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = 18
+        paragraph.maximumLineHeight = 18
+        paragraph.alignment = .left
+        styled.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: styled.length))
+
         let label = NSTextField(wrappingLabelWithString: message)
-        label.attributedStringValue = CaptureShadeView.hintText(message, isError: true)
-        // 用实际绘制文字的控件测量，计入文字框内边距，末尾文字不会被换到不可见的第二行。
-        label.preferredMaxLayoutWidth = AppConstants.scrollHintMaxWidth - padding.width * 2
+        label.attributedStringValue = styled
+        // 用实际绘制文字的控件测量，计入左侧图标与内边距，末尾文字不会被换到不可见的第二行。
+        label.preferredMaxLayoutWidth = maxTextWidth
         let fitting = label.fittingSize
-        let textSize = NSSize(width: ceil(fitting.width), height: ceil(fitting.height))
-        let size = NSSize(width: textSize.width + padding.width * 2, height: textSize.height + padding.height * 2)
-        label.frame = NSRect(origin: NSPoint(x: padding.width, y: padding.height), size: textSize)
+        let textSize = NSSize(width: min(ceil(fitting.width), maxTextWidth), height: max(18, ceil(fitting.height)))
+        let bodyHeight = max(iconSize, textSize.height)
+        let size = NSSize(
+            width: padding.width * 2 + iconSize + iconSpacing + textSize.width,
+            height: padding.height * 2 + bodyHeight
+        )
+
+        let icon = NSImageView(frame: NSRect(
+            x: padding.width,
+            y: ((size.height - iconSize) / 2).rounded(),
+            width: iconSize,
+            height: iconSize
+        ))
+        icon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "错误")
+        icon.contentTintColor = .systemRed
+        icon.imageScaling = .scaleProportionallyDown
+
+        label.frame = NSRect(
+            origin: NSPoint(x: icon.frame.maxX + iconSpacing, y: ((size.height - textSize.height) / 2).rounded()),
+            size: textSize
+        )
         let content = BubbleClickView(frame: NSRect(origin: .zero, size: size))
+        content.toolTip = "点击关闭"
         content.onClick = { [weak self] in self?.close() }
+        content.onHoverChanged = { [weak self] hovering in
+            guard let self, self.kind == .failure else { return }
+            if hovering {
+                // 鼠标悬停阅读长报错时暂停自动消失。
+                self.generation += 1
+            } else {
+                // 鼠标离开后重新开始 2000ms 倒计时。
+                self.scheduleFailureDismiss()
+            }
+        }
+        content.addSubview(icon)
         content.addSubview(label)
-        let glass = present(content: content, size: size, anchor: anchor, kind: .failure, ignoresMouse: false)
-        NSAccessibility.post(element: glass, notification: .announcementRequested,
+        let container = present(content: content, size: size, anchor: anchor, kind: .failure, ignoresMouse: false)
+        NSAccessibility.post(element: container, notification: .announcementRequested,
                              userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        scheduleFailureDismiss()
+    }
+
+    /// 无参数；从当前代次起安排 2000ms 后自动关闭失败气泡，悬停或后续更新会递增 generation 使本次作废，无返回值。
+    private func scheduleFailureDismiss() {
+        generation += 1
         let current = generation
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(AppConstants.inputFailureDurationMs))
@@ -253,9 +324,9 @@ final class InputStatusBubble {
     }
 
     /// content 为面板内容，size 为内容尺寸，anchor 为定位依据，kind 为内容种类，ignoresMouse 为是否点击穿透；
-    /// 按统一位置规则显示非激活玻璃面板，返回包裹内容的玻璃视图。
+    /// 通过 NativeGlassFactory 创建统一玻璃容器与明暗外观，返回包裹内容的容器视图（#144 U-18）。
     @discardableResult
-    private func present(content: NSView, size: NSSize, anchor: InputAnchor, kind: Kind, ignoresMouse: Bool) -> NSGlassEffectView {
+    private func present(content: NSView, size: NSSize, anchor: InputAnchor, kind: Kind, ignoresMouse: Bool) -> NSView {
         // 锚点所在屏；锚点不在任何屏幕上时按主屏放置。
         let screen = NSScreen.screens.first { $0.frame.intersects(anchor.selection) } ?? NSScreen.screens[0]
         // 可用区域为锚点所在屏可见区与来源窗口的交集，气泡不越出来源窗口。
@@ -268,14 +339,14 @@ final class InputStatusBubble {
         panel.backgroundColor = .clear
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = ignoresMouse
-        let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: size))
-        glass.cornerRadius = kind == .progress ? AppConstants.inputProgressRadius : AppConstants.scrollHintRadius
-        glass.contentView = content
-        panel.contentView = glass
+        NativeGlassFactory.applyAppearance(to: panel)
+        let radius = kind == .progress ? AppConstants.inputProgressRadius : AppConstants.scrollHintRadius
+        let container = NativeGlassFactory.makeGlassContainer(content: content, size: size, cornerRadius: radius)
+        panel.contentView = container
         panel.orderFrontRegardless()
         self.panel = panel
         self.kind = kind
-        return glass
+        return container
     }
 
     /// textWidth 为「翻译中…」单行文字宽；返回浮标尺寸：高固定，宽为左右内边距、转圈、间距与文字之和（取整点）。
@@ -313,12 +384,38 @@ final class InputStatusBubble {
     }
 }
 
-/// 失败气泡内容视图：非激活面板首次点击即关闭气泡。
+/// 失败气泡内容视图：非激活面板首次点击即关闭气泡，鼠标悬停期间通知外层暂停自动消失（#144 用户意见 #1）。
 private final class BubbleClickView: NSView {
     var onClick: (() -> Void)?
+    var onHoverChanged: ((Bool) -> Void)?
+    private var tracking: NSTrackingArea?
+
+    /// 无参数；重建悬停追踪区域以适配气泡宽高，无返回值。
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
 
     /// event 为首次点击；非激活面板不先激活应用，返回 true 直接处理。
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// event 为鼠标进入；暂停自动消失计时，无返回值。
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    /// event 为鼠标离开；恢复并重新计时 2000ms，无返回值。
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
+    }
 
     /// event 为鼠标按下；关闭气泡，无返回值。
     override func mouseDown(with event: NSEvent) { onClick?() }

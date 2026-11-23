@@ -10,12 +10,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var installed = false
     private var automaticItem: NSMenuItem?
     private var accessItem: NSMenuItem?
+    private var screenRecordingItem: NSMenuItem?
+    private var screenshotItem: NSMenuItem?
     private var stopCaptureItem: NSMenuItem?
     /// 显示器子菜单在菜单打开时重建（#105）。
     private var displayMenu: NSMenu?
     /// 录制倒计时的剩余秒数；没有倒计时时为 nil（#129）。
     private var countdown: Int?
     private var liveAbort = false
+    private var captureActive = false
+    private var automaticEnabled = true
     /// 执行中或仍在最短保持时间内的 MCP 截图数；大于 0 时显示采集图标。
     private var mcpCaptures = 0
     /// MCP 操控会话进行中时的终止回调；非 nil 时显示操控图标，菜单首项为「停止操控」（#140）。
@@ -32,12 +36,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.isVisible = true
-        item.button?.image = idleImage()
         item.button?.imagePosition = .imageOnly
         // 图标独占菜单栏方形位置，名称仍通过悬停与辅助功能提供。
         item.button?.title = ""
-        applyIdleLabel(to: item.button)
         statusItem = item
+        syncStatusButton()
         reloadMenu()
         // 刚创建时窗口高度可能是 0，下一拍再强制显示。
         DispatchQueue.main.async { [weak self] in
@@ -45,16 +48,52 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 无参数；按当前辅助功能授权状态重建菜单项与动作，无返回值。
+    /// 无参数；按实时翻译、操控会话、双权限授权及快捷键配置重建菜单并始终挂载（#144 U-30）。
     func reloadMenu() {
-        let trusted = AccessibilitySelection.isTrusted(prompt: false)
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
+        if liveAbort {
+            // 实时翻译运行期间保留精简应急菜单，确保「停止操控」「设置」「历史」「退出」均可触达。
+            automaticItem = nil
+            accessItem = nil
+            screenRecordingItem = nil
+            screenshotItem = nil
+            stopCaptureItem = nil
+            displayMenu = nil
+
+            let abortItem = NSMenuItem(title: "停止实时翻译", action: #selector(abortLive), keyEquivalent: "")
+            abortItem.target = self
+            abortItem.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "停止实时翻译")
+            menu.addItem(abortItem)
+
+            if stopControl != nil {
+                let stop = NSMenuItem(title: "停止操控", action: #selector(stopComputerControl), keyEquivalent: "")
+                stop.target = self
+                stop.image = NSImage(systemSymbolName: AppConstants.controlSymbol, accessibilityDescription: "停止操控")
+                menu.addItem(stop)
+            }
+
+            menu.addItem(.separator())
+            let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+            settings.target = self
+            menu.addItem(settings)
+            let history = NSMenuItem(title: "翻译历史…", action: #selector(openHistory), keyEquivalent: "")
+            history.target = self
+            menu.addItem(history)
+            menu.addItem(.separator())
+            let quit = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
+            quit.target = self
+            menu.addItem(quit)
+            statusItem?.menu = menu
+            return
+        }
+
         if stopControl != nil {
             // 操控期间菜单首项为「停止操控」（#67「电脑操控提示」）。
             let stop = NSMenuItem(title: "停止操控", action: #selector(stopComputerControl), keyEquivalent: "")
             stop.target = self
+            stop.image = NSImage(systemSymbolName: AppConstants.controlSymbol, accessibilityDescription: "停止操控")
             menu.addItem(stop)
             menu.addItem(.separator())
         }
@@ -66,7 +105,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         // 截图编辑工具栏承载媒体工具，菜单栏保留普通截图、捕获选项和采集停止。
         let screenshot = NSMenuItem(title: "区域截图…", action: #selector(captureScreenshot), keyEquivalent: "")
         screenshot.target = self
+        screenshotItem = screenshot
+        applyScreenshotShortcut()
         menu.addItem(screenshot)
+
         let displays = NSMenuItem(title: "截取显示器", action: nil, keyEquivalent: "")
         let displayMenu = NSMenu()
         displayMenu.autoenablesItems = false
@@ -90,42 +132,37 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(history)
         let automatic = NSMenuItem(title: "仅使用快捷键", action: #selector(toggleAutomatic), keyEquivalent: "")
         automatic.target = self
+        automatic.state = automaticEnabled ? .off : .on
         automaticItem = automatic
         menu.addItem(automatic)
         menu.addItem(.separator())
+
+        let trusted = AccessibilitySelection.isTrusted(prompt: false)
         let access = NSMenuItem(title: "", action: #selector(requestAccess), keyEquivalent: "")
         accessItem = access
         access.target = self
         applyAccessState(to: access, trusted: trusted)
         menu.addItem(access)
+
+        let screenAuthorized = ScreenCaptureService.isAuthorized()
+        let screenItem = NSMenuItem(title: "", action: #selector(requestScreenCapture), keyEquivalent: "")
+        screenRecordingItem = screenItem
+        screenItem.target = self
+        applyScreenCaptureState(to: screenItem, authorized: screenAuthorized)
+        menu.addItem(screenItem)
+
         menu.addItem(NSMenuItem.separator())
         let quit = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
-        statusItem?.menu = liveAbort ? nil : menu
+        statusItem?.menu = menu
     }
 
-    /// active 为实时翻译正在运行。图标变为中止按钮，点击执行结束并保留结果。
+    /// active 为实时翻译正在运行，abort 为结束并保留结果回调；保留精简菜单并将图标切换为停止样式，无返回值（#144 U-30）。
     func setLiveAbort(_ active: Bool, abort: (() -> Void)? = nil) {
         liveAbort = active
         abortLiveTranslation = abort
-        let button = statusItem?.button
-        if active {
-            statusItem?.menu = nil
-            if let image = NSImage(systemSymbolName: "stop.circle", accessibilityDescription: "中止实时翻译") {
-                image.isTemplate = true
-                button?.image = image
-            }
-            button?.action = #selector(abortLive)
-            button?.target = self
-            button?.toolTip = "中止实时翻译"
-            button?.setAccessibilityLabel("中止实时翻译")
-            return
-        }
-        button?.action = nil
-        button?.target = nil
-        button?.image = idleImage()
-        applyIdleLabel(to: button)
+        syncStatusButton()
         reloadMenu()
     }
 
@@ -135,14 +172,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     /// 返回：截图结束时调用的回调；到达最短保持时间后计数减一，无进行中截图时恢复普通图标。
     func beginMCPCapture() -> () -> Void {
         mcpCaptures += 1
-        updateMCPIcon()
+        syncStatusButton()
         let started = ContinuousClock.now
         return { [weak self] in
             Task { @MainActor in
                 try? await Task.sleep(until: started + AppConstants.mcpCaptureIndicatorMinimum, clock: .continuous)
                 guard let self else { return }
-                self.mcpCaptures -= 1
-                self.updateMCPIcon()
+                self.mcpCaptures = max(0, self.mcpCaptures - 1)
+                self.syncStatusButton()
             }
         }
     }
@@ -150,7 +187,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     /// active 为 MCP 操控会话是否进行中，stop 为「停止操控」执行的终止；更新图标与菜单，无返回值（#140）。
     func setControlActive(_ active: Bool, stop: (() -> Void)?) {
         stopControl = active ? stop : nil
-        updateMCPIcon()
+        syncStatusButton()
         reloadMenu()
     }
 
@@ -158,28 +195,43 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         stopControl?()
     }
 
-    /// 无参数；按 MCP 截图计数设置非实时翻译状态下的图标，无返回值。
-    private func updateMCPIcon() {
-        guard !liveAbort else { return }
-        statusItem?.button?.image = idleImage()
-    }
+    /// 无参数；统一根据当前优先级状态同步菜单栏图标、悬停提示与无障碍名称，避免状态切换遗漏（#144 U-30）。
+    private func syncStatusButton() {
+        guard let button = statusItem?.button else { return }
+        button.title = ""
+        button.action = nil
+        button.target = nil
 
-    /// 无参数；返回非实时翻译状态的模板图标：录制倒计时为剩余秒数，操控会话中为操控图标，MCP 截图进行中为采集图标，否则为翻译图标。
-    private func idleImage() -> NSImage? {
-        if let countdown {
-            let image = NSImage(systemSymbolName: "\(countdown).circle", accessibilityDescription: "\(countdown) 秒后开始录制")
-            image?.isTemplate = true
-            return image
+        let symbolName: String
+        let description: String
+        if liveAbort {
+            symbolName = "stop.circle"
+            description = stopControl != nil
+                ? "TranslateApp，实时翻译与操控运行中"
+                : "TranslateApp，实时翻译运行中"
+        } else if let countdown {
+            symbolName = "\(countdown).circle"
+            description = "TranslateApp，录制倒计时 \(countdown) 秒"
+        } else if stopControl != nil {
+            symbolName = AppConstants.controlSymbol
+            description = "TranslateApp，模型操控中"
+        } else if captureActive {
+            symbolName = mcpCaptures > 0 ? AppConstants.mcpCaptureSymbol : "translate"
+            description = "TranslateApp，采集中"
+        } else if mcpCaptures > 0 {
+            symbolName = AppConstants.mcpCaptureSymbol
+            description = "TranslateApp，agent 截图中"
+        } else {
+            symbolName = "translate"
+            description = "TranslateApp"
         }
-        // 操控会话优先于 MCP 截图：截图是操控过程的一部分（#140）。
-        let image = stopControl != nil
-            ? NSImage(systemSymbolName: AppConstants.controlSymbol, accessibilityDescription: "模型操控中")
-            : mcpCaptures > 0
-            ? NSImage(systemSymbolName: AppConstants.mcpCaptureSymbol, accessibilityDescription: "agent 截图中")
-            : NSImage(systemSymbolName: "translate", accessibilityDescription: "选区翻译")
-                ?? NSImage(systemSymbolName: "globe", accessibilityDescription: "选区翻译")
+
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: description)
+            ?? NSImage(systemSymbolName: "globe", accessibilityDescription: description)
         image?.isTemplate = true
-        return image
+        button.image = image
+        button.toolTip = description
+        button.setAccessibilityLabel(description)
     }
 
     @objc private func abortLive() {
@@ -188,13 +240,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     /// enabled 为主 Dart 已成功保存的自动按钮设置；更新菜单状态，无返回值。
     func updateAutomatic(_ enabled: Bool) {
+        automaticEnabled = enabled
         // 菜单勾选表示仅使用快捷键，与底层自动捕获状态相反。
         automaticItem?.state = enabled ? .off : .on
     }
 
-    /// menu 为即将展示的菜单；即时读取权限、采集停止能力与显示器列表，无返回值。
+    /// menu 为即将展示的菜单；即时读取双权限、快捷键、采集停止能力与显示器列表，无返回值（#144 U-30）。
     func menuWillOpen(_ menu: NSMenu) {
+        guard !liveAbort else { return }
         stopCaptureItem?.isEnabled = MacPlatformBridge.Shared.instance?.capture.canStop == true
+        applyScreenshotShortcut()
         // 显示器可能在两次打开菜单之间接入或断开，按当前系统顺序重建。
         displayMenu?.removeAllItems()
         for screen in NSScreen.screens {
@@ -206,6 +261,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
         let trusted = AccessibilitySelection.isTrusted(prompt: false)
         if let accessItem { applyAccessState(to: accessItem, trusted: trusted) }
+        let screenAuthorized = ScreenCaptureService.isAuthorized()
+        if let screenRecordingItem { applyScreenCaptureState(to: screenRecordingItem, authorized: screenAuthorized) }
     }
 
     /// item 为辅助功能菜单项，trusted 为是否已获得辅助功能权限；已授权时显示已开启且不可点，无返回值。
@@ -214,10 +271,27 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         item.isEnabled = !trusted
     }
 
-    /// button 为菜单栏图标按钮；写入空闲态的悬停提示与辅助功能名称，无返回值。
-    private func applyIdleLabel(to button: NSStatusBarButton?) {
-        button?.toolTip = "选区翻译"
-        button?.setAccessibilityLabel("选区翻译")
+    /// item 为屏幕录制菜单项，authorized 为是否已获得屏幕录制权限；已授权时显示已开启且不可点，无返回值（#144 U-30）。
+    private func applyScreenCaptureState(to item: NSMenuItem, authorized: Bool) {
+        item.title = authorized ? "屏幕录制已开启" : "授予屏幕录制权限…"
+        item.isEnabled = !authorized
+    }
+
+    /// 无参数；将已保存的区域截图快捷键同步到菜单项标题或原生键等效符，刷新前先还原基础标题避免重复拼接。
+    private func applyScreenshotShortcut() {
+        guard let screenshotItem else { return }
+        screenshotItem.title = "区域截图…"
+        screenshotItem.keyEquivalent = ""
+        screenshotItem.keyEquivalentModifierMask = []
+        guard let formatted = GlobalHotKey.screenshot.formattedShortcut(in: AppPreferences.current) else {
+            return
+        }
+        if !formatted.titleSuffix.isEmpty {
+            screenshotItem.title = "区域截图…\(formatted.titleSuffix)"
+        } else {
+            screenshotItem.keyEquivalent = formatted.keyEquivalent
+            screenshotItem.keyEquivalentModifierMask = formatted.modifiers
+        }
     }
 
     /// 无参数；打开普通设置窗口，无返回值。
@@ -247,33 +321,30 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         DispatchQueue.main.async { MacPlatformBridge.Shared.instance?.screenshot.capture(.display(id)) }
     }
 
-    /// remaining 为录制倒计时剩余秒数，nil 表示没有倒计时；相同值不重绘，实时翻译的中止图标优先，无返回值（#129）。
+    /// remaining 为录制倒计时剩余秒数，nil 表示没有倒计时；同步更新图标、悬停提示与无障碍文本，无返回值（#129、#144 U-30）。
     func showCountdown(_ remaining: Int?) {
         guard countdown != remaining else { return }
         countdown = remaining
-        guard !liveAbort else { return }
-        statusItem?.button?.image = idleImage()
+        syncStatusButton()
     }
 
-    /// active为连续采集状态；更新提示与停止能力，保持图标入口宽度不变。
+    /// active 为连续采集状态；记录采集标志并经统一出口更新图标提示与停止能力，保持入口宽度不变（#144 U-30）。
     func setCaptureActive(_ active: Bool) {
-        if liveAbort { return }
-        statusItem?.button?.title = ""
-        let description = active ? "选区翻译，采集中" : "选区翻译"
-        statusItem?.button?.toolTip = description
-        statusItem?.button?.setAccessibilityLabel(description)
+        captureActive = active
+        syncStatusButton()
         stopCaptureItem?.isEnabled = MacPlatformBridge.Shared.instance?.capture.canStop == true
     }
 
     /// 无参数；请求当前采集正常结束，编码完成前不发布文件。
     @objc private func stopCapture() { MacPlatformBridge.Shared.instance?.capture.stop() }
 
-    /// 无参数；经主 Dart 修改全局开关，成功后刷新设置窗口，无返回值。
+    /// 无参数；经主 Dart 修改全局开关，成功后刷新设置窗口，失败弹窗继承当前应用明暗外观（#144 U-18）。
     @objc private func toggleAutomatic() {
         // requestApplication把菜单开关交给主引擎唯一设置队列。
         MacPlatformBridge.Shared.instance?.requestApplication(AppConstants.toggleAutomaticMethod) { [weak self] value in
             if let error = value as? FlutterError {
-                let alert = NSAlert()
+                let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
+                alert.alertStyle = .warning
                 alert.messageText = "设置未保存"
                 alert.informativeText = error.message ?? error.code
                 alert.runModal()
@@ -283,7 +354,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 无参数；已授权则只刷新菜单，未授权才弹出系统提示。
+    /// 无参数；已授权则只刷新菜单，未授权才弹出系统提示并打开设置。
     @objc private func requestAccess() {
         if AccessibilitySelection.isTrusted(prompt: false) {
             reloadMenu()
@@ -291,6 +362,21 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
         _ = AccessibilitySelection.isTrusted(prompt: true)
         AccessibilitySelection.openSettings()
+    }
+
+    /// 无参数；申请或打开系统「屏幕录制」授权设置，并刷新菜单项状态（#144 U-30）。
+    @objc private func requestScreenCapture() {
+        if ScreenCaptureService.isAuthorized() {
+            reloadMenu()
+            return
+        }
+        Task { @MainActor [weak self] in
+            _ = await ScreenCaptureService.requestAccess(promoteToRegularApp: true)
+            if !ScreenCaptureService.isAuthorized() {
+                ScreenCaptureService.openScreenRecordingSettings()
+            }
+            self?.reloadMenu()
+        }
     }
 
     @objc private func quit() {

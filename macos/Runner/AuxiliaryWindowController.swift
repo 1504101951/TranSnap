@@ -12,18 +12,24 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
     private let entrypoint: String
     private let title: String
     private let size: NSSize
+    private let minSize: NSSize?
+    private let autosaveName: NSWindow.FrameAutosaveName?
     private let refreshMethod: String?
     private let refreshesOnFocus: Bool
 
     /// engineName/entrypoint 标识第二引擎；title/size 为窗口外观；
+    /// minSize 为最小宽高限制（可选）；autosaveName 为几何位置与尺寸持久化键名（可选）；
     /// refreshMethod 为请 Dart 重新读取数据的方法名，重开已存在的窗口或调用 refresh() 时发送，为空表示不需要（#126）；
     /// refreshesOnFocus 为真时窗口每次成为 key 也发送，供权限向导在用户点回时重读授权。
     init(engineName: String, entrypoint: String, title: String, size: NSSize,
+         minSize: NSSize? = nil, autosaveName: NSWindow.FrameAutosaveName? = nil,
          refreshMethod: String? = nil, refreshesOnFocus: Bool = false) {
         self.engineName = engineName
         self.entrypoint = entrypoint
         self.title = title
         self.size = size
+        self.minSize = minSize
+        self.autosaveName = autosaveName
         self.refreshMethod = refreshMethod
         self.refreshesOnFocus = refreshesOnFocus
         super.init()
@@ -56,7 +62,8 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
                 self.channel = started.channel
                 // makeWindow 建出普通窗口；附属窗口关闭即停止引擎。
                 let window = WindowEngine.makeWindow(
-                    flutter: started.flutter, title: self.title, size: self.size, minSize: nil, delegate: self)
+                    flutter: started.flutter, title: self.title, size: self.size,
+                    minSize: self.minSize, delegate: self, autosaveName: self.autosaveName)
                 self.window = window
                 // present 激活并前置已经就绪的附属窗口。
                 WindowEngine.present(window)

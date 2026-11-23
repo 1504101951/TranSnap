@@ -51,14 +51,38 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         return argb
     }
 
+    /// 无参数；解析用户选择的原生窗口外观及系统高对比度配置，跟随系统时返回 nil。
+    static func resolvedAppearance() -> NSAppearance? {
+        let mode = appearanceSnapshot()[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem
+        guard mode != AppConstants.appearanceSystem else { return nil }
+        let dark = mode == AppConstants.appearanceDark
+        let highContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let name: NSAppearance.Name = highContrast
+            ? (dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
+            : (dark ? .darkAqua : .aqua)
+        return NSAppearance(named: name)
+    }
+
     /// window 为实际原生窗口；应用手动明暗或系统继承，不改焦点及层级。
     static func applyAppearance(to window: NSWindow) {
-        let mode = appearanceSnapshot()[AppConstants.glassAppearanceKey] as! String
-        window.appearance = mode == AppConstants.appearanceSystem ? nil : NSAppearance(named: mode == AppConstants.appearanceDark ? .darkAqua : .aqua)
+        window.appearance = resolvedAppearance()
         if let content = window.contentViewController as? NativeGlassWindowContent {
             // 标题与正文共用阅读底色；系统负责窗口唯一外轮廓，不制造另一条玻璃标题带。
             content.windowCanvas.updateReadingColor()
         }
+    }
+
+    /// alert 为系统弹窗；将当前应用浅色/深色外观同步到弹窗窗口并返回自身，无副作用（#144）。
+    @discardableResult
+    static func applyAppearance(to alert: NSAlert) -> NSAlert {
+        applyAppearance(to: alert.window)
+        return alert
+    }
+
+    /// content 为原生 AppKit 内容视图，size 为预期尺寸，cornerRadius 为玻璃裁切圆角；
+    /// 返回分层承载玻璃背景与不透明前景的容器视图，确保调节玻璃透明度时仅淡化底层材料而不淡化前景文字（#144）。
+    static func makeGlassContainer(content: NSView, size: NSSize, cornerRadius: CGFloat) -> NativeGlassContainerView {
+        NativeGlassContainerView(content: content, frame: NSRect(origin: .zero, size: size), cornerRadius: cornerRadius)
     }
 
     /// controller为Flutter内容，window为面板或结果窗口；背景贯穿窗口，交互内容遵守视图安全区域。
@@ -204,4 +228,105 @@ final class NativeReadingCanvas: NSView {
     /// point为本地坐标；背景不命中，返回nil让交互内容处理事件。
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var acceptsFirstResponder: Bool { false }
+}
+
+/// 分层承载原生 AppKit 玻璃材料与前景交互控件的通用容器（#144 U-18）。
+/// 底层使用 `NativeGlassView` 同步 `glassOpacity` 与系统减少透明度/增强对比度降级；
+/// 顶层放置透明前景容器，确保前景文字与按钮始终保持 100% 不透明度。
+final class NativeGlassContainerView: NSView {
+    let glassView: NativeGlassView
+    let contentHolder: NSView
+    private let cornerRadius: CGFloat
+    private var appearanceObserver: NSObjectProtocol?
+    private var accessibilityObserver: NSObjectProtocol?
+
+    /// content 为原生交互前景视图，frame 为初始容器边界，cornerRadius 为材质圆角半径。
+    init(content: NSView, frame: NSRect, cornerRadius: CGFloat) {
+        self.glassView = NativeGlassView(frame: .zero)
+        self.contentHolder = content
+        self.cornerRadius = cornerRadius
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.masksToBounds = true
+
+        glassView.style = .regular
+        glassView.cornerRadius = cornerRadius
+        glassView.translatesAutoresizingMaskIntoConstraints = false
+        glassView.setAccessibilityElement(false)
+
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glassView)
+        addSubview(content)
+        NSLayoutConstraint.activate([
+            glassView.topAnchor.constraint(equalTo: topAnchor),
+            glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            content.topAnchor.constraint(equalTo: topAnchor),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        syncAppearanceAndMaterial()
+        appearanceObserver = NotificationCenter.default.addObserver(
+            forName: AppConstants.appearanceChangedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.syncAppearanceAndMaterial()
+        }
+        accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.syncAppearanceAndMaterial()
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("NativeGlassContainerView requires programmatic initialization")
+    }
+
+    deinit {
+        if let appearanceObserver { NotificationCenter.default.removeObserver(appearanceObserver) }
+        if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
+    }
+
+    /// 无参数；系统或窗口外观改变时同步刷新材质色调与无障碍背板。
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncAppearanceAndMaterial()
+    }
+
+    /// 无参数；按当前偏好（明暗模式、玻璃透明度）与系统无障碍开关同步底层材料与高对比背板。
+    func syncAppearanceAndMaterial() {
+        let snapshot = NativeGlassFactory.appearanceSnapshot()
+        let mode = snapshot[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem
+        let opacity = snapshot[AppConstants.glassOpacityKey] as? Double ?? 0.8
+        let clampedOpacity = min(1, max(0.2, opacity))
+        let isDark: Bool
+        switch mode {
+        case AppConstants.appearanceDark:
+            isDark = true
+        case AppConstants.appearanceLight:
+            isDark = false
+        default:
+            isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        glassView.appearance = NativeGlassFactory.resolvedAppearance()
+        glassView.materialOpacity = clampedOpacity
+        glassView.tintColor = isDark
+            ? NSColor.black.withAlphaComponent(0.16)
+            : NSColor.white.withAlphaComponent(0.16)
+        glassView.updateTransparency()
+        // 开启「减少透明度」或「增强对比度」时补实底阅读色，避免底层背景花纹降低文字对比度。
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+            || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        if reduceTransparency {
+            let value = isDark ? 23.0 / 255.0 : 247.0 / 255.0
+            layer?.backgroundColor = NSColor(srgbRed: value, green: value, blue: value, alpha: 1).cgColor
+        } else {
+            layer?.backgroundColor = nil
+        }
+    }
 }

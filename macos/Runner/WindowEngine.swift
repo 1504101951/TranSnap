@@ -109,9 +109,11 @@ enum WindowEngine {
     }
 
     /// flutter 为已运行引擎的视图控制器，title/size 为窗口标题与内容尺寸，minSize 为最小尺寸（为空不限制），
-    /// delegate 接收窗口事件；返回关闭时不释放、透明承载原生玻璃内容、已居中但尚未显示的普通窗口（#126）。
+    /// delegate 接收窗口事件，autosaveName 为可选的窗口位置与尺寸记忆键（首次无记录时居中）；
+    /// 返回关闭时不释放、透明承载原生玻璃内容但尚未显示的普通窗口（#126、#144）。
     static func makeWindow(flutter: FlutterViewController, title: String, size: NSSize, minSize: NSSize?,
-                           delegate: NSWindowDelegate) -> NSWindow {
+                           delegate: NSWindowDelegate,
+                           autosaveName: NSWindow.FrameAutosaveName? = nil) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -125,9 +127,15 @@ enum WindowEngine {
         window.isOpaque = false
         window.backgroundColor = .clear
         NativeGlassFactory.installContent(flutter, in: window)
-        // Flutter 控制器初始视图可为零尺寸；绑定后明确设置内容尺寸。
+        // Flutter 控制器初始视图可为零尺寸；绑定后先设定基准内容尺寸，再恢复用户调整过的几何位置。
         window.setContentSize(size)
-        window.center()
+        if let autosaveName {
+            let restored = window.setFrameUsingName(autosaveName)
+            window.setFrameAutosaveName(autosaveName)
+            if !restored { window.center() }
+        } else {
+            window.center()
+        }
         return window
     }
 
@@ -138,11 +146,25 @@ enum WindowEngine {
         window.makeKeyAndOrderFront(nil)
     }
 
-    /// name 为窗口名；引擎启动失败时弹出提示，请用户重开应用，无返回值（#126）。
+    /// name 为窗口名；引擎启动失败时按当前应用外观弹出提示，提供超时信息与数据目录入口，无返回值（#126、#144）。
     static func reportStartFailure(_ name: String) {
-        let alert = NSAlert()
+        let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
+        alert.alertStyle = .warning
         alert.messageText = "\(name)启动失败"
-        alert.informativeText = "请退出并重新打开 TranslateApp。"
-        alert.runModal()
+        let supportURL = AppConstants.applicationSupportURL
+        alert.informativeText = """
+        无法在 \(Int(AppConstants.windowStartupTimeout)) 秒内完成\(name)初始化。
+
+        请退出并重新打开 TranslateApp；若问题反复出现，可打开数据目录查看日志：
+        \(supportURL.path)
+        """
+        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: "打开数据目录")
+        if alert.runModal() == .alertSecondButtonReturn {
+            let target = FileManager.default.fileExists(atPath: supportURL.path)
+                ? supportURL
+                : supportURL.deletingLastPathComponent()
+            NSWorkspace.shared.open(target)
+        }
     }
 }

@@ -10,6 +10,7 @@ class AppDelegate: FlutterAppDelegate {
         entrypoint: AppConstants.permissionWizardEntrypoint,
         title: "TranslateApp 权限",
         size: NSSize(width: 480, height: 360),
+        minSize: AppConstants.permissionWizardMinSize,
         refreshMethod: AppConstants.permissionStatusChangedMethod,
         refreshesOnFocus: true
     )
@@ -18,6 +19,8 @@ class AppDelegate: FlutterAppDelegate {
         entrypoint: AppConstants.historyEntrypoint,
         title: "翻译历史",
         size: NSSize(width: 520, height: 640),
+        minSize: AppConstants.historyWindowMinSize,
+        autosaveName: AppConstants.historyWindowAutosaveName,
         refreshMethod: AppConstants.historyChangedMethod
     )
     private var launchedAtLogin = false
@@ -98,7 +101,7 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let capture = MacPlatformBridge.Shared.instance?.capture else { return .terminateNow }
         if capture.hasPendingCapture {
-            let alert = NSAlert()
+            let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
             alert.messageText = "退出并丢弃当前采集？"
             alert.informativeText = "未保存的录制或长图将被删除。已经保存的文件会保留。"
             alert.addButton(withTitle: "返回采集")

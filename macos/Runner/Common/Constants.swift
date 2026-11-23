@@ -305,9 +305,12 @@ enum AppConstants {
     static let replaceSelectionMethod = "replaceSelection"
     /// showInputFailure 协议值；输入翻译失败时 Dart 发送 sessionId 与 message，原生在选中区域附近显示失败气泡（#99），与Dart常量同步。
     static let showInputFailureMethod = "showInputFailure"
-    /// 输入翻译失败气泡的显示时长（毫秒）与距锚点的间距（#99）。
-    static let inputFailureDurationMs = 2500
+    /// 输入翻译失败气泡的自动消失时长（毫秒，悬停暂停计时、离开后重新计时 2000ms）与距锚点的间距（#99、#144）。
+    static let inputFailureDurationMs = 2000
     static let inputFailureGap: CGFloat = 8
+    /// 输入翻译失败气泡左端错误图标边长与文本间距，避免仅靠颜色区分错误（#144）。
+    static let inputFailureIconSize: CGFloat = 14
+    static let inputFailureIconSpacing: CGFloat = 6
     /// 输入翻译锚点使用的文本标记范围属性名（Electron/WebKit 的只读文本，SDK 未提供常量）：选区范围与按范围取屏幕矩形。
     static let axSelectedTextMarkerRangeAttribute = "AXSelectedTextMarkerRange"
     static let axBoundsForTextMarkerRangeAttribute = "AXBoundsForTextMarkerRange"
@@ -431,6 +434,19 @@ enum AppConstants {
     static let screenRecordingRequiredMessage = "需要屏幕录制权限，请在系统设置中允许 TranslateApp 后重试。"
     /// 长图结果窗的最小内容尺寸，单位点。
     static let longScreenshotResultMinimumSize = NSSize(width: 320, height: 240)
+    /// 设置与历史独立窗口的系统框架持久化键名（#144 U-34）。
+    static let settingsWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppSettingsWindow"
+    static let historyWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppHistoryWindow"
+    /// 权限向导与历史独立窗口的最小尺寸，防止缩窄造成主体或顶栏挤压溢出（#144 U-14）。
+    static let permissionWizardMinSize = NSSize(width: 440, height: 340)
+    static let historyWindowMinSize = NSSize(width: 480, height: 480)
+    /// 翻译浮层触发胶囊与展开卡片的宿主裁切圆角（pt）及触发器最大高度阈值，与 Dart GlassMetrics 一致（#144 U-18）。
+    static let overlayTriggerCornerRadius: CGFloat = 10
+    static let overlayCardCornerRadius: CGFloat = 16
+    static let overlayTriggerMaxHeight: CGFloat = 44
+    /// 桌面贴图右上角悬停关闭按钮边长与内缩间距（pt，满足 WCAG 2.5.8 最小 24pt 命中目标，#144 U-29）。
+    static let pinCloseButtonSize: CGFloat = 24
+    static let pinCloseButtonInset: CGFloat = 6
     /// 无参数；返回用户 Application Support 下的 App 数据目录（不保证已创建），历史库与 MCP socket 共用。
     static var applicationSupportURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -683,6 +699,48 @@ enum GlobalHotKey: CaseIterable {
         case .input: AppConstants.inputShortcutLabelKey
         case .screenshot: AppConstants.screenshotShortcutLabelKey
         }
+    }
+
+    /// preferences 为已保存偏好字典；解析全局快捷键用于菜单项展示，返回标题后缀、单字符键等效符与修饰键标志。
+    /// 当偏好尚未写入、缺少修饰键或标签为空时返回 nil。
+    func formattedShortcut(
+        in preferences: [String: Any]
+    ) -> (titleSuffix: String, keyEquivalent: String, modifiers: NSEvent.ModifierFlags)? {
+        guard let rawModifiers = (preferences[modifiersKey] as? NSNumber)?.uint32Value,
+              rawModifiers != 0,
+              let rawLabel = (preferences[labelKey] as? String)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawLabel.isEmpty else {
+            return nil
+        }
+        var flags: NSEvent.ModifierFlags = []
+        var symbols = ""
+        // 遵循 macOS 菜单标准顺序：⌃ ⌥ ⇧ ⌘。
+        if rawModifiers & UInt32(controlKey) != 0 {
+            flags.insert(.control)
+            symbols += "⌃"
+        }
+        if rawModifiers & UInt32(optionKey) != 0 {
+            flags.insert(.option)
+            symbols += "⌥"
+        }
+        if rawModifiers & UInt32(shiftKey) != 0 {
+            flags.insert(.shift)
+            symbols += "⇧"
+        }
+        if rawModifiers & UInt32(cmdKey) != 0 {
+            flags.insert(.command)
+            symbols += "⌘"
+        }
+        guard !flags.isEmpty else { return nil }
+        // 单字符可打印 ASCII 交由 AppKit 原生渲染；传小写避免 NSMenuItem 隐式追加 Shift。
+        if rawLabel.unicodeScalars.count == 1,
+           let scalar = rawLabel.unicodeScalars.first,
+           scalar.isASCII,
+           scalar.value > 32 && scalar.value < 127 {
+            return ("", rawLabel.lowercased(), flags)
+        }
+        return (" (\(symbols)\(rawLabel))", "", flags)
     }
 }
 
