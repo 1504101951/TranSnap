@@ -15,6 +15,7 @@ import 'package:translate_app/src/common/utils/geometry.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/screenshot/edit_document.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
+import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_resize_cursor.dart';
 import 'package:translate_app/src/screenshot/screenshot_editor_layout.dart';
 
@@ -838,7 +839,7 @@ void main() {
 
   testWidgets('子级组从父级按钮液态展开，收起时融合回父级后移除（#142）', (tester) async {
     // 作用：展开与收起都以父级按钮为起止点，而不是在格位上直接出现或消失。
-    // 边界：切到矩形工具后「截图」的子级进入收起中的组，动画结束即移除；
+    // 边界：切到无二级菜单的光标工具后，「截图」的子级进入快速收起中的组，动画结束即移除；
     // 切回截图后第 2 帧时「录制」仍在离格位较远处（靠近父级），动画结束后回到格位。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
@@ -869,7 +870,7 @@ void main() {
     final record = find.byKey(const Key(ScreenshotActions.record));
     final settled = tester.getCenter(record);
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
     await tester.pumpAndSettle();
@@ -1012,6 +1013,303 @@ void main() {
     expect(tester.getCenter(record) - tester.getCenter(crop), settledDelta);
     await tester.pumpAndSettle();
     expect(tester.getCenter(record) - tester.getCenter(crop), settledDelta);
+  });
+
+  testWidgets('收起未完成时快速切换带二级菜单的工具立即打断，不挤压新属性组或附加行到第三行（#67、#1）', (tester) async {
+    // 作用：覆盖“切换到带二级菜单的新工具”及“收起动画进行中再切换”两大防挤压场景。
+    // 边界：从「截图」切「光标」推进 48ms 后收起仍在进行（screenshot-closing-group-0 存在），
+    // 此时立刻点「图形」，首帧立即打断清除收起组，属性组紧跟「图形」所在行（间距 4pt），
+    // 且「图形」「画笔」「比例」「美化」「录制目标」均复用 LiquidSplit。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-fast-interrupt');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'fast-interrupt',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    // 1. 切到「光标」启动快速收起，推进 48ms 确认收起组仍在动画中。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 48));
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
+
+    // 2. 在收起未结束时立即切到「图形」：旧收起组必须首帧清零，新属性组紧贴工具主行且复用 LiquidSplit。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    final attrGroup = find.byKey(const Key('screenshot-attributes-group-0'));
+    expect(attrGroup, findsOneWidget);
+    expect(
+      find.ancestor(of: attrGroup, matching: find.byType(LiquidSplit)),
+      findsOneWidget,
+    );
+    final gridGroup0 = find.byKey(const Key('screenshot-grid-group-0'));
+    final horizontal =
+        tester.widget<Flex>(gridGroup0).direction == Axis.horizontal;
+    final rectGroupRect = tester.getRect(gridGroup0);
+    final attrGroupRect = tester.getRect(attrGroup);
+    expect(
+      horizontal ? attrGroupRect.top : attrGroupRect.left,
+      (horizontal ? rectGroupRect.bottom : rectGroupRect.right) + 4,
+    );
+    await tester.pumpAndSettle();
+
+    // 3. 验证其余工具与附加行全部统一复用 LiquidSplit 且无第三行挤压。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(
+      find.ancestor(of: attrGroup, matching: find.byType(LiquidSplit)),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.ratio)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('ratio-row')),
+        matching: find.byType(LiquidSplit),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('screenshot-beautify-row')),
+        matching: find.byType(LiquidSplit),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
+    await tester.pump();
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('recording-targets-row')),
+        matching: find.byType(LiquidSplit),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('展开与收起中途反向切换原位平滑接续，快速收起在短时内完成移除（#67）', (tester) async {
+    // 作用：验证 LiquidSplit 在展开半程打断时从当前位置快速收回，并在收起半程切回原工具时平滑弹回。
+    // 边界：从「光标」点开「截图」64ms 后未到位，切回「光标」时按钮不跳回终态、直接往锚点回收，
+    // 并在 350ms 内完成快速收起移除；再次打开收起 48ms 时切回「截图」，最终完整回到 settled 位置。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-reverse-interrupt');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'reverse-interrupt',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    final record = find.byKey(const Key(ScreenshotActions.record));
+    final crop = find.byKey(const Key(ScreenshotActions.crop));
+    final settledOffset = tester.getCenter(record) - tester.getCenter(crop);
+
+    // 先收起到「光标」状态。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.pumpAndSettle();
+
+    // 点开「截图」展开 32ms（240ms 周期下中途尚未到终态），立刻点「光标」原位打断快速收起。
+    await tester.tap(crop);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 32));
+    final midDistance =
+        (tester.getCenter(record) - tester.getCenter(crop)).distance;
+    expect(midDistance, greaterThan(2.0));
+    expect(midDistance, lessThan(settledOffset.distance - 2.0));
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
+    // 打断首帧按钮仍在中断位置，不跳回已展开终态。
+    expect(
+      (tester.getCenter(record) - tester.getCenter(crop)).distance,
+      closeTo(midDistance, 2.0),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+
+    // 再次展开 -> 收起 32ms 时中途点回「截图」，最终完整落位。
+    await tester.tap(crop);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    await tester.tap(crop);
+    await tester.pump();
+    expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(record) - tester.getCenter(crop), settledOffset);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('画笔工具下展开美化不漏出画笔属性，且次级行靠起点排列不左右分散（#67、#141）', (tester) async {
+    // 作用：验证处于绘图工具时展开「美化」只显示美化自身子级（贴纸）与美化参数行，收起美化后恢复绘图属性；
+    // 同时验证同排存在多个次级组时靠起点紧邻排列（间距 ToolbarGrid.groupGap=12pt），不做 spaceBetween 两端拉扯。
+    final png = await tester.runAsync(_image);
+    final capture = await tester.runAsync(() => capturePixels(png!));
+    const channel = MethodChannel('test/toolbar-beautify-isolation');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'beautify-isolation',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...ScreenshotToolbarPreferences().toMap(),
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+
+    // 1. 切到画笔确认存在画笔属性组，再点「美化」不应漏出画笔属性且贴纸行紧贴左缘。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('screenshot-attributes-group-0')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('screenshot-attributes-group-0')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('screenshot-beautify-row')), findsOneWidget);
+    final grid0 = tester.getRect(
+      find.byKey(const Key('screenshot-grid-group-0')),
+    );
+    final stickerGroup = tester.getRect(
+      find.byKey(const Key('screenshot-children-group-0')),
+    );
+    expect(stickerGroup.left, grid0.left);
+
+    // 2. 再次点「美化」关闭美化行后，当前画笔工具的属性组恢复展示。
+    await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screenshot-beautify-row')), findsNothing);
+    expect(
+      find.byKey(const Key('screenshot-attributes-group-0')),
+      findsOneWidget,
+    );
+
+    // 3. 自定义同时带子级与属性的工具（如把箭头放到图形下），两者同行靠起点间距 12pt，不两端对齐。
+    final columns = [
+      for (final column in ScreenshotToolbarPreferences().columns)
+        ToolbarColumn(column.modifiers, [
+          for (final slot in column.slots)
+            slot == ScreenshotActions.arrow ? null : slot,
+        ]),
+    ];
+    final prefs = ScreenshotToolbarPreferences(
+      columns: columns,
+      children: {
+        ...ScreenshotActions.defaultChildren,
+        ScreenshotActions.rect: const [ScreenshotActions.arrow],
+      },
+    );
+    const codec = StandardMethodCodec();
+    await messenger.handlePlatformMessage(
+      channel.name,
+      codec.encodeMethodCall(
+        MethodCall(MethodNames.screenshotChanged, {
+          'id': 'beautify-isolation-custom',
+          ...capture!,
+          'width': 320,
+          'height': 240,
+          'cropX': 40,
+          'cropY': 20,
+          'cropWidth': 120,
+          'cropHeight': 60,
+          'canCaptureMedia': true,
+          ...prefs.toMap(),
+        }),
+      ),
+      (_) {},
+    );
+    await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.pumpAndSettle();
+    final childRect = tester.getRect(
+      find.byKey(const Key('screenshot-children-group-0')),
+    );
+    final attrRect = tester.getRect(
+      find.byKey(const Key('screenshot-attributes-group-0')),
+    );
+    final customGrid0 = tester.getRect(
+      find.byKey(const Key('screenshot-grid-group-0')),
+    );
+    expect(childRect.top, attrRect.top);
+    expect(childRect.left, customGrid0.left);
+    expect(attrRect.left - childRect.right, ToolbarGrid.groupGap);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {

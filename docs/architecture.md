@@ -153,7 +153,7 @@ OCR 由 `ScreenCaptureService.recognizeDocument` 用 Vision 文档识别在原�
 ### 界面动效与光学高光（#142）
 
 界面动效参数集中定义在 `lib/src/common/constants/motion_metrics.dart`（物理弹簧 `420ms` / 阻尼比 `0.62`、舒缓入场 `440ms` / 错峰 `80ms` / 模糊 `4pt`、棱镜 `1.25pt` 银白倒角与 `0.16` 冷暖色散及 `1100ms` 完成扫光），共用组件位于 `lib/src/common/widgets/app_motion.dart`：
-- `AppMotion.bouncy` 使用 `motor` 的 `CupertinoMotion.bouncy(snapToEnd: true)` 驱动 `BouncyPresence`（翻译结果卡、录制目标与动态工具栏行、悬浮控制气泡）、`NativeGlassSidebar` 的选中指示滑块以及 `NativeGlassSegments`（按各分段实测矩形做水平位移与宽度的弹簧滑块）；弹簧稳定后锁定精确 `1.0` 且保持同构子树，既消除亚像素变换偏差，也不拆装 `MenuAnchor` 等有状态控件。
+- `AppMotion.bouncy` 使用 `motor` 的 `CupertinoMotion.bouncy(snapToEnd: true)` 驱动 `BouncyPresence`（翻译结果卡、工具栏状态组、悬浮控制气泡）、`NativeGlassSidebar` 的选中指示滑块以及 `NativeGlassSegments`（按各分段实测矩形做水平位移与宽度的弹簧滑块）；弹簧稳定后锁定精确 `1.0` 且保持同构子树，既消除亚像素变换偏差，也不拆装 `MenuAnchor` 等有状态控件。
 - `GentleReveal` 与 `GentleShimmerSkeleton` 通过带可取消延迟定时器的 `_ControlledAnimate` 驱动 `flutter_animate` 的 `FadeEffect`、`SlideEffect`、`BlurEffect`、`ShakeEffect` 与有限周期 `ShimmerEffect`，分别用于译文/词典段落错峰入场、失败轻抖与首字骨架扫光；承载 `AppKitView` 玻璃气泡的列表条目关闭模糊通道，避免跨层合成冲突。
 - `OpticalPrismOverlay` 在前景 `IgnorePointer` 叠加层以 Flutter Impeller 片段着色器 `shaders/optical_prism.frag` 绘制随指针受光角偏移的 `1.25pt` 银白倒角与微弱色散（预乘透明度，浅/暗峰值 `0.75`/`0.55`），并在结果完成时播放一次斜向扫光；底层 `AppKitView` 与 `NSGlassEffectView` 不进入着色流程、不重建。
 - `TranslationStatusIcon`、`SpeechWaveIcon`、`VocabularyBookmarkIcon`、`CopyConfirmIcon`、`RecordingPulseIcon` 以纯 Dart `CustomPainter`、`Canvas` 与可控动画控制器驱动状态切换微交互，不依赖原生动画运行库，并保证复制 `1.3s` 确认回弹等有限时长在卸载前自动收敛。
@@ -162,7 +162,7 @@ OCR 由 `ScreenCaptureService.recognizeDocument` 用 Vision 文档识别在原�
 - `BusyRing` 统一接入共享 `NativeGlassSurface` 与 `NativeGlassSwitch`（覆写截图工具栏、采集控制与结果操作、权限向导、术语表、历史/生词本及截图拼接/拆分/比较等全部可测等待点）；等待期间在按钮外 `2pt` 处流动 `28%` 弧段，结构不随等待态重建以保持原生材料稳定，结束时闭合放大淡出；对应按钮不可见时截图工具栏状态组显示同样的环。
 - `CharReveal` 用一个动画控制器为段内新到达的字生成逐字 `TextSpan` 前景画笔（透明度与模糊），截图译文盖层用 `Text.rich`、翻译卡片译文用 `SelectableText.rich` 排版；追加文字只显影新字。原生实时翻译盖层 `LiveFitTextView` 经 `CharRevealBatch` 与 `CADisplayLink` 复用同一批序与时长参数（单字 `260ms`、错峰 `18ms`、总错峰上限 `600ms`、同色零偏移阴影近似模糊 `3pt→0`），字号按完整段落测算以保持排版稳定。
 - `CaptureShadeView` 在区域录制（排除实时翻译与长截图）期间通过 `CAShapeLayer` 绘制选区周长 `22%` 强调色光段（`2400ms` 一圈、`2pt` 线宽、`8pt` 发光）；暂停时置图层 `speed=0` 锁定当前相位并在恢复后接着流动，外观变更经 `viewDidChangeEffectiveAppearance` 更新强调色。
-- `LiquidSplit` 承载截图工具栏的子级组：按钮挂 `_buttonKeys` 全局键，首帧后测量父级按钮与各按钮中心的位移，用阻尼比 0.62、周期 420ms 的 `SpringSimulation` 按 40ms 错峰把按钮从父级移到格位，移动期间下方液滴经 `ImageFilter.blur` 与透明度阈值 `ColorFilter` 合成粘连；切换不同父级时直接替换为新子级并清空收起组，仅同一父级收起时经 `_syncClosing` 保留收起动画，且工具栏在选区拖动隐藏期间由 `Visibility` 保持布局与动画状态不重建。
+- `LiquidSplit` 作为共享工具栏二级菜单组件，统一承载截图工具栏的子级组、工具属性组与可滚动附加行（支持可选 `lead` 与 `scrollable`）：各按钮挂 `_buttonKeys` 全局键，首帧后测量锚点按钮与目标格位中心的位移，展开沿主轴按阻尼比 `0.78`、周期 `240ms` 弹簧以 `20ms` 错峰滑出，收起与打断沿临界阻尼（阻尼比 `1.0`、周期 `120ms`、`10ms` 错峰）快速回弹，期间下方液滴经 `ImageFilter.blur` 与透明度阈值 `ColorFilter` 合成粘连并随按钮接近落位提前淡出至 `0`；相同锚点的打开与收起共用稳定键以支持展开或收起中途从当前进度无缝衔接，切换至任何带二级菜单的新工具、在展开美化时抑制绘图属性或收起中途再次切换工具时，`_syncClosing` 立即清空收起组，主配置组行同行两组两端对齐而次级插入行统一紧邻起点排列，工具栏在选区拖动隐藏期间由 `Visibility` 保持布局与动画状态不重建。
 - 全部动效统一遵循系统减少动态效果设置（Dart 读 `MediaQuery.disableAnimationsOf`，Swift 读 `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`），开启后以静态瞬时切换呈现，不另设应用内动效开关。
 
 TranslationProgress 只保存已完成分片、配对和上一片双尾；SelectionSession 持有冻结服务与方向，失败后通过 retry 重发失败片。翻译浮层仍消费统一 TranslationSnapshot，成功后的历史写入沿用主入口的完整结果边界。

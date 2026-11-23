@@ -157,11 +157,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 工具栏各按钮的全局键：液态展开据此找到父级按钮的位置；按钮换行时元素随键移动，原生材料不重建（#142）。
   final _buttonKeys = <String, GlobalKey>{};
 
-  /// 正在收起的子级组：parent 为原父级，cells 为原子级；液态收起播完后清空（#142）。
-  ({String parent, List<String> cells})? _closing;
+  /// 正在收起的二级菜单组：parent 为原锚点工具，kind 为 'children' 或 'attributes'，cells 为原子级或属性；快速收起播完后清空（#142）。
+  ({String parent, String kind, List<String> cells})? _closing;
 
-  /// 上一次构建时展开着的父级与子级，用于发现收起。
-  ({String parent, List<String> cells})? _open;
+  /// 上一次构建时展开着的二级菜单（子级或属性），用于检测收起并在同锚点重新展开时原位打断。
+  ({String parent, String kind, List<String> cells})? _open;
+
+  /// 上一次构建时的活动功能标识；在收起尚未播完前切到其他工具时用于立即打断旧收起组。
+  String? _lastActiveId;
 
   /// 标尺两端（截图像素）；不进入标注与撤销，切换工具或新截图后清除（#111）。
   ({Offset start, Offset end})? _ruler;
@@ -277,27 +280,51 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (ScreenshotActions.composable[id]!.hostsChildren ? id : null);
   }
 
-  /// reduced 为是否减少动态效果；比较上一次构建时展开的子级，仅在收起后没有展开任何父级（open == null）时
-  /// 记下原子级供液态收起；切换父级时旧组直接移除，不挤到新子级前；减少动态效果时不保留收起中的组，无返回值（#142）。
-  void _syncClosing(bool reduced) {
-    final group = _group;
+  /// actions 为当前可用动作映射；返回当前工具的属性按钮标识列表（不含功能图标与在 Finder 中显示），
+  /// 供 _syncClosing 与 _toolbarLines 共用，确保判断唯一来源。
+  List<String> _attributeIds(Map<String, VoidCallback?> actions) => actions.keys
+      .where(
+        (id) =>
+            id != ScreenshotActions.reveal &&
+            !ScreenshotActions.icons.containsKey(id),
+      )
+      .toList();
+
+  /// reduced 为是否减少动态效果，actions 为当前工具栏动作映射；统一追踪全部二级菜单的开合。
+  /// 只要当前存在任何二级菜单（子级、属性或附加行）、开启减少动态效果，或在收起尚未播完前再次切换工具，
+  /// 均立即打断并清空 _closing，确保新二级菜单不被旧收起组挤到第三行；仅在首次切至无二级菜单的工具时保留 _closing 快速收起，无返回值（#142）。
+  void _syncClosing(bool reduced, Map<String, VoidCallback?> actions) {
+    final active = _activeId;
     final children = _visibleChildren;
-    final open = group == null || children.isEmpty
-        ? null
-        : (parent: group, cells: children);
-    final previous = _open;
-    // 原子级若已全部成为一级或别的子级（配置更新），没有需要收起的按钮。
+    final attributes = _attributeIds(actions);
+    final strips = _strips();
+    final hasSecondary =
+        children.isNotEmpty || attributes.isNotEmpty || strips.isNotEmpty;
+    final open = children.isNotEmpty && _group != null
+        ? (parent: _group!, kind: 'children', cells: children)
+        : attributes.isNotEmpty
+        ? (parent: _group ?? active, kind: 'attributes', cells: attributes)
+        : null;
+    final previous = _closing == null ? _open : null;
+    // 原子级或属性若已回到一级或其他已显示位置（配置更新），不重复参与收起动画。
     final placed = {
       for (final column in _toolbar.columns) ...column.slots,
       ...children,
+      ...attributes,
     };
-    if (reduced || open != null) {
+    if (reduced || hasSecondary) {
+      _closing = null;
+    } else if (_closing != null &&
+        _lastActiveId != null &&
+        _lastActiveId != active) {
+      // 上一轮快速收起尚未播完，用户又切到别的无二级菜单工具时立即打断旧收起组。
       _closing = null;
     } else if (previous != null &&
         previous.cells.any((id) => !placed.contains(id))) {
       _closing = previous;
     }
     _open = open;
+    _lastActiveId = active;
   }
 
   /// 无参数；返回第二行里按配置顺序排列、未隐藏的子级功能。
@@ -334,13 +361,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       for (var start = 0; start < ids.length; start += ToolbarGrid.slots)
         ids.sublist(start, math.min(start + ToolbarGrid.slots, ids.length)),
     ];
-    final attributes = actions.keys
-        .where(
-          (id) =>
-              id != ScreenshotActions.reveal &&
-              !ScreenshotActions.icons.containsKey(id),
-        )
-        .toList();
+    final attributes = _attributeIds(actions);
     final inserted = <_ToolbarCells>[
       for (final (index, cells) in chunk(_visibleChildren).indexed)
         (key: 'screenshot-children-group-$index', cells: <String?>[...cells], label: null),
@@ -2538,7 +2559,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Widget build(BuildContext context) {
     final renderedTool = _tool;
     _pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    _syncClosing(MediaQuery.disableAnimationsOf(context));
+    final actions = _toolbarActions();
+    _syncClosing(MediaQuery.disableAnimationsOf(context), actions);
     final hasImage = _document.hasImage;
     return NativeGlassApp(
       home: Focus(
@@ -2725,7 +2747,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                           (_capture['displayHeight'] as num).toDouble(),
                         ),
                   // 各行长度（含插入的子级、属性、状态组与附加行）决定工具栏尺寸（#141）。
-                  lines: (perLine) => _lineLengths(_toolbarActions(), perLine),
+                  lines: (perLine) => _lineLengths(actions, perLine),
                   beautify: _beautify,
                   feedbackIsError: _failed,
                   feedback: _message,
@@ -2903,14 +2925,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   /// 无参数；返回当前上下文可见动作及启用回调，鼠标与快捷键共用业务入口。
   Map<String, VoidCallback?> _toolbarActions() {
+    final showDrawingAttributes = !_beautifyExpanded;
     final textControls =
-        _tool == ScreenshotTool.text ||
-        (_selectedTextId != null &&
-            _document.annotations.any(
-              (item) =>
-                  item.id == _selectedTextId &&
-                  item.kind == AnnotationKind.text,
-            ));
+        showDrawingAttributes &&
+        (_tool == ScreenshotTool.text ||
+            (_selectedTextId != null &&
+                _document.annotations.any(
+                  (item) =>
+                      item.id == _selectedTextId &&
+                      item.kind == AnnotationKind.text,
+                )));
     final styleTool = _styleTool;
     final brushMode = _styleSelection?.shapeMode ?? _shapeMode;
     final actions = <String, VoidCallback?>{
@@ -2932,17 +2956,18 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ScreenshotActions.scrolling: _capture['canCaptureMedia'] == true
           ? () => _prepareCapture(CaptureTarget.region, scrolling: true)
           : null,
-      if (styleTool == ScreenshotTool.rect)
+      if (showDrawingAttributes && styleTool == ScreenshotTool.rect)
         for (final shape in ShapeVariant.values)
           '${ScreenshotActions.shapePrefix}${shape.name}': () =>
               _chooseShape(shape),
-      if (styleTool == ScreenshotTool.brush)
+      if (showDrawingAttributes && styleTool == ScreenshotTool.brush)
         for (final mode in ShapeMode.values)
           '${ScreenshotActions.brushPrefix}${mode.name}': () =>
               _chooseBrush(mode),
-      if (supportsDrawingColor(styleTool, brushMode))
+      if (showDrawingAttributes && supportsDrawingColor(styleTool, brushMode))
         ScreenshotActions.palette: () => _editDrawingStyle(color: true),
-      if (supportsStrokeWidth(styleTool) &&
+      if (showDrawingAttributes &&
+          supportsStrokeWidth(styleTool) &&
           !(styleTool == ScreenshotTool.rect && _styleShape.filled))
         ScreenshotActions.width: () => _editDrawingStyle(color: false),
       for (final entry in _toolIds.entries)
@@ -3133,26 +3158,34 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           else
             button(id),
       ];
-      // 子级组从父级按钮液态分裂展开，收起中的组反向融合回父级后移除（#142）。
-      final closingGroup = group.key.startsWith('screenshot-closing-group-');
-      final parent = closingGroup
+      // 子级组、工具属性组统一由 LiquidSplit 从锚点按钮液态分裂展开；收起中的组保持同一组件键以原位反向快速收回（#67、#142）。
+      final isClosing = group.key.startsWith('screenshot-closing-group-');
+      final isChildren = group.key.startsWith('screenshot-children-group-');
+      final isAttributes = group.key.startsWith('screenshot-attributes-group-');
+      final parent = isClosing
           ? _closing?.parent
-          : group.key.startsWith('screenshot-children-group-')
+          : isChildren
           ? _group
+          : isAttributes
+          ? (_group ?? _activeId)
           : null;
       if (parent != null) {
+        final kind = isClosing
+            ? (_closing?.kind ?? 'children')
+            : isChildren
+            ? 'children'
+            : 'attributes';
+        final chunkIndex = group.key.split('-').last;
         return LiquidSplit(
-          // 换父级或转为收起时是新的展开过程，键不同以重新测量与计时。
-          key: ValueKey(
-            'liquid-${closingGroup ? 'closing' : 'open'}-$parent-${group.key}',
-          ),
+          // 同锚点同类型二级菜单打开与收起复用同一状态键，实现展开中途原位快速打断或反向重开。
+          key: ValueKey('liquid-$parent-$kind-$chunkIndex'),
           flexKey: Key(group.key),
           axis: axis,
           lead: lead,
           items: cells,
           anchor: _buttonKeys.putIfAbsent(parent, GlobalKey.new),
           color: NativeGlassTheme.accentOf(context),
-          collapsing: closingGroup,
+          collapsing: isClosing,
           onCollapsed: () {
             if (mounted) setState(() => _closing = null);
           },
@@ -3205,20 +3238,20 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ),
     );
 
-    /// key为行身份、children为按钮；返回沿当前工具栏方向可滚动的32pt操作行，附加行启用物理弹簧入场（#142）。
-    Widget captureRow(String key, List<Widget> children) => BouncyPresence(
-      key: ValueKey('presence-$key'),
-      fromScale: 0.92,
-      child: SingleChildScrollView(
-        key: Key(key),
-        scrollDirection: axis,
-        child: Flex(
-          direction: axis,
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: children,
-        ),
-      ),
+    /// key 为行身份、children 为按钮、anchorId 为触发该附加行的锚点按钮标识；
+    /// 全部工具栏附加行均复用可滚动的 LiquidSplit 液态展开组件（#67 第 10 条、#142）。
+    Widget captureRow(
+      String key,
+      List<Widget> children, {
+      required String anchorId,
+    }) => LiquidSplit(
+      key: ValueKey('liquid-strip-$anchorId-$key'),
+      flexKey: Key(key),
+      axis: axis,
+      scrollable: true,
+      items: children,
+      anchor: _buttonKeys.putIfAbsent(anchorId, GlobalKey.new),
+      color: NativeGlassTheme.accentOf(context),
     );
     final beautify = _beautify;
     // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
@@ -3284,138 +3317,169 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     // 附加行按键取用，键与条件和 _strips 一致，位置由 _toolbarLines 决定。
     final strips = <String, Widget>{
       if (beautifyControls.isNotEmpty)
-        'screenshot-beautify-row':
-            captureRow('screenshot-beautify-row', beautifyControls),
+        'screenshot-beautify-row': captureRow(
+          'screenshot-beautify-row',
+          beautifyControls,
+          anchorId: ScreenshotActions.beautify,
+        ),
       // 比例行：自由与固定宽高比，锁定后框选与调整保持比例（#106）。
       if (_expandedRow == _ExpandedRow.ratio)
-        'ratio-row': captureRow('ratio-row', [
-          for (final preset in CropMetrics.ratios)
-            captureButton(
-              preset.label == '自由' ? '自由比例' : '比例 ${preset.label}',
-              Text(
-                preset.label,
-                style: const TextStyle(fontSize: CropMetrics.ratioFontSize),
+        'ratio-row': captureRow(
+          'ratio-row',
+          [
+            for (final preset in CropMetrics.ratios)
+              captureButton(
+                preset.label == '自由' ? '自由比例' : '比例 ${preset.label}',
+                Text(
+                  preset.label,
+                  style: const TextStyle(fontSize: CropMetrics.ratioFontSize),
+                ),
+                () => _chooseRatio(preset.ratio),
+                selected: _cropRatio == preset.ratio,
               ),
-              () => _chooseRatio(preset.ratio),
-              selected: _cropRatio == preset.ratio,
-            ),
-        ]),
+          ],
+          anchorId: ScreenshotActions.ratio,
+        ),
       if ((_recordingExpanded || _liveExpanded) &&
           _tool == ScreenshotTool.crop)
-        'recording-targets-row': captureRow('recording-targets-row', [
-          for (final target in const {
-            CaptureTarget.region: ('当前选区', Icons.crop),
-            CaptureTarget.application: ('窗口', Icons.apps),
-            CaptureTarget.display: ('全屏', Icons.desktop_mac),
-          }.entries)
-            captureButton(
-              target.value.$1,
-              Icon(target.value.$2, size: 16),
-              () => _selectRecordingTarget(target.key),
-              selected: _recordingTarget == target.key,
-            ),
-          if (!_liveExpanded)
-            // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
-            MenuAnchor(
-              style: NativeGlassMenuPanel.anchorStyle,
-              menuChildren: [
-                NativeGlassMenuPanel(
-                  children: [
-                    for (final delay in RecordingOptions.delays)
-                      NativeGlassMenuItem(
-                        label: delay == 0 ? '不延时' : '延时 $delay 秒',
-                        checked: delay == _recordingDelay,
-                        onPressed: () => _saveRecordingOptions(
-                          delay: delay,
-                          clickEffect: _recordingClickEffect,
+        'recording-targets-row': captureRow(
+          'recording-targets-row',
+          [
+            for (final target in const {
+              CaptureTarget.region: ('当前选区', Icons.crop),
+              CaptureTarget.application: ('窗口', Icons.apps),
+              CaptureTarget.display: ('全屏', Icons.desktop_mac),
+            }.entries)
+              (() {
+                final button = captureButton(
+                  target.value.$1,
+                  Icon(target.value.$2, size: 16),
+                  () => _selectRecordingTarget(target.key),
+                  selected: _recordingTarget == target.key,
+                );
+                // 窗口目标按钮同时作为应用列表行的液态展开锚点。
+                return target.key == CaptureTarget.application
+                    ? KeyedSubtree(
+                        key: _buttonKeys.putIfAbsent(
+                          'recording-target-application',
+                          GlobalKey.new,
                         ),
-                      ),
-                    const Divider(height: 9, thickness: 1),
-                    for (final effect in RecordingClickEffect.values)
-                      NativeGlassMenuItem(
-                        label: effect == RecordingClickEffect.off
-                            ? '点击特效：关闭'
-                            : effect.label,
-                        checked: effect == _recordingClickEffect,
-                        // 应用录制不含指针，不显示点击特效。
-                        onPressed: _recordingTarget == CaptureTarget.application
-                            ? null
-                            : () => _saveRecordingOptions(
-                                delay: _recordingDelay,
-                                clickEffect: effect,
-                              ),
-                      ),
-                  ],
-                ),
-              ],
-              builder: (context, controller, _) => captureButton(
-                _recordingDelay == 0
-                    ? '录制选项'
-                    : '录制选项：延时 $_recordingDelay 秒',
-                const Icon(Icons.tune, size: 16),
-                () => controller.isOpen ? controller.close() : controller.open(),
-                selected:
-                    _recordingDelay != 0 ||
-                    _recordingClickEffect != RecordingClickEffect.off,
-              ),
-            ),
-          captureButton(
-            _liveExpanded ? '开始实时翻译' : '开始录制',
-            const Icon(Icons.fiber_manual_record, size: 16),
-            _loadingApplications ||
-                    (_recordingTarget == CaptureTarget.application &&
-                        _recordingApplication == null)
-                ? null
-                : () => _prepareCapture(
-                    _recordingTarget,
-                    live: _liveExpanded,
+                        child: button,
+                      )
+                    : button;
+              })(),
+            if (!_liveExpanded)
+              // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
+              MenuAnchor(
+                style: NativeGlassMenuPanel.anchorStyle,
+                menuChildren: [
+                  NativeGlassMenuPanel(
+                    children: [
+                      for (final delay in RecordingOptions.delays)
+                        NativeGlassMenuItem(
+                          label: delay == 0 ? '不延时' : '延时 $delay 秒',
+                          checked: delay == _recordingDelay,
+                          onPressed: () => _saveRecordingOptions(
+                            delay: delay,
+                            clickEffect: _recordingClickEffect,
+                          ),
+                        ),
+                      const Divider(height: 9, thickness: 1),
+                      for (final effect in RecordingClickEffect.values)
+                        NativeGlassMenuItem(
+                          label: effect == RecordingClickEffect.off
+                              ? '点击特效：关闭'
+                              : effect.label,
+                          checked: effect == _recordingClickEffect,
+                          // 应用录制不含指针，不显示点击特效。
+                          onPressed:
+                              _recordingTarget == CaptureTarget.application
+                              ? null
+                              : () => _saveRecordingOptions(
+                                  delay: _recordingDelay,
+                                  clickEffect: effect,
+                                ),
+                        ),
+                    ],
                   ),
-          ),
-          captureButton(
-            _liveExpanded ? '取消实时翻译' : '取消录制',
-            const Icon(Icons.close, size: 16),
-            () => setState(() {
-              _expandedRow = null;
-              unawaited(_syncRecordingPreview());
-              unawaited(_syncLivePreview());
-              _recordingApplication = null;
-            }),
-          ),
-        ]),
+                ],
+                builder: (context, controller, _) => captureButton(
+                  _recordingDelay == 0
+                      ? '录制选项'
+                      : '录制选项：延时 $_recordingDelay 秒',
+                  const Icon(Icons.tune, size: 16),
+                  () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  selected:
+                      _recordingDelay != 0 ||
+                      _recordingClickEffect != RecordingClickEffect.off,
+                ),
+              ),
+            captureButton(
+              _liveExpanded ? '开始实时翻译' : '开始录制',
+              const Icon(Icons.fiber_manual_record, size: 16),
+              _loadingApplications ||
+                      (_recordingTarget == CaptureTarget.application &&
+                          _recordingApplication == null)
+                  ? null
+                  : () => _prepareCapture(
+                      _recordingTarget,
+                      live: _liveExpanded,
+                    ),
+            ),
+            captureButton(
+              _liveExpanded ? '取消实时翻译' : '取消录制',
+              const Icon(Icons.close, size: 16),
+              () => setState(() {
+                _expandedRow = null;
+                unawaited(_syncRecordingPreview());
+                unawaited(_syncLivePreview());
+                _recordingApplication = null;
+              }),
+            ),
+          ],
+          anchorId: _liveExpanded
+              ? ScreenshotActions.live
+              : ScreenshotActions.record,
+        ),
       if ((_recordingExpanded || _liveExpanded) &&
           _tool == ScreenshotTool.crop &&
           _recordingTarget == CaptureTarget.application)
-        'recording-applications-row':
-            captureRow('recording-applications-row', [
-          if (_loadingApplications)
-            const SizedBox(
-              width: 32,
-              height: 32,
-              child: Icon(Icons.hourglass_top, size: 16),
-            ),
-          for (final app in _recordingApplications)
-            captureButton(
-              app['name'] as String,
-              app['icon'] is Uint8List
-                  ? Image.memory(
-                      app['icon'] as Uint8List,
-                      width: 16,
-                      height: 16,
-                    )
-                  : const Icon(Icons.apps, semanticLabel: '应用图标不可用'),
-              _loadingApplications
-                  ? null
-                  : () {
-                      setState(() => _recordingApplication = app);
-                      unawaited(_syncRecordingPreview());
-                    },
-              selected:
-                  _recordingApplication?['applicationID'] ==
-                  app['applicationID'],
-            ),
-        ]),
+        'recording-applications-row': captureRow(
+          'recording-applications-row',
+          [
+            if (_loadingApplications)
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: Icon(Icons.hourglass_top, size: 16),
+              ),
+            for (final app in _recordingApplications)
+              captureButton(
+                app['name'] as String,
+                app['icon'] is Uint8List
+                    ? Image.memory(
+                        app['icon'] as Uint8List,
+                        width: 16,
+                        height: 16,
+                      )
+                    : const Icon(Icons.apps, semanticLabel: '应用图标不可用'),
+                _loadingApplications
+                    ? null
+                    : () {
+                        setState(() => _recordingApplication = app);
+                        unawaited(_syncRecordingPreview());
+                      },
+                selected:
+                    _recordingApplication?['applicationID'] ==
+                    app['applicationID'],
+              ),
+          ],
+          anchorId: 'recording-target-application',
+        ),
     };
-    // 各行沿交叉方向依次排列；同行两组两端对齐（横放左右、竖放上下），间距至少 groupGap，单组靠起点（#141）。
+    // 各行沿交叉方向依次排列；主配置组行（带修饰标签）同行两组时两端对齐（#141），次级插入行与状态组紧邻起点排列。
     final groups = Flex(
       direction: cross,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3428,7 +3492,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             child: line.strip == null
                 ? Flex(
                     direction: axis,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment:
+                        line.groups.isNotEmpty &&
+                            line.groups.first.label != null
+                        ? MainAxisAlignment.spaceBetween
+                        : MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: ToolbarGrid.groupGap,
                     children: [for (final group in line.groups) groupOf(group)],

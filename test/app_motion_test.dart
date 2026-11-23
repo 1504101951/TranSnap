@@ -264,4 +264,119 @@ void main() {
     expect(span.children, isNull);
     expect(span.text, '再见');
   });
+
+  testWidgets('LiquidSplit 支持可选 lead、可滚动裁剪切换、中途打断反向收敛及长度动态变更（#67、#142）', (
+    tester,
+  ) async {
+    // 作用：验证通用组件 LiquidSplit 可无前置 lead、可开启 scrollable 并正确在动画期放开裁剪、
+    // 且展开中转 collapsing: true 不跳变并快速回调 onCollapsed，数量变化不越界。
+    final anchorKey = GlobalKey();
+    var collapsing = false;
+    var itemCount = 2;
+    var collapsedCount = 0;
+    late StateSetter setHostState;
+
+    Widget buildHost() => MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) {
+            setHostState = setState;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox.square(
+                  dimension: 32,
+                  child: DecoratedBox(
+                    key: anchorKey,
+                    decoration: const BoxDecoration(color: Colors.blue),
+                  ),
+                ),
+                LiquidSplit(
+                  flexKey: const Key('test-liquid-scroll'),
+                  axis: Axis.horizontal,
+                  scrollable: true,
+                  items: [
+                    for (var i = 0; i < itemCount; i++)
+                      SizedBox.square(
+                        key: Key('item-$i'),
+                        dimension: 32,
+                        child: Text('$i'),
+                      ),
+                  ],
+                  anchor: anchorKey,
+                  color: Colors.blue,
+                  collapsing: collapsing,
+                  onCollapsed: () => setState(() => collapsedCount += 1),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(buildHost());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 40));
+
+    // 动画期间滚动容器放开裁剪（Clip.none），避免飞出锚点处被裁切，且粘连液滴正在绘制。
+    expect(
+      tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('test-liquid-scroll')),
+          )
+          .clipBehavior,
+      Clip.none,
+    );
+    expect(find.byType(ImageFiltered), findsOneWidget);
+    final midX = tester.getCenter(find.byKey(const Key('item-1'))).dx;
+
+    // 展开未结束即反向快速收起：首帧位置接续当前中途位移，并在 220ms 内完成通知。
+    setHostState(() => collapsing = true);
+    await tester.pump();
+    expect(
+      tester.getCenter(find.byKey(const Key('item-1'))).dx,
+      closeTo(midX, 0.5),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(collapsedCount, 1);
+
+    // 验证快节奏展开（240ms/0.78）：接近落位（约 240ms）时蓝色液滴已淡出移除，<= 420ms 内彻底停表。
+    setHostState(() => collapsing = false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 240));
+    expect(find.byType(ImageFiltered), findsNothing);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(
+      tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('test-liquid-scroll')),
+          )
+          .clipBehavior,
+      Clip.hardEdge,
+    );
+
+    // 收起中途重新展开不应触发滞后 onCollapsed，按钮数变化也保持安全不越界。
+    setHostState(() => collapsing = true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 24));
+    setHostState(() {
+      collapsing = false;
+      itemCount = 3;
+    });
+    await tester.pumpAndSettle();
+    expect(collapsedCount, 1);
+    expect(
+      tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const Key('test-liquid-scroll')),
+          )
+          .clipBehavior,
+      Clip.hardEdge,
+    );
+    expect(find.byKey(const Key('item-2')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

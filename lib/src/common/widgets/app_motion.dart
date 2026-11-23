@@ -1599,17 +1599,22 @@ class _CharRevealState extends State<CharReveal>
   }
 }
 
-/// 工具栏液态展开（#142，#67 第 10 条）：items 各按钮从 anchor（父级按钮）位置沿物理弹簧（420ms、阻尼 0.62）
-/// 错峰移到自己的格位，移动期间按钮下方的液滴经模糊与阈值合成产生粘连；collapsing 为真时反向回到父级并融合，
-/// 结束后调用 onCollapsed。减少动态效果时直接显示，收起时立即调用 onCollapsed。
+/// 工具栏二级菜单液态展开（#142，#67 第 10 条）：items 各按钮从 anchor（锚点按钮）位置沿物理弹簧（240ms、阻尼 0.78）
+/// 错峰移到格位，移动期间下方液滴经模糊与阈值合成产生粘连并随按钮接近落位淡出；collapsing 为真时以临界阻尼（120ms、阻尼 1.0）
+/// 快速收回锚点并调用 onCollapsed。展开或收起中途被打断反向时从当前实时进度无缝衔接；减少动态效果时直接切换并立即通知 onCollapsed。
 class LiquidSplit extends StatefulWidget {
-  /// flexKey 为内部 Flex 的键，axis 为排列方向，lead 为排在最前、不参与动画的部件（组标签空位），
-  /// items 为按钮，anchor 为父级按钮的全局键，color 为液滴颜色（强调色）。
+  /// flexKey 为内部布局容器键（scrollable 为真时挂于 SingleChildScrollView，否则挂于 Flex），
+  /// axis 为排列方向，lead 为排在最前、不参与位移动画的可选前置部件（如组标签空位），
+  /// spacing 为按钮主轴间距，scrollable 为真时在到位后允许沿主轴滚动，
+  /// items 为按钮列表，anchor 为锚点按钮全局键，color 为液滴颜色（强调色），
+  /// collapsing 控制收起态，onCollapsed 在收起动画完成后触发。
   const LiquidSplit({
     super.key,
     required this.flexKey,
     required this.axis,
-    required this.lead,
+    this.lead,
+    this.spacing = 4,
+    this.scrollable = false,
     required this.items,
     required this.anchor,
     required this.color,
@@ -1619,7 +1624,9 @@ class LiquidSplit extends StatefulWidget {
 
   final Key flexKey;
   final Axis axis;
-  final Widget lead;
+  final Widget? lead;
+  final double spacing;
+  final bool scrollable;
   final List<Widget> items;
   final GlobalKey anchor;
   final Color color;
@@ -1637,26 +1644,48 @@ class _LiquidSplitState extends State<LiquidSplit>
   final _stackKey = GlobalKey();
   late List<GlobalKey> _itemKeys = _keys(widget.items.length);
 
-  /// 各按钮中心到父级中心的位移（本组坐标）；首帧布局前为 null，此时按钮先不显示。
+  /// 各按钮中心到锚点中心的位移（本组坐标）；首帧布局前为 null，此时按钮先隐藏以免闪现。
   List<Offset>? _deltas;
 
-  /// 父级按钮在本组坐标中的矩形，供液滴绘制。
+  /// 锚点按钮在本组坐标中的矩形，供液滴绘制。
   Rect? _anchorRect;
 
-  /// 各按钮当前的展开进度（0 在父级、1 在格位）。
+  /// 本轮动画各按钮的起始进度，用于中途被打断时从当前位置无缝接续。
+  List<double> _from = const [];
+
+  /// 各按钮当前的展开进度（0 在锚点、1 在格位）。
   List<double> _progress = const [];
 
-  /// 周期 420ms、阻尼比 0.62 的弹簧，与 BouncyPresence 一致。
+  /// 展开弹簧：周期 240ms、阻尼比 0.78，响应利落且保留轻微弹性（#67 第 10 条）。
   static final _spring = SpringDescription.withDampingRatio(
     mass: 1,
     stiffness: math
         .pow(
-          2 * math.pi / (MotionMetrics.bouncyDuration.inMicroseconds / 1e6),
+          2 *
+              math.pi /
+              (MotionMetrics.liquidExpandDuration.inMicroseconds / 1e6),
           2,
         )
         .toDouble(),
-    ratio: MotionMetrics.bouncyDampingRatio,
+    ratio: MotionMetrics.liquidExpandDampingRatio,
   );
+
+  /// 快速收起弹簧：临界阻尼（阻尼比 1.0）120ms 无过冲回收，避免切换工具时滞留（#67 第 10 条）。
+  static final _collapseSpring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: math
+        .pow(
+          2 *
+              math.pi /
+              (MotionMetrics.liquidCollapseDuration.inMicroseconds / 1e6),
+          2,
+        )
+        .toDouble(),
+    ratio: 1.0,
+  );
+
+  /// 感知收敛容差：视觉接近落位即停表，避免长拖尾滞留强调色残影。
+  static const _tolerance = Tolerance(distance: 0.01, velocity: 0.05);
 
   /// count 为按钮数；返回每个按钮的全局键，用于测量其位置。
   static List<GlobalKey> _keys(int count) =>
@@ -1669,38 +1698,131 @@ class _LiquidSplitState extends State<LiquidSplit>
     WidgetsBinding.instance.addPostFrameCallback((_) => _begin());
   }
 
-  /// oldWidget 为上一配置；按钮数变化时重建测量键，开始收起时从当前进度反向播放。
+  /// 无参数；在当前帧结束后回调 onCollapsed，仅当组件仍挂载且处于收起态时生效。
+  void _notifyCollapsedAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.collapsing) widget.onCollapsed?.call();
+    });
+  }
+
+  /// oldWidget 为上一配置；处理方向切换、按钮数变化、锚点变更及原位展开/收起打断。
   @override
   void didUpdateWidget(covariant LiquidSplit oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.items.length != oldWidget.items.length) {
-      _itemKeys = _keys(widget.items.length);
+    if (widget.axis != oldWidget.axis) {
+      _ticker.stop();
+      _anchorRect = null;
+      _deltas = const [];
+      _from = const [];
+      _progress = const [];
+      if (widget.collapsing) _notifyCollapsedAfterFrame();
+      return;
     }
-    if (widget.collapsing && !oldWidget.collapsing) {
-      if (AppMotion.reduced(context) || _deltas == null) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => widget.onCollapsed?.call(),
-        );
+    if (widget.items.length != oldWidget.items.length) {
+      _ticker.stop();
+      _itemKeys = _keys(widget.items.length);
+      _anchorRect = null;
+      if (widget.collapsing) {
+        _deltas = const [];
+        _from = const [];
+        _progress = const [];
+        _notifyCollapsedAfterFrame();
         return;
       }
-      // 重新计时，收起动画从头按弹簧回收。
-      _ticker
-        ..stop()
-        ..start();
+      if (_deltas != null) {
+        _deltas = const [];
+        _from = const [];
+        _progress = const [];
+      }
+      return;
+    }
+    if (widget.anchor != oldWidget.anchor) {
+      _ticker.stop();
+      _anchorRect = null;
+      if (widget.collapsing) {
+        _deltas = const [];
+        _from = const [];
+        _progress = const [];
+        _notifyCollapsedAfterFrame();
+        return;
+      }
+      _deltas = null;
+      _from = const [];
+      _progress = const [];
+      WidgetsBinding.instance.addPostFrameCallback((_) => _begin());
+      return;
+    }
+    if (widget.collapsing != oldWidget.collapsing) {
+      final count = _itemKeys.length;
+      if (AppMotion.reduced(context) || _deltas == null || _deltas!.isEmpty) {
+        _ticker.stop();
+        if (widget.collapsing) {
+          _notifyCollapsedAfterFrame();
+        } else if (_deltas != null) {
+          _from = List.filled(count, 1.0);
+          _progress = List.filled(count, 1.0);
+        }
+        return;
+      }
+      if (widget.collapsing) {
+        // 捕获当前展开进度作为快速收起起点，不跳回终点 1.0。
+        final current = _progress.length == count
+            ? List<double>.of(_progress)
+            : List<double>.filled(count, 1.0);
+        if (current.every((value) => value <= 0.001)) {
+          _ticker.stop();
+          _from = List.filled(count, 0.0);
+          _progress = List.filled(count, 0.0);
+          _notifyCollapsedAfterFrame();
+          return;
+        }
+        _from = current;
+        _ticker
+          ..stop()
+          ..start();
+      } else {
+        // 收起中途切回同一工具时，从当前位置按展开弹簧平滑恢复。
+        final current = _progress.length == count
+            ? List<double>.of(_progress)
+            : List<double>.filled(count, 0.0);
+        _from = current;
+        if (current.every((value) => value >= 0.999)) {
+          _ticker.stop();
+          _progress = List.filled(count, 1.0);
+          return;
+        }
+        _ticker
+          ..stop()
+          ..start();
+      }
     }
   }
 
-  /// 无参数；测量父级与各按钮的位置，减少动态效果或父级不在树上时直接显示。
+  /// 无参数；测量锚点与各按钮的位置，减少动态效果或任一节点未就绪时直接定态展示。
   void _begin() {
     if (!mounted) return;
     final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     final anchor =
         widget.anchor.currentContext?.findRenderObject() as RenderBox?;
-    if (AppMotion.reduced(context) || stack == null || anchor == null) {
+    final boxes = <RenderBox>[
+      for (final key in _itemKeys)
+        if (key.currentContext?.findRenderObject() case final RenderBox box)
+          if (box.hasSize) box,
+    ];
+    if (AppMotion.reduced(context) ||
+        stack == null ||
+        !stack.hasSize ||
+        anchor == null ||
+        !anchor.hasSize ||
+        boxes.length != _itemKeys.length ||
+        boxes.isEmpty) {
       setState(() {
+        _anchorRect = null;
         _deltas = const [];
+        _from = const [];
         _progress = const [];
       });
+      if (widget.collapsing) _notifyCollapsedAfterFrame();
       return;
     }
     final anchorTopLeft = stack.globalToLocal(
@@ -1708,42 +1830,74 @@ class _LiquidSplitState extends State<LiquidSplit>
     );
     final anchorRect = anchorTopLeft & anchor.size;
     final deltas = <Offset>[];
-    for (final key in _itemKeys) {
-      final box = key.currentContext!.findRenderObject()! as RenderBox;
+    for (final box in boxes) {
       final center = stack.globalToLocal(
         box.localToGlobal(box.size.center(Offset.zero)),
       );
       deltas.add(anchorRect.center - center);
     }
+    final initial = widget.collapsing ? 1.0 : 0.0;
     setState(() {
       _anchorRect = anchorRect;
       _deltas = deltas;
-      _progress = List.filled(deltas.length, 0);
+      _from = List.filled(deltas.length, initial);
+      _progress = List.filled(deltas.length, initial);
     });
-    _ticker.start();
+    _ticker
+      ..stop()
+      ..start();
   }
 
-  /// elapsed 为本轮时长；按错峰推进各按钮的弹簧进度，全部到位后停止，收起完成时通知调用方。
+  /// elapsed 为本轮已耗时；按展开/快速收起弹簧从 _from 推进各按钮进度，全部到位后停表并触发收起完成回调。
   void _tick(Duration elapsed) {
+    final count = _itemKeys.length;
+    if (_deltas == null || _deltas!.length != count || count == 0) {
+      _ticker.stop();
+      if (widget.collapsing) widget.onCollapsed?.call();
+      return;
+    }
     final seconds = elapsed.inMicroseconds / 1e6;
-    final stagger = MotionMetrics.liquidStagger.inMicroseconds / 1e6;
-    final from = widget.collapsing ? 1.0 : 0.0;
-    final to = widget.collapsing ? 0.0 : 1.0;
+    final collapsing = widget.collapsing;
+    final stagger =
+        (collapsing
+                ? MotionMetrics.liquidCollapseStagger
+                : MotionMetrics.liquidStagger)
+            .inMicroseconds /
+        1e6;
+    final spring = collapsing ? _collapseSpring : _spring;
+    final to = collapsing ? 0.0 : 1.0;
+    final starts = _from.length == count
+        ? _from
+        : List<double>.filled(count, collapsing ? 1.0 : 0.0);
     var done = true;
     final progress = <double>[];
-    for (var index = 0; index < _itemKeys.length; index++) {
-      // 收起时从最后一个按钮开始回收，展开时从第一个开始弹出。
-      final order = widget.collapsing ? _itemKeys.length - 1 - index : index;
+    for (var index = 0; index < count; index++) {
+      final start = starts[index];
+      if ((start - to).abs() < 0.001) {
+        progress.add(to);
+        continue;
+      }
+      // 收起时从末位按钮起快速回收，展开时从首位按钮起错峰弹出。
+      final order = collapsing ? count - 1 - index : index;
       final time = math.max(0.0, seconds - order * stagger);
-      final simulation = SpringSimulation(_spring, from, to, 0);
+      final simulation = SpringSimulation(
+        spring,
+        start,
+        to,
+        0,
+        tolerance: _tolerance,
+      );
       progress.add(simulation.x(time));
       if (!simulation.isDone(time)) done = false;
     }
     setState(() => _progress = progress);
     if (!done) return;
     _ticker.stop();
-    if (widget.collapsing) widget.onCollapsed?.call();
-    setState(() => _progress = List.filled(_itemKeys.length, to));
+    setState(() {
+      _from = List<double>.filled(count, to);
+      _progress = List<double>.filled(count, to);
+    });
+    if (collapsing) widget.onCollapsed?.call();
   }
 
   /// 无参数；停止计时。
@@ -1753,25 +1907,44 @@ class _LiquidSplitState extends State<LiquidSplit>
     super.dispose();
   }
 
-  /// context 提供主题；返回按钮行，展开或收起期间按钮带位移且下方绘制粘连液滴。
+  /// context 提供主题；返回二级菜单按钮组，展开或快速收起期间按钮带位移且下方绘制粘连液滴。
   @override
   Widget build(BuildContext context) {
     final deltas = _deltas;
-    final moving = _ticker.isActive && deltas != null && deltas.isNotEmpty;
+    final count = _itemKeys.length;
+    final validDeltas =
+        deltas != null && deltas.length == count && _progress.length == count;
+    final transformable = validDeltas && count > 0 && deltas.isNotEmpty;
+    final moving = _ticker.isActive && transformable;
+    final keepOffset = moving || (widget.collapsing && transformable);
+    // 按按钮距终点的最大剩余位移计算液滴不透明度，接近落位前平滑消隐，不滞留蓝色底。
+    var blobFactor = 0.0;
+    if (moving) {
+      final peak = _progress.fold<double>(0.0, (best, value) {
+        final remaining = widget.collapsing
+            ? value.clamp(0.0, 1.0)
+            : (1.0 - value).clamp(0.0, 1.0);
+        return math.max(best, remaining);
+      });
+      blobFactor = widget.collapsing
+          ? ((peak - 0.05) / 0.55).clamp(0.0, 1.0)
+          : ((peak - 0.12) / 0.55).clamp(0.0, 1.0);
+    }
+    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     final flex = Flex(
-      key: widget.flexKey,
+      key: widget.scrollable ? null : widget.flexKey,
       direction: widget.axis,
       mainAxisSize: MainAxisSize.min,
-      spacing: 4,
+      spacing: widget.spacing,
       children: [
-        widget.lead,
+        ?widget.lead,
         for (final (index, item) in widget.items.indexed)
           KeyedSubtree(
             key: _itemKeys[index],
             child: deltas == null
-                // 首帧尚未测量位置，先不显示，避免按钮在格位闪现。
+                // 首帧尚未测量位置，先隐藏占位以免按钮在格位闪现。
                 ? Opacity(opacity: 0, child: item)
-                : deltas.isEmpty || !moving
+                : !keepOffset
                 ? item
                 : Transform.translate(
                     offset: deltas[index] * (1 - _progress[index]),
@@ -1780,15 +1953,27 @@ class _LiquidSplitState extends State<LiquidSplit>
           ),
       ],
     );
+    final layout = widget.scrollable
+        ? SingleChildScrollView(
+            key: widget.flexKey,
+            scrollDirection: widget.axis,
+            // 动画位移期间放开裁剪避免按钮在锚点附近被切掉，到位后恢复裁剪支持窄区滚动。
+            clipBehavior: moving ? Clip.none : Clip.hardEdge,
+            child: flex,
+          )
+        : flex;
     return Stack(
       key: _stackKey,
       clipBehavior: Clip.none,
       children: [
-        if (moving)
+        if (moving &&
+            blobFactor > 0.001 &&
+            stackBox != null &&
+            stackBox.hasSize)
           Positioned.fill(
             child: IgnorePointer(
               child: Opacity(
-                opacity: MotionMetrics.liquidOpacity,
+                opacity: MotionMetrics.liquidOpacity * blobFactor,
                 // 先模糊再按透明度阈值合成，相邻液滴的模糊边缘相连处形成粘连。
                 child: ColorFiltered(
                   colorFilter: const ColorFilter.matrix([
@@ -1810,13 +1995,12 @@ class _LiquidSplitState extends State<LiquidSplit>
                           for (final (index, key) in _itemKeys.indexed)
                             if (key.currentContext?.findRenderObject()
                                 case final RenderBox box)
-                              (_stackKey.currentContext!.findRenderObject()!
-                                              as RenderBox)
-                                          .globalToLocal(
-                                            box.localToGlobal(Offset.zero),
-                                          ) +
-                                      deltas[index] * (1 - _progress[index]) &
-                                  box.size,
+                              if (box.hasSize)
+                                stackBox.globalToLocal(
+                                          box.localToGlobal(Offset.zero),
+                                        ) +
+                                        deltas[index] * (1 - _progress[index]) &
+                                    box.size,
                         ],
                       ),
                     ),
@@ -1825,7 +2009,7 @@ class _LiquidSplitState extends State<LiquidSplit>
               ),
             ),
           ),
-        flex,
+        IgnorePointer(ignoring: widget.collapsing, child: layout),
       ],
     );
   }

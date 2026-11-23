@@ -54,8 +54,12 @@ abstract final class MotionMetrics {
   static const charRevealMaxSpread = Duration(milliseconds: 600);
   static const charRevealBlur = 3.0;
 
-  /// 工具栏液态展开（#67 第 10 条）：各按钮错峰、粘连模糊半径、液滴不透明度。
-  static const liquidStagger = Duration(milliseconds: 40);
+  /// 工具栏液态展开（#67 第 10 条）：展开/收起弹簧周期、阻尼、各按钮错峰、粘连模糊半径与液滴不透明度。
+  static const liquidExpandDuration = Duration(milliseconds: 240);
+  static const liquidExpandDampingRatio = 0.78;
+  static const liquidStagger = Duration(milliseconds: 20);
   static const liquidBlur = 5.0;
   static const liquidOpacity = 0.25;
+  static const liquidCollapseDuration = Duration(milliseconds: 120);
+  static const liquidCollapseStagger = Duration(milliseconds: 10);
 }
