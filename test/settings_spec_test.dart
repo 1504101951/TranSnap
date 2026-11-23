@@ -271,8 +271,18 @@ void main() {
     expect(find.text('点击录制；录制完成后自动保存；检查系统保留组合和可识别的全局占用。'), findsNothing);
     expect(find.byKey(const ValueKey('全局翻译快捷键')).hitTestable(), findsOneWidget);
     expect(maxScroll(), 0);
+    // 外观、强调色与玻璃透明度位于「个性化」；「通用」只保留权限、语言包与登录启动（#1、#67）。
+    await openSettingsPage(tester, '通用');
+    expect(find.text('外观'), findsNothing);
+    expect(find.text('强调色'), findsNothing);
+    expect(maxScroll(), 0, reason: '通用');
+    await openSettingsPage(tester, '个性化');
+    expect(find.text('外观'), findsOneWidget);
+    expect(find.text('强调色'), findsOneWidget);
+    expect(find.textContaining('玻璃透明度'), findsOneWidget);
+    expect(maxScroll(), 0, reason: '个性化');
     // 除四个列表子页外，其余子页在默认窗口同样一屏完整展示（#67）。
-    for (final page in ['通用', '保存与导出', '录制', '操作']) {
+    for (final page in ['保存与导出', '录制', '操作']) {
       await openSettingsPage(tester, page);
       expect(maxScroll(), 0, reason: page);
     }

@@ -962,15 +962,28 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；外观快照携带浅、深两份不透明的系统强调色 ARGB，供各 Flutter 引擎跟随系统强调色（#142）。
-    /// 边界：两份都必须存在且 alpha 为 0xFF（系统强调色不透明）。
+    /// 无参数；外观快照携带浅、深两份不透明的系统强调色 ARGB，且固定强调色偏好优先于系统色（#142、#144）。
+    /// 边界：系统默认态两份都存在且 alpha 为 0xFF；写入 purple 后返回经典紫色浅/深 ARGB 整数。
     func testAppearanceSnapshotCarriesOpaqueAccentColors() {
+        let original = UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey)
+        defer {
+            if let original {
+                UserDefaults.standard.set(original, forKey: AppConstants.preferencesKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppConstants.preferencesKey)
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: AppConstants.preferencesKey)
         let snapshot = NativeGlassFactory.appearanceSnapshot()
         for key in [AppConstants.accentLightKey, AppConstants.accentDarkKey] {
             let argb = snapshot[key] as? Int
             XCTAssertNotNil(argb)
             XCTAssertEqual((argb ?? 0) >> 24 & 0xFF, 0xFF)
         }
+        UserDefaults.standard.set([AppConstants.accentColorKey: "purple"], forKey: AppConstants.preferencesKey)
+        let custom = NativeGlassFactory.appearanceSnapshot()
+        XCTAssertEqual(custom[AppConstants.accentLightKey] as? Int, 0xFF95_3D96)
+        XCTAssertEqual(custom[AppConstants.accentDarkKey] as? Int, 0xFFA5_50A7)
     }
 
     /// 无参数；使用真实设备语言识别，确保法语不会被当成英语，无返回值。

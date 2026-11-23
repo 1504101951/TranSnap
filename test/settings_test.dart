@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/settings/service_config.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
@@ -372,5 +373,28 @@ void main() {
       }),
       throwsFormatException,
     );
+  });
+
+  test('强调色偏好默认跟随系统，支持全部 6 种经典色往返保存，未知值拒绝（#144）', () {
+    // 作用：验证 AppSettings.accentColor 协议枚举往返序列化与边界校验。
+    // 边界：缺失字段默认 AccentColors.system；全部 AccentColors.values 通过校验；非法值抛 FormatException。
+    final defaults = AppSettings.fromMap({'primaryLanguage': 'zh-CN'});
+    expect(defaults.accentColor, AccentColors.system);
+
+    for (final color in AccentColors.values) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        accentColor: color,
+      );
+      expect(settings.validate, returnsNormally);
+      final restored = AppSettings.fromMap(settings.toMap());
+      expect(restored.accentColor, color);
+    }
+
+    final invalid = AppSettings(
+      primaryLanguage: 'zh-CN',
+      accentColor: 'neonPink',
+    );
+    expect(invalid.validate, throwsFormatException);
   });
 }

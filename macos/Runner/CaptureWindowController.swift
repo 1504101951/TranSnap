@@ -938,10 +938,10 @@ final class CaptureShadeView: NSView {
         if let flowLayer { applyFlowAppearance(to: flowLayer) }
     }
 
-    /// layer 为区域流光形状层；按当前有效外观写入强调色描边与外发光，无返回值。
+    /// layer 为区域流光形状层；按当前有效外观写入个性化或系统强调色描边与外发光，无返回值。
     private func applyFlowAppearance(to layer: CAShapeLayer) {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let accent = NSColor.controlAccentColor.cgColor
+            let accent = NativeGlassFactory.resolvedAccentNSColor(for: effectiveAppearance).cgColor
             layer.strokeColor = accent
             layer.shadowColor = accent
         }
@@ -1169,7 +1169,7 @@ final class CaptureShadeView: NSView {
             NSGraphicsContext.current?.cgContext.setBlendMode(.clear)
             for rect in contentRects { rect.fill() }
             NSGraphicsContext.restoreGraphicsState()
-            NSColor.controlAccentColor.setStroke()
+            NativeGlassFactory.resolvedAccentNSColor(for: effectiveAppearance).setStroke()
             for rect in contentRects { NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5)).stroke() }
         } else {
             path.appendRect(selection)
@@ -1179,7 +1179,7 @@ final class CaptureShadeView: NSView {
         }
         let border = NSBezierPath(rect: selection.insetBy(dx: 0.5, dy: 0.5))
         border.lineWidth = 1
-        NSColor.controlAccentColor.setStroke()
+        NativeGlassFactory.resolvedAccentNSColor(for: effectiveAppearance).setStroke()
         border.stroke()
     }
 }

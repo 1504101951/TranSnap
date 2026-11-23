@@ -54,6 +54,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openSettingsPage(tester, '个性化');
     await tester.tap(find.text('深色'));
     await tester.pumpAndSettle();
     // 持久化事务仍挂起：后台保存也不能出现文字或占位。
@@ -65,6 +66,7 @@ void main() {
     expect(saved[PreferenceKeys.glassAppearance], 'dark');
     expect(find.text('深色'), findsOneWidget);
     expect(find.text('保存设置'), findsNothing);
+    await openSettingsPage(tester, '通用');
     expect(
       tester.widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch)).value,
       true,

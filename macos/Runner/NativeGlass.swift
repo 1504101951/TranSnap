@@ -29,13 +29,29 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         }
     }
 
-    /// 无参数；返回已提交的视觉字段与当前系统强调色（浅、深外观各一份），不读取凭据或业务草稿。
+    /// 无参数；返回已提交的视觉字段与当前解析强调色（浅、深外观各一份），固定强调色优先于系统强调色（#142、#144）。
     static func appearanceSnapshot() -> [String: Any] {
         let preferences = AppPreferences.current
+        let accentMode = preferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
+        let swatch = AppConstants.accentSwatches[accentMode]
         return [AppConstants.glassAppearanceKey: preferences[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem,
                 AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
-                AppConstants.accentLightKey: accentARGB(.aqua),
-                AppConstants.accentDarkKey: accentARGB(.darkAqua)]
+                AppConstants.accentLightKey: swatch?.light ?? accentARGB(.aqua),
+                AppConstants.accentDarkKey: swatch?.dark ?? accentARGB(.darkAqua)]
+    }
+
+    /// appearance 为目标绘制外观；若用户在个性化选中固定强调色则解析对应 sRGB 颜色，否则跟随系统强调色（#144）。
+    static func resolvedAccentNSColor(for appearance: NSAppearance) -> NSColor {
+        let accentMode = AppPreferences.current[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
+        guard let swatch = AppConstants.accentSwatches[accentMode] else {
+            return NSColor.controlAccentColor
+        }
+        let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let argb = dark ? swatch.dark : swatch.light
+        let red = CGFloat((argb >> 16) & 0xFF) / 255
+        let green = CGFloat((argb >> 8) & 0xFF) / 255
+        let blue = CGFloat(argb & 0xFF) / 255
+        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
     }
 
     /// name 为浅色或深色外观；在该外观下解析系统强调色，返回 sRGB ARGB 整数（如系统蓝浅色 0xFF007AFF）。

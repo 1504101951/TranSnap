@@ -35,6 +35,7 @@ import 'service_editor.dart';
 /// 设置窗口子页（#67）；仅控制展示，不进入持久化偏好。
 enum SettingsPage {
   general,
+  personalization,
   languages,
   services,
   shortcuts,
@@ -109,6 +110,12 @@ class _SettingsPageState extends State<_SettingsPage>
           title: '通用',
           icon: Icons.tune,
           value: SettingsPage.general,
+          children: {},
+        ),
+        (
+          title: '个性化',
+          icon: Icons.palette_outlined,
+          value: SettingsPage.personalization,
           children: {},
         ),
         (
@@ -804,61 +811,6 @@ class _SettingsPageState extends State<_SettingsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (_page == SettingsPage.general) ...[
-                              NativeGlassGroup(
-                                title: '外观与材质',
-                                children: [
-                                  NativeGlassSettingRow(
-                                    title: '外观',
-                                    leading: const NativeGlassRowIcon(
-                                      icon: Icons.contrast_outlined,
-                                      tint: Color(0xFF0A84FF),
-                                    ),
-                                    child: NativeGlassSegments<String>(
-                                      value: settings.glassAppearance,
-                                      options: AppearanceModes.labels,
-                                      onChanged: (value) => _edit(
-                                        () => settings.glassAppearance = value,
-                                      ),
-                                    ),
-                                  ),
-                                  NativeGlassSettingRow(
-                                    title:
-                                        '玻璃透明度 ${(100 * (1 - settings.glassOpacity)).round()}%',
-                                    leading: const NativeGlassRowIcon(
-                                      icon: Icons.blur_on_outlined,
-                                      tint: Color(0xFF5E5CE6),
-                                    ),
-                                    caption:
-                                        '更改后自动保存并应用到所有窗口；系统“减少透明度”开启时保持材料不透明。',
-                                    // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳。
-                                    child: SizedBox(
-                                      width: 200,
-                                      height: GlassMetrics.sliderHeight,
-                                      child: Slider(
-                                        value: 1 - settings.glassOpacity,
-                                        min: 0,
-                                        max: 0.8,
-                                        divisions: 80,
-                                        label:
-                                            '${(100 * (1 - settings.glassOpacity)).round()}%',
-                                        // 按滑块的整数百分比换算，避免 1 - 0.8 略小于合法下限 0.2。
-                                        onChanged: (value) => _edit(
-                                          () => settings.glassOpacity =
-                                              (100 - (value * 100).round()) /
-                                              100,
-                                          submit: false,
-                                        ),
-                                        onChangeStart: (_) =>
-                                            _adjustingOpacity = true,
-                                        onChangeEnd: (_) {
-                                          _adjustingOpacity = false;
-                                          _save();
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
                               // 系统权限与 Apple 离线翻译语言包集中在一张卡片，登录启动单独成组放在最下方（#67）。
                               NativeGlassGroup(
                                 title: '系统权限与离线翻译',
@@ -993,6 +945,79 @@ class _SettingsPageState extends State<_SettingsPage>
                                     ),
                                 ],
                               ),
+                      ] else if (_page == SettingsPage.personalization) ...[
+                        NativeGlassGroup(
+                          title: '外观与强调色',
+                          children: [
+                            NativeGlassSettingRow(
+                              title: '外观',
+                              leading: const NativeGlassRowIcon(
+                                icon: Icons.contrast_outlined,
+                                tint: Color(0xFF0A84FF),
+                              ),
+                              child: NativeGlassSegments<String>(
+                                value: settings.glassAppearance,
+                                options: AppearanceModes.labels,
+                                onChanged: (value) => _edit(
+                                  () => settings.glassAppearance = value,
+                                ),
+                              ),
+                            ),
+                            NativeGlassSettingRow(
+                              title: '强调色',
+                              leading: const NativeGlassRowIcon(
+                                icon: Icons.palette_outlined,
+                                tint: Color(0xFFAF52DE),
+                              ),
+                              child: _AccentColorPicker(
+                                value: settings.accentColor,
+                                onChanged: (value) => _edit(
+                                  () => settings.accentColor = value,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        NativeGlassGroup(
+                          title: '液态玻璃',
+                          children: [
+                            NativeGlassSettingRow(
+                              title:
+                                  '玻璃透明度 ${(100 * (1 - settings.glassOpacity)).round()}%',
+                              leading: const NativeGlassRowIcon(
+                                icon: Icons.blur_on_outlined,
+                                tint: Color(0xFF5E5CE6),
+                              ),
+                              caption:
+                                  '更改后自动保存并应用到所有窗口；系统“减少透明度”开启时保持材料不透明。',
+                              // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳。
+                              child: SizedBox(
+                                width: 200,
+                                height: GlassMetrics.sliderHeight,
+                                child: Slider(
+                                  value: 1 - settings.glassOpacity,
+                                  min: 0,
+                                  max: 0.8,
+                                  divisions: 80,
+                                  label:
+                                      '${(100 * (1 - settings.glassOpacity)).round()}%',
+                                  // 按滑块的整数百分比换算，避免 1 - 0.8 略小于合法下限 0.2。
+                                  onChanged: (value) => _edit(
+                                    () => settings.glassOpacity =
+                                        (100 - (value * 100).round()) / 100,
+                                    submit: false,
+                                  ),
+                                  onChangeStart: (_) =>
+                                      _adjustingOpacity = true,
+                                  onChangeEnd: (_) {
+                                    _adjustingOpacity = false;
+                                    _save();
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ] else if (_page == SettingsPage.languages) ...[
                         NativeGlassGroup(
                           children: [
@@ -1647,6 +1672,204 @@ class _SubpageReveal extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// 个性化页「强调色」色点选择器（#67、#144）：提供跟随系统及 6 种经典 macOS 色点，
+/// 支持鼠标悬停微放、按下微缩、键盘焦点环与选中白点指示，更改后即时保存并同步全窗口。
+class _AccentColorPicker extends StatelessWidget {
+  /// value 为当前选中标识（AccentColors.values），onChanged 回传新选中色。
+  const _AccentColorPicker({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  /// context 提供明暗环境与强调色主题；返回横向排列的 7 个 32×32pt 命中圆点。
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < AccentColors.values.length; i++) ...[
+          if (i > 0) const SizedBox(width: 2),
+          _AccentColorSwatch(
+            id: AccentColors.values[i],
+            label: AccentColors.labels[AccentColors.values[i]]!,
+            selected: value == AccentColors.values[i],
+            swatchColor: AccentColors.values[i] == AccentColors.system
+                ? null
+                : (dark
+                      ? AccentColors.swatches[AccentColors.values[i]]!.dark
+                      : AccentColors.swatches[AccentColors.values[i]]!.light),
+            onSelected: () => onChanged(AccentColors.values[i]),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 单个可聚焦/可悬停的强调色色点按钮；跟随系统显示多色渐变环，其余展示当前明暗外观对应经典色。
+class _AccentColorSwatch extends StatefulWidget {
+  /// id 为协议值，label 为提示与读屏名，selected 为选中态，swatchColor 为固定色值（null 表示多色跟随系统），onSelected 为选中回调。
+  const _AccentColorSwatch({
+    required this.id,
+    required this.label,
+    required this.selected,
+    required this.swatchColor,
+    required this.onSelected,
+  });
+
+  final String id;
+  final String label;
+  final bool selected;
+  final Color? swatchColor;
+  final VoidCallback onSelected;
+
+  @override
+  State<_AccentColorSwatch> createState() => _AccentColorSwatchState();
+}
+
+class _AccentColorSwatchState extends State<_AccentColorSwatch> {
+  bool _hovered = false;
+  bool _pressed = false;
+  bool _focused = false;
+
+  /// context 提供外观与减动效设置；返回 32×32 命中区内的 22pt 立体色点。
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final reduced = AppMotion.reduced(context);
+    final accent = NativeGlassTheme.accentOf(context);
+    final ringColor = widget.swatchColor ?? accent;
+    final scale = reduced
+        ? 1.0
+        : _pressed
+        ? 0.92
+        : _hovered
+        ? 1.08
+        : 1.0;
+
+    final BoxDecoration fillDecoration;
+    if (widget.swatchColor == null) {
+      // 「跟随系统」以多色圆环区分固定单色，摘镜或浅色下仍一眼可辨。
+      fillDecoration = BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const SweepGradient(
+          colors: [
+            Color(0xFF007AFF),
+            Color(0xFFAF52DE),
+            Color(0xFFF74F9E),
+            Color(0xFFF7821B),
+            Color(0xFF28A745),
+            Color(0xFF007AFF),
+          ],
+        ),
+        border: Border.all(
+          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.16),
+          width: GlassMetrics.groupBorderWidth,
+        ),
+      );
+    } else {
+      fillDecoration = BoxDecoration(
+        shape: BoxShape.circle,
+        color: widget.swatchColor,
+        border: Border.all(
+          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.16),
+          width: GlassMetrics.groupBorderWidth,
+        ),
+      );
+    }
+
+    return Semantics(
+      label: widget.label,
+      selected: widget.selected,
+      button: true,
+      onTap: widget.onSelected,
+      child: Tooltip(
+        message: widget.label,
+        child: FocusableActionDetector(
+          mouseCursor: SystemMouseCursors.click,
+          onShowFocusHighlight: (v) => setState(() => _focused = v),
+          actions: {
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (_) {
+                widget.onSelected();
+                return null;
+              },
+            ),
+          },
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            }),
+            child: Listener(
+              onPointerDown: (_) => setState(() => _pressed = true),
+              onPointerUp: (_) => setState(() => _pressed = false),
+              onPointerCancel: (_) => setState(() => _pressed = false),
+              child: GestureDetector(
+                key: ValueKey('accent-color-${widget.id}'),
+                excludeFromSemantics: true,
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onSelected,
+                child: SizedBox.square(
+                  dimension: GlassMetrics.hitSize,
+                  child: Center(
+                    child: AnimatedScale(
+                      scale: scale,
+                      duration: reduced ? Duration.zero : GlassMetrics.transition,
+                      curve: Curves.easeOutCubic,
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: _focused
+                              ? Border.all(
+                                  color: accent,
+                                  width: GlassMetrics.focusRingWidth,
+                                )
+                              : widget.selected
+                              ? Border.all(
+                                  color: ringColor.withValues(alpha: 0.72),
+                                  width: 1.5,
+                                )
+                              : null,
+                        ),
+                        child: DecoratedBox(
+                          decoration: fillDecoration,
+                          child: widget.selected
+                              ? Center(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.22,
+                                        ),
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                    child: const SizedBox.square(dimension: 7),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

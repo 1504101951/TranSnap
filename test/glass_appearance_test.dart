@@ -37,6 +37,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
+    await openSettingsPage(tester, '个性化');
     expect(find.text('保存设置'), findsNothing);
     final slider = find.byType(Slider);
     for (final transparency in [0.8, 0.0]) {
@@ -87,6 +88,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
+    await openSettingsPage(tester, '个性化');
     final slider = find.byType(Slider);
     tester.widget<Slider>(slider).onChanged!(0.6);
     await tester.pump();
@@ -155,5 +157,44 @@ void main() {
     expect((light.b * 255).round(), closeTo(0xBF, 2));
     expect((dark.r * 255).round(), closeTo(0x5F, 2));
     expect((dark.b * 255).round(), 0xFF);
+  });
+
+  testWidgets('个性化页切换强调色后立即持久化，支持 6 种经典色与跟随系统（#144）', (tester) async {
+    // 作用：验证「个性化 → 强调色」点击预设色点立即自动保存 PreferenceKeys.accentColor。
+    // 边界：初始缺省为 system，点选 accent-color-purple 后保存值为 purple，切回 system 后恢复 system。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var saved = <String, Object?>{'revision': 0};
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true};
+        case MethodNames.getSettings:
+          return saved;
+        case MethodNames.saveSettings:
+          saved = Map<String, Object?>.from(call.arguments as Map)
+            ..remove('credentials')
+            ..['revision'] = (saved['revision'] as int) + 1;
+          return saved;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '个性化');
+
+    expect(find.text('强调色'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('accent-color-purple')));
+    await tester.pumpAndSettle();
+    expect(saved[PreferenceKeys.accentColor], AccentColors.purple);
+
+    await tester.tap(find.byKey(const ValueKey('accent-color-system')));
+    await tester.pumpAndSettle();
+    expect(saved[PreferenceKeys.accentColor], AccentColors.system);
   });
 }

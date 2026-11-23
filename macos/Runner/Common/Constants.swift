@@ -267,6 +267,17 @@ enum AppConstants {
     static let getScreenshotMethod = "getScreenshot"
     static let glassAppearanceKey = "glassAppearance"
     static let glassOpacityKey = "glassOpacity"
+    /// 个性化强调色偏好与六种经典色表（sRGB ARGB 整数），与 Dart AccentColors 同步（#144）。
+    static let accentColorKey = "accentColor"
+    static let accentSystem = "system"
+    static let accentSwatches: [String: (light: Int, dark: Int)] = [
+        "blue": (0xFF00_7AFF, 0xFF0A_84FF),
+        "purple": (0xFF95_3D96, 0xFFA5_50A7),
+        "pink": (0xFFF7_4F9E, 0xFFFF_5CA8),
+        "orange": (0xFFF7_821B, 0xFFFF_8F24),
+        "green": (0xFF28_A745, 0xFF30_D158),
+        "graphite": (0xFF8E_8E93, 0xFF98_989D),
+    ]
     /// 外观快照中按浅、深外观解析的系统强调色（sRGB ARGB 整数），与 Dart AppearanceKeys 同步（#142）。
     static let accentLightKey = "accentLight"
     static let accentDarkKey = "accentDark"

@@ -43,6 +43,7 @@ class AppSettings {
     this.gifMaximumWidth,
     this.glassAppearance = AppearanceModes.system,
     this.glassOpacity = 0.8,
+    this.accentColor = AccentColors.system,
     this.launchAtLogin = false,
     Map<String, String>? excludedApps,
     List<GlossaryEntry>? glossary,
@@ -127,6 +128,7 @@ class AppSettings {
   /// 视觉偏好与业务设置一同提交，不单独保存第二份配置。
   String glassAppearance;
   double glassOpacity;
+  String accentColor;
   bool launchAtLogin;
   final Map<String, String> excludedApps;
 
@@ -233,6 +235,8 @@ class AppSettings {
           AppearanceModes.system,
       glassOpacity:
           (map[PreferenceKeys.glassOpacity] as num?)?.toDouble() ?? 0.8,
+      accentColor:
+          map[PreferenceKeys.accentColor] as String? ?? AccentColors.system,
       launchAtLogin: map[PreferenceKeys.launchAtLogin] as bool? ?? false,
       excludedApps: Map<String, String>.from(
         map[PreferenceKeys.excludedApps] as Map? ?? {},
@@ -280,6 +284,9 @@ class AppSettings {
         glassOpacity < 0.2 ||
         glassOpacity > 1) {
       throw const FormatException('外观模式或玻璃透明度无效。');
+    }
+    if (!AccentColors.values.contains(accentColor)) {
+      throw const FormatException('强调色设置无效。');
     }
     for (final service in services) {
       service.validate();
@@ -395,6 +402,7 @@ class AppSettings {
     PreferenceKeys.gifMaximumWidth: ?gifMaximumWidth,
     PreferenceKeys.glassAppearance: glassAppearance,
     PreferenceKeys.glassOpacity: glassOpacity,
+    PreferenceKeys.accentColor: accentColor,
     PreferenceKeys.launchAtLogin: launchAtLogin,
     PreferenceKeys.excludedApps: excludedApps,
     PreferenceKeys.glossary: [for (final entry in glossary) entry.toMap()],
