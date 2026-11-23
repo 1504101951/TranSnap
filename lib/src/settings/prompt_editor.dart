@@ -108,61 +108,118 @@ class _PromptEditorState extends State<PromptEditor> {
     ],
   );
 
-  /// mode 为处理模式，label 为字段名；返回标题行带「思考」开关与「恢复默认」的多行提示词字段，空值在框内底部就地报错。
+  /// mode 为处理模式，label 为字段名；返回独立分卡、标题行带紧凑图标、思考开关与恢复默认的多行提示词字段，空值在框内底部就地报错。
   Widget _field(TextMode mode, String label) {
     final controller = _controllers[mode]!;
     final fallback = defaultPrompts[mode]!;
     final error = controller.text.trim().isEmpty ? '提示词不能为空。' : null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final (icon, tint) = switch (mode) {
+      TextMode.translate => (Icons.translate_outlined, const Color(0xFF0A84FF)),
+      TextMode.polish => (Icons.auto_fix_high_outlined, const Color(0xFFAF52DE)),
+      TextMode.correct => (Icons.spellcheck_outlined, const Color(0xFF34C759)),
+      TextMode.explain => (Icons.lightbulb_outline, const Color(0xFFFF9500)),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: GlassMetrics.space12),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.04)
+              : Colors.black.withValues(alpha: 0.025),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(GlassMetrics.space12),
+            side: BorderSide(
+              color: (dark ? Colors.white : Colors.black).withValues(
+                alpha: dark ? 0.10 : 0.07,
               ),
+              width: GlassMetrics.groupBorderWidth,
             ),
-            const Text('思考', style: TextStyle(fontSize: 13)),
-            const SizedBox(width: 6),
-            NativeGlassSwitch(
-              key: ValueKey('思考-$label'),
-              label: '$label思考',
-              value: _thinking[mode]!,
-              onChanged: (value) => setState(() => _thinking[mode] = value),
-            ),
-            const SizedBox(width: GlassMetrics.actionGap),
-            // 内容已是默认值时无需恢复。
-            NativeGlassSurface(
-              material: true,
-              child: TextButton(
-                key: ValueKey('恢复默认-$label'),
-                onPressed: controller.text == fallback
-                    ? null
-                    : () => _confirmReset(mode, label),
-                child: const Text('恢复默认'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: GlassMetrics.space4),
-        // 顶行已渲染标题，此处置空 label 仅保留 semanticLabel 并由输入框内置 errorText 归属报错（U-13）。
-        NativeGlassField(
-          label: null,
-          semanticLabel: label,
-          errorText: error,
-          child: TextField(
-            key: ValueKey('提示词-$label'),
-            controller: controller,
-            minLines: 4,
-            maxLines: 8,
-            // 修改后重新判断「恢复默认」与「保存」是否可用。
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(),
           ),
         ),
-      ],
+        child: Padding(
+          padding: const EdgeInsets.all(GlassMetrics.space12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  ExcludeSemantics(
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [tint, tint.withValues(alpha: 0.78)],
+                        ),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: BorderRadius.circular(
+                            GlassMetrics.sidebarIconRadius,
+                          ),
+                        ),
+                      ),
+                      child: SizedBox.square(
+                        dimension: 24,
+                        child: Center(
+                          child: Icon(
+                            icon,
+                            size: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: GlassMetrics.space8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const Text('思考', style: TextStyle(fontSize: 13)),
+                  const SizedBox(width: 6),
+                  NativeGlassSwitch(
+                    key: ValueKey('思考-$label'),
+                    label: '$label思考',
+                    value: _thinking[mode]!,
+                    onChanged: (value) =>
+                        setState(() => _thinking[mode] = value),
+                  ),
+                  const SizedBox(width: GlassMetrics.actionGap),
+                  // 内容已是默认值时无需恢复。
+                  NativeGlassSurface(
+                    material: true,
+                    child: TextButton(
+                      key: ValueKey('恢复默认-$label'),
+                      onPressed: controller.text == fallback
+                          ? null
+                          : () => _confirmReset(mode, label),
+                      child: const Text('恢复默认'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: GlassMetrics.space8),
+              // 顶行已渲染标题，此处置空 label 仅保留 semanticLabel 并由输入框内置 errorText 归属报错（U-13）。
+              NativeGlassField(
+                label: null,
+                semanticLabel: label,
+                errorText: error,
+                child: TextField(
+                  key: ValueKey('提示词-$label'),
+                  controller: controller,
+                  minLines: 4,
+                  maxLines: 8,
+                  // 修改后重新判断「恢复默认」与「保存」是否可用。
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

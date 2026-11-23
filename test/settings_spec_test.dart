@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/settings/settings_app.dart';
@@ -296,5 +297,114 @@ void main() {
     });
     expect(existing.validate, returnsNormally);
     expect(existing.toMap()['id'], 'saved');
+  });
+
+  testWidgets('NativeGlassSwitch 按下态横向果冻拉伸至 21pt，松手回位且减动效跳过拉伸（#67、#144）', (
+    tester,
+  ) async {
+    // 作用：验证果冻开关按住时滑块水平拉伸、松手物理弹簧落位并切换值，系统减少动态效果时跳过拉伸。
+    // 边界：常规态按住滑块宽 = switchThumbPressedWidth（21pt），松手恢复 switchThumb（16pt）；disableAnimations 为真按住仍为 16pt。
+    var value = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, update) => MediaQuery(
+              data: const MediaQueryData(disableAnimations: false),
+              child: Center(
+                child: NativeGlassSwitch(
+                  value: value,
+                  label: '果冻开关',
+                  onChanged: (next) => update(() => value = next),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final thumbFinder = find.byKey(const ValueKey('native-glass-switch-thumb'));
+    expect(tester.getSize(thumbFinder).width, GlassMetrics.switchThumb);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(NativeGlassSwitch)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(thumbFinder).width,
+      closeTo(GlassMetrics.switchThumbPressedWidth, 0.05),
+    );
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(value, isTrue);
+    expect(tester.getSize(thumbFinder).width, GlassMetrics.switchThumb);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Center(
+              child: NativeGlassSwitch(
+                value: false,
+                label: '减动效开关',
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final reducedGesture = await tester.startGesture(
+      tester.getCenter(find.byType(NativeGlassSwitch)),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(thumbFinder).width, GlassMetrics.switchThumb);
+    await reducedGesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('NativeGlassGroup 外置眉标与 NativeGlassKeycaps 独立键帽及合并语义（#67）', (
+    tester,
+  ) async {
+    // 作用：验证分组外置眉标位于卡片上方、行图标锚点跳过无障碍树，且机械键帽保留分键视觉与整体读屏语义。
+    // 边界：「外观与材质」眉标底缘 <= 卡片内正文顶缘；NativeGlassKeycaps 含 3 个独立键文本并匹配合并语义标签「⇧ ⌘ @」。
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: NativeGlassGroup(
+            title: '外观与材质',
+            children: const [
+              NativeGlassSettingRow(
+                title: '快捷键示例',
+                leading: NativeGlassRowIcon(
+                  icon: Icons.keyboard_outlined,
+                  tint: Color(0xFF0A84FF),
+                ),
+                child: NativeGlassKeycaps(tokens: ['⇧', '⌘', '@']),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getRect(find.text('外观与材质')).bottom,
+      lessThanOrEqualTo(tester.getRect(find.text('快捷键示例')).top),
+    );
+    expect(find.bySemanticsLabel('⇧ ⌘ @'), findsOneWidget);
+    for (final token in ['⇧', '⌘', '@']) {
+      expect(find.text(token), findsOneWidget);
+    }
   });
 }

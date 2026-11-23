@@ -143,11 +143,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('全局翻译快捷键')));
     await tester.pumpAndSettle();
-    expect(find.text('⌃ ⌘ 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('⌃ ⌘ 1'), findsOneWidget);
+    for (final token in ['⌃', '⌘', '1']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('全局翻译快捷键')),
+          matching: find.text(token),
+        ),
+        findsOneWidget,
+      );
+    }
     cancel = true;
     await tester.tap(find.byKey(const ValueKey('全局翻译快捷键')));
     await tester.pumpAndSettle();
-    expect(find.text('⌃ ⌘ 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('⌃ ⌘ 1'), findsOneWidget);
   });
   testWidgets('添加服务、测试草稿、默认切换和删除通过保存形成实际状态', (tester) async {
     const channel = MethodChannel(ChannelNames.settings);

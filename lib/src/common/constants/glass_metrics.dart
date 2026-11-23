@@ -36,6 +36,8 @@ abstract final class GlassMetrics {
   static const switchWidth = 36.0;
   static const switchHeight = 20.0;
   static const switchThumb = 16.0;
+  /// Apple 果冻开关按下态滑块横向拉伸宽度（#67、#144）。
+  static const switchThumbPressedWidth = 21.0;
   static const sliderHeight = 32.0;
   static const sliderTrack = 6.0;
   static const sliderThumbRadius = 8.0;
@@ -88,4 +90,17 @@ abstract final class GlassMetrics {
   static const menuMaxHeight = 320.0;
   static const sliderOverlayRadius = 14.0;
   static const sliderThumbBorderWidth = 1.5;
+
+  /// 方案 A 桌面工艺扩展度量：分组卡片眉标与轮廓、行图标锚点、机械键帽（#67、#144）。
+  static const groupHeaderFont = 11.5;
+  static const groupHeaderGap = 5.0;
+  static const groupBorderWidth = 0.5;
+  static const rowIconBox = 28.0;
+  static const rowIconRadius = 8.0;
+  static const rowIconSize = 15.0;
+  static const rowIconGap = 12.0;
+  static const keycapMinWidth = 22.0;
+  static const keycapHeight = 20.0;
+  static const keycapRadius = 5.0;
+  static const keycapGap = 4.0;
 }
