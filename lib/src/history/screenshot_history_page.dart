@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_compose_dialogs.dart';
 import 'screenshot_history.dart';
@@ -37,11 +38,17 @@ class ScreenshotHistoryPage extends StatefulWidget {
 class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   List<ScreenshotRecord>? _records;
   bool? _recording;
+  String? _loadError;
   String? _message;
+  bool _messageIsError = false;
+  bool _loading = true;
   String? _busyAction;
 
   /// 勾选的记录 id，用于拼接、拆分与比较（#109）；只在本页保存。
   Set<int> _selected = {};
+
+  /// 每条截图记录的复制按钮触发计数，用于驱动 CopyConfirmIcon 反馈动效。
+  final Map<int, int> _copyTriggers = {};
 
   /// 无参数；返回勾选的记录，按截图时间先后（同一时刻按 id）排列。
   List<ScreenshotRecord> get _chosen =>
@@ -68,8 +75,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     if (old.version != widget.version) _load();
   }
 
-  /// 无参数；读取截图记录与「记录截图历史」开关，失败时显示原因，返回读取结束的 Future。
+  /// 无参数；读取截图记录与「记录截图历史」开关，首次失败展示可重试错误，刷新失败以横幅提示。
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      if (_records == null) _loadError = null;
+    });
     try {
       final rows = await widget.channel.invokeListMethod<Map<Object?, Object?>>(
         MethodNames.screenshotHistoryList,
@@ -78,10 +89,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         MethodNames.screenshotHistoryRecording,
       );
       if (!mounted) return;
-      final records = rows!.map(ScreenshotRecord.fromMap).toList();
+      final records = (rows ?? const []).map(ScreenshotRecord.fromMap).toList();
       setState(() {
         _records = records;
-        _recording = recording!;
+        _recording = recording ?? false;
+        _loading = false;
+        _loadError = null;
         // 只保留仍存在且图片未缺失的勾选。
         _selected = {
           for (final record in records)
@@ -90,23 +103,105 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       });
     } on PlatformException catch (error) {
       if (!mounted) return;
-      setState(() => _message = error.message ?? '无法读取截图历史');
+      final reason = error.message ?? '无法读取截图历史';
+      setState(() {
+        _loading = false;
+        if (_records == null) {
+          _loadError = reason;
+        } else {
+          _message = reason;
+          _messageIsError = true;
+        }
+      });
     }
   }
 
-  /// method 为主引擎或原生操作，arguments 为参数；执行后按需重新读取，失败显示原因，返回结束的 Future。
-  Future<void> _run(
+  /// method/arguments 为原生调用参数，reload 控制完成后是否重读列表，successMessage 为成功反馈，busyKey 为忙碌锁键；返回是否执行成功。
+  Future<bool> _run(
     String method, [
     Map<String, Object>? arguments,
     bool reload = false,
+    String? successMessage,
+    String? busyKey,
   ]) async {
+    if (_busyAction != null) return false;
+    setState(() {
+      _message = null;
+      _messageIsError = false;
+      if (busyKey != null) _busyAction = busyKey;
+    });
     try {
       await widget.channel.invokeMethod<Object?>(method, arguments);
+      if (!mounted) return false;
+      if (successMessage != null) {
+        setState(() {
+          _message = successMessage;
+          _messageIsError = false;
+        });
+      }
       if (reload) await _load();
+      return true;
     } on PlatformException catch (error) {
-      if (!mounted) return;
-      setState(() => _message = error.message ?? _operationFailed);
+      if (!mounted) return false;
+      setState(() {
+        _message = error.message ?? _operationFailed;
+        _messageIsError = true;
+      });
+      return false;
+    } finally {
+      if (mounted && busyKey != null) setState(() => _busyAction = null);
     }
+  }
+
+  /// 无参数；经确认弹窗后清空全部截图历史与磁盘文件，防止误触清空。
+  Future<void> _clearAll() async {
+    if (_busyAction != null) return;
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '清空截图历史',
+      message: '确定要清空全部截图历史吗？此操作将移除所有历史记录和截图文件，且不可撤销。',
+      confirmLabel: '清空',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _run(MethodNames.clearScreenshotHistory, null, true, null, 'clear');
+  }
+
+  /// record 为待删截图记录；经确认弹窗后删除记录与文件，防止误删。
+  Future<void> _deleteRecord(ScreenshotRecord record) async {
+    if (_busyAction != null) return;
+    final timestamp = dateTimeText(
+      DateTime.fromMillisecondsSinceEpoch(record.capturedAt),
+    );
+    final confirmed = await NativeGlassDialog.confirm(
+      context: context,
+      title: '删除截图',
+      message: '确定要删除 $timestamp（${record.width}×${record.height}）的截图吗？此操作不可撤销。',
+      confirmLabel: '删除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _run(
+      MethodNames.deleteScreenshotHistory,
+      {'id': record.id},
+      true,
+      null,
+      'delete-${record.id}',
+    );
+  }
+
+  /// record 为目标截图记录；复制图片到剪贴板并触发图标确认动效与横幅反馈。
+  Future<void> _copyImage(ScreenshotRecord record) async {
+    final copied = await _run(
+      MethodNames.copyImageFile,
+      {'path': record.path},
+      false,
+      '已复制图片',
+    );
+    if (!copied || !mounted) return;
+    setState(() {
+      _copyTriggers[record.id] = (_copyTriggers[record.id] ?? 0) + 1;
+    });
   }
 
   /// action 为操作标识（'stitch' / 'split'），produce 调用原生生成结果图片，done 为完成提示；
@@ -116,7 +211,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     Future<List<Uint8List>> Function() produce,
     String Function(int count) done,
   ) async {
-    setState(() => _busyAction = action);
+    if (_busyAction != null) return;
+    setState(() {
+      _busyAction = action;
+      _message = null;
+      _messageIsError = false;
+    });
     try {
       final images = await produce();
       await widget.channel.invokeMethod<void>(
@@ -127,11 +227,15 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       setState(() {
         _selected = {};
         _message = done(images.length);
+        _messageIsError = false;
       });
       await _load();
     } on PlatformException catch (error) {
       if (!mounted) return;
-      setState(() => _message = error.message ?? _operationFailed);
+      setState(() {
+        _message = error.message ?? _operationFailed;
+        _messageIsError = true;
+      });
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
@@ -140,42 +244,62 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   /// 无参数；选择方向后按时间先后拼接勾选的截图，返回结束的 Future。
   Future<void> _stitch() async {
     final chosen = _chosen;
+    if (_busyAction != null || chosen.length < 2) return;
     // StitchDialog 返回纵向（true）或横向（false），取消为 null。
     final vertical = await showDialog<bool>(
       context: context,
       builder: (_) => StitchDialog(count: chosen.length),
     );
-    if (vertical == null) return;
+    if (vertical == null || !mounted) return;
     await _compose(
       'stitch',
-      () async => [
-        (await widget.channel.invokeMethod<Uint8List>(
+      () async {
+        final result = await widget.channel.invokeMethod<Uint8List>(
           MethodNames.stitchScreenshots,
           {
             'paths': [for (final record in chosen) record.path],
             'vertical': vertical,
           },
-        ))!,
-      ],
+        );
+        if (result == null) {
+          throw PlatformException(
+            code: 'INVALID_RESULT',
+            message: _operationFailed,
+          );
+        }
+        return [result];
+      },
       (_) => '已生成拼接图',
     );
   }
 
   /// 无参数；选择段数后按高度等分勾选的截图，返回结束的 Future。
   Future<void> _split() async {
-    final record = _chosen.single;
+    final chosen = _chosen;
+    if (_busyAction != null || chosen.length != 1) return;
+    final record = chosen.single;
+    if (record.height < 2) return;
     // SplitDialog 返回 2–10 的段数，取消为 null。
     final parts = await showDialog<int>(
       context: context,
       builder: (_) => SplitDialog(height: record.height),
     );
-    if (parts == null) return;
+    if (parts == null || !mounted) return;
     await _compose(
       'split',
-      () async => (await widget.channel.invokeListMethod<Uint8List>(
-        MethodNames.splitScreenshot,
-        {'path': record.path, 'parts': parts},
-      ))!,
+      () async {
+        final result = await widget.channel.invokeListMethod<Uint8List>(
+          MethodNames.splitScreenshot,
+          {'path': record.path, 'parts': parts},
+        );
+        if (result == null) {
+          throw PlatformException(
+            code: 'INVALID_RESULT',
+            message: _operationFailed,
+          );
+        }
+        return result;
+      },
       (count) => '已拆分为 $count 张',
     );
   }
@@ -183,7 +307,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   /// 无参数；原生逐像素比较勾选的两张截图后打开并排比较弹窗，失败显示原因，返回结束的 Future。
   Future<void> _compare() async {
     final chosen = _chosen;
-    setState(() => _busyAction = 'compare');
+    if (_busyAction != null || chosen.length != 2) return;
+    setState(() {
+      _busyAction = 'compare';
+      _message = null;
+      _messageIsError = false;
+    });
     Map<String, Object?>? result;
     try {
       result = await widget.channel.invokeMapMethod<String, Object?>(
@@ -191,7 +320,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         {'first': chosen[0].path, 'second': chosen[1].path},
       );
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _message = error.message ?? _operationFailed);
+      if (mounted) {
+        setState(() {
+          _message = error.message ?? _operationFailed;
+          _messageIsError = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
@@ -208,90 +342,174 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
   }
 
-  /// context 提供主题；返回开关栏与截图卡片列表。
+  /// context 提供主题；返回开关栏、批量合成工具条、状态横幅与截图卡片列表。
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final records = _records;
+    final chosen = _chosen;
+    final canSplit = chosen.length == 1 && chosen.single.height >= 2;
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: GlassMetrics.pagePadding,
+          padding: const EdgeInsets.fromLTRB(
+            GlassMetrics.pagePadding,
+            GlassMetrics.space12,
+            GlassMetrics.pagePadding,
+            GlassMetrics.space8,
           ),
-          child: Row(
-            children: [
-              const Text('记录截图历史'),
-              const SizedBox(width: 8),
-              NativeGlassSwitch(
-                label: '记录截图历史',
-                value: _recording ?? false,
-                onChanged: _recording == null
-                    ? null
-                    : (enabled) async {
-                        await _run(MethodNames.setScreenshotHistoryRecording, {
-                          'enabled': enabled,
-                        }, true);
-                      },
-              ),
-              const Spacer(),
-              NativeGlassSurface(
-                material: true,
-                child: TextButton(
-                  onPressed: records == null || records.isEmpty
-                      ? null
-                      : () => _run(
-                          MethodNames.clearScreenshotHistory,
-                          null,
-                          true,
-                        ),
-                  child: const Text('清空截图历史'),
+          child: SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: GlassMetrics.actionGap,
+              runSpacing: GlassMetrics.space8,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('记录截图历史'),
+                    const SizedBox(width: GlassMetrics.actionGap),
+                    NativeGlassSwitch(
+                      label: '记录截图历史',
+                      value: _recording ?? false,
+                      onChanged: _recording == null || _busyAction != null
+                          ? null
+                          : (enabled) async {
+                              await _run(
+                                MethodNames.setScreenshotHistoryRecording,
+                                {'enabled': enabled},
+                                true,
+                              );
+                            },
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    NativeGlassSurface(
+                      material: true,
+                      busy: _loading && records != null,
+                      child: IconButton(
+                        tooltip: '刷新截图历史',
+                        onPressed: _loading ? null : _load,
+                        icon: const Icon(
+                          Icons.refresh,
+                          size: GlassMetrics.icon,
+                        ),
+                        visualDensity: VisualDensity.standard,
+                      ),
+                    ),
+                    const SizedBox(width: GlassMetrics.actionGap),
+                    NativeGlassSurface(
+                      material: true,
+                      busy: _busyAction == 'clear',
+                      child: TextButton(
+                        onPressed:
+                            _busyAction != null ||
+                                records == null ||
+                                records.isEmpty
+                            ? null
+                            : _clearAll,
+                        child: const Text('清空截图历史'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        // 勾选后的拼接（≥2 张）、拆分（1 张）与比较（2 张）（#109）。
+        // 勾选后的拼接（≥2 张）、拆分（1 张且高度≥2px）与比较（2 张）（#109）。
         if (records != null && records.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               GlassMetrics.pagePadding,
-              8,
+              0,
+              GlassMetrics.pagePadding,
+              GlassMetrics.space8,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: GlassMetrics.actionGap,
+                runSpacing: GlassMetrics.space8,
+                children: [
+                  Text(
+                    '已选 ${_selected.length} 张',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Wrap(
+                    spacing: GlassMetrics.actionGap,
+                    runSpacing: GlassMetrics.space8,
+                    children: [
+                      for (final (id, label, enabled, action) in [
+                        ('stitch', '拼接', _selected.length >= 2, _stitch),
+                        ('split', '拆分', canSplit, _split),
+                        ('compare', '比较', _selected.length == 2, _compare),
+                      ])
+                        NativeGlassSurface(
+                          material: true,
+                          busy: _busyAction == id,
+                          child: TextButton(
+                            onPressed: _busyAction == null && enabled
+                                ? action
+                                : null,
+                            child: Text(label),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const Divider(height: 1, thickness: GlassMetrics.groupDividerThickness),
+        if (_message != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              GlassMetrics.pagePadding,
+              GlassMetrics.space12,
               GlassMetrics.pagePadding,
               0,
             ),
-            child: Row(
-              children: [
-                Text(
-                  '已选 ${_selected.length} 张',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const Spacer(),
-                for (final (id, label, enabled, action) in [
-                  ('stitch', '拼接', _selected.length >= 2, _stitch),
-                  ('split', '拆分', _selected.length == 1, _split),
-                  ('compare', '比较', _selected.length == 2, _compare),
-                ]) ...[
-                  const SizedBox(width: 8),
-                  NativeGlassSurface(
-                    material: true,
-                    busy: _busyAction == id,
-                    child: TextButton(
-                      onPressed: _busyAction == null && enabled ? action : null,
-                      child: Text(label),
-                    ),
-                  ),
-                ],
-              ],
+            child: NativeGlassBanner(
+              message: _message!,
+              isError: _messageIsError,
             ),
           ),
-        if (_message != null)
-          Padding(
-            padding: const EdgeInsets.all(GlassMetrics.panelPadding),
-            child: Text(_message!),
-          ),
         Expanded(
-          child: records == null
+          child: records == null && _loadError != null
+              ? Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: Padding(
+                      padding: const EdgeInsets.all(GlassMetrics.pagePadding),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NativeGlassBanner(
+                            message: _loadError!,
+                            isError: true,
+                          ),
+                          const SizedBox(height: GlassMetrics.space12),
+                          NativeGlassSurface(
+                            material: true,
+                            child: FilledButton(
+                              onPressed: _load,
+                              child: const Text('重试加载'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : records == null
               ? const Center(child: CircularProgressIndicator())
               : records.isEmpty
               ? Center(
@@ -322,18 +540,30 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         : (ScreenshotHistoryPage.thumbnailWidth * record.height / record.width)
               .clamp(1.0, ScreenshotHistoryPage.thumbnailMaxHeight);
     final path = {'path': record.path};
+    final deleting = _busyAction == 'delete-${record.id}';
 
-    /// tooltip/icon/method 为按钮提示、图标与原生操作；返回 16pt 玻璃图标按钮。
-    Widget action(String tooltip, IconData icon, VoidCallback onPressed) =>
-        NativeGlassSurface(
-          material: true,
-          child: IconButton(
-            tooltip: tooltip,
-            onPressed: onPressed,
-            icon: Icon(icon, size: 16),
-            visualDensity: VisualDensity.standard,
-          ),
-        );
+    /// tooltip/icon/onPressed 为按钮提示、图标与回调；返回统一样式的玻璃图标按钮。
+    Widget action(
+      String tooltip,
+      Widget icon,
+      VoidCallback? onPressed, {
+      bool busy = false,
+      String? semanticsLabel,
+    }) => Semantics(
+      label: semanticsLabel,
+      button: semanticsLabel != null,
+      child: NativeGlassSurface(
+        material: true,
+        busy: busy,
+        child: IconButton(
+          tooltip: tooltip,
+          onPressed: onPressed,
+          icon: icon,
+          visualDensity: VisualDensity.standard,
+        ),
+      ),
+    );
+
     return Card(
       key: ValueKey('screenshot-history-${record.id}'),
       margin: const EdgeInsets.only(bottom: GlassMetrics.groupGap),
@@ -348,8 +578,8 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
               value: _selected.contains(record.id),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
-              semanticLabel: '选择截图',
-              onChanged: record.exists
+              semanticLabel: '选择 $timestamp 截图',
+              onChanged: record.exists && _busyAction == null
                   ? (checked) => setState(
                       () => checked == true
                           ? _selected.add(record.id)
@@ -357,7 +587,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                     )
                   : null,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: GlassMetrics.actionGap),
             SizedBox(
               width: ScreenshotHistoryPage.thumbnailWidth,
               height: height,
@@ -367,49 +597,73 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       fit: BoxFit.contain,
                       cacheWidth: (ScreenshotHistoryPage.thumbnailWidth * 2)
                           .round(),
+                      errorBuilder: (context, error, stackTrace) => ColoredBox(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        child: Center(
+                          child: Text(
+                            '截图文件不可用',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ),
                     )
                   : const Center(child: Text('图片文件已缺失')),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: GlassMetrics.space12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(timestamp, style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: GlassMetrics.space4),
                   Text(
                     '${record.width} × ${record.height}',
                     style: theme.textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: GlassMetrics.space8),
                   Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
+                    spacing: GlassMetrics.actionGap,
+                    runSpacing: GlassMetrics.actionGap,
                     children: [
                       // 文件缺失时只保留删除。
                       if (record.exists) ...[
                         action(
                           '打开',
-                          Icons.open_in_new,
-                          () => _run(MethodNames.openFile, path),
+                          const Icon(Icons.open_in_new, size: GlassMetrics.icon),
+                          _busyAction == null
+                              ? () => _run(MethodNames.openFile, path)
+                              : null,
                         ),
                         action(
                           '复制图片',
-                          Icons.copy_outlined,
-                          () => _run(MethodNames.copyImageFile, path),
+                          CopyConfirmIcon(
+                            trigger: _copyTriggers[record.id] ?? 0,
+                            size: GlassMetrics.icon,
+                          ),
+                          _busyAction == null ? () => _copyImage(record) : null,
                         ),
                         action(
                           '在 Finder 中显示',
-                          Icons.folder_open,
-                          () => _run(MethodNames.revealFile, path),
+                          const Icon(
+                            Icons.folder_open,
+                            size: GlassMetrics.icon,
+                          ),
+                          _busyAction == null
+                              ? () => _run(MethodNames.revealFile, path)
+                              : null,
                         ),
                       ],
                       action(
                         '删除截图',
-                        Icons.delete_outline,
-                        () => _run(MethodNames.deleteScreenshotHistory, {
-                          'id': record.id,
-                        }, true),
+                        const Icon(
+                          Icons.delete_outline,
+                          size: GlassMetrics.icon,
+                        ),
+                        _busyAction == null
+                            ? () => _deleteRecord(record)
+                            : null,
+                        busy: deleting,
+                        semanticsLabel: '删除 $timestamp 截图',
                       ),
                     ],
                   ),

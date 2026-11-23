@@ -11,6 +11,7 @@ import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/history/history_app.dart';
 import 'package:translate_app/src/history/history_requests.dart';
 import 'package:translate_app/src/history/translation_history.dart';
+import 'package:translate_app/src/history/vocabulary_page.dart';
 
 /// 无参数；用真实 SQLite 驱动窗口，验证卡片顺序、跨页浏览与保存失败反馈。
 void main() {
@@ -246,6 +247,7 @@ void main() {
       find.byKey(const ValueKey('history-search')),
       '目标译文',
     );
+    await tester.pump(const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
     expect(find.text('unique'), findsOneWidget);
     expect(find.text('source-10'), findsNothing);
@@ -263,6 +265,7 @@ void main() {
       find.byKey(const ValueKey('history-search')),
       '译文-10',
     );
+    await tester.pump(const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
     expect(find.text('source-10'), findsOneWidget);
     await tester.tap(find.text('清空全部'));
@@ -377,6 +380,145 @@ void main() {
     pending.complete();
     await tester.pumpAndSettle();
     expect(ring().active, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('搜索防抖生效，支持输入框内清除并区分无匹配与空列表，空闲时清除筛选禁用', (tester) async {
+    // 作用：验证 200ms 搜索防抖、清除按钮显隐及无筛选结果文案区分。
+    // 边界：未满 200ms 不触发远端查询；筛选清空后列表恢复且「清除筛选」回退为禁用。
+    store.insert(
+      sourceText: 'hello world',
+      translatedText: '你好世界',
+      detectedLanguage: 'en',
+      targetLanguage: 'zh',
+      providerId: 'test',
+      completedAt: 1000,
+      sourceLabel: 'Notes',
+    );
+    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
+          .onPressed,
+      isNull,
+    );
+    expect(find.byKey(const ValueKey('history-search-clear')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('history-search')),
+      '不存在的词',
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('hello world'), findsOneWidget);
+    expect(find.byKey(const ValueKey('history-search-clear')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的翻译历史'), findsOneWidget);
+    expect(find.text('暂无翻译历史'), findsNothing);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('history-search-clear')));
+    await tester.pumpAndSettle();
+    expect(find.text('hello world'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('分段切换延迟加载并保持翻译历史浏览状态，支持卡片快捷复制与中文日期选择', (tester) async {
+    // 作用：验证 IndexedStack 延迟挂载子分段、往返保留搜索筛选、卡片复制确认及日期选择器可打开。
+    // 边界：停留在翻译历史时不挂载 VocabularyPage；切去生词本再切回仍保留搜索框文本。
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final clipboard = <String>[];
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.vocabularyList ||
+          call.method == MethodNames.screenshotHistoryList) {
+        return const <Map<String, Object>>[];
+      }
+      if (call.method == MethodNames.screenshotHistoryRecording) {
+        return true;
+      }
+      try {
+        return handleHistoryRequest(store, call);
+      } on SqliteException catch (error) {
+        throw PlatformException(
+          code: 'history_storage',
+          message: error.message,
+        );
+      }
+    });
+    store.insert(
+      sourceText: 'keep-filter',
+      translatedText: '保持筛选结果',
+      detectedLanguage: 'en',
+      targetLanguage: 'zh',
+      providerId: 'test',
+      completedAt: 2000,
+      sourceLabel: 'Safari',
+    );
+    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpAndSettle();
+    expect(find.byType(VocabularyPage), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('history-search')),
+      'keep-filter',
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('生词本').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(VocabularyPage), findsOneWidget);
+
+    await tester.tap(find.text('翻译历史').first);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('history-search')))
+          .controller!
+          .text,
+      'keep-filter',
+    );
+
+    expect(
+      tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon).first).trigger,
+      0,
+    );
+    await tester.tap(find.byTooltip('复制译文').first);
+    await tester.pumpAndSettle();
+    expect(clipboard, ['保持筛选结果']);
+    expect(
+      tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon).first).trigger,
+      1,
+    );
+
+    await tester.tap(find.text('起始日期'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }

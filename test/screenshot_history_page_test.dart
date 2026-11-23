@@ -8,12 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:translate_app/src/history/screenshot_compose_dialogs.dart';
+import 'package:translate_app/src/history/screenshot_history.dart';
 import 'package:translate_app/src/history/screenshot_history_page.dart';
 
-/// 无参数；用假历史通道验证截图历史分段的缺失文件、删除、清空与开关空状态（#29）。
+/// 无参数；用假历史通道验证截图历史分段的缺失文件、删除确认、清空确认与合成边界（#29）。
 void main() {
-  testWidgets('图片缺失的条目只能删除；清空后显示空状态，关闭记录后提示开启方式', (tester) async {
-    // 边界：文件缺失是外部操作造成的唯一不一致状态，只保留删除；列表为空时清空按钮禁用。
+  testWidgets('图片缺失的条目只能删除；删除与清空需确认，关闭记录后提示开启方式', (tester) async {
+    // 边界：文件缺失只保留删除；取消删除或清空不修改数据；列表为空时清空按钮禁用。
     final directory = Directory.systemTemp.createTempSync('screenshot-page-');
     addTearDown(() => directory.deleteSync(recursive: true));
     // 1×1 透明 PNG，让存在的条目能正常解码缩略图。
@@ -83,10 +85,26 @@ void main() {
 
     await tester.tap(find.byTooltip('删除截图').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('图片文件已缺失'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('删除截图').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
     expect(find.text('图片文件已缺失'), findsNothing);
     expect(find.text('1 × 1'), findsOneWidget);
 
     await tester.tap(find.text('清空截图历史'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 × 1'), findsOneWidget);
+
+    await tester.tap(find.text('清空截图历史'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '清空'));
     await tester.pumpAndSettle();
     expect(find.text('暂无截图历史'), findsOneWidget);
     expect(
@@ -122,8 +140,8 @@ void main() {
       return {
         'id': id,
         'path': path,
-        'width': 1,
-        'height': 1,
+        'width': 100,
+        'height': 100,
         'capturedAt': capturedAt,
         'exists': exists,
       };
@@ -301,6 +319,186 @@ void main() {
     await tester.pumpAndSettle();
     expect(ringFor('比较').active, isFalse);
     expect(find.text('两张截图像素完全一致'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('高度不足 2px 的截图禁用拆分，SplitDialog 展示错误横幅并禁用确认', (tester) async {
+    // 作用：验证 1px 高截图在列表选择后「拆分」仍禁用，且直接打开 SplitDialog(height: 1) 不崩溃并禁用确认。
+    // 边界：record.height == 1 (< 2) 时，列表页拆分按钮与弹窗内「拆分」FilledButton onPressed 均为 null。
+    final directory = Directory.systemTemp.createTempSync(
+      'screenshot-split-min-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final pixel = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    );
+    final file = File('${directory.path}/thin.png')..writeAsBytesSync(pixel);
+    const channel = MethodChannel('test/screenshot-split-min');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.screenshotHistoryList:
+          return [
+            {
+              'id': 1,
+              'path': file.path,
+              'width': 100,
+              'height': 1,
+              'capturedAt': 10,
+              'exists': true,
+            },
+          ];
+        case MethodNames.screenshotHistoryRecording:
+          return true;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: ScreenshotHistoryPage(channel: channel, version: 0),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, '拆分'))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: const Scaffold(body: SplitDialog(height: 1)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('截图高度不足 2 像素，无法拆分。'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '拆分'))
+          .onPressed,
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ScreenshotCompareDialog 在 total 为 0 时安全降级并支持双侧缩放浏览', (tester) async {
+    // 作用：验证比较弹窗在 total == 0 时避免除零异常，并为较早/较晚截图提供时间标识与 InteractiveViewer。
+    // 边界：total = 0 返回「无法统计差异像素」而非 NaN/Infinity。
+    final directory = Directory.systemTemp.createTempSync(
+      'screenshot-compare-zero-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final pixel = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    );
+    final first = File('${directory.path}/1.png')..writeAsBytesSync(pixel);
+    final second = File('${directory.path}/2.png')..writeAsBytesSync(pixel);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: ScreenshotCompareDialog(
+            first: ScreenshotRecord(
+              id: 1,
+              path: first.path,
+              width: 100,
+              height: 50,
+              capturedAt: 1000,
+              exists: true,
+            ),
+            second: ScreenshotRecord(
+              id: 2,
+              path: second.path,
+              width: 120,
+              height: 60,
+              capturedAt: 2000,
+              exists: true,
+            ),
+            mask: Uint8List.fromList(pixel),
+            different: 0,
+            total: 0,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('无法统计差异像素'), findsOneWidget);
+    expect(find.textContaining('较早 · '), findsOneWidget);
+    expect(find.textContaining('较晚 · '), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('截图历史首次加载失败可重试恢复，复制图片展示成功横幅与对勾反馈', (tester) async {
+    // 作用：验证首次读取抛异常时呈现重试页而非永久转圈，恢复并复制图片后出现成功横幅和图标确认。
+    // 边界：screenshotHistoryList 首次抛 PlatformException 展示「重试加载」，恢复后复制触发 trigger=1。
+    final directory = Directory.systemTemp.createTempSync(
+      'screenshot-retry-copy-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final pixel = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    );
+    final file = File('${directory.path}/a.png')..writeAsBytesSync(pixel);
+    const channel = MethodChannel('test/screenshot-retry-copy');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var failLoad = true;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.screenshotHistoryList:
+          if (failLoad) {
+            throw PlatformException(code: 'io_error', message: '截图历史索引不可读');
+          }
+          return [
+            {
+              'id': 1,
+              'path': file.path,
+              'width': 100,
+              'height': 80,
+              'capturedAt': 100,
+              'exists': true,
+            },
+          ];
+        case MethodNames.screenshotHistoryRecording:
+          return true;
+        case MethodNames.copyImageFile:
+          return null;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light),
+        home: Scaffold(
+          body: ScreenshotHistoryPage(channel: channel, version: 0),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('截图历史索引不可读'), findsOneWidget);
+
+    failLoad = false;
+    await tester.tap(find.text('重试加载'));
+    await tester.pumpAndSettle();
+    expect(find.text('100 × 80'), findsOneWidget);
+
+    expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 0);
+    await tester.tap(find.byTooltip('复制图片'));
+    await tester.pump();
+    expect(find.text('已复制图片'), findsOneWidget);
+    expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 1);
     expect(tester.takeException(), isNull);
   });
 }

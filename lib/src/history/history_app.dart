@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/constants/channel_names.dart';
@@ -6,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../common/utils/date_text.dart';
+import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 
 import 'translation_history.dart';
@@ -59,8 +62,24 @@ class _HistoryAppState extends State<HistoryApp> {
   /// 当前分段；生词本分段不显示历史刷新与记录开关。
   _HistorySection _section = _HistorySection.history;
 
+  /// 已访问的分段；延迟初始化未打开的分段，切换回来时保留滚动与筛选状态（U-22）。
+  final Set<_HistorySection> _visited = {_HistorySection.history};
+
+  /// 搜索防抖计时器；避免逐字输入高频触发分页通道调用。
+  Timer? _searchDebounce;
+
+  /// 每条翻译历史卡片的复制确认动效触发计数。
+  final Map<int, int> _copyTriggers = {};
+
   /// 主引擎通知历史、生词本或截图历史变化的次数；递增后对应分段重新读取。
   int _changeVersion = 0;
+
+  /// 无参数；返回当前是否处于搜索或筛选状态。
+  bool get _hasActiveFilters =>
+      _search.text.trim().isNotEmpty ||
+      _source.isNotEmpty ||
+      _from != null ||
+      _to != null;
 
   /// 无参数；读取首批记录及开关，无返回值。
   @override
@@ -203,37 +222,20 @@ class _HistoryAppState extends State<HistoryApp> {
     }
   }
 
-  /// context 为窗口内上下文，title/message 为确认说明；返回是否明确确认。
+  /// context 为窗口内上下文，title/message 为确认说明，confirmLabel/destructive 为确认按钮文案与危险样式；返回是否明确确认。
   Future<bool> _confirm(
     BuildContext context,
     String title,
-    String message,
-  ) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (context) => NativeGlassDialog(
-          maxWidth: 520,
-          title: Text(title),
-          content: SingleChildScrollView(child: Text(message)),
-          actions: [
-            NativeGlassSurface(
-              material: true,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
-              ),
-            ),
-            NativeGlassSurface(
-              material: true,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('确认'),
-              ),
-            ),
-          ],
-        ),
-      ) ??
-      false;
+    String message, {
+    String confirmLabel = '确认',
+    bool destructive = false,
+  }) => NativeGlassDialog.confirm(
+    context: context,
+    title: title,
+    message: message,
+    confirmLabel: confirmLabel,
+    destructive: destructive,
+  );
 
   /// context 为弹窗上下文，days 为待选期限；预览清理数量并确认后提交，返回操作结束的 Future。
   Future<void> _changeRetention(BuildContext context, int days) async {
@@ -267,12 +269,13 @@ class _HistoryAppState extends State<HistoryApp> {
     }
   }
 
-  /// context 为弹窗上下文；id 非空时删除单条，为空时清空全部翻译历史，返回操作结束的 Future。
+  /// context 为弹窗上下文；id 非空时删除单条，为空时清空全部翻译历史并重置筛选条件，返回操作结束的 Future。
   Future<void> _deleteHistory(BuildContext context, {int? id}) async {
     final confirmed = await _confirm(
       context,
       id == null ? '清空全部翻译历史' : '删除翻译记录',
       id == null ? '清空全部翻译历史，不受当前筛选范围限制。此操作无法撤销。' : '删除这条翻译记录？此操作无法撤销。',
+      destructive: true,
     );
     if (!confirmed || !mounted) return;
     setState(() => _managing = true);
@@ -281,7 +284,18 @@ class _HistoryAppState extends State<HistoryApp> {
         id == null ? MethodNames.clearHistory : MethodNames.deleteHistory,
         id == null ? null : {'id': id},
       );
-      if (mounted) await _refresh();
+      if (!mounted) return;
+      if (id == null) {
+        // 清空全部历史后清除筛选状态，避免空列表停留在已筛选视图下造成误解。
+        _searchDebounce?.cancel();
+        setState(() {
+          _search.clear();
+          _source = '';
+          _from = null;
+          _to = null;
+        });
+      }
+      await _refresh();
     } on PlatformException catch (error) {
       if (mounted) {
         setState(() => _managementError = error.message ?? '无法删除翻译历史');
@@ -289,6 +303,36 @@ class _HistoryAppState extends State<HistoryApp> {
     } finally {
       if (mounted) setState(() => _managing = false);
     }
+  }
+
+  /// value 为搜索输入当前文本；同步清除按钮可见性并在 200ms 防抖后重置查询首批记录。
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 200), () {
+      if (mounted) _loadMore(reset: true);
+    });
+  }
+
+  /// 无参数；取消未触发的搜索防抖，重置搜索、来源与起止日期并重读首批历史。
+  void _clearFilters() {
+    _searchDebounce?.cancel();
+    setState(() {
+      _search.clear();
+      _source = '';
+      _from = null;
+      _to = null;
+    });
+    _loadMore(reset: true);
+  }
+
+  /// item 为待复制的历史记录；复制译文到剪贴板并递增对应卡片的复制确认触发计数。
+  Future<void> _copyItem(TranslationRecord item) async {
+    await Clipboard.setData(ClipboardData(text: item.translatedText));
+    if (!mounted) return;
+    setState(() {
+      _copyTriggers[item.id] = (_copyTriggers[item.id] ?? 0) + 1;
+    });
   }
 
   /// context 为日期控件上下文，start 指定起始或结束日期；选择后回到首批，返回选择结束的 Future。
@@ -326,7 +370,7 @@ class _HistoryAppState extends State<HistoryApp> {
   Widget _buildManagement(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(
       GlassMetrics.pagePadding,
-      8,
+      GlassMetrics.space8,
       GlassMetrics.pagePadding,
       0,
     ),
@@ -334,8 +378,8 @@ class _HistoryAppState extends State<HistoryApp> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: GlassMetrics.actionGap,
+          runSpacing: GlassMetrics.space8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             SizedBox(
@@ -346,14 +390,38 @@ class _HistoryAppState extends State<HistoryApp> {
                 child: TextField(
                   key: const ValueKey('history-search'),
                   controller: _search,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: '搜索原文或译文',
-                    contentPadding: EdgeInsets.symmetric(
+                    contentPadding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 7,
                     ),
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: GlassMetrics.hitSize,
+                      minHeight: GlassMetrics.hitSize,
+                    ),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            key: const ValueKey('history-search-clear'),
+                            tooltip: '清空搜索',
+                            constraints: const BoxConstraints(
+                              minWidth: GlassMetrics.hitSize,
+                              minHeight: GlassMetrics.hitSize,
+                            ),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              Icons.close,
+                              size: GlassMetrics.icon,
+                            ),
+                            onPressed: () {
+                              _searchDebounce?.cancel();
+                              setState(_search.clear);
+                              _loadMore(reset: true);
+                            },
+                          ),
                   ),
-                  onChanged: (_) => _loadMore(reset: true),
+                  onChanged: _onSearchChanged,
                 ),
               ),
             ),
@@ -392,24 +460,16 @@ class _HistoryAppState extends State<HistoryApp> {
             NativeGlassSurface(
               material: true,
               child: TextButton(
-                onPressed: () {
-                  setState(() {
-                    _search.clear();
-                    _source = '';
-                    _from = null;
-                    _to = null;
-                  });
-                  _loadMore(reset: true);
-                },
+                onPressed: _hasActiveFilters ? _clearFilters : null,
                 child: const Text('清除筛选'),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: GlassMetrics.space8),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: GlassMetrics.actionGap,
+          runSpacing: GlassMetrics.space8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Text('保留期限'),
@@ -442,28 +502,35 @@ class _HistoryAppState extends State<HistoryApp> {
               ),
           ],
         ),
-        if (!_retentionConfirmed) const Text('保留期限尚未确认，现有记录不会自动清理。'),
-        if (_managementError != null)
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(_managementError!),
-              NativeGlassSurface(
-                material: true,
-                child: TextButton(
-                  onPressed: _loadManagement,
-                  child: const Text('重新读取管理设置'),
-                ),
-              ),
-            ],
+        if (!_retentionConfirmed) ...[
+          const SizedBox(height: GlassMetrics.space8),
+          const NativeGlassBanner(
+            message: '保留期限尚未确认，现有记录不会自动清理。',
+            isError: false,
           ),
+        ],
+        if (_managementError != null) ...[
+          const SizedBox(height: GlassMetrics.space8),
+          NativeGlassBanner(
+            message: _managementError!,
+            isError: true,
+            action: NativeGlassSurface(
+              material: true,
+              child: TextButton(
+                onPressed: _loadManagement,
+                child: const Text('重新读取管理设置'),
+              ),
+            ),
+          ),
+        ],
       ],
     ),
   );
 
-  /// 无参数；解除通道回调并释放搜索输入，无返回值。
+  /// 无参数；解除通道回调、取消待触发的搜索防抖并释放搜索输入，无返回值。
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     widget.channel.setMethodCallHandler(null);
     _search.dispose();
     super.dispose();
@@ -473,20 +540,21 @@ class _HistoryAppState extends State<HistoryApp> {
   Widget _buildFooter() {
     if (_loading) return const CircularProgressIndicator();
     if (_pageError != null) {
-      return Column(
-        children: [
-          Text(_pageError!),
-          NativeGlassSurface(
-            material: true,
-            child: TextButton(
-              onPressed: () => _loadMore(reset: _failedReset),
-              child: const Text('重试加载'),
-            ),
+      return NativeGlassBanner(
+        message: _pageError!,
+        isError: true,
+        action: NativeGlassSurface(
+          material: true,
+          child: TextButton(
+            onPressed: () => _loadMore(reset: _failedReset),
+            child: const Text('重试加载'),
           ),
-        ],
+        ),
       );
     }
-    if (_items.isEmpty) return const Text('暂无翻译历史');
+    if (_items.isEmpty) {
+      return Text(_hasActiveFilters ? '没有匹配的翻译历史' : '暂无翻译历史');
+    }
     if (_done) return const Text('已显示全部历史');
     // 窗口足够高而未产生滚动时，仍提供可访问的下一批入口。
     return NativeGlassSurface(
@@ -495,10 +563,11 @@ class _HistoryAppState extends State<HistoryApp> {
     );
   }
 
-  /// context 为窗口上下文；返回来源/日期标题与译文优先的历史卡片。
+  /// context 为窗口上下文；返回历史窗口根组件并传递标准中文标题。
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
+      title: 'TranslateApp 历史',
       home: Builder(key: _pageKey, builder: _buildPage),
     );
   }
@@ -520,7 +589,7 @@ class _HistoryAppState extends State<HistoryApp> {
             child: Padding(
               padding: const EdgeInsets.only(
                 left: GlassMetrics.pagePadding,
-                bottom: 8,
+                bottom: GlassMetrics.space8,
               ),
               child: Align(
                 alignment: Alignment.centerLeft,
@@ -532,7 +601,10 @@ class _HistoryAppState extends State<HistoryApp> {
                     _HistorySection.screenshots: '截图历史',
                   },
                   navigation: true,
-                  onChanged: (section) => setState(() => _section = section),
+                  onChanged: (section) => setState(() {
+                    _section = section;
+                    _visited.add(section);
+                  }),
                 ),
               ),
             ),
@@ -541,6 +613,7 @@ class _HistoryAppState extends State<HistoryApp> {
             if (_section == _HistorySection.history) ...[
               NativeGlassSurface(
                 material: true,
+                busy: _loading && _items.isNotEmpty,
                 child: IconButton(
                   tooltip: '刷新历史',
                   onPressed: _loading ? null : _refresh,
@@ -562,146 +635,217 @@ class _HistoryAppState extends State<HistoryApp> {
             ],
           ],
         ),
-        // 每个分段只渲染自己的内容；变更版本号共用同一计数。
-        body: switch (_section) {
-          _HistorySection.vocabulary => VocabularyPage(
-            channel: widget.channel,
-            version: _changeVersion,
-          ),
-          _HistorySection.screenshots => ScreenshotHistoryPage(
-            channel: widget.channel,
-            version: _changeVersion,
-          ),
-          _HistorySection.history => Column(
-            children: [
-              // 管理控件位于分段下方，保持正文独立滚动。
-              _buildManagement(context),
-              if (_recordingError != null)
-                ListTile(
-                  title: Text(_recordingError!),
-                  trailing: NativeGlassSurface(
-                    material: true,
-                    child: TextButton(
-                      onPressed: _loadRecording,
-                      child: const Text('重新读取设置'),
+        // 首次切换到对应分段时再实例化，随后保留浏览进度、筛选与勾选状态（U-22）。
+        body: IndexedStack(
+          index: _section.index,
+          children: [
+            Column(
+              children: [
+                // 管理控件位于分段下方，保持正文独立滚动。
+                _buildManagement(context),
+                if (_recordingError != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      GlassMetrics.pagePadding,
+                      GlassMetrics.space8,
+                      GlassMetrics.pagePadding,
+                      0,
+                    ),
+                    child: NativeGlassBanner(
+                      message: _recordingError!,
+                      isError: true,
+                      action: NativeGlassSurface(
+                        material: true,
+                        child: TextButton(
+                          onPressed: _loadRecording,
+                          child: const Text('重新读取设置'),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_recording == false)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      GlassMetrics.pagePadding,
+                      GlassMetrics.space8,
+                      GlassMetrics.pagePadding,
+                      0,
+                    ),
+                    child: NativeGlassBanner(
+                      message: '已暂停记录；已有历史仍保留。',
+                      isError: false,
+                    ),
+                  ),
+                Expanded(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      // 只响应外层列表；错误后由用户显式重试，避免无限失败重试。
+                      if (notification.depth == 0 &&
+                          notification.metrics.extentAfter < 160 &&
+                          _pageError == null) {
+                        _loadMore();
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(GlassMetrics.pagePadding),
+                      itemCount: _items.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == _items.length) {
+                          // 列表末项承载分页反馈，不遮挡已有结果。
+                          return Padding(
+                            padding: const EdgeInsets.all(GlassMetrics.space24),
+                            child: Center(child: _buildFooter()),
+                          );
+                        }
+                        final item = _items[index];
+                        final timestamp = dateTimeText(
+                          DateTime.fromMillisecondsSinceEpoch(item.completedAt),
+                        );
+                        return Card(
+                          key: ValueKey('history-${item.id}'),
+                          margin: const EdgeInsets.only(
+                            bottom: GlassMetrics.groupGap,
+                          ),
+                          elevation: 0,
+                          child: Padding(
+                            padding: const EdgeInsets.all(
+                              GlassMetrics.panelPadding,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: GlassMetrics.space16,
+                                  runSpacing: GlassMetrics.space8,
+                                  children: [
+                                    Text(
+                                      item.sourceLabel == null ||
+                                              item.sourceLabel!.isEmpty
+                                          ? TranslationHistoryStore
+                                                .unknownSource
+                                          : item.sourceLabel!,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    // 窄窗口下把操作按钮组拆到下一行，避免时间戳与双按钮横向溢出卡片宽度。
+                                    Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      spacing: GlassMetrics.actionGap,
+                                      runSpacing: GlassMetrics.space4,
+                                      children: [
+                                        Text(
+                                          timestamp,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Semantics(
+                                              label: '复制 $timestamp 的译文',
+                                              button: true,
+                                              child: NativeGlassSurface(
+                                                material: true,
+                                                child: IconButton(
+                                                  tooltip: '复制译文',
+                                                  onPressed: () =>
+                                                      _copyItem(item),
+                                                  icon: CopyConfirmIcon(
+                                                    trigger:
+                                                        _copyTriggers[item
+                                                            .id] ??
+                                                        0,
+                                                    size: GlassMetrics.icon,
+                                                  ),
+                                                  visualDensity:
+                                                      VisualDensity.standard,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                              width: GlassMetrics.actionGap,
+                                            ),
+                                            Semantics(
+                                              label: '删除 $timestamp 的翻译记录',
+                                              button: true,
+                                              child: NativeGlassSurface(
+                                                material: true,
+                                                child: IconButton(
+                                                  tooltip: '删除翻译记录',
+                                                  onPressed: _managing
+                                                      ? null
+                                                      : () => _deleteHistory(
+                                                          context,
+                                                          id: item.id,
+                                                        ),
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    size: GlassMetrics.icon,
+                                                  ),
+                                                  visualDensity:
+                                                      VisualDensity.standard,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const Divider(
+                                  height: GlassMetrics.space16,
+                                  thickness: GlassMetrics.groupDividerThickness,
+                                ),
+                                Text('译文', style: theme.textTheme.labelLarge),
+                                const SizedBox(height: GlassMetrics.space8),
+                                SelectableText(
+                                  item.translatedText,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                                // 译文与原文独立阅读，分隔线不进入可复制正文。
+                                const Divider(
+                                  height: GlassMetrics.space16,
+                                  thickness: GlassMetrics.groupDividerThickness,
+                                ),
+                                Text('原文', style: theme.textTheme.labelLarge),
+                                const SizedBox(height: GlassMetrics.space8),
+                                SelectableText(
+                                  item.sourceText,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
-              if (_recording == false)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('已暂停记录；已有历史仍保留。'),
-                ),
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    // 只响应外层列表；错误后由用户显式重试，避免无限失败重试。
-                    if (notification.depth == 0 &&
-                        notification.metrics.extentAfter < 160 &&
-                        _pageError == null) {
-                      _loadMore();
-                    }
-                    return false;
-                  },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(GlassMetrics.pagePadding),
-                    itemCount: _items.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == _items.length) {
-                        // 列表末项承载分页反馈，不遮挡已有结果。
-                        return Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Center(child: _buildFooter()),
-                        );
-                      }
-                      final item = _items[index];
-                      final timestamp = dateTimeText(
-                        DateTime.fromMillisecondsSinceEpoch(item.completedAt),
-                      );
-                      return Card(
-                        key: ValueKey('history-${item.id}'),
-                        margin: const EdgeInsets.only(
-                          bottom: GlassMetrics.groupGap,
-                        ),
-                        elevation: 0,
-                        child: Padding(
-                          padding: const EdgeInsets.all(
-                            GlassMetrics.panelPadding,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 16,
-                                runSpacing: 8,
-                                children: [
-                                  Text(
-                                    item.sourceLabel == null ||
-                                            item.sourceLabel!.isEmpty
-                                        ? TranslationHistoryStore.unknownSource
-                                        : item.sourceLabel!,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        timestamp,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      NativeGlassSurface(
-                                        material: true,
-                                        child: IconButton(
-                                          tooltip: '删除翻译记录',
-                                          onPressed: _managing
-                                              ? null
-                                              : () => _deleteHistory(
-                                                  context,
-                                                  id: item.id,
-                                                ),
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            size: GlassMetrics.icon,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 28),
-                              Text('译文', style: theme.textTheme.labelLarge),
-                              const SizedBox(height: 8),
-                              SelectableText(
-                                item.translatedText,
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                              // 译文与原文独立阅读，分隔线不进入可复制正文。
-                              const Divider(height: 21, thickness: 1),
-                              Text('原文', style: theme.textTheme.labelLarge),
-                              const SizedBox(height: 8),
-                              SelectableText(
-                                item.sourceText,
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        },
+              ],
+            ),
+            if (_visited.contains(_HistorySection.vocabulary))
+              VocabularyPage(
+                channel: widget.channel,
+                version: _changeVersion,
+              )
+            else
+              const SizedBox.shrink(),
+            if (_visited.contains(_HistorySection.screenshots))
+              ScreenshotHistoryPage(
+                channel: widget.channel,
+                version: _changeVersion,
+              )
+            else
+              const SizedBox.shrink(),
+          ],
+        ),
       ),
     );
   }

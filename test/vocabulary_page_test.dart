@@ -5,11 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/history/vocabulary_page.dart';
 
-/// 无参数；用假历史通道验证生词本分段的展示、删除、导出反馈与空列表状态。
+/// 无参数；用假历史通道验证生词本分段的展示、删除确认、失败重试与导出状态。
 void main() {
-  testWidgets('生词条目显示单词、译文与释义，删除后消失，导出成功显示保存路径', (tester) async {
+  testWidgets('生词条目显示单词、译文与释义，删除需确认后消失，导出成功显示保存路径', (tester) async {
+    // 作用：验证生词本读取、删除确认防误触、CSV 导出与删空禁用状态。
+    // 边界：取消删除保留原词，确认后删除；列表为空后禁用「导出 CSV」。
     const channel = MethodChannel('test/vocabulary-page');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -57,6 +60,14 @@ void main() {
 
     await tester.tap(find.byTooltip('删除生词').first);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('serendipity'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('删除生词').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
     expect(find.text('serendipity'), findsNothing);
     expect(find.text('pear'), findsOneWidget);
 
@@ -66,6 +77,8 @@ void main() {
 
     // 边界：删到为空后显示空状态，导出按钮禁用。
     await tester.tap(find.byTooltip('删除生词'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(find.text('生词本为空'), findsOneWidget);
     expect(
@@ -123,6 +136,105 @@ void main() {
     pending.complete('/Users/test/pear.csv');
     await tester.pumpAndSettle();
     expect(ring().active, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('生词本首次加载失败展示错误横幅与重试按钮，恢复后正常加载', (tester) async {
+    // 作用：验证首次读取抛 PlatformException 时退出转圈并提供「重试加载」入口。
+    // 边界：_entries == null 且 _loadError 非空时渲染 NativeGlassBanner 与「重试加载」。
+    const channel = MethodChannel('test/vocabulary-load-error');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var failLoad = true;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.vocabularyList) {
+        if (failLoad) {
+          throw PlatformException(code: 'db_error', message: '生词库连接失败');
+        }
+        return [
+          {
+            'word': 'apple',
+            'translation': '苹果',
+            'definition': 'noun 苹果',
+            'addedAt': 1,
+          },
+        ];
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: VocabularyPage(channel: channel, version: 0)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(NativeGlassBanner), findsOneWidget);
+    expect(find.text('生词库连接失败'), findsOneWidget);
+
+    failLoad = false;
+    await tester.tap(find.text('重试加载'));
+    await tester.pumpAndSettle();
+    expect(find.text('apple'), findsOneWidget);
+    expect(find.text('生词库连接失败'), findsNothing);
+  });
+
+  testWidgets('生词本结构化释义渲染、快捷复制按钮与删除失败提示正常', (tester) async {
+    // 作用：验证词典分节释义渲染、快捷复制触发图标确认以及删除异常横幅反馈。
+    // 边界：删除失败保留条目并通过 NativeGlassBanner 展示错误文案。
+    const channel = MethodChannel('test/vocabulary-copy-delete-err');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final clipboard = <String>[];
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    });
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.vocabularyList:
+          return [
+            {
+              'word': 'pear',
+              'translation': '梨',
+              'definition': 'pear | pɛr | A. noun ① 梨子 ▸ sweet pear',
+              'addedAt': 1,
+            },
+          ];
+        case MethodNames.deleteVocabulary:
+          throw PlatformException(code: 'delete_failed', message: '删除失败，磁盘只读');
+      }
+      return null;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: VocabularyPage(channel: channel, version: 0)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('A. noun'), findsOneWidget);
+    expect(find.text('① 梨子'), findsOneWidget);
+    expect(find.text('sweet pear'), findsOneWidget);
+
+    expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 0);
+    await tester.tap(find.byTooltip('复制生词'));
+    await tester.pumpAndSettle();
+    expect(clipboard, ['pear\n梨\npear | pɛr | A. noun ① 梨子 ▸ sweet pear']);
+    expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 1);
+
+    await tester.tap(find.byTooltip('删除生词'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除失败，磁盘只读'), findsOneWidget);
+    expect(find.text('pear'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
