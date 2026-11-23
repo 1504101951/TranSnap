@@ -37,6 +37,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('以下提示词所有模型服务共用。'), findsOneWidget);
+    expect(find.textContaining('思考只对 DeepSeek'), findsNothing);
     for (final label in ['翻译', '润色', '纠错', '解释']) {
       expect(find.text(label), findsOneWidget);
     }
@@ -76,6 +78,66 @@ void main() {
           .text,
       defaultPrompts[TextMode.polish],
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('PromptEditor 矮窗可滚动且隐藏滚动条避免遮挡右侧操作按钮（#67）', (tester) async {
+    // 作用：验证提示词弹窗隐藏默认桌面滚动条，避免覆盖右侧「恢复默认」按钮，同时在矮窗内保持可滚动访问。
+    // 边界：视口高 480pt 时无 Scrollbar/RawScrollbar 实例，向上拖动表单滚动视图后底部「解释」输入框仍可达。
+    tester.view.physicalSize = const Size(700, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      NativeGlassApp(
+        home: Scaffold(
+          body: PromptEditor(
+            prompts: defaultPrompts,
+            thinking: {for (final mode in TextMode.values) mode: false},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 弹窗外层表单不挂载滚动条（避免遮挡右侧「恢复默认」按钮）；仅多行输入框内部保留 Flutter 自身 EditableText 的 Scrollbar。
+    expect(
+      find.ancestor(
+        of: find.byKey(const ValueKey('恢复默认-翻译')),
+        matching: find.byType(Scrollbar),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(const ValueKey('恢复默认-翻译')),
+        matching: find.byType(RawScrollbar),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.widgetList(find.byType(Scrollbar)).length,
+      tester
+          .widgetList(
+            find.descendant(
+              of: find.byType(EditableText),
+              matching: find.byType(Scrollbar),
+            ),
+          )
+          .length,
+    );
+
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+
+    final explainField = find.byKey(const ValueKey('提示词-解释'));
+    await tester.ensureVisible(explainField);
+    await tester.pumpAndSettle();
+    expect(explainField.hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

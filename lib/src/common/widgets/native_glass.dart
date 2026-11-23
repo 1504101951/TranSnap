@@ -1684,7 +1684,15 @@ class NativeGlassDialog extends StatelessWidget {
               child: title,
             ),
             const SizedBox(height: GlassMetrics.space20),
-            Flexible(child: content),
+            // 弹窗表单内隐藏系统自动挂载的滚动条，避免与右侧按钮（如「恢复默认」）及输入边框重叠，仍保留正常滚动。
+            Flexible(
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
+                child: content,
+              ),
+            ),
             const SizedBox(height: GlassMetrics.space20),
             OverflowBar(
               alignment: MainAxisAlignment.end,

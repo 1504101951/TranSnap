@@ -688,6 +688,13 @@ class _SettingsPageState extends State<_SettingsPage>
               busy: isThisRecording,
               child: OutlinedButton.icon(
                 key: ValueKey(title),
+                // 统一常规组合的按钮最小宽度，避免窄字符与宽字符快捷键左右不齐；录制提示文案超宽时仍自然撑开。
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(
+                    GlassMetrics.shortcutButtonMinWidth,
+                    GlassMetrics.buttonHeight,
+                  ),
+                ),
                 onPressed: _recordingTarget != null
                     ? null
                     : () => _recordShortcut(title, apply),
@@ -903,7 +910,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                             MethodNames
                                                 .openTranslationLanguages,
                                           ),
-                                      child: const Text('下载翻译包'),
+                                      child: const Text('前往下载'),
                                     ),
                                   ),
                                 ),
@@ -1243,7 +1250,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                         child: TextButton(
                                           onPressed:
                                               _chooseScreenshotDirectory,
-                                          child: const Text('选择…'),
+                                          child: const Text('选择路径'),
                                         ),
                                       ),
                                     ],

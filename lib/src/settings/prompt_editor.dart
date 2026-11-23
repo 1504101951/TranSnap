@@ -73,7 +73,7 @@ class _PromptEditorState extends State<PromptEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '翻译、润色、纠错、解释使用的系统提示词与思考开关，所有模型服务共用；思考只对 DeepSeek 与 Anthropic 生效。',
+            '以下提示词所有模型服务共用。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: GlassMetrics.space8),

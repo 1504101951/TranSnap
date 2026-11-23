@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:translate_app/src/common/constants/error_codes.dart';
+import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
+import 'package:translate_app/src/common/constants/shortcut_keys.dart';
 import 'package:translate_app/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -339,7 +341,7 @@ void main() {
     expect(find.text('截图目录'), findsOneWidget);
     expect(find.text('/tmp/shots'), findsOneWidget);
     expect(find.text('仅使用快捷键'), findsNothing);
-    await tester.tap(find.text('选择…'));
+    await tester.tap(find.text('选择路径'));
     await tester.pumpAndSettle();
     expect(find.text('/tmp/chosen'), findsOneWidget);
 
@@ -1028,7 +1030,7 @@ void main() {
     await tester.pump();
     expect(find.text('正在检查语言包…'), findsOneWidget);
     expect(find.text('安装 Apple 离线翻译语言包'), findsOneWidget);
-    expect(find.text('下载翻译包'), findsOneWidget);
+    expect(find.text('前往下载'), findsOneWidget);
 
     reply.complete('语言包已安装：English → 简体中文');
     await tester.pumpAndSettle();
@@ -1175,5 +1177,53 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('快捷键按钮在字符宽度不同时保持统一最小宽度与左右对齐（#67）', (tester) async {
+    // 作用：验证全局翻译快捷键与输入翻译快捷键按钮在使用窄/宽不同字符标签时保持统一宽度与左右边界对齐。
+    // 边界：@ 与 ! 的字符宽度不同，按钮宽度均应 >= GlassMetrics.shortcutButtonMinWidth（128pt）且左右边缘差 <= 0.01pt。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true, 'screenAccess': true};
+        case MethodNames.getSettings:
+          return {
+            'revision': 0,
+            PreferenceKeys.shortcutKeyCode: 19,
+            PreferenceKeys.shortcutModifiers:
+                ShortcutKeys.shift | ShortcutKeys.command,
+            PreferenceKeys.shortcutLabel: '@',
+            PreferenceKeys.inputShortcutKeyCode: 18,
+            PreferenceKeys.inputShortcutModifiers:
+                ShortcutKeys.shift | ShortcutKeys.command,
+            PreferenceKeys.inputShortcutLabel: '!',
+          };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '快捷键');
+
+    final globalRect = tester.getRect(find.byKey(const ValueKey('全局翻译快捷键')));
+    final inputRect = tester.getRect(find.byKey(const ValueKey('输入翻译快捷键')));
+    expect(
+      globalRect.width,
+      greaterThanOrEqualTo(GlassMetrics.shortcutButtonMinWidth),
+    );
+    expect(
+      inputRect.width,
+      greaterThanOrEqualTo(GlassMetrics.shortcutButtonMinWidth),
+    );
+    expect((globalRect.width - inputRect.width).abs(), lessThanOrEqualTo(0.01));
+    expect((globalRect.left - inputRect.left).abs(), lessThanOrEqualTo(0.01));
+    expect((globalRect.right - inputRect.right).abs(), lessThanOrEqualTo(0.01));
   });
 }

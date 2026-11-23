@@ -65,7 +65,7 @@ void main() {
     final languagesRow = find.byKey(const ValueKey('离线翻译语言'));
     expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(56));
     expect(
-      find.descendant(of: accessibilityGroup, matching: find.text('下载翻译包')),
+      find.descendant(of: accessibilityGroup, matching: find.text('前往下载')),
       findsOneWidget,
     );
     expect(
