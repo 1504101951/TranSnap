@@ -3,15 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/error_codes.dart';
-import 'package:translate_app/src/common/constants/live_region.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/service_config.dart';
-import 'package:translate_app/src/translation/live_region_session.dart';
-import 'package:translate_app/src/translation/providers/apple_translation_provider.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/error_codes.dart';
+import 'package:transnap/src/common/constants/live_region.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/settings/service_config.dart';
+import 'package:transnap/src/translation/live_region_session.dart';
+import 'package:transnap/src/translation/providers/apple_translation_provider.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 测试用单调时钟。elapse 只前进到目标时刻，并按截止点顺序触发回调。
 final class ManualClock implements LiveRegionClock {

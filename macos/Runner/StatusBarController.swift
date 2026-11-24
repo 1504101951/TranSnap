@@ -207,23 +207,23 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         if liveAbort {
             symbolName = "stop.circle"
             description = stopControl != nil
-                ? "TranslateApp，实时翻译与操控运行中"
-                : "TranslateApp，实时翻译运行中"
+                ? "TranSnap，实时翻译与操控运行中"
+                : "TranSnap，实时翻译运行中"
         } else if let countdown {
             symbolName = "\(countdown).circle"
-            description = "TranslateApp，录制倒计时 \(countdown) 秒"
+            description = "TranSnap，录制倒计时 \(countdown) 秒"
         } else if stopControl != nil {
             symbolName = AppConstants.controlSymbol
-            description = "TranslateApp，模型操控中"
+            description = "TranSnap，模型操控中"
         } else if captureActive {
             symbolName = mcpCaptures > 0 ? AppConstants.mcpCaptureSymbol : "translate"
-            description = "TranslateApp，采集中"
+            description = "TranSnap，采集中"
         } else if mcpCaptures > 0 {
             symbolName = AppConstants.mcpCaptureSymbol
-            description = "TranslateApp，agent 截图中"
+            description = "TranSnap，agent 截图中"
         } else {
             symbolName = "translate"
-            description = "TranslateApp"
+            description = "TranSnap"
         }
 
         let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: description)

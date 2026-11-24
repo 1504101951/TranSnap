@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/overlay/dictionary_definition.dart';
+import 'package:transnap/src/overlay/dictionary_definition.dart';
 
 /// 无参数；验证 macOS 词典纯文本释义按词条、词性、义项、例句与未识别片段拆行（#135）。
 void main() {

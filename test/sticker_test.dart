@@ -4,11 +4,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/screenshot/beautify.dart';
-import 'package:translate_app/src/screenshot/edit_document.dart';
-import 'package:translate_app/src/screenshot/stickers.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/screenshot/beautify.dart';
+import 'package:transnap/src/screenshot/edit_document.dart';
+import 'package:transnap/src/screenshot/stickers.dart';
+import 'package:transnap/src/settings/app_settings.dart';
 
 /// width/height 为像素尺寸，color 为颜色；返回纯色图像。
 Future<ui.Image> _solid(int width, int height, Color color) async {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/translation/glossary.dart';
-import 'package:translate_app/src/translation/glossary_file.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/translation/glossary.dart';
+import 'package:transnap/src/translation/glossary_file.dart';
 
 /// 无参数；验证术语的整词与子串匹配、目标语言筛选、保留原文输出及设置往返与校验（#104）。
 void main() {

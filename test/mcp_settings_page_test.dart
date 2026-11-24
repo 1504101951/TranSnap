@@ -4,15 +4,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/glass_metrics.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/mcp_platforms.dart';
-import 'package:translate_app/src/settings/mcp_settings_page.dart';
-import 'package:translate_app/src/settings/settings_app.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/mcp_platforms.dart';
+import 'package:transnap/src/settings/mcp_settings_page.dart';
+import 'package:transnap/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
 
@@ -56,7 +56,7 @@ class _FakeMcpService extends McpPlatformService {
 /// helper 路径与配置复制、按注册表渲染的平台状态与按钮可用性、安装失败原文、删除二次确认。
 void main() {
   const helperPath =
-      '/Applications/TranslateApp.app/Contents/MacOS/translateapp-mcp';
+      '/Applications/TranSnap.app/Contents/MacOS/transnap-mcp';
   const channel = MethodChannel(ChannelNames.settings);
 
   /// 作用：挂载设置窗口并切到侧边栏指定子页。
@@ -188,7 +188,7 @@ void main() {
     final config = jsonDecode(clipboard.single) as Map<String, Object?>;
     expect(config, {
       'mcpServers': {
-        'translateapp': {'command': helperPath, 'args': <Object?>[]},
+        'transnap': {'command': helperPath, 'args': <Object?>[]},
       },
     });
     expect(find.text('已复制'), findsOneWidget);
@@ -269,7 +269,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mcp-remove-codex')));
     await tester.pumpAndSettle();
     expect(
-      find.text('从 Codex（CLI 与桌面 App 共用） 删除 TranslateApp？'),
+      find.text('从 Codex（CLI 与桌面 App 共用） 删除 TranSnap？'),
       findsOneWidget,
     );
     await tester.tap(find.text('取消'));

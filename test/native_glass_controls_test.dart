@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/common/constants/glass_metrics.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/constants/appearance_modes.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
 
 /// 验证Spec的尺寸、WCAG 对比度、强调色联动、按钮微交互与真实交互边界；使用实际布局，不检查配置文件字符串。
 void main() {

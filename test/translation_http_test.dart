@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/translation/translation_http.dart';
+import 'package:transnap/src/translation/translation_http.dart';
 
 /// 无参数；验证连接预热让后续翻译请求复用同一条连接，以及预热失败不抛出（#68）。
 void main() {

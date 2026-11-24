@@ -1,4 +1,4 @@
-# macos/TranslateAppMCP目录索引
+# macos/TranSnapMCP目录索引
 
 由 MCP 客户端以 stdio 启动、把截图请求转给运行中 App 的 helper 命令行程序。
 

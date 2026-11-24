@@ -3,7 +3,7 @@ import Carbon
 import Darwin
 import XCTest
 
-@testable import translate_app
+@testable import TranSnap
 
 /// 验证 MCP 接口（#96 验收 1）：JSON-RPC 编解码与错误响应、参数到工具请求的转换、结果到工具内容的转换、
 /// 图片缩放尺寸与 capture_rect 坐标换算、取消、App 未运行与开关关闭的错误输出。
@@ -435,7 +435,7 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(toolResult(messages[1]).content.first?["text"] as? String, "output must be one of image, text, both")
     }
 
-    /// 没有 socket 文件与残留 socket 文件都返回「TranslateApp is not running.」。
+    /// 没有 socket 文件与残留 socket 文件都返回「TranSnap is not running.」。
     /// 边界依据：App 退出后 socket 文件可能残留，连接被拒绝同样代表未运行。
     func testAppNotRunningReturnsToolError() async throws {
         let call = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_displays"}}"#
@@ -676,7 +676,7 @@ final class MCPTests: XCTestCase {
 
     /// 截图结果：PNG 按 token 上限缩放；OCR 在原图识别并以 Markdown 返回；output 控制返回内容。
     func testImageReplyScalesPngAndReturnsMarkdown() async throws {
-        let png = try textImage(width: 3136, height: 400, text: "TranslateApp", x: 400, baseline: 140)
+        let png = try textImage(width: 3136, height: 400, text: "TranSnap", x: 400, baseline: 140)
         let source = try MCPImageOutput.image(png)
 
         let both = MCPCaptureOptions(output: .both, detail: .standard, includePositions: false)
@@ -687,7 +687,7 @@ final class MCPTests: XCTestCase {
         let expected = MCPImageOutput.fitted(width: 3136, height: 400, detail: .standard)
         XCTAssertEqual(returned.width, expected.width)
         XCTAssertEqual(returned.height, expected.height)
-        XCTAssertTrue(try XCTUnwrap(markdown).contains("TranslateApp"), markdown ?? "")
+        XCTAssertTrue(try XCTUnwrap(markdown).contains("TranSnap"), markdown ?? "")
 
         guard case .image(let imageOnly, let noText) = try await MCPImageOutput.reply(
             source, options: MCPCaptureOptions(output: .image, detail: .low, includePositions: false)

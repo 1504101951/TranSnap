@@ -13,7 +13,7 @@ final class SystemTranslationService {
     struct IncompleteResponse: Error {}
 
     /// 排查日志：每次请求的段数、语言对、耗时与结果，不写原文或译文（#138）。
-    private static let log = Logger(subsystem: "TranslateApp", category: "SystemTranslation")
+    private static let log = Logger(subsystem: "TranSnap", category: "SystemTranslation")
 
     /// requestId 定位会话，texts 为待译段落，source/target 为语言码（如 zh-CN、en），strategy 为策略协议值。
     /// 返回与 texts 下标一一对应的译文；语言包未安装、语言对不支持或框架失败时抛出错误，

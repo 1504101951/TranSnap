@@ -611,7 +611,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
             alert.alertStyle = .warning
-            alert.messageText = "TranslateApp 无法启动"
+            alert.messageText = "TranSnap 无法启动"
             // message 由 Dart 启动入口必定提供。
             alert.informativeText = "主程序初始化失败：\(args["message"] as! String)"
             alert.addButton(withTitle: "退出")

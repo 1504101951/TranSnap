@@ -5,19 +5,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/glossary_editor.dart';
-import 'package:translate_app/src/settings/settings_app.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/settings/glossary_editor.dart';
+import 'package:transnap/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
 
-import 'package:translate_app/src/translation/glossary.dart';
-import 'package:translate_app/src/translation/glossary_file.dart';
+import 'package:transnap/src/translation/glossary.dart';
+import 'package:transnap/src/translation/glossary_file.dart';
 
 /// tester 为测试界面，source 为 JSON 文件，existing 为当前条目，submit 保存完整列表；返回预览打开的 Future。
 Future<void> openPreview(
@@ -318,7 +318,7 @@ void main() {
   testWidgets('导出操作保存可重新导入的 UTF-8 CSV 与 JSON 术语文件', (tester) async {
     // 边界：实际临时文件包含逗号、引号、换行及空译法，输出仅含术语字段；不检查下游调用次数。
     final directory = Directory.systemTemp.createTempSync(
-      'translateapp-glossary.01a19b92-2e95-7c50-ba89-aed2fc78fad9.',
+      'transnap-glossary.01a19b92-2e95-7c50-ba89-aed2fc78fad9.',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
     const channel = MethodChannel(ChannelNames.settings);
@@ -361,7 +361,7 @@ void main() {
       await tester.tap(find.text(format));
       await tester.pumpAndSettle();
       final file = File(
-        '${directory.path}/TranslateApp 术语表.${format.toLowerCase()}',
+        '${directory.path}/TranSnap 术语表.${format.toLowerCase()}',
       );
       final text = file.readAsStringSync(encoding: utf8);
       final draft = parseGlossaryFile(text, format: format.toLowerCase());

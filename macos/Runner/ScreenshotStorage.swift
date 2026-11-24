@@ -42,7 +42,7 @@ enum ScreenshotStorage {
     /// source为已校验的临时媒体，target为默认完整路径；原子发布，重名追加序号，返回实际保存路径。
     static func publish(source: URL, target: URL) throws -> URL {
         let directory = target.deletingLastPathComponent()
-        let staging = directory.appendingPathComponent(".TranslateApp-\(UUID().uuidString).partial")
+        let staging = directory.appendingPathComponent(".TranSnap-\(UUID().uuidString).partial")
         defer { try? FileManager.default.removeItem(at: staging) }
         try Task.checkCancellation()
         try FileManager.default.copyItem(at: source, to: staging)

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/translation/language_direction.dart';
+import 'package:transnap/src/translation/language_direction.dart';
 
 void main() {
   test('without secondary language every source targets the primary', () {

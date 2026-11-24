@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/utils/permission_utils.dart';
+import 'package:transnap/src/common/utils/permission_utils.dart';
 
 /// 无参数；验证两项权限齐备才允许进入应用，不点击系统TCC。
 void main() {

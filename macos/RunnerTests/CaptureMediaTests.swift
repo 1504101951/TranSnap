@@ -8,7 +8,7 @@ import FlutterMacOS
 import ImageIO
 import XCTest
 
-@testable import translate_app
+@testable import TranSnap
 
 /// 使用真实位图与本地编码文件验证输出；不调用屏幕权限，不控制其他应用。
 final class CaptureMediaTests: XCTestCase {

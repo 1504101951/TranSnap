@@ -1,4 +1,4 @@
-import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
 
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -6,21 +6,21 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
-import 'package:translate_app/src/common/constants/screenshot_actions.dart';
-import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
-import 'package:translate_app/src/common/constants/toolbar_grid.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:transnap/src/common/constants/toolbar_grid.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:translate_app/src/common/utils/geometry.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/screenshot/drawing_controls.dart';
-import 'package:translate_app/src/screenshot/edit_document.dart';
-import 'package:translate_app/src/screenshot/screenshot_app.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/common/widgets/native_resize_cursor.dart';
-import 'package:translate_app/src/screenshot/screenshot_editor_layout.dart';
+import 'package:transnap/src/common/utils/geometry.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/screenshot/drawing_controls.dart';
+import 'package:transnap/src/screenshot/edit_document.dart';
+import 'package:transnap/src/screenshot/screenshot_app.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/widgets/native_resize_cursor.dart';
+import 'package:transnap/src/screenshot/screenshot_editor_layout.dart';
 
 import 'support/capture_pixels.dart';
 

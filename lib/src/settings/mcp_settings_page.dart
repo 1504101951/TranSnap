@@ -38,7 +38,7 @@ class McpSettingsPage extends StatefulWidget {
 
   /// 作用：生成可直接粘贴到 MCP 客户端的配置。
   /// 参数 helperPath：helper 完整路径。
-  /// 返回：缩进两格的 JSON 字符串 {"mcpServers": {"translateapp": {"command": 路径, "args": []}}}。
+  /// 返回：缩进两格的 JSON 字符串 {"mcpServers": {"transnap": {"command": 路径, "args": []}}}。
   static String clientConfig(String helperPath) =>
       const JsonEncoder.withIndent('  ').convert({
         'mcpServers': {
@@ -169,8 +169,8 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
   Future<void> _confirmRemove(McpPlatform platform) async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
-      title: '从 ${platform.name} 删除 TranslateApp？',
-      message: '只移除该平台中的 translateapp 条目，可随时重新安装。',
+      title: '从 ${platform.name} 删除 TranSnap？',
+      message: '只移除该平台中的 transnap 条目，可随时重新安装。',
       confirmLabel: '删除',
       destructive: true,
     );

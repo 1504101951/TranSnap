@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:translate_app/src/history/translation_history.dart';
+import 'package:transnap/src/history/translation_history.dart';
 
 /// 无参数；验证真实 SQLite 的排序、分页、持久化与已有数据保留。
 void main() {

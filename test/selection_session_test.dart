@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/selection_gesture_types.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
-import 'package:translate_app/src/translation/language_direction.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/common/constants/selection_gesture_types.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/selection/selection_session.dart';
+import 'package:transnap/src/translation/language_direction.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 用独立服务身份和受控输入流验证会话取消，不代替会话状态转换。
 class _StreamingProvider extends TranslationProvider {

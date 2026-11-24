@@ -683,7 +683,7 @@ final class MCPForwardCall {
 
     /// 作用：同步发送请求并等待 App 结果，在后台线程调用。
     /// 参数 request：工具请求；path：App socket 路径。
-    /// 返回：App 结果；连不上 App 为「TranslateApp 未运行」，被取消时返回 nil。
+    /// 返回：App 结果；连不上 App 为「TranSnap 未运行」，被取消时返回 nil。
     func run(_ request: MCPToolRequest, path: String) -> MCPToolReply? {
         let connected: Int32
         do {

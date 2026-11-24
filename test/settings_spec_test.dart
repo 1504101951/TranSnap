@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/glass_metrics.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/settings_app.dart';
-import 'package:translate_app/src/settings/service_config.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/settings_app.dart';
+import 'package:transnap/src/settings/service_config.dart';
 
 import 'support/settings_pages.dart';
 

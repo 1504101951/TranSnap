@@ -1,6 +1,6 @@
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/appearance_modes.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
 
 import 'dart:async';
 

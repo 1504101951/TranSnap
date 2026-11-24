@@ -2,14 +2,14 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/constants/screenshot_actions.dart';
-import 'package:translate_app/src/common/constants/toolbar_grid.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/common/constants/shortcut_keys.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/screenshot_toolbar_editor.dart';
-import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/common/constants/toolbar_grid.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/screenshot_toolbar_editor.dart';
+import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 
 /// 覆盖网格配置的推导、校验、读取补位与编辑器操作后的真实配置（#141），不检查下游调用次数。
 void main() {

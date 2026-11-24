@@ -164,7 +164,7 @@ enum WindowEngine {
         alert.informativeText = """
         无法在 \(Int(AppConstants.windowStartupTimeout)) 秒内完成\(name)初始化。
 
-        请退出并重新打开 TranslateApp；若问题反复出现，可打开数据目录查看日志：
+        请退出并重新打开 TranSnap；若问题反复出现，可打开数据目录查看日志：
         \(supportURL.path)
         """
         alert.addButton(withTitle: "好")

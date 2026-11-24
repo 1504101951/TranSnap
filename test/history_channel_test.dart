@@ -1,13 +1,13 @@
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/main.dart' as app;
-import 'package:translate_app/src/selection/selection_translation_app.dart';
+import 'package:transnap/main.dart' as app;
+import 'package:transnap/src/selection/selection_translation_app.dart';
 
 /// 无参数；验证截图翻译和设置提交等待期间，主引擎仍能读取历史和持久化记录开关。
 void main() {
@@ -49,7 +49,7 @@ void main() {
     await app.main();
     await tester.pump();
     final history = tester
-        .widget<TranslateApp>(find.byType(TranslateApp))
+        .widget<TranSnapApp>(find.byType(TranSnapApp))
         .history;
     addTearDown(() {
       history.database.close();

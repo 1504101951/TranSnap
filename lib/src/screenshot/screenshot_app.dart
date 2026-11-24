@@ -2820,7 +2820,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _syncClosing(MediaQuery.disableAnimationsOf(context), actions);
     final hasImage = _document.hasImage;
     return NativeGlassApp(
-      title: 'TranslateApp 截图',
+      title: 'TranSnap 截图',
       home: Focus(
         key: _editorKey,
         focusNode: _focusNode,

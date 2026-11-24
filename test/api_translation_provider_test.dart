@@ -4,16 +4,16 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
-import 'package:translate_app/src/platform/settings_platform.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/service_config.dart';
-import 'package:translate_app/src/translation/glossary.dart';
-import 'package:translate_app/src/translation/model_result.dart';
-import 'package:translate_app/src/translation/provider_selection.dart';
-import 'package:translate_app/src/translation/providers/api_translation_provider.dart';
-import 'package:translate_app/src/translation/providers/apple_translation_provider.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/platform/settings_platform.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/settings/service_config.dart';
+import 'package:transnap/src/translation/glossary.dart';
+import 'package:transnap/src/translation/model_result.dart';
+import 'package:transnap/src/translation/provider_selection.dart';
+import 'package:transnap/src/translation/providers/api_translation_provider.dart';
+import 'package:transnap/src/translation/providers/apple_translation_provider.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 无参数；用真实本地 HTTP 验证协议、流完整性及取消，不调用付费服务。
 void main() {

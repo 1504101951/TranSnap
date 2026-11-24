@@ -5,18 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/constants/shortcut_keys.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/history/history_app.dart';
-import 'package:translate_app/src/history/history_empty_state.dart';
-import 'package:translate_app/src/history/history_list_card.dart';
-import 'package:translate_app/src/history/history_requests.dart';
-import 'package:translate_app/src/history/translation_history.dart';
-import 'package:translate_app/src/history/vocabulary_page.dart';
+import 'package:transnap/src/common/constants/appearance_modes.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/history/history_app.dart';
+import 'package:transnap/src/history/history_empty_state.dart';
+import 'package:transnap/src/history/history_list_card.dart';
+import 'package:transnap/src/history/history_requests.dart';
+import 'package:transnap/src/history/translation_history.dart';
+import 'package:transnap/src/history/vocabulary_page.dart';
 
 /// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
 Future<TestGesture> _startMouse(WidgetTester tester) async {

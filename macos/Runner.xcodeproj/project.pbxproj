@@ -65,7 +65,7 @@
 		A96M00000000000000000007 /* MCPSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M00000000000000000001 /* MCPSocket.swift */; };
 		A96M00000000000000000008 /* MCPProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M00000000000000000003 /* MCPProtocol.swift */; };
 		A96M00000000000000000009 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18C00000000000000000001 /* Constants.swift */; };
-		A96M00000000000000000017 /* translateapp-mcp in Embed MCP Helper */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000000C /* translateapp-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A96M00000000000000000017 /* transnap-mcp in Embed MCP Helper */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000000C /* transnap-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A96M00000000000000000019 /* MCPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M00000000000000000018 /* MCPTests.swift */; };
 		A96M0000000000000000001B /* MCPCaptureServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000001A /* MCPCaptureServer.swift */; };
 		A96M0000000000000000001D /* MCPImageOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96M0000000000000000001C /* MCPImageOutput.swift */; };
@@ -94,7 +94,7 @@
 			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A96M0000000000000000000D;
-			remoteInfo = "translateapp-mcp";
+			remoteInfo = "transnap-mcp";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -115,7 +115,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
-				A96M00000000000000000017 /* translateapp-mcp in Embed MCP Helper */,
+				A96M00000000000000000017 /* transnap-mcp in Embed MCP Helper */,
 			);
 			name = "Embed MCP Helper";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -129,7 +129,7 @@
 		A28000000000000000000009 /* CaptureMediaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMediaTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
-		33CC10ED2044A3C60003C045 /* translate_app.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "translate_app.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		33CC10ED2044A3C60003C045 /* TranSnap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TranSnap.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		33CC10F02044A3C60003C045 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		33CC10F22044A3C60003C045 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Runner/Assets.xcassets; sourceTree = "<group>"; };
 		33CC10F52044A3C60003C045 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
@@ -176,7 +176,7 @@
 		A96M00000000000000000001 /* MCPSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocket.swift; sourceTree = "<group>"; };
 		A96M00000000000000000003 /* MCPProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPProtocol.swift; sourceTree = "<group>"; };
 		A96M00000000000000000005 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		A96M0000000000000000000C /* translateapp-mcp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "translateapp-mcp"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A96M0000000000000000000C /* transnap-mcp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "transnap-mcp"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A96M00000000000000000018 /* MCPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPTests.swift; sourceTree = "<group>"; };
 		A96M0000000000000000001A /* MCPCaptureServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPCaptureServer.swift; sourceTree = "<group>"; };
 		A96M0000000000000000001C /* MCPImageOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPImageOutput.swift; sourceTree = "<group>"; };
@@ -238,7 +238,7 @@
 				33FAB671232836740065AC1E /* Runner */,
 				33CEB47122A05771004F2AC0 /* Flutter */,
 				331C80D6294CF71000263BE5 /* RunnerTests */,
-				A96M0000000000000000000B /* TranslateAppMCP */,
+				A96M0000000000000000000B /* TranSnapMCP */,
 				33CC10EE2044A3C60003C045 /* Products */,
 				D73912EC22F37F3D000D13A0 /* Frameworks */,
 			);
@@ -247,9 +247,9 @@
 		33CC10EE2044A3C60003C045 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				33CC10ED2044A3C60003C045 /* translate_app.app */,
+				33CC10ED2044A3C60003C045 /* TranSnap.app */,
 				331C80D5294CF71000263BE5 /* RunnerTests.xctest */,
-				A96M0000000000000000000C /* translateapp-mcp */,
+				A96M0000000000000000000C /* transnap-mcp */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -350,12 +350,12 @@
 			path = MCP;
 			sourceTree = "<group>";
 		};
-		A96M0000000000000000000B /* TranslateAppMCP */ = {
+		A96M0000000000000000000B /* TranSnapMCP */ = {
 			isa = PBXGroup;
 			children = (
 				A96M00000000000000000005 /* main.swift */,
 			);
-			path = TranslateAppMCP;
+			path = TranSnapMCP;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -401,12 +401,12 @@
 				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
 			);
 			productName = Runner;
-			productReference = 33CC10ED2044A3C60003C045 /* translate_app.app */;
+			productReference = 33CC10ED2044A3C60003C045 /* TranSnap.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A96M0000000000000000000D /* translateapp-mcp */ = {
+		A96M0000000000000000000D /* transnap-mcp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A96M00000000000000000010 /* Build configuration list for PBXNativeTarget "translateapp-mcp" */;
+			buildConfigurationList = A96M00000000000000000010 /* Build configuration list for PBXNativeTarget "transnap-mcp" */;
 			buildPhases = (
 				A96M0000000000000000000E /* Sources */,
 				A96M0000000000000000000F /* Frameworks */,
@@ -415,9 +415,9 @@
 			);
 			dependencies = (
 			);
-			name = "translateapp-mcp";
-			productName = "translateapp-mcp";
-			productReference = A96M0000000000000000000C /* translateapp-mcp */;
+			name = "transnap-mcp";
+			productName = "transnap-mcp";
+			productReference = A96M0000000000000000000C /* transnap-mcp */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -470,7 +470,7 @@
 				33CC10EC2044A3C60003C045 /* Runner */,
 				331C80D4294CF70F00263BE5 /* RunnerTests */,
 				33CC111A2044C6BA0003C045 /* Flutter Assemble */,
-				A96M0000000000000000000D /* translateapp-mcp */,
+				A96M0000000000000000000D /* transnap-mcp */,
 			);
 		};
 /* End PBXProject section */
@@ -619,7 +619,7 @@
 		};
 		A96M00000000000000000015 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A96M0000000000000000000D /* translateapp-mcp */;
+			target = A96M0000000000000000000D /* transnap-mcp */;
 			targetProxy = A96M00000000000000000014 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -644,10 +644,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/translate_app.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/translate_app";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranSnap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranSnap";
 			};
 			name = Debug;
 		};
@@ -658,10 +658,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/translate_app.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/translate_app";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranSnap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranSnap";
 			};
 			name = Release;
 		};
@@ -672,10 +672,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/translate_app.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/translate_app";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranSnap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranSnap";
 			};
 			name = Profile;
 		};
@@ -919,7 +919,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.mcp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -930,7 +930,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.mcp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -941,7 +941,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.translateApp.mcp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -991,7 +991,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A96M00000000000000000010 /* Build configuration list for PBXNativeTarget "translateapp-mcp" */ = {
+		A96M00000000000000000010 /* Build configuration list for PBXNativeTarget "transnap-mcp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A96M00000000000000000011 /* Debug */,

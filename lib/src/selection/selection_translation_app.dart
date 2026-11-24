@@ -16,10 +16,10 @@ import '../translation/translation_types.dart';
 import 'selection_session.dart';
 
 /// 选区翻译界面与会话协调者；处理原生事件、取消和完整成功后的历史记录。
-class TranslateApp extends StatefulWidget {
+class TranSnapApp extends StatefulWidget {
   /// selection 为选区读取与输入注入，overlay 为浮层窗口，speech 为朗读，perf 为性能日志；
   /// session 为唯一翻译会话，history 为主引擎历史存储，vocabulary 为生词本；构造不启动请求。
-  const TranslateApp({
+  const TranSnapApp({
     super.key,
     required this.selection,
     required this.overlay,
@@ -40,11 +40,11 @@ class TranslateApp extends StatefulWidget {
 
   /// 无参数；返回管理事件订阅与浮层同步的界面状态。
   @override
-  State<TranslateApp> createState() => _TranslateAppState();
+  State<TranSnapApp> createState() => _TranSnapAppState();
 }
 
 /// 绑定选区会话与浮层生命周期，不创建独立配置或历史存储。
-class _TranslateAppState extends State<TranslateApp> {
+class _TranSnapAppState extends State<TranSnapApp> {
   static const _triggerSize = TranslationOverlay.triggerWindowSize;
   late final StreamSubscription<PlatformEvent> _bridgeSubscription;
 
@@ -410,7 +410,7 @@ class _TranslateAppState extends State<TranslateApp> {
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
-      title: 'TranslateApp',
+      title: 'TranSnap',
       home: TranslationOverlay(
         session: widget.session,
         speakingSource: _speakingSource,

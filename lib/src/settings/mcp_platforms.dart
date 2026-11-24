@@ -68,7 +68,7 @@ class CommandMcpPlatform extends McpPlatform {
   McpPlatformKind get kind => McpPlatformKind.command;
 }
 
-/// 配置文件式平台：只读写 JSON 配置中 `mcpServers.translateapp`，其他内容原样保留。
+/// 配置文件式平台：只读写 JSON 配置中 `mcpServers.transnap`，其他内容原样保留。
 class ConfigFileMcpPlatform extends McpPlatform {
   const ConfigFileMcpPlatform({
     required super.id,
@@ -162,8 +162,8 @@ class McpPlatformException implements Exception {
   String toString() => message;
 }
 
-/// 按注册表检测、安装、删除 TranslateApp 的 MCP 条目（#96「设置」6–13）。
-/// 命令在用户主目录执行，CLI 在登录 shell 的 PATH 中查找；只增删 `translateapp` 条目。
+/// 按注册表检测、安装、删除 TranSnap 的 MCP 条目（#96「设置」6–13）。
+/// 命令在用户主目录执行，CLI 在登录 shell 的 PATH 中查找；只增删 `transnap` 条目。
 class McpPlatformService {
   /// helperPath 为当前 App 包内 helper 的绝对路径；home 为用户主目录；
   /// searchPath 返回查找 CLI 用的 PATH（冒号分隔），缺省读取用户登录 shell 的 PATH。
@@ -183,7 +183,7 @@ class McpPlatformService {
   /// 交互式登录 shell 才会加载 .zprofile 与 .zshrc 中的 PATH 设置。
   /// 返回：冒号分隔的 PATH；shell 启动输出的其他文字以标记隔开后丢弃。
   static Future<String> loginShellPath() async {
-    const marker = '__TRANSLATEAPP_PATH__';
+    const marker = '__TRANSNAP_PATH__';
     final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
     final result = await Process.run(shell, [
       '-ilc',
@@ -246,7 +246,7 @@ class McpPlatformService {
     }
   }
 
-  /// 作用：从平台删除 TranslateApp 条目。参数 platform：注册项。失败时抛 McpPlatformException。
+  /// 作用：从平台删除 TranSnap 条目。参数 platform：注册项。失败时抛 McpPlatformException。
   Future<void> remove(McpPlatform platform) async {
     switch (platform) {
       case CommandMcpPlatform():

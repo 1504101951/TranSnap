@@ -126,7 +126,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
       final text = exportGlossaryFile(_entries, format: format);
       final path = await widget.channel.invokeMethod<String>(
         MethodNames.saveTextFile,
-        {'text': text, 'suggestedName': 'TranslateApp 术语表.$format'},
+        {'text': text, 'suggestedName': 'TranSnap 术语表.$format'},
       );
       if (mounted && path != null) {
         setState(() {

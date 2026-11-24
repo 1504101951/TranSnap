@@ -400,7 +400,7 @@ final class WebMWriter {
         let seekHead = Self.element(ID.seekHead, Self.element(ID.seek,
             Self.element(ID.seekID, Self.id(ID.cues)) + Self.uint(ID.seekPosition, 0, width: 8)))
         let info = Self.element(ID.info, Self.uint(ID.timecodeScale, 1_000_000) + Self.float(ID.duration, Double(durationMs)) +
-            Self.string(ID.muxingApp, "TranslateApp") + Self.string(ID.writingApp, "TranslateApp"))
+            Self.string(ID.muxingApp, "TranSnap") + Self.string(ID.writingApp, "TranSnap"))
         let colourElement = Self.element(ID.colour, Self.uint(ID.matrixCoefficients, colour.matrix) + Self.uint(ID.range, 1) +
             Self.uint(ID.transferCharacteristics, colour.transfer) + Self.uint(ID.primaries, colour.primaries))
         let tracks = Self.element(ID.tracks, Self.element(ID.trackEntry,

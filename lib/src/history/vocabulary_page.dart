@@ -146,7 +146,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
       final date = dateText(DateTime.now());
       await widget.channel.invokeMethod<String>(MethodNames.saveTextFile, {
         'text': csv,
-        'suggestedName': 'TranslateApp 生词本 $date.csv',
+        'suggestedName': 'TranSnap 生词本 $date.csv',
       });
     } on PlatformException catch (error) {
       if (!mounted) return;

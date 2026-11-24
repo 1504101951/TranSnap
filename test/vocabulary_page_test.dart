@@ -4,12 +4,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/history/history_empty_state.dart';
-import 'package:translate_app/src/history/history_list_card.dart';
-import 'package:translate_app/src/history/vocabulary_page.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/history/history_empty_state.dart';
+import 'package:transnap/src/history/history_list_card.dart';
+import 'package:transnap/src/history/vocabulary_page.dart';
 
 /// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
 Future<TestGesture> _startMouse(WidgetTester tester) async {
@@ -64,7 +64,7 @@ void main() {
         case MethodNames.vocabularyCsv:
           return '"pear","梨","noun 梨"\n';
         case MethodNames.saveTextFile:
-          return '/Users/test/TranslateApp 生词本.csv';
+          return '/Users/test/TranSnap 生词本.csv';
       }
       return null;
     });

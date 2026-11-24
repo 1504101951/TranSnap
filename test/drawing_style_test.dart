@@ -1,21 +1,21 @@
-import 'package:translate_app/src/common/constants/toolbar_grid.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/screenshot/drawing_preferences.dart';
+import 'package:transnap/src/common/constants/toolbar_grid.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/screenshot/drawing_preferences.dart';
 
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:translate_app/src/screenshot/screenshot_app.dart';
-import 'package:translate_app/src/common/constants/screenshot_actions.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:transnap/src/screenshot/screenshot_app.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/screenshot/drawing_controls.dart';
-import 'package:translate_app/src/common/constants/drawing_metrics.dart';
-import 'package:translate_app/src/screenshot/drawing_style.dart';
-import 'package:translate_app/src/screenshot/edit_document.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/screenshot/drawing_controls.dart';
+import 'package:transnap/src/common/constants/drawing_metrics.dart';
+import 'package:transnap/src/screenshot/drawing_style.dart';
+import 'package:transnap/src/screenshot/edit_document.dart';
 
 import 'support/capture_pixels.dart';
 

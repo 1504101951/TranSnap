@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
-import 'package:translate_app/src/common/constants/motion_metrics.dart';
-import 'package:translate_app/src/common/constants/translation_phase.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/constants/motion_metrics.dart';
+import 'package:transnap/src/common/constants/translation_phase.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
 
 /// 无参数；验证公共动效基座的无障碍降级、光学高光安全回退、五组纯 Dart 矢量状态机与侧边栏弹簧滑块（#142）。
 void main() {

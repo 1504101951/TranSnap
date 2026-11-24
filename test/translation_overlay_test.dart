@@ -1,7 +1,7 @@
-import 'package:translate_app/src/common/constants/selection_gesture_types.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
-import 'package:translate_app/src/common/constants/bridge_event_types.dart';
+import 'package:transnap/src/common/constants/selection_gesture_types.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/common/constants/bridge_event_types.dart';
 
 import 'dart:async';
 import 'dart:ui';
@@ -10,17 +10,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:translate_app/src/selection/selection_translation_app.dart'
-    show TranslateApp;
-import 'package:translate_app/src/history/translation_history.dart';
-import 'package:translate_app/src/history/vocabulary.dart';
-import 'package:translate_app/src/platform/channel_platform_bridge.dart';
-import 'package:translate_app/src/translation/language_direction.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/overlay/dictionary_definition.dart';
-import 'package:translate_app/src/overlay/translation_overlay.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/selection/selection_translation_app.dart'
+    show TranSnapApp;
+import 'package:transnap/src/history/translation_history.dart';
+import 'package:transnap/src/history/vocabulary.dart';
+import 'package:transnap/src/platform/channel_platform_bridge.dart';
+import 'package:transnap/src/translation/language_direction.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/overlay/dictionary_definition.dart';
+import 'package:transnap/src/overlay/translation_overlay.dart';
+import 'package:transnap/src/selection/selection_session.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 以固定译文驱动真实会话，避免界面回归测试依赖外部网络。
 class _Provider implements TranslationProvider {
@@ -68,7 +68,7 @@ void main() {
     // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
-      TranslateApp(
+      TranSnapApp(
         selection: bridge,
         overlay: bridge,
         speech: bridge,

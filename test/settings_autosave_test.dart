@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/settings_app.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
 

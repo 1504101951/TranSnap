@@ -77,7 +77,7 @@ final class SelectionMonitor {
                     case .screenshot:
                         MacPlatformBridge.Shared.instance?.screenshot.capture()
                     case .translate:
-                        // 翻译热键复用选区读取，不激活 TranslateApp。
+                        // 翻译热键复用选区读取，不激活 TranSnap。
                         monitor.capture(gesture: .hotkey)
                     case .input:
                         // 输入翻译读取当前输入，完成后由 Dart 请求替换原文。

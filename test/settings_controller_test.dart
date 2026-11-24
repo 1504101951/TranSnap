@@ -3,14 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/error_codes.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/platform/settings_platform.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/settings/settings_controller.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/error_codes.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/platform/settings_platform.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/settings/settings_controller.dart';
 
 /// 无参数；验证唯一设置队列的状态提交、真实存储失败、修订冲突与系统翻译的测试连接，无返回值。
 void main() {

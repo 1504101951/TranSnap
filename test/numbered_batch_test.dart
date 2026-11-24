@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/translation/numbered_batch.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/translation/numbered_batch.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// chunks 为模型依次输出的文本片段，count 为批次段落数。
 /// 返回各下标累计得到的译文；没有译文的下标不出现。

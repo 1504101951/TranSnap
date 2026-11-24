@@ -3,10 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/drawing_metrics.dart';
-import 'package:translate_app/src/screenshot/beautify.dart';
-import 'package:translate_app/src/screenshot/drawing_style.dart';
-import 'package:translate_app/src/screenshot/edit_document.dart';
+import 'package:transnap/src/common/constants/drawing_metrics.dart';
+import 'package:transnap/src/screenshot/beautify.dart';
+import 'package:transnap/src/screenshot/drawing_style.dart';
+import 'package:transnap/src/screenshot/edit_document.dart';
 
 import 'support/capture_pixels.dart';
 

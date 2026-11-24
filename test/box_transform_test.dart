@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/screenshot/box_transform.dart';
+import 'package:transnap/src/screenshot/box_transform.dart';
 
 /// 无参数；验证可拖动矩形的命中、移动、拉伸、比例与旋转规则（#106、#103）。
 void main() {

@@ -4,18 +4,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/glossary_editor.dart';
-import 'package:translate_app/src/settings/prompt_editor.dart';
-import 'package:translate_app/src/settings/service_config.dart';
-import 'package:translate_app/src/settings/service_editor.dart';
-import 'package:translate_app/src/settings/sticker_upload_dialog.dart';
-import 'package:translate_app/src/translation/glossary.dart';
+import 'package:transnap/src/common/constants/appearance_modes.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/glossary_editor.dart';
+import 'package:transnap/src/settings/prompt_editor.dart';
+import 'package:transnap/src/settings/service_config.dart';
+import 'package:transnap/src/settings/service_editor.dart';
+import 'package:transnap/src/settings/sticker_upload_dialog.dart';
+import 'package:transnap/src/translation/glossary.dart';
 
 /// 无参数；验证设置页各独立弹窗子编辑器的 UI/UX 规范加固项（#144）。
 void main() {

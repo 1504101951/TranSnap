@@ -1,8 +1,8 @@
-import 'package:translate_app/src/common/constants/selection_gesture_types.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/bridge_event_types.dart';
+import 'package:transnap/src/common/constants/selection_gesture_types.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/bridge_event_types.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/platform/platform_event.dart';
+import 'package:transnap/src/platform/platform_event.dart';
 
 /// 无参数；验证原生事件到Dart事件的字段转换，不创建或修改翻译会话。
 void main() {

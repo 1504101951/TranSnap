@@ -8,7 +8,7 @@ import ServiceManagement
 import Translation
 import XCTest
 
-@testable import translate_app
+@testable import TranSnap
 
 class RunnerTests: XCTestCase {
     /// 无参数；真实 PNG 保留透明 BGRA 和尺寸、动图只解首帧、方向元数据归正、损坏字节拒绝，无返回值。
@@ -771,7 +771,7 @@ class RunnerTests: XCTestCase {
     /// 无参数；输入翻译粘贴后还原原剪贴板，用户在等待期间新复制的内容不被覆盖，无返回值。
     @MainActor
     func testPasteReplacingSelectionRestoresClipboard() async throws {
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("translateapp-paste-\(UUID().uuidString)"))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("transnap-paste-\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
         pasteboard.clearContents()
         pasteboard.setString("原剪贴板", forType: .string)
@@ -1732,16 +1732,16 @@ final class WindowStartupTests: XCTestCase {
         // shutdown 撤销待启动窗口，后续显式打开才创建新的启动。
         settings.shutdown()
         await Task.yield()
-        XCTAssertFalse(NSApp.windows.contains { $0.title == "TranslateApp 设置" && $0.isVisible })
+        XCTAssertFalse(NSApp.windows.contains { $0.title == "权限与启动" && $0.isVisible })
         settings.show()
         settings.show()
-        let window = try await visibleWindow(title: "TranslateApp 设置")
+        let window = try await visibleWindow(title: "权限与启动")
         let flutter = try XCTUnwrap(window.contentViewController?.children.first as? FlutterViewController)
-        XCTAssertEqual(NSApp.windows.filter { $0.title == "TranslateApp 设置" && $0.isVisible }.count, 1)
+        XCTAssertEqual(NSApp.windows.filter { $0.title == "权限与启动" && $0.isVisible }.count, 1)
         window.close()
         XCTAssertFalse(window.isVisible)
         settings.show()
-        let reopened = try await visibleWindow(title: "TranslateApp 设置")
+        let reopened = try await visibleWindow(title: "权限与启动")
         XCTAssertTrue(reopened === window)
         XCTAssertTrue((reopened.contentViewController?.children.first as? FlutterViewController)?.engine === flutter.engine)
         reopened.close()

@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
-import 'package:translate_app/src/translation/providers/unofficial_google_provider.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/selection/selection_session.dart';
+import 'package:transnap/src/translation/providers/unofficial_google_provider.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 void main() {
   test('dismissing a selection closes its in-flight HTTP connection', () async {

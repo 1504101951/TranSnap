@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/utils/date_text.dart';
+import 'package:transnap/src/common/utils/date_text.dart';
 
 /// 无参数；验证历史与生词本共用的日期时间与日期分组文本。
 void main() {

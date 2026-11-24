@@ -13,7 +13,7 @@ final class MCPCaptureServer {
     /// 执行一次工具请求并生成结果。
     typealias Run = @MainActor (MCPToolRequest) async -> MCPToolReply
 
-    private static let log = Logger(subsystem: "TranslateApp", category: "MCP")
+    private static let log = Logger(subsystem: "TranSnap", category: "MCP")
     private let isEnabled: () -> Bool
     private let isControlEnabled: () -> Bool
     private let run: Run
@@ -126,7 +126,7 @@ final class MCPCaptureServer {
 }
 
 /// socket 对端校验（#140）：只接受本 App 包内、签名有效的 helper 可执行文件；本 App 有签名证书时，
-/// 另要求 helper 标识符为 com.coolyang.translateApp.mcp 且叶证书与本 App 相同。
+/// 另要求 helper 标识符为 com.coolyang.transnap.mcp 且叶证书与本 App 相同。
 /// 适用条件：Release 包由安装脚本以同一证书签名 App 与 helper。Debug 构建为临时签名、没有证书，
 /// helper 标识符由 Xcode 生成，此时只校验签名有效与路径；若改为分发给他人或更换签名方式，需重新评估该校验强度。
 enum MCPPeer {

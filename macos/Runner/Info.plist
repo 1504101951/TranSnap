@@ -13,9 +13,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>TranslateApp</string>
+	<string>TranSnap</string>
 	<key>CFBundleDisplayName</key>
-	<string>TranslateApp</string>
+	<string>TranSnap</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -33,6 +33,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>TranslateApp 需要屏幕录制权限，以便截取你选中的屏幕区域并在桌面上标注、复制或贴图。</string>
+	<string>TranSnap 需要屏幕录制权限，以便截取你选中的屏幕区域并在桌面上标注、复制或贴图。</string>
 </dict>
 </plist>

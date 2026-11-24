@@ -2,16 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show Color;
 
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/settings/service_config.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
+import 'package:transnap/src/common/constants/appearance_modes.dart';
+import 'package:transnap/src/settings/service_config.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
-import 'package:translate_app/src/translation/language_direction.dart';
+import 'package:transnap/src/settings/app_settings.dart';
+import 'package:transnap/src/selection/selection_session.dart';
+import 'package:transnap/src/translation/language_direction.dart';
 
 import 'selection_session_test.dart' show RecordingProvider;
 

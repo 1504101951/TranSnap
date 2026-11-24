@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/translation/live_block_cache.dart';
+import 'package:transnap/src/translation/live_block_cache.dart';
 
 void main() {
   test('占用恰好等于预算时保留全部条目，超出后淘汰最久未用的条目', () {

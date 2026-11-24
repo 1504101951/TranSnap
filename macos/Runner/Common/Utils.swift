@@ -32,7 +32,7 @@ enum DockPresence {
 
 /// 录制启动的本地耗时记录；只记录固定步骤与时长，不包含图像、窗口标题或输出路径。
 enum CaptureStartupLog {
-    private static let logger = Logger(subsystem: "TranslateApp", category: "CaptureStartup")
+    private static let logger = Logger(subsystem: "TranSnap", category: "CaptureStartup")
 
     /// stage为固定步骤名，start为该步骤的单调时钟起点；向系统日志写入毫秒耗时，无返回值。
     static func record(_ stage: String, since start: ContinuousClock.Instant) {
@@ -44,7 +44,7 @@ enum CaptureStartupLog {
 
 /// 启动、截图与导出的耗时日志（#68「性能测量边界」）；只写固定阶段名与毫秒数，不含图像、文字、标题或路径。
 enum PerformanceLog {
-    private static let logger = Logger(subsystem: "TranslateApp", category: "Performance")
+    private static let logger = Logger(subsystem: "TranSnap", category: "Performance")
 
     /// stage 为固定阶段名，start 为该阶段的单调时钟起点；向系统日志写入毫秒耗时，无返回值。
     static func record(_ stage: String, since start: ContinuousClock.Instant) {
@@ -60,7 +60,7 @@ enum PerformanceLog {
 
 /// 实时翻译与截图翻译的排查日志（#138）。只写数量、耗时与状态，不写屏幕文字或译文。
 enum LiveRegionLog {
-    private static let logger = Logger(subsystem: "TranslateApp", category: "LiveRegion")
+    private static let logger = Logger(subsystem: "TranSnap", category: "LiveRegion")
 
     /// message 为“键=值”形式的一行数值字段；写入系统日志，无返回值。
     static func note(_ message: String) {

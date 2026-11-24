@@ -4,7 +4,7 @@ import CoreVideo
 import ScreenCaptureKit
 import Vision
 
-/// 系统截图模块的权限与冻结帧；本进程捕获才会把 TranslateApp 写入屏幕录制 TCC。
+/// 系统截图模块的权限与冻结帧；本进程捕获才会把 TranSnap 写入屏幕录制 TCC。
 enum ScreenCaptureService {
     /// 显示器内容无法读取（编号缺失或不在可捕获列表）时显示给用户的提示。
     private static let displayUnreadableMessage = "无法读取显示器内容，请检查屏幕录制权限。"
@@ -43,7 +43,7 @@ enum ScreenCaptureService {
         defer { DockPresence.leave(presence) }
         // 只在尚未授权时申请；已授权不得再次 CGRequest。
         _ = CGRequestScreenCaptureAccess()
-        // 只打开设置页不会把本进程写入列表；ScreenCaptureKit 枚举才会登记 TranslateApp。
+        // 只打开设置页不会把本进程写入列表；ScreenCaptureKit 枚举才会登记 TranSnap。
         _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         for _ in 0..<20 {
             if isAuthorized() { return true }

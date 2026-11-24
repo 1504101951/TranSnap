@@ -274,7 +274,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   }
   unawaited(bridge.perfMark('launch-dart-apply', stage));
   runApp(
-    TranslateApp(
+    TranSnapApp(
       selection: bridge,
       overlay: bridge,
       speech: bridge,

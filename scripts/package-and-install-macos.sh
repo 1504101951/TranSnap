@@ -1,16 +1,16 @@
 #!/bin/bash
-# 无参数；先强制退出正在运行的 TranslateApp，再清除 build 与 dist 里的旧副本。
+# 无参数；先强制退出正在运行的 TranSnap，再清除 build 与 dist 里的旧副本。
 # 随后同时构建 Release，并清除本机其余旧副本。成功后校验 ZIP，安装到访达「应用程序」。
-# TRANSLATEAPP_SIGN_IDENTITY 可指定固定签名证书，缺省 TranslateApp Local Signing。
+# TRANSNAP_SIGN_IDENTITY 可指定固定签名证书，缺省 TranSnap Local Signing。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-built_app="build/macos/Build/Products/Release/translate_app.app"
-archive="dist/TranslateApp.zip"
-identity="${TRANSLATEAPP_SIGN_IDENTITY:-TranslateApp Local Signing}"
-bundle_id="com.coolyang.translateApp"
-target="/Applications/TranslateApp.app"
-legacy="$HOME/Applications/TranslateApp.app"
+built_app="build/macos/Build/Products/Release/TranSnap.app"
+archive="dist/TranSnap.zip"
+identity="${TRANSNAP_SIGN_IDENTITY:-TranSnap Local Signing}"
+bundle_id="com.coolyang.transnap"
+target="/Applications/TranSnap.app"
+legacy="$HOME/Applications/TranSnap.app"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 # 打包暂存放在 dist 下，ZIP 才能在同一文件系统里原子替换。安装暂存放在临时目录，回滚时不碰已写好的 ZIP。
 package_stage=""
@@ -33,23 +33,23 @@ fi
 
 # 作用：判断路径最后一级是不是本仓库的 App 包名。
 # 参数：app 为任意路径。
-# 返回：0 表示包名是 TranslateApp.app、translate_app.app，或废纸篓重名后追加的「空格 + 时间戳」；大小写不敏感。1 表示不是。
+# 返回：0 表示包名是 TranSnap.app，或废纸篓重名后追加的「空格 + 时间戳」；大小写不敏感。1 表示不是。
 is_target_app_name() {
   local base
   base="$(basename "$1")"
   base="$(printf '%s' "$base" | /usr/bin/tr '[:upper:]' '[:lower:]')"
-  [[ "$base" == "translateapp.app" || "$base" == "translate_app.app" ]] && return 0
-  # 废纸篓遇到重名会把副本改成 “TranslateApp 20-46-05-824.app”。
-  [[ "$base" == translateapp\ *.app || "$base" == translate_app\ *.app ]]
+  [[ "$base" == "transnap.app" ]] && return 0
+  # 废纸篓遇到重名会把副本改成 “TranSnap 20-46-05-824.app”。
+  [[ "$base" == transnap\ *.app ]]
 }
 
 # 作用：判断磁盘上的目录是否属于本应用，避免误删同名包。
 # 参数：app 为已存在的 .app 目录。
-# 返回：0 表示应删除；1 表示跳过。Bundle ID 匹配，或没有 Info.plist 但可执行文件是 translate_app 时删除。
+# 返回：0 表示应删除；1 表示跳过。Bundle ID 匹配，或没有 Info.plist 但可执行文件是 TranSnap 时删除。
 should_remove_app() {
   local app="$1"
   local id
-  # is_target_app_name：只接受打包名和 Flutter 产物名。
+  # is_target_app_name：只接受 TranSnap 包名。
   is_target_app_name "$app" || return 1
   [[ -d "$app" ]] || return 1
   id="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist" 2>/dev/null || true)"
@@ -57,7 +57,7 @@ should_remove_app() {
     return 0
   fi
   # 测试中断会留下没有 Info.plist 的半成品，只认本仓库可执行文件。
-  [[ -z "$id" && -f "$app/Contents/MacOS/translate_app" ]]
+  [[ -z "$id" && -f "$app/Contents/MacOS/TranSnap" ]]
 }
 
 # 作用：列出磁盘和 LaunchServices 中的候选路径。
@@ -69,9 +69,9 @@ list_app_candidates() {
   local -a roots
   if [[ "$scope" == "external" ]]; then
     mdfind "kMDItemCFBundleIdentifier == '${bundle_id}'" 2>/dev/null || true
-    mdfind 'kMDItemFSName == "TranslateApp.app" || kMDItemFSName == "translate_app.app"' 2>/dev/null || true
+    mdfind 'kMDItemFSName == "TranSnap.app"' 2>/dev/null || true
     # 这两个位置是安装目标。直接判断，避免遍历整个 /Applications。
-    for path in /Applications/TranslateApp.app "$HOME/Applications/TranslateApp.app"; do
+    for path in /Applications/TranSnap.app "$HOME/Applications/TranSnap.app"; do
       if [[ -e "$path" ]]; then
         printf '%s\n' "$path"
       fi
@@ -88,8 +88,8 @@ list_app_candidates() {
   fi
   for root in "${roots[@]}"; do
     [[ -d "$root" ]] || continue
-    # 第三、四种名字是废纸篓为重名副本追加的时间戳，Spotlight 经常不索引这些路径。
-    find "$root" \( -iname 'TranslateApp.app' -o -iname 'translate_app.app' -o -iname 'TranslateApp *.app' -o -iname 'translate_app *.app' \) -prune -print 2>/dev/null || true
+    # 第二种名字是废纸篓为重名副本追加的时间戳，Spotlight 经常不索引这些路径。
+    find "$root" \( -iname 'TranSnap.app' -o -iname 'TranSnap *.app' \) -prune -print 2>/dev/null || true
   done
   [[ "$scope" == "external" ]] || return 0
   # 目录删除后启动服务仍保留测试副本和 dist/package.* 暂存路径，屏幕录制列表会继续显示它们。
@@ -153,7 +153,7 @@ remove_existing_copies() {
   if [[ "$scope" == "build" ]]; then
     echo "正在清除构建目录中的旧副本…"
   else
-    echo "正在查找本机其余 TranslateApp 与 translate_app 副本…"
+    echo "正在查找本机其余 TranSnap 副本…"
   fi
   candidate_file="$(mktemp)"
   normalized_file="$(mktemp)"
@@ -173,7 +173,7 @@ remove_existing_copies() {
     [[ -n "$path" ]] || continue
     printf '%07d %s\n' "${#path}" "$path"
   done < "$normalized_file" | sort -nr > "$ordered_file"
-  # 候选名单收齐后再取物理路径。构建此时可能已经写出 translate_app.app，前缀要把这份产物排除。
+  # 候选名单收齐后再取物理路径。构建此时可能已经写出 TranSnap.app，前缀要把这份产物排除。
   skip_prefixes=()
   if [[ "$scope" == "external" ]]; then
     skip_prefixes+=("$PWD/build")
@@ -279,8 +279,8 @@ cleanup_on_exit() {
   if [[ -n "$install_stage" ]]; then
     rm -rf "$install_stage"
   fi
-  if [[ -n "$package_stage" && -d "$package_stage/TranslateApp.app" ]]; then
-    "$lsregister" -u "$package_stage/TranslateApp.app" >/dev/null 2>&1 || true
+  if [[ -n "$package_stage" && -d "$package_stage/TranSnap.app" ]]; then
+    "$lsregister" -u "$package_stage/TranSnap.app" >/dev/null 2>&1 || true
   fi
   if [[ -d "$built_app" ]]; then
     "$lsregister" -u "$PWD/$built_app" >/dev/null 2>&1 || true
@@ -295,25 +295,25 @@ cleanup_on_exit() {
   exit "$status"
 }
 
-# 作用：强制结束所有正在运行的 TranslateApp，并等到进程消失。
+# 作用：强制结束所有正在运行的 TranSnap，并等到进程消失。
 # 参数：无。
-# 返回：0 表示已经没有 translate_app 进程。发出 SIGKILL 后 5 秒内进程仍在，则以状态码 1 退出。
+# 返回：0 表示已经没有 TranSnap 进程。发出 SIGKILL 后 5 秒内进程仍在，则以状态码 1 退出。
 quit_running_apps() {
   local pid waited
-  if ! pgrep -x translate_app >/dev/null; then
+  if ! pgrep -x TranSnap >/dev/null; then
     return 0
   fi
-  echo "正在强制退出 TranslateApp…"
+  echo "正在强制退出 TranSnap…"
   while IFS= read -r pid; do
     [[ -n "$pid" ]] || continue
     # SIGKILL 不进入 applicationShouldTerminate，因此不会弹出「退出并丢弃当前采集？」。
     # 适用条件：打包前允许丢掉未保存采集。媒体流和临时目录的 shutdown 不会执行；若打包必须先做完这些清理，再改为正常退出。
     kill -9 "$pid" 2>/dev/null || true
-  done < <(pgrep -x translate_app || true)
+  done < <(pgrep -x TranSnap || true)
   waited=0
-  while pgrep -x translate_app >/dev/null; do
+  while pgrep -x TranSnap >/dev/null; do
     if [[ "$waited" -ge 5 ]]; then
-      echo "无法强制退出 TranslateApp。" >&2
+      echo "无法强制退出 TranSnap。" >&2
       exit 1
     fi
     sleep 1
@@ -321,7 +321,7 @@ quit_running_apps() {
   done
 }
 
-# quit_running_apps：强制结束正在运行的 TranslateApp。运行中的包删不干净，签名也会继续指向旧进程。
+# quit_running_apps：强制结束正在运行的 TranSnap。运行中的包删不干净，签名也会继续指向旧进程。
 # 此时尚未注册 EXIT 清理；退出失败不会删掉已有构建产物。
 quit_running_apps
 # 只注册一次 EXIT。后注册的 trap 会替换先注册的，分开清理会留下另一个暂存目录。
@@ -344,7 +344,7 @@ build_status=0
 wait "$build_pid" || build_status=$?
 build_pid=""
 [[ "$build_status" == 0 ]] || exit "$build_status"
-ditto "$built_app" "$package_stage/TranslateApp.app"
+ditto "$built_app" "$package_stage/TranSnap.app"
 sign_flags=(--force --sign "$identity")
 if [[ "$identity" == "Developer ID Application:"* ]]; then
   # 对外分发身份使用安全时间戳；本地自签名证书不向时间戳服务请求公证能力。
@@ -355,33 +355,33 @@ fi
 # 从最内层签名实际动态库，再签框架与外层App，所有代码沿用同一身份。
 while IFS= read -r -d '' library; do
   codesign "${sign_flags[@]}" "$library"
-done < <(find "$package_stage/TranslateApp.app/Contents" -type f -name '*.dylib' -print0)
-for framework in "$package_stage/TranslateApp.app/Contents/Frameworks/"*.framework; do
+done < <(find "$package_stage/TranSnap.app/Contents" -type f -name '*.dylib' -print0)
+for framework in "$package_stage/TranSnap.app/Contents/Frameworks/"*.framework; do
   codesign "${sign_flags[@]}" "$framework"
 done
 # MCP helper 是 Contents/MacOS 中的独立可执行文件，须在外层 App 之前以固定标识签名（#96）。
-codesign "${sign_flags[@]}" --identifier "$bundle_id.mcp" "$package_stage/TranslateApp.app/Contents/MacOS/translateapp-mcp"
+codesign "${sign_flags[@]}" --identifier "$bundle_id.mcp" "$package_stage/TranSnap.app/Contents/MacOS/transnap-mcp"
 # Flutter 可独立更新 App.framework；重新签封外层 App，使嵌套资源摘要与实际内容一致。
-codesign "${sign_flags[@]}" --entitlements macos/Runner/Release.entitlements "$package_stage/TranslateApp.app"
-codesign --verify --deep --strict "$package_stage/TranslateApp.app"
-requirement="$(codesign -d -r- "$package_stage/TranslateApp.app" 2>&1)"
+codesign "${sign_flags[@]}" --entitlements macos/Runner/Release.entitlements "$package_stage/TranSnap.app"
+codesign --verify --deep --strict "$package_stage/TranSnap.app"
+requirement="$(codesign -d -r- "$package_stage/TranSnap.app" 2>&1)"
 printf '%s\n' "$requirement"
 # 权限身份必须由证书链与Bundle ID定义，不能再绑定某次构建的内容哈希。
 if /usr/bin/grep -q 'designated.*cdhash' <<< "$requirement"; then
   echo "签名身份仍绑定cdhash，拒绝发布。" >&2
   exit 1
 fi
-ditto -c -k --sequesterRsrc --keepParent "$package_stage/TranslateApp.app" "$package_stage/TranslateApp.zip"
+ditto -c -k --sequesterRsrc --keepParent "$package_stage/TranSnap.app" "$package_stage/TranSnap.zip"
 # 暂存文件位于同一文件系统，重命名原子替换已验证的归档。
-mv -f "$package_stage/TranslateApp.zip" "$archive"
+mv -f "$package_stage/TranSnap.zip" "$archive"
 echo "Archive: $PWD/$archive"
 
-# quit_running_apps：构建耗时较久，安装前再强制结束期间重新打开的 TranslateApp。
+# quit_running_apps：构建耗时较久，安装前再强制结束期间重新打开的 TranSnap。
 quit_running_apps
-install_stage="$(mktemp -d "${TMPDIR:-/tmp}/translateapp-install.XXXXXX")"
+install_stage="$(mktemp -d "${TMPDIR:-/tmp}/transnap-install.XXXXXX")"
 ditto -x -k "$archive" "$install_stage"
-codesign --verify --deep --strict "$install_stage/TranslateApp.app"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$install_stage/TranslateApp.app/Contents/Info.plist")" == "$bundle_id" ]] || {
+codesign --verify --deep --strict "$install_stage/TranSnap.app"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$install_stage/TranSnap.app/Contents/Info.plist")" == "$bundle_id" ]] || {
   echo "归档包含其他应用，停止安装。" >&2
   exit 1
 }
@@ -397,7 +397,7 @@ if [[ -e "$target" ]]; then
   }
 fi
 # install_bundle：把验签后的包写入访达「应用程序」。
-install_bundle "$install_stage/TranslateApp.app" "$target"
+install_bundle "$install_stage/TranSnap.app" "$target"
 # 用户目录那份不会出现在访达「应用程序」里，留下会让录屏列表对不上正在运行的副本。
 if [[ -d "$legacy" ]]; then
   legacy_id="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$legacy/Contents/Info.plist" 2>/dev/null || true)"

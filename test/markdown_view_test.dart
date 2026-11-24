@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/screenshot/markdown_view.dart';
+import 'package:transnap/src/screenshot/markdown_view.dart';
 
 /// 验证识别结果 Markdown 的解析与渲染（#67「识别文字弹窗 Markdown 渲染（#96）」）：
 /// 标题、段落、列表、表格的拆分，表格分隔行与转义竖线，块间距，以及宽表格在表格内横向滚动。

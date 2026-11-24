@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:characters/characters.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/translation/paragraph_translation.dart';
-import 'package:translate_app/src/translation/segmented_translation.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/translation/paragraph_translation.dart';
+import 'package:transnap/src/translation/segmented_translation.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 按真实段落提供事件流；未定义的段落直接失败，避免额外请求被测试吞掉。
 class _Provider implements TranslationProvider {

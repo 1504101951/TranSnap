@@ -857,7 +857,7 @@ class _CaptureAppState extends State<CaptureApp> {
   /// context 为窗口上下文；使用项目统一原生玻璃主题与窗口背景。
   @override
   Widget build(BuildContext context) => NativeGlassApp(
-    title: 'TranslateApp 采集',
+    title: 'TranSnap 采集',
     home: Builder(builder: _buildPage),
   );
 

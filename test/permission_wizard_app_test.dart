@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/settings/permission_wizard_app.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/settings/permission_wizard_app.dart';
 
 /// 无参数；验证单页双权限与「进入应用」可点条件。
 void main() {

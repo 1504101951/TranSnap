@@ -14,7 +14,7 @@ enum MCPSocketError: Error, Equatable {
 /// 只负责字节收发与 socket 文件权限，不理解请求语义。
 enum MCPSocket {
     /// 作用：返回当前用户的默认 socket 文件 URL。
-    /// 返回：~/Library/Application Support/TranslateApp/mcp.sock。
+    /// 返回：~/Library/Application Support/TranSnap/mcp.sock。
     static var defaultURL: URL {
         AppConstants.applicationSupportURL
             .appendingPathComponent(AppConstants.mcpSocketFileName)

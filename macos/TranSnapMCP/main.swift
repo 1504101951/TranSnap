@@ -1,7 +1,7 @@
 import Foundation
 
-// translateapp-mcp：由 MCP 客户端以 stdio 启动的 helper（#96、#68「MCP 接口边界」）。
-// stdin 每行一条 JSON-RPC 消息，stdout 每行一条响应；截图请求经 Unix socket 转给运行中的 TranslateApp。
+// transnap-mcp：由 MCP 客户端以 stdio 启动的 helper（#96、#68「MCP 接口边界」）。
+// stdin 每行一条 JSON-RPC 消息，stdout 每行一条响应；截图请求经 Unix socket 转给运行中的 TranSnap。
 
 /// 作用：读取外层 App 的版本号作为 serverInfo.version。
 /// 返回：App 包 Info.plist 的 CFBundleShortVersionString；从构建目录单独运行、没有外层 App 时为 "unknown"。

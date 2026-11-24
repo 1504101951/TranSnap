@@ -1,4 +1,4 @@
-import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -7,21 +7,21 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/emoji_catalog.dart';
-import 'package:translate_app/src/common/constants/screenshot_actions.dart';
-import 'package:translate_app/src/common/constants/toolbar_grid.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/common/utils/geometry.dart';
-import 'package:translate_app/src/common/utils/screenshot_filename.dart';
-import 'package:translate_app/src/screenshot/edit_document.dart';
-import 'package:translate_app/src/screenshot/recognized_text_panel.dart';
-import 'package:translate_app/src/screenshot/screenshot_app.dart';
-import 'package:translate_app/src/screenshot/sticker_panel.dart';
-import 'package:translate_app/src/settings/app_settings.dart';
+import 'package:transnap/src/common/constants/emoji_catalog.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/common/constants/toolbar_grid.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/common/utils/geometry.dart';
+import 'package:transnap/src/common/utils/screenshot_filename.dart';
+import 'package:transnap/src/screenshot/edit_document.dart';
+import 'package:transnap/src/screenshot/recognized_text_panel.dart';
+import 'package:transnap/src/screenshot/screenshot_app.dart';
+import 'package:transnap/src/screenshot/sticker_panel.dart';
+import 'package:transnap/src/settings/app_settings.dart';
 
 import 'support/capture_pixels.dart';
 
@@ -361,7 +361,7 @@ void main() {
       if (call.method == MethodNames.getScreenshot) {
         return {
           'screenAccess': false,
-          'error': '截图需要屏幕录制权限。请在设置中允许 TranslateApp。',
+          'error': '截图需要屏幕录制权限。请在设置中允许 TranSnap。',
         };
       }
       if (call.method == MethodNames.requestScreenAccess) {

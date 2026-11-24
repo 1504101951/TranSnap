@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/text_mode.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
-import 'package:translate_app/src/settings/service_config.dart';
-import 'package:translate_app/src/translation/language_direction.dart';
-import 'package:translate_app/src/translation/providers/api_translation_provider.dart';
-import 'package:translate_app/src/translation/translation_types.dart';
+import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/selection/selection_session.dart';
+import 'package:transnap/src/settings/service_config.dart';
+import 'package:transnap/src/translation/language_direction.dart';
+import 'package:transnap/src/translation/providers/api_translation_provider.dart';
+import 'package:transnap/src/translation/translation_types.dart';
 
 /// 真实本地HTTP失败到恢复的业务路径，不以内部调用次数代替结果。
 void main() {

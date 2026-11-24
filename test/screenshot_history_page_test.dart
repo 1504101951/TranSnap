@@ -5,13 +5,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/history/history_empty_state.dart';
-import 'package:translate_app/src/history/screenshot_compose_dialogs.dart';
-import 'package:translate_app/src/history/screenshot_history.dart';
-import 'package:translate_app/src/history/screenshot_history_page.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/history/history_empty_state.dart';
+import 'package:transnap/src/history/screenshot_compose_dialogs.dart';
+import 'package:transnap/src/history/screenshot_history.dart';
+import 'package:transnap/src/history/screenshot_history_page.dart';
 
 /// 无参数；用假历史通道验证截图历史分段的缺失文件、删除确认、清空确认与合成边界（#29）。
 void main() {

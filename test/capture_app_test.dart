@@ -5,17 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:translate_app/src/capture/capture_app.dart';
-import 'package:translate_app/src/common/constants/channel_names.dart';
-import 'package:translate_app/src/common/constants/glass_metrics.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/common/constants/preference_keys.dart';
-import 'package:translate_app/src/common/constants/screenshot_actions.dart';
-import 'package:translate_app/src/common/constants/screenshot_enums.dart';
-import 'package:translate_app/src/common/widgets/app_motion.dart';
-import 'package:translate_app/src/screenshot/screenshot_app.dart';
-import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
-import 'package:translate_app/src/common/constants/toolbar_grid.dart';
+import 'package:transnap/src/capture/capture_app.dart';
+import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/common/constants/screenshot_enums.dart';
+import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/screenshot/screenshot_app.dart';
+import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
+import 'package:transnap/src/common/constants/toolbar_grid.dart';
 
 import 'support/capture_pixels.dart';
 

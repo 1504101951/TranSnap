@@ -219,7 +219,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         id = UUID().uuidString
         details = [:]
         captureFrame = nil
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("TranslateApp-Capture-\(id)", isDirectory: true)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("TranSnap-Capture-\(id)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         temporaryDirectory = directory
         update(.preparing)

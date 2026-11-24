@@ -33,13 +33,13 @@ enum ScrollCaptureMode: String {
 /// 只定义 Swift 端代码（含测试）实际使用的值。
 enum AppConstants {
     /// 独立引擎入口就绪确认；五秒预算只覆盖入口执行，不等待首帧或业务加载。
-    static let windowStartupChannel = "translateapp/window_startup"
+    static let windowStartupChannel = "transnap/window_startup"
     static let windowReadyMethod = "windowReady"
     /// #120 的有限等待策略；实测条件与样本见工单，若新增入口或启动负载变化需重新测量。
     static let windowStartupTimeout: TimeInterval = 5
 
     /// 连续采集独立通道与多引擎入口，和Dart常量一致。
-    static let captureChannel = "translateapp/capture"
+    static let captureChannel = "transnap/capture"
     static let captureEntrypoint = "captureMain"
     /// 实时翻译 SCStream 的已批准供帧间隔，单位毫秒；只节流系统输出，不保证固定帧率。
     static let liveCaptureMinIntervalMs = 200
@@ -48,7 +48,7 @@ enum AppConstants {
     static let liveRegionCommandMethod = "liveRegionCommand"
     static let liveRegionOcrMethod = "liveRegionOcr"
     static let publishLiveRegionMethod = "publishLiveRegion"
-    static let captureVideoPreview = "translateapp/capture_video_preview"
+    static let captureVideoPreview = "transnap/capture_video_preview"
     /// Spec #67中的采集工具尺寸，单位为屏幕逻辑点。
     static let captureControlSize = NSSize(width: 320, height: 84)
     static let captureShadeOpacity: CGFloat = 0.6
@@ -79,7 +79,7 @@ enum AppConstants {
     /// 录制最高帧率：ScreenCaptureKit 最小帧间隔为其倒数；WebM 编码以此作为码率分配的帧率提示（#110）。
     static let recordingFramesPerSecond: Int32 = 30
     /// WebM 编码页面的自定义 URL 协议名；编码页面与待编码帧都经此协议交给不挂窗口的 WKWebView（#110）。
-    static let webMEncoderScheme = "translateapp-webm"
+    static let webMEncoderScheme = "transnap-webm"
     /// 录制结果使用系统窗口控制；标题栏尺寸由AppKit按此样式实际计算。
     static let captureResultWindowStyle: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
     /// 采集控制窗口标记：控制气泡、选区外阴影、长截图预览、截图面板与跨屏目标预览；录屏只排除带此标记的本应用窗口（#68）。
@@ -97,7 +97,7 @@ enum AppConstants {
     /// copyRecording 协议值；拷贝完整视频或裁剪片段到剪贴板临时目录并写入文件引用（#142），与 Dart 常量同步。
     static let copyRecordingMethod = "copyRecording"
     /// 录屏复制到剪贴板使用的临时子目录名；下次启动应用时清空（#68 第 10 条、#142）。
-    static let recordingClipboardDirectoryName = "TranslateApp-Clipboard"
+    static let recordingClipboardDirectoryName = "TranSnap-Clipboard"
     static let previewRecordingMethod = "previewRecording"
     static let toggleRecordingPlaybackMethod = "toggleRecordingPlayback"
     static let seekRecordingMethod = "seekRecording"
@@ -118,7 +118,7 @@ enum AppConstants {
     /// screenshotConfirmAction 偏好键；确认截图时的动作，随截图快照与工具栏变更通知交给截图引擎（#111），与Dart常量同步。
     static let screenshotConfirmActionKey = "screenshotConfirmAction"
     static let historyChangedMethod = "historyChanged"
-    static let historyChangedNotification = Notification.Name("translateapp.historyChanged")
+    static let historyChangedNotification = Notification.Name("transnap.historyChanged")
 
     /// 截图对角光标的受控协议轴，与Dart ResizeCursorAxes一致。
     static let setResizeCursorMethod = "setResizeCursor"
@@ -140,9 +140,9 @@ enum AppConstants {
     static let appearanceSystem = "system"
     static let appearanceLight = "light"
     static let appearanceDark = "dark"
-    static let appearanceChangedNotification = Notification.Name("TranslateAppAppearanceChanged")
-    static let settingsChannel = "translateapp/settings"
-    static let screenshotChannel = "translateapp/screenshot"
+    static let appearanceChangedNotification = Notification.Name("TranSnapAppearanceChanged")
+    static let settingsChannel = "transnap/settings"
+    static let screenshotChannel = "transnap/screenshot"
     static let screenshotEntrypoint = "screenshotMain"
     /// 附属窗口的 Flutter 引擎名，经 WindowEngine 创建时使用（#120、#124）。
     static let screenshotEngineName = "screenshot"
@@ -295,7 +295,7 @@ enum AppConstants {
     static let historyEntrypoint = "historyMain"
     static let keychainFailedError = "keychain_failed"
     /// 凭据在钥匙串中的服务名；凭据列举、读取与写入共用，改动会使已存凭据读不到（#122）。
-    static let credentialsKeychainService = "com.coolyang.translateApp.credentials"
+    static let credentialsKeychainService = "com.coolyang.transnap.credentials"
     static let launchAtLoginKey = "launchAtLogin"
     static let loadSettingsMethod = "loadSettings"
     static let ocrEmptyError = "ocr_empty"
@@ -442,26 +442,26 @@ enum AppConstants {
     static let translationNotInstalledError = "translation_not_installed"
     /// translation_unsupported 协议值；系统翻译不支持该语言对，与Dart常量同步。
     static let translationUnsupportedError = "translation_unsupported"
-    static let appearanceChannel = "translateapp/appearance"
+    static let appearanceChannel = "transnap/appearance"
     /// 主引擎平台通道与事件通道，与 Dart ChannelNames.platform/platformEvents 同步；Windows 原生实现同一协议。
-    static let platformChannel = "translateapp/platform"
-    static let platformEventsChannel = "translateapp/platform/events"
-    static let nativeGlassViewType = "translateapp/native-glass"
+    static let platformChannel = "transnap/platform"
+    static let platformEventsChannel = "transnap/platform/events"
+    static let nativeGlassViewType = "transnap/native-glass"
     static let undoPressedMethod = "undoPressed"
 
     /// App 在用户 Application Support 下的数据目录名；历史库与 MCP socket 共用。
-    static let applicationSupportFolderName = "TranslateApp"
+    static let applicationSupportFolderName = "TranSnap"
     /// 本应用 NSError 的统一域名。
-    static let errorDomain = "TranslateApp"
+    static let errorDomain = "TranSnap"
     /// 钥匙串读写失败的 NSError 域名。
-    static let keychainErrorDomain = "TranslateApp.Keychain"
+    static let keychainErrorDomain = "TranSnap.Keychain"
     /// 缺少屏幕录制权限时显示给用户的统一提示。
-    static let screenRecordingRequiredMessage = "需要屏幕录制权限，请在系统设置中允许 TranslateApp 后重试。"
+    static let screenRecordingRequiredMessage = "需要屏幕录制权限，请在系统设置中允许 TranSnap 后重试。"
     /// 长图结果与打开图片结果窗的最小内容尺寸，单位点（#67 第 5 条、#145）。
     static let longScreenshotResultMinimumSize = NSSize(width: 600, height: 240)
     /// 设置与历史独立窗口的系统框架持久化键名（#144 U-34）。
-    static let settingsWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppSettingsWindow"
-    static let historyWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppHistoryWindow"
+    static let settingsWindowAutosaveName: NSWindow.FrameAutosaveName = "TranSnapSettingsWindow"
+    static let historyWindowAutosaveName: NSWindow.FrameAutosaveName = "TranSnapHistoryWindow"
     /// 权限向导与历史独立窗口的最小尺寸，防止缩窄造成主体或顶栏挤压溢出（#144 U-14）。
     static let permissionWizardMinSize = NSSize(width: 440, height: 340)
     static let historyWindowMinSize = NSSize(width: 480, height: 480)
@@ -483,9 +483,9 @@ enum AppConstants {
     }
     /// MCP 接口（#96、#68「MCP 接口边界」）：stdio helper 与 App 共用的名称、图片预算和英文协议文案。
     /// helper 可执行文件名，位于 App 包 Contents/MacOS。
-    static let mcpHelperName = "translateapp-mcp"
+    static let mcpHelperName = "transnap-mcp"
     /// MCP serverInfo.name 与客户端配置中的服务名。
-    static let mcpServerName = "translateapp"
+    static let mcpServerName = "transnap"
     /// helper 连接 App 的 Unix domain socket 文件名，位于 Application Support 数据目录。
     static let mcpSocketFileName = "mcp.sock"
     /// 返回图片长边上限，单位像素（#96 决策 3）。
@@ -493,17 +493,17 @@ enum AppConstants {
     /// Claude 视觉 token 的切块边长，单位像素；token 数为 ⌈宽/28⌉×⌈高/28⌉（#96 决策 3）。
     static let mcpTokenPatch = 28
     /// 连接不到 App 时返回给 agent 的错误。
-    static let mcpNotRunningMessage = "TranslateApp is not running."
+    static let mcpNotRunningMessage = "TranSnap is not running."
     /// MCP helper 的代码签名标识符；App 只接受该标识符且与本 App 同证书签名的 socket 对端（#140）。
-    static let mcpHelperIdentifier = "com.coolyang.translateApp.mcp"
+    static let mcpHelperIdentifier = "com.coolyang.transnap.mcp"
     /// socket 对端不是本 App 签名的 helper 时返回的错误。
-    static let mcpUntrustedPeerMessage = "Connection refused: the caller is not the TranslateApp MCP helper."
+    static let mcpUntrustedPeerMessage = "Connection refused: the caller is not the TranSnap MCP helper."
     /// 设置中 MCP 开关关闭时返回给 agent 的错误。
-    static let mcpDisabledMessage = "MCP is disabled in TranslateApp settings."
+    static let mcpDisabledMessage = "MCP is disabled in TranSnap settings."
     /// 屏幕录制授权被拒绝时返回给 agent 的错误。
-    static let mcpPermissionMessage = "TranslateApp lacks Screen Recording permission. Allow it in System Settings > Privacy & Security > Screen Recording, then retry."
+    static let mcpPermissionMessage = "TranSnap lacks Screen Recording permission. Allow it in System Settings > Privacy & Security > Screen Recording, then retry."
     /// 运行中的 App 与 helper 版本不一致、请求或结果结构无法解析时返回给 agent 的错误。
-    static let mcpVersionMismatchMessage = "TranslateApp and its MCP helper are different versions. Restart TranslateApp, then retry."
+    static let mcpVersionMismatchMessage = "TranSnap and its MCP helper are different versions. Restart TranSnap, then retry."
     /// OCR 没有识别到文字时返回给 agent 的文本。
     static let mcpNoTextMessage = "No text recognized."
     /// 截图类工具的矩形超出参考清晰度图片时的错误；reference 为清晰度名，display 为显示器序号，width/height 为该图尺寸。
@@ -527,11 +527,11 @@ enum AppConstants {
     /// 响应无法序列化为 JSON 时的 JSON-RPC 内部错误文案。
     static let mcpInternalErrorMessage = "Internal error: response is not JSON-serializable."
     /// helper 无法连接 App 时的错误；reason 为失败原因描述。
-    static func mcpConnectFailedMessage(_ reason: String) -> String { "Cannot connect to TranslateApp: \(reason)" }
+    static func mcpConnectFailedMessage(_ reason: String) -> String { "Cannot connect to TranSnap: \(reason)" }
     /// App 未返回结果就关闭连接时的错误。
-    static let mcpConnectionClosedMessage = "TranslateApp closed the connection without a result."
+    static let mcpConnectionClosedMessage = "TranSnap closed the connection without a result."
     /// helper 与 App 通信中断时的错误；reason 为失败原因描述。
-    static func mcpCommunicationFailedMessage(_ reason: String) -> String { "Communication with TranslateApp failed: \(reason)" }
+    static func mcpCommunicationFailedMessage(_ reason: String) -> String { "Communication with TranSnap failed: \(reason)" }
     /// 请求不是合法 JSON 时的 JSON-RPC 错误文案。
     static let mcpParseErrorMessage = "Parse error"
     /// 请求的 JSON-RPC 方法不存在时的错误；method 为方法名。
@@ -547,9 +547,9 @@ enum AppConstants {
     /// 偏好字典中「允许操控电脑」开关的键，与 Dart PreferenceKeys.mcpControlEnabled 一致（#140）。
     static let mcpControlEnabledKey = "mcpControlEnabled"
     /// 「允许操控电脑」关闭时调用写入类工具返回的错误；点名全部写入工具。
-    static let mcpControlDisabledMessage = "Computer control is disabled in TranslateApp settings. click, type_text, press_key, scroll, and drag are not allowed."
+    static let mcpControlDisabledMessage = "Computer control is disabled in TranSnap settings. click, type_text, press_key, scroll, and drag are not allowed."
     /// 辅助功能未授权时操控类工具返回的错误。
-    static let mcpAccessibilityPermissionMessage = "TranslateApp lacks Accessibility permission. Allow it in System Settings > Privacy & Security > Accessibility, then retry."
+    static let mcpAccessibilityPermissionMessage = "TranSnap lacks Accessibility permission. Allow it in System Settings > Privacy & Security > Accessibility, then retry."
     /// 目标应用禁止读取或操作时的错误；name 为应用显示名。
     static func mcpBlockedAppMessage(_ name: String) -> String { "\(name) is blocked from computer control." }
     /// 按名称或包标识找不到运行中应用时的错误。

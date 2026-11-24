@@ -2,9 +2,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:translate_app/src/common/constants/glass_metrics.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/common/widgets/toolbar_feedback.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'package:transnap/src/common/widgets/toolbar_feedback.dart';
 
 /// 验证工具栏反馈气泡的错误语义图标、鼠标悬停暂停通知、关闭按钮、liveRegion 开关及极窄视口夹紧保护。
 void main() {

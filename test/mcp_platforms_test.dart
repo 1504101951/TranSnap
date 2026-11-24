@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/settings/mcp_platforms.dart';
+import 'package:transnap/src/settings/mcp_platforms.dart';
 
 /// 验证 MCP 接入平台服务（#96「设置」6–13）：命令式平台的检测、安装、重复安装、删除与路径变化判定，
 /// 配置文件式平台的条目读写、备份与其他内容保留，以及安装时清除 helper 隔离属性。
@@ -25,7 +25,7 @@ done
 case "${args[1]}" in
   get) [ -f "$store" ] || { echo "No MCP server named \"${args[2]}\"" >&2; exit 1; }
        echo "${args[2]}: command $(cat "$store")" ;;
-  list) if [ -f "$store" ]; then echo "[{\"name\":\"translateapp\",\"command\":\"$(cat "$store")\"}]"; else echo "[]"; fi ;;
+  list) if [ -f "$store" ]; then echo "[{\"name\":\"transnap\",\"command\":\"$(cat "$store")\"}]"; else echo "[]"; fi ;;
   add) if [ "$cli" = claude ] && [ -f "$store" ]; then echo "MCP server ${args[2]} already exists" >&2; exit 1; fi
        printf '%s' "${args[3]}" > "$store" ;;
   remove) [ -f "$store" ] || { echo "No MCP server named \"${args[2]}\"" >&2; exit 1; }
@@ -37,7 +37,7 @@ esac
     root = Directory.systemTemp.createTempSync('mcp-platforms-');
     bin = Directory('${root.path}/bin')..createSync();
     home = Directory('${root.path}/home')..createSync();
-    helper = '${root.path}/TranslateApp.app/Contents/MacOS/translateapp-mcp';
+    helper = '${root.path}/TranSnap.app/Contents/MacOS/transnap-mcp';
     File(helper).createSync(recursive: true);
   });
 
@@ -95,7 +95,7 @@ esac
 
       // App 挪动位置后登记的是旧路径，应判定为路径已变化。
       File('${bin.path}/$cli.registered').writeAsStringSync(
-        '/Old/TranslateApp.app/Contents/MacOS/translateapp-mcp',
+        '/Old/TranSnap.app/Contents/MacOS/transnap-mcp',
       );
       expect(await mcp.detect(target), McpInstallState.pathChanged);
 
@@ -148,14 +148,14 @@ esac
     expect(written['globalShortcut'], 'Alt+Space');
     expect(written['mcpServers'], {
       'other': {'command': '/usr/bin/other'},
-      'translateapp': {'command': helper, 'args': <Object?>[]},
+      'transnap': {'command': helper, 'args': <Object?>[]},
     });
     expect(File('${config.path}.bak').readAsStringSync(), original);
 
     // 条目存在但命令不是当前 helper 时为路径已变化。
     final moved = jsonDecode(config.readAsStringSync()) as Map<String, Object?>;
-    (moved['mcpServers'] as Map)['translateapp'] = {
-      'command': '/Old/translateapp-mcp',
+    (moved['mcpServers'] as Map)['transnap'] = {
+      'command': '/Old/transnap-mcp',
     };
     config.writeAsStringSync(jsonEncode(moved));
     expect(await mcp.detect(target), McpInstallState.pathChanged);
@@ -178,7 +178,7 @@ esac
     await mcp.install(target);
     expect(jsonDecode(config.readAsStringSync()), {
       'mcpServers': {
-        'translateapp': {'command': helper, 'args': <Object?>[]},
+        'transnap': {'command': helper, 'args': <Object?>[]},
       },
     });
     expect(File('${config.path}.bak').existsSync(), isFalse);

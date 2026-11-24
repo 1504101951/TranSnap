@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:translate_app/src/common/constants/shortcut_keys.dart';
-import 'package:translate_app/src/common/utils/shortcut_tokens.dart';
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
+import 'package:transnap/src/common/utils/shortcut_tokens.dart';
 
 /// 无参数；验证键帽拆分的修饰键顺序与边界输入。
 void main() {

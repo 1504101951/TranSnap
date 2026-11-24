@@ -574,7 +574,7 @@ class _SettingsPageState extends State<_SettingsPage>
         _status = {..._status, ...status};
         _message = status['screenAccess'] == true
             ? '已获得屏幕录制权限。'
-            : '请在系统设置中允许 TranslateApp 的屏幕录制。';
+            : '请在系统设置中允许 TranSnap 的屏幕录制。';
         _failed = status['screenAccess'] != true;
       });
     } on PlatformException catch (error) {

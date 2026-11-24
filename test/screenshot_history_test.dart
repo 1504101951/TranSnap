@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:translate_app/src/history/screenshot_history.dart';
+import 'package:transnap/src/history/screenshot_history.dart';
 
 /// width/height 为像素尺寸；返回只含 PNG 签名与 IHDR 宽高的最小字节，足够存储层解析尺寸。
 Uint8List fakePng(int width, int height) {

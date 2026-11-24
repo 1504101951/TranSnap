@@ -155,7 +155,7 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
                           ),
                         ),
                         const SizedBox(height: GlassMetrics.space8),
-                        const Text('授权后 TranslateApp 会出现在系统列表中。都完成后即可进入应用。'),
+                        const Text('授权后 TranSnap 会出现在系统列表中。都完成后即可进入应用。'),
                         const SizedBox(height: GlassMetrics.space20),
                         _PermissionRow(
                           title: '辅助功能',

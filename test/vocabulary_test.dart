@@ -1,9 +1,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
-import 'package:translate_app/src/history/vocabulary.dart';
-import 'package:translate_app/src/selection/selection_session.dart';
+import 'package:transnap/src/common/constants/method_names.dart';
+import 'package:transnap/src/history/vocabulary.dart';
+import 'package:transnap/src/selection/selection_session.dart';
 
 /// 无参数；用内存 SQLite 验证生词本的增改删、排序与 CSV 输出，以及查词判定的边界。
 void main() {

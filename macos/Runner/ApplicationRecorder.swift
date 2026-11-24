@@ -57,7 +57,7 @@ struct ApplicationCaptureCanvas: Equatable {
 final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendable {
     // 写入轨道与帧时间量化共用刻度，避免两处精度不同造成时间折叠。
     private static let mediaTimeScale: CMTimeScale = 600
-    let queue = DispatchQueue(label: "TranslateApp.application-video")
+    let queue = DispatchQueue(label: "TranSnap.application-video")
     let canvas: ApplicationCaptureCanvas
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput
