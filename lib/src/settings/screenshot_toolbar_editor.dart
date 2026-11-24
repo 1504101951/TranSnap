@@ -27,13 +27,19 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   /// 与已启用系统快捷键相同的格位；放了工具时标红提示系统优先，不阻止保存（#141）。
   final Set<({int modifiers, int digit})> systemSlots;
 
-  /// 格子宽高与间距、组头宽与组头到格子的间距、行间距（#67）。
+  /// 格子最大宽、高与间距、组头宽与组头到格子的间距、行间距（#67）；
+  /// 格子宽随内容区等分，最大 cellWidth，整张网格最大宽 gridWidth，一屏内显示不横向滚动。
   static const cellWidth = 64.0;
   static const cellHeight = 64.0;
   static const cellGap = 4.0;
   static const headerWidth = 72.0;
   static const headerGap = 8.0;
   static const rowGap = 8.0;
+  static const gridWidth =
+      headerWidth +
+      headerGap +
+      ToolbarGrid.slots * cellWidth +
+      (ToolbarGrid.slots - 1) * cellGap;
 
   /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（≥24pt 无障碍下限）（#67、#144）。
   static const headerRowHeight = 20.0;
@@ -85,19 +91,15 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   /// 选中的可承载子级的一级工具；非 null 时网格下方显示其子级列表。
   String? _selected;
 
-  /// 横向滚动控制器；绑定可见滚动条便于窄窗口察看多列工具（U-26）。
-  final ScrollController _gridScroll = ScrollController();
-
   /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
   final Map<String, FocusNode> _handles = {};
 
   /// 各组拖拽手柄的焦点；按组合保存（组合各组唯一），组移动后焦点仍跟随该组。
   final Map<int, FocusNode> _columnHandles = {};
 
-  /// 无参数；释放手柄焦点与网格滚动控制器。
+  /// 无参数；释放手柄焦点。
   @override
   void dispose() {
-    _gridScroll.dispose();
     for (final node in [..._handles.values, ..._columnHandles.values]) {
       node.dispose();
     }
@@ -441,7 +443,25 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// context 为页面主题；每组一行自上而下，超出宽度时显示横向滚动条，底部操作与子级区随设置正文滚动。
+  /// column 为一组；返回组内工具是否全部隐藏（空组为 false）。
+  bool _columnHidden(ToolbarColumn column) {
+    final ids = column.slots.nonNulls;
+    return ids.isNotEmpty && ids.every(_value.hidden.contains);
+  }
+
+  /// column 为一组；组内工具全部隐藏时一次全部显示，否则一次全部隐藏，格位与键位保持（#1）。
+  void _toggleColumnVisible(ToolbarColumn column) {
+    final ids = column.slots.nonNulls.toSet();
+    _submit(
+      _value.copyWith(
+        hidden: _columnHidden(column)
+            ? _value.hidden.difference(ids)
+            : {..._value.hidden, ...ids},
+      ),
+    );
+  }
+
+  /// context 为页面主题；每组一行自上而下，格子按内容宽等分（最大 64）一屏显示，底部操作与子级区随设置正文滚动。
   @override
   Widget build(BuildContext context) {
     final selected = _selected != null && _slotOf(_selected!) != null
@@ -456,57 +476,55 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             padding: const EdgeInsets.only(bottom: GlassMetrics.space8),
             child: NativeGlassBanner(message: _error!, isError: true),
           ),
-        Scrollbar(
-          controller: _gridScroll,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            key: const ValueKey('toolbar-grid'),
-            controller: _gridScroll,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(bottom: GlassMetrics.space12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: ScreenshotToolbarEditor.rowGap,
-              children: [
-                // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
-                Row(
-                  key: const ValueKey('toolbar-digits'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width:
-                          ScreenshotToolbarEditor.headerWidth +
-                          ScreenshotToolbarEditor.headerGap,
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+        // 网格最大宽 484，窄于此时格子等分剩余宽度，不横向滚动（#67）。
+        ConstrainedBox(
+          key: const ValueKey('toolbar-grid'),
+          constraints: const BoxConstraints(
+            maxWidth: ScreenshotToolbarEditor.gridWidth,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: ScreenshotToolbarEditor.rowGap,
+            children: [
+              // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
+              Row(
+                key: const ValueKey('toolbar-digits'),
+                children: [
+                  const SizedBox(
+                    width:
+                        ScreenshotToolbarEditor.headerWidth +
+                        ScreenshotToolbarEditor.headerGap,
+                  ),
+                  Expanded(
+                    child: Row(
                       spacing: ScreenshotToolbarEditor.cellGap,
                       children: [
                         for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
-                          SizedBox(
-                            width: ScreenshotToolbarEditor.cellWidth,
-                            height: ScreenshotToolbarEditor.headerRowHeight,
-                            child: Center(
-                              child: Text(
-                                '$digit',
-                                style: TextStyle(
-                                  fontSize: ScreenshotToolbarEditor.labelFont,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                          Expanded(
+                            child: SizedBox(
+                              height: ScreenshotToolbarEditor.headerRowHeight,
+                              child: Center(
+                                child: Text(
+                                  '$digit',
+                                  style: TextStyle(
+                                    fontSize: ScreenshotToolbarEditor.labelFont,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                       ],
                     ),
-                  ],
-                ),
-                for (final (index, column) in _value.columns.indexed)
-                  _column(context, index, column),
-              ],
-            ),
+                  ),
+                ],
+              ),
+              for (final (index, column) in _value.columns.indexed)
+                _column(context, index, column),
+            ],
           ),
         ),
         const SizedBox(height: GlassMetrics.space8),
@@ -689,6 +707,24 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   ),
                 ),
               ),
+              // 非空组为整组眼睛：组内全部隐藏时为闭眼，点击一次全部显示，否则一次全部隐藏（#67、#1）。
+              if (!empty)
+                IconButton(
+                  key: ValueKey('toolbar-hide-column-$index'),
+                  tooltip: _columnHidden(column) ? '显示$label' : '隐藏$label',
+                  constraints: const BoxConstraints.tightFor(
+                    width: GlassMetrics.hitSize,
+                    height: GlassMetrics.hitSize,
+                  ),
+                  padding: EdgeInsets.zero,
+                  icon: Icon(
+                    _columnHidden(column)
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                    size: GlassMetrics.icon,
+                  ),
+                  onPressed: () => _toggleColumnVisible(column),
+                ),
               if (empty)
                 IconButton(
                   key: ValueKey('toolbar-remove-column-$index'),
@@ -707,17 +743,24 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       ),
     );
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         header,
         const SizedBox(width: ScreenshotToolbarEditor.headerGap),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: ScreenshotToolbarEditor.cellGap,
-          children: [
-            for (final (slot, id) in column.slots.indexed)
-              _cell(context, (column: index, slot: slot), column.modifiers, id),
-          ],
+        Expanded(
+          child: Row(
+            spacing: ScreenshotToolbarEditor.cellGap,
+            children: [
+              for (final (slot, id) in column.slots.indexed)
+                Expanded(
+                  child: _cell(
+                    context,
+                    (column: index, slot: slot),
+                    column.modifiers,
+                    id,
+                  ),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -786,8 +829,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                       ),
               )
             : _toolCell(context, id, conflict: systemConflict);
+        // 宽度由所在行等分决定（最大 64），高固定 64。
         return Container(
-          width: ScreenshotToolbarEditor.cellWidth,
           height: ScreenshotToolbarEditor.cellHeight,
           // 工具格为平面底色加细线，空格只有虚线框（#67 原生克制风格）。
           decoration: ShapeDecoration(

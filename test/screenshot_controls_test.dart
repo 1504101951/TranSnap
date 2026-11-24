@@ -830,7 +830,7 @@ void main() {
     // 作用：两块并排节省厚度；每块前有修饰键提示；录制目标等三级托盘紧跟父级所在行，首个按钮对齐唤起它的「录制」。
     // 边界：默认 3 组时无修饰块与 ⌘ 块同行，工具栏无整体背景板，⌘ 块按钮右缘距工具栏右缘为块内边距 4；
     // 两块按钮之间隔着 4（块内边距）＋8（块间距）＋4（块内边距）＋24（提示区）＋4（提示与按钮间距）＝44；
-    // ⌘ 块有「⌘」提示，「无」块提示区留空；⌥ 块在下一行；
+    // ⌘ 块有「⌘」提示，「无」块提示为键盘图标；⌥ 块在下一行；
     // 截图（无修饰第 2 格）的子级托盘与录制目标托盘依次插在第一行与 ⌥ 块之间，录制目标首个按钮中心与「录制」中心同列；
     // 视口宽 400pt 时横栏可用长度 384pt 小于两块并排所需的 504pt，改为每行一块。
     final png = await tester.runAsync(_image);
@@ -887,8 +887,12 @@ void main() {
       lessThan(group1.left),
     );
     expect(
-      find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
-      findsNothing,
+      tester
+          .widget<Icon>(
+            find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
+          )
+          .icon,
+      Icons.keyboard_outlined,
     );
     expect(group2.top, greaterThan(group0.top));
     expect(group2.left, group0.left);

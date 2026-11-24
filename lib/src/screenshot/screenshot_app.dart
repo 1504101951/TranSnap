@@ -3608,13 +3608,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           child: block(row),
         );
       }
-      // 分区块先放修饰键提示（沿主轴 24pt、11pt w600 次要色，放不下时等比缩小），「无」分区留空保持对齐（#67）。
+      // 分区块先放修饰键提示（沿主轴 24pt、11pt w600 次要色，放不下时等比缩小），「无」分区为键盘图标（#67）。
       final label = ToolbarModifiers.label(group.modifiers!);
       final hint = SizedBox(
         width: axis == Axis.horizontal ? ToolbarGrid.hintExtent : 32,
         height: axis == Axis.horizontal ? 32 : ToolbarGrid.hintExtent,
+        // 「无」分区没有修饰键符号，显示 14pt 键盘图标，表示直接按数字键（#67）。
         child: label.isEmpty
-            ? null
+            ? Center(
+                child: Icon(
+                  Icons.keyboard_outlined,
+                  key: Key('toolbar-hint-${group.key}'),
+                  size: 14,
+                  color: colors.onSurfaceVariant,
+                ),
+              )
             : Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,

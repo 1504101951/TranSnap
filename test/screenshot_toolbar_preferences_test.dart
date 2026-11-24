@@ -473,6 +473,45 @@ void main() {
       expect(saved().shortcutLabel(ScreenshotActions.cursor), '⌘2');
     });
 
+    testWidgets('组头眼睛一次隐藏整组，全部隐藏时一次全部显示；格子按内容宽等分不横向滚动', (tester) async {
+      // 作用：整组隐藏只改隐藏集合，格位与键位保持；网格在一屏内显示。
+      // 边界：先单独隐藏第 2 组首个工具（部分隐藏），点组眼睛应变为全部隐藏而不是全部显示；再点一次全部显示；
+      // 内容宽 900 时格子取最大宽 64；内容宽 400 时格子宽＝(400−72−8−5×4)÷6＝50，网格内没有可滚动区域。
+      final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+      final column = ScreenshotToolbarPreferences().columns[2];
+      final ids = column.slots.nonNulls.toSet();
+      final first = ids.first;
+      final label = ScreenshotToolbarPreferences().shortcutLabel(first);
+      if (!saved().hidden.contains(first)) {
+        await tester.tap(find.byKey(ValueKey('visibility-$first')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-2')));
+      await tester.pumpAndSettle();
+      expect(saved().hidden.containsAll(ids), isTrue);
+      expect(saved().shortcutLabel(first), label);
+      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-2')));
+      await tester.pumpAndSettle();
+      expect(saved().hidden.intersection(ids), isEmpty);
+
+      final grid = find.byKey(const ValueKey('toolbar-grid'));
+      expect(
+        tester.getSize(find.byKey(const ValueKey('toolbar-slot-0-0'))).width,
+        ScreenshotToolbarEditor.cellWidth,
+      );
+      tester.view.physicalSize = const Size(400, 1200);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(const ValueKey('toolbar-slot-0-0'))).width,
+        50,
+      );
+      expect(
+        find.descendant(of: grid, matching: find.byType(Scrollable)),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('方向键移动与修改组组合在冲突全局快捷键时拒绝保存并展示横幅（#144）', (tester) async {
       // 作用：验证键盘移位与修改组修饰键均执行 reserved 冲突校验，阻断进入无法保存状态。
       // 边界：(无, 2) 空格与 (⌃, 1) 被全局快捷键占用时，右移光标与切换组修饰键为 ⌃ 均提示横幅并保持原配置。
@@ -564,10 +603,14 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('toolbar-add-child-${ScreenshotActions.crop}')),
+        find.byKey(
+          const ValueKey('toolbar-add-child-${ScreenshotActions.crop}'),
+        ),
       );
       await tester.tap(
-        find.byKey(const ValueKey('toolbar-add-child-${ScreenshotActions.crop}')),
+        find.byKey(
+          const ValueKey('toolbar-add-child-${ScreenshotActions.crop}'),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('贴图').last);
