@@ -289,6 +289,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         NativeGlassGroup(
+          dividerIndent: 0,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -348,6 +349,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
           ],
         ),
         NativeGlassGroup(
+          dividerIndent: 0,
           children: [
             if (_loadError != null)
               Column(

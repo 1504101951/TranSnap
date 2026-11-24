@@ -224,6 +224,8 @@ enum AppConstants {
     /// perfMark 协议值；Dart 交来阶段名与毫秒数，原生写入性能日志（#68「性能测量边界」），与Dart常量同步。
     static let perfMarkMethod = "perfMark"
     static let appearanceChangedMethod = "appearanceChanged"
+    /// 设置页拖动透明度或调色时的外观预览；参数为 {glassOpacity?, accentColor?}，nil 清除预览，只广播不写偏好（#144）。
+    static let previewAppearanceMethod = "previewAppearance"
     static let applicationSupportPathMethod = "applicationSupportPath"
     /// 贴纸库协议值（#103），与Dart常量同步：选择并规范化图片、写入贴纸文件、删除贴纸文件。
     static let importStickerImageMethod = "importStickerImage"
@@ -270,14 +272,17 @@ enum AppConstants {
     /// 个性化强调色偏好与六种经典色表（sRGB ARGB 整数），与 Dart AccentColors 同步（#144）。
     static let accentColorKey = "accentColor"
     static let accentSystem = "system"
+    /// 强调色预设的浅、深两套 sRGB ARGB 值，与 Dart AccentColors.swatches 同步；自定义色为 #RRGGBB（#144）。
     static let accentSwatches: [String: (light: Int, dark: Int)] = [
-        "blue": (0xFF00_7AFF, 0xFF0A_84FF),
-        "purple": (0xFF95_3D96, 0xFFA5_50A7),
-        "pink": (0xFFF7_4F9E, 0xFFFF_5CA8),
-        "orange": (0xFFF7_821B, 0xFFFF_8F24),
-        "green": (0xFF28_A745, 0xFF30_D158),
-        "graphite": (0xFF8E_8E93, 0xFF98_989D),
+        "blue": (0xFF2F_6FE4, 0xFF4C_8DFF),
+        "purple": (0xFF6E_56CF, 0xFF9B_8AFB),
+        "pink": (0xFFC9_356E, 0xFFF0_6A97),
+        "orange": (0xFFC2_560F, 0xFFFF_8F4D),
+        "green": (0xFF0B_7F72, 0xFF2E_C4AE),
+        "graphite": (0xFF57_606C, 0xFFA3_AAB4),
     ]
+    /// 自定义强调色深色外观值由浅色值向白混合的比例，与 Dart AccentColors.customDarkLift 同步（#144）。
+    static let accentCustomDarkLift = 0.35
     /// 外观快照中按浅、深外观解析的系统强调色（sRGB ARGB 整数），与 Dart AppearanceKeys 同步（#142）。
     static let accentLightKey = "accentLight"
     static let accentDarkKey = "accentDark"

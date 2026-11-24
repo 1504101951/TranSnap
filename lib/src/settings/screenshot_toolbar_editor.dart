@@ -38,7 +38,7 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（≥24pt 无障碍下限）（#67、#144）。
   static const headerRowHeight = 20.0;
   static const labelFont = 11.0;
-  static const noteFont = 10.0;
+  static const noteFont = 11.0;
   static const eyeIcon = 14.0;
   static const eyeHit = GlassMetrics.minTouchTarget;
 

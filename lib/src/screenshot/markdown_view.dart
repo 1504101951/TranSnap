@@ -168,8 +168,8 @@ class MarkdownView extends StatelessWidget {
         MarkdownHeading(:final text) => Text(
           text,
           style: body.copyWith(
-            fontSize: 14,
-            height: 20 / 14,
+            fontSize: 15,
+            height: 22 / 15,
             fontWeight: FontWeight.w600,
           ),
         ),

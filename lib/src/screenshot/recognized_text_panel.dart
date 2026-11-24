@@ -234,7 +234,10 @@ class _CodeRow extends StatelessWidget {
                   ),
                 ),
                 // 链接完整显示，用户打开前能看到真实地址。
-                Text(code.payload, style: const TextStyle(fontSize: 14)),
+                Text(
+                  code.payload,
+                  style: const TextStyle(fontSize: GlassMetrics.bodyFont),
+                ),
               ],
             ),
           ),

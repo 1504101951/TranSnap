@@ -13,9 +13,10 @@ Color? parseDrawingColor(String text) {
   return Color(0xFF000000 | int.parse(hex, radix: 16));
 }
 
-/// 通用调色盘：纯色或双色渐变，所有带颜色的工具与美化背景共用（#103）。
+/// 通用调色盘：纯色或双色渐变，所有带颜色的工具、美化背景与自定义强调色共用（#103、#144）。
 /// initial 为当前颜色与渐变，onApply 返回确认的值，onCancel 关闭不改变；footer 为附加在操作按钮之上的内容
-/// （美化背景放「阴影」与「无背景」）。不接触画布或历史。
+/// （美化背景放「阴影」与「无背景」）；allowGradient 为 false 时只显示纯色编辑；
+/// onPreview 在纯色变化时回传当前颜色，供调用方实时预览。不接触画布或历史。
 class ColorPicker extends StatefulWidget {
   const ColorPicker({
     super.key,
@@ -23,11 +24,15 @@ class ColorPicker extends StatefulWidget {
     required this.onApply,
     required this.onCancel,
     this.footer,
+    this.allowGradient = true,
+    this.onPreview,
   });
   final ColorFill initial;
   final ValueChanged<ColorFill> onApply;
   final VoidCallback onCancel;
   final Widget? footer;
+  final bool allowGradient;
+  final ValueChanged<Color>? onPreview;
   @override
   State<ColorPicker> createState() => _ColorPickerState();
 }
@@ -58,16 +63,19 @@ class _ColorPickerState extends State<ColorPicker> {
       .padLeft(6, '0')
       .toUpperCase();
 
-  /// value 为调色结果；写入正在编辑的颜色并同步 HEX 输入，返回空。
-  void _setColor(HSVColor value) => setState(() {
-    if (_gradient && _editingEnd) {
-      _end = value;
-    } else {
-      _start = value;
-    }
-    _invalid = false;
-    _hex.text = _hexString(value.toColor());
-  });
+  /// value 为调色结果；写入正在编辑的颜色并同步 HEX 输入，纯色时回传预览，返回空。
+  void _setColor(HSVColor value) {
+    setState(() {
+      if (_gradient && _editingEnd) {
+        _end = value;
+      } else {
+        _start = value;
+      }
+      _invalid = false;
+      _hex.text = _hexString(value.toColor());
+    });
+    if (!_gradient) widget.onPreview?.call(value.toColor());
+  }
 
   /// end 为是否改为编辑结束色；切换渐变页签中正在编辑的颜色并同步 HEX，返回空。
   void _selectWell(bool end) => setState(() {
@@ -164,17 +172,18 @@ class _ColorPickerState extends State<ColorPicker> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                // 页签切换只改变编辑方式；纯色页签应用时不带渐变。
-                NativeGlassSegments<bool>(
-                  value: _gradient,
-                  options: const {false: '纯色', true: '渐变'},
-                  onChanged: (value) => setState(() {
-                    _gradient = value;
-                    _editingEnd = false;
-                    _invalid = false;
-                    _hex.text = _hexString(_start.toColor());
-                  }),
-                ),
+                // 页签切换只改变编辑方式；纯色页签应用时不带渐变。只允许纯色时不显示页签。
+                if (widget.allowGradient)
+                  NativeGlassSegments<bool>(
+                    value: _gradient,
+                    options: const {false: '纯色', true: '渐变'},
+                    onChanged: (value) => setState(() {
+                      _gradient = value;
+                      _editingEnd = false;
+                      _invalid = false;
+                      _hex.text = _hexString(_start.toColor());
+                    }),
+                  ),
               ],
             ),
             const SizedBox(height: DrawingMetrics.gap),
@@ -433,6 +442,10 @@ class _ColorPickerState extends State<ColorPicker> {
                       _start = HSVColor.fromColor(color);
                     }
                   });
+                  // 合法的纯色 HEX 与拖动色域一样实时预览。
+                  if (color != null && !_gradient) {
+                    widget.onPreview?.call(color);
+                  }
                 },
               ),
             ),

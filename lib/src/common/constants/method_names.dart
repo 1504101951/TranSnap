@@ -66,6 +66,9 @@ abstract final class MethodNames {
 
   static const appearanceChanged = 'appearanceChanged';
 
+  /// 设置页拖动透明度或调色时的外观预览；参数为 {glassOpacity?, accentColor?}，null 清除预览，原生只广播不写偏好（#144）。
+  static const previewAppearance = 'previewAppearance';
+
   static const applicationSupportPath = 'applicationSupportPath';
 
   static const applySettings = 'applySettings';

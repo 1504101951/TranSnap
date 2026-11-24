@@ -9,9 +9,6 @@ import 'package:motor/motor.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 
-/// a/b 为颜色、base 为底层背景色；将含 alpha 前景色复合到背景后返回不透明色。
-Color _compositeOver(Color fg, Color base) => Color.alphaBlend(fg, base);
-
 /// 验证Spec的尺寸、WCAG 对比度、强调色联动、按钮微交互与真实交互边界；使用实际布局，不检查配置文件字符串。
 void main() {
   testWidgets('分段未选项在鼠标悬停时呈现柔和悬停叠层且区别于实底选中项，移出后复原', (tester) async {
@@ -253,32 +250,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // 验证 NativeGlassStatus 的授权态与未授权态胶囊文本、无障碍语义、18pt 固定高度以及亮暗主题固定绿/橙配色（不受强调色影响）。
-  testWidgets('NativeGlassStatus 使用固定高度 18 与浅深色固定绿/橙语义配色（#142）', (
+  testWidgets('NativeGlassStatus：已开启为次要色对勾，未开启为固定橙色警告，不随强调色变化（#142）', (
     tester,
   ) async {
+    // 作用：验证权限状态只在需要处理时使用颜色，文字与语义标签分别为「已开启」「未开启」。
+    // 边界：已开启取主题 onSurfaceVariant；未开启浅色 #8A4A00、深色 #FF9F0A，在分组卡片底色（浅 #FFFFFF / 深 #232326）上均 ≥ 4.5:1；
+    // 强调色故意设为系统蓝，状态颜色不受影响。
     Future<void> pumpStatus({
       required Brightness brightness,
       required bool granted,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: ThemeData(
-            brightness: brightness,
-            // 故意传入蓝色作为强调色，验证状态胶囊不随强调色变化。
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blue,
-              brightness: brightness,
-            ),
-            extensions: const [GlassAccent(Color(0xFF007AFF))],
-          ),
+          theme: NativeGlassTheme.data(brightness),
           home: Scaffold(
-            body: Center(
-              child: NativeGlassStatus(
-                granted: granted,
-                label: granted ? '已授权' : '未授权',
-              ),
-            ),
+            body: Center(child: NativeGlassStatus(granted: granted)),
           ),
         ),
       );
@@ -295,72 +281,28 @@ void main() {
         .style
         ?.color;
 
-    Color? statusFillColor() {
-      final containers = tester.widgetList<Container>(
-        find.descendant(
-          of: find.byType(NativeGlassStatus),
-          matching: find.byType(Container),
-        ),
-      );
-      for (final c in containers) {
-        final dec = c.decoration;
-        if (dec is BoxDecoration && dec.borderRadius != null) {
-          return dec.color;
-        }
-      }
-      return null;
-    }
-
-    // 浅色已授权：固定 18pt 高度、WCAG AA 绿 #126326 及 12% 底与「已授权」语义标签。
     await pumpStatus(brightness: Brightness.light, granted: true);
-    expect(tester.getSize(find.byType(NativeGlassStatus)).height, 18);
-    expect(find.text('已授权'), findsOneWidget);
-    expect(statusTextColor(), const Color(0xFF126326));
-    expect(statusFillColor(), const Color(0xFF126326).withValues(alpha: 0.12));
+    expect(find.text('已开启'), findsOneWidget);
     expect(
-      NativeGlassTheme.contrastRatio(
-        statusTextColor()!,
-        _compositeOver(statusFillColor()!, const Color(0xFFEEEEEE)),
-      ),
-      greaterThanOrEqualTo(4.5),
+      statusTextColor(),
+      Theme.of(
+        tester.element(find.byType(NativeGlassStatus)),
+      ).colorScheme.onSurfaceVariant,
     );
-    expect(tester.getSemantics(find.byType(NativeGlassStatus)).label, '已授权');
+    expect(tester.getSemantics(find.byType(NativeGlassStatus)).label, '已开启');
 
-    // 浅色未授权：WCAG AA 橙 #8A4A00 及 12% 底与「未授权」语义标签。
-    await pumpStatus(brightness: Brightness.light, granted: false);
-    expect(find.text('未授权'), findsOneWidget);
-    expect(statusTextColor(), const Color(0xFF8A4A00));
-    expect(statusFillColor(), const Color(0xFF8A4A00).withValues(alpha: 0.12));
-    expect(
-      NativeGlassTheme.contrastRatio(
-        statusTextColor()!,
-        _compositeOver(statusFillColor()!, const Color(0xFFEEEEEE)),
-      ),
-      greaterThanOrEqualTo(4.5),
-    );
-
-    // 深色模式切换至亮绿 #32D74B 与亮橙 #FF9F0A，同样满足 >= 4.5:1。
-    await pumpStatus(brightness: Brightness.dark, granted: true);
-    expect(statusTextColor(), const Color(0xFF32D74B));
-    expect(statusFillColor(), const Color(0xFF32D74B).withValues(alpha: 0.16));
-    expect(
-      NativeGlassTheme.contrastRatio(
-        statusTextColor()!,
-        _compositeOver(statusFillColor()!, const Color(0xFF232323)),
-      ),
-      greaterThanOrEqualTo(4.5),
-    );
-
-    await pumpStatus(brightness: Brightness.dark, granted: false);
-    expect(statusTextColor(), const Color(0xFFFF9F0A));
-    expect(statusFillColor(), const Color(0xFFFF9F0A).withValues(alpha: 0.18));
-    expect(
-      NativeGlassTheme.contrastRatio(
-        statusTextColor()!,
-        _compositeOver(statusFillColor()!, const Color(0xFF232323)),
-      ),
-      greaterThanOrEqualTo(4.5),
-    );
+    for (final (brightness, orange, card) in [
+      (Brightness.light, const Color(0xFF8A4A00), const Color(0xFFFFFFFF)),
+      (Brightness.dark, const Color(0xFFFF9F0A), const Color(0xFF232326)),
+    ]) {
+      await pumpStatus(brightness: brightness, granted: false);
+      expect(find.text('未开启'), findsOneWidget);
+      expect(statusTextColor(), orange);
+      expect(
+        NativeGlassTheme.contrastRatio(orange, card),
+        greaterThanOrEqualTo(4.5),
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 

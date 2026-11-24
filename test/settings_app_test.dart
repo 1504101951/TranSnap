@@ -294,7 +294,7 @@ void main() {
     // 默认通用子页：侧边栏行与标题各一处；登录与权限可见，其他子页内容不可见。
     expect(find.text('通用'), findsNWidgets(2));
     expect(find.text('登录时启动'), findsOneWidget);
-    expect(find.text('屏幕录制权限'), findsOneWidget);
+    expect(find.text('屏幕录制'), findsOneWidget);
     expect(find.text('翻译语言'), findsNothing);
     expect(find.text('截图目录'), findsNothing);
     for (final label in [
@@ -412,7 +412,9 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '保存与导出');
-    expect(find.text('默认截图存放路径'), findsOneWidget);
+    // 截图目录行以「截图目录」为标题，未设置时说明行显示默认位置。
+    expect(find.text('截图目录'), findsOneWidget);
+    expect(find.text('系统图片目录/截图'), findsOneWidget);
     expect(find.text('每次询问'), findsNothing);
     expect(find.text('10 fps'), findsOneWidget);
     final width = find.byKey(const Key('gif-maximum-width'));
@@ -1038,8 +1040,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('正在检查语言包…'), findsOneWidget);
-    expect(find.text('安装 Apple 离线翻译语言包'), findsOneWidget);
-    expect(find.text('前往下载'), findsOneWidget);
+    expect(find.text('Apple 离线翻译语言包'), findsOneWidget);
+    expect(find.text('管理…'), findsOneWidget);
 
     reply.complete('语言包已安装：English → 简体中文');
     await tester.pumpAndSettle();
@@ -1104,7 +1106,7 @@ void main() {
 
     await openSettingsPage(tester, '通用');
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, '申请权限')).onPressed,
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, '授权…')).onPressed,
       isNotNull,
     );
 

@@ -15,7 +15,8 @@ abstract final class AppearanceKeys {
   static const accentDark = 'accentDark';
 }
 
-/// 强调色选项协议与 6 种经典 macOS 浅/深色阶；默认跟随系统，与 Swift AppConstants 同步（#144）。
+/// 强调色选项协议：跟随系统、6 种预设浅/深色阶或自定义 6 位 HEX（如 #2EA3D6）；默认跟随系统，
+/// 与 Swift AppConstants.accentSwatches 同步（#144）。
 abstract final class AccentColors {
   static const system = 'system';
   static const blue = 'blue';
@@ -27,19 +28,44 @@ abstract final class AccentColors {
   static const values = [system, blue, purple, pink, orange, green, graphite];
   static const labels = {
     system: '跟随系统',
-    blue: '蓝色',
-    purple: '紫色',
-    pink: '粉色',
-    orange: '橙色',
-    green: '绿色',
-    graphite: '石墨色',
+    blue: '晴空蓝',
+    purple: '鸢尾紫',
+    pink: '玫瑰',
+    orange: '琥珀',
+    green: '松石绿',
+    graphite: '石墨',
   };
+
+  /// 预设色浅色值配白字 ≥ 4.5:1，深色值配 #1C1C1E 深字 ≥ 5.3:1（#144）。
   static const swatches = <String, ({Color light, Color dark})>{
-    blue: (light: Color(0xFF007AFF), dark: Color(0xFF0A84FF)),
-    purple: (light: Color(0xFF953D96), dark: Color(0xFFA550A7)),
-    pink: (light: Color(0xFFF74F9E), dark: Color(0xFFFF5CA8)),
-    orange: (light: Color(0xFFF7821B), dark: Color(0xFFFF8F24)),
-    green: (light: Color(0xFF28A745), dark: Color(0xFF30D158)),
-    graphite: (light: Color(0xFF8E8E93), dark: Color(0xFF98989D)),
+    blue: (light: Color(0xFF2F6FE4), dark: Color(0xFF4C8DFF)),
+    purple: (light: Color(0xFF6E56CF), dark: Color(0xFF9B8AFB)),
+    pink: (light: Color(0xFFC9356E), dark: Color(0xFFF06A97)),
+    orange: (light: Color(0xFFC2560F), dark: Color(0xFFFF8F4D)),
+    green: (light: Color(0xFF0B7F72), dark: Color(0xFF2EC4AE)),
+    graphite: (light: Color(0xFF57606C), dark: Color(0xFFA3AAB4)),
   };
+
+  /// 自定义色深色外观值由浅色值向白混合的比例，与 Swift NativeGlassFactory.accentPair 一致（#144）。
+  static const customDarkLift = 0.35;
+
+  /// value 为偏好值；返回它是否为自定义 6 位 HEX（大写，带 #）。
+  static bool isCustom(String value) =>
+      RegExp(r'^#[0-9A-F]{6}$').hasMatch(value);
+
+  /// color 为不透明 sRGB 颜色；返回保存用的自定义偏好值（#RRGGBB，大写）。
+  static String customValue(Color color) =>
+      '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+  /// value 为偏好值；返回预设或自定义色的浅、深两套颜色，跟随系统或无法解析时为 null。
+  static ({Color light, Color dark})? pairOf(String value) {
+    final preset = swatches[value];
+    if (preset != null) return preset;
+    if (!isCustom(value)) return null;
+    final light = Color(0xFF000000 | int.parse(value.substring(1), radix: 16));
+    return (
+      light: light,
+      dark: Color.lerp(light, const Color(0xFFFFFFFF), customDarkLift)!,
+    );
+  }
 }

@@ -41,27 +41,29 @@ abstract final class GlassMetrics {
   /// Apple 果冻开关按下态滑块横向拉伸宽度（#67、#144）。
   static const switchThumbPressedWidth = 21.0;
   static const sliderHeight = 32.0;
+
+  /// 透明度滑块最小宽度与右侧百分比数值宽度（等宽数字，容纳“80%”）（#67、#144）。
+  static const sliderMinWidth = 160.0;
+  static const sliderValueWidth = 36.0;
   static const sliderTrack = 6.0;
   static const sliderThumbRadius = 8.0;
-  static const pagePadding = 22.0;
+  static const pagePadding = 24.0;
   static const panelPadding = 16.0;
-  static const groupGap = 20.0;
-  static const rowHeight = 40.0;
+  static const groupGap = 24.0;
+  static const rowHeight = 44.0;
   static const captionRowHeight = 60.0;
-  static const labelGap = 6.0;
+  static const labelGap = 8.0;
   static const bodyFont = 13.0;
   static const bodyLine = 18.0;
   static const captionFont = 12.0;
   static const captionLine = 17.0;
 
-  /// 设置页静态样式数值（#67 第 14 条）：行间细线、状态标签与侧边栏图标块。
+  /// 设置页静态样式数值（#67 第 14 条）：行间细线、11pt 标签字号与侧边栏图标块。
   static const groupDividerThickness = 0.5;
-  static const statusHeight = 18.0;
-  static const statusRadius = 9.0;
-  static const statusPaddingX = 8.0;
-  static const statusDotSize = 6.0;
-  static const statusDotGap = 5.0;
   static const statusFont = 11.0;
+
+  /// 权限状态图标边长（#142 第 14 条）。
+  static const statusIcon = 14.0;
   static const sidebarIconBox = 22.0;
   static const sidebarIconRadius = 6.0;
   static const sidebarIconSize = 12.0;
@@ -93,13 +95,14 @@ abstract final class GlassMetrics {
   static const sliderOverlayRadius = 14.0;
   static const sliderThumbBorderWidth = 1.5;
 
-  /// 方案 A 桌面工艺扩展度量：分组卡片眉标与轮廓、行图标锚点、机械键帽（#67、#144）。
-  static const groupHeaderFont = 11.5;
-  static const groupHeaderGap = 5.0;
+  /// 设置分组与行（#67、#144）：眉标字号、左缩进与到卡片间距，卡片圆角、轮廓与上下内边距，16pt 单色行图标与图文间距。
+  static const groupHeaderFont = 11.0;
+  static const groupHeaderIndent = 16.0;
+  static const groupHeaderGap = 8.0;
+  static const groupRadius = 12.0;
   static const groupBorderWidth = 0.5;
-  static const rowIconBox = 28.0;
-  static const rowIconRadius = 8.0;
-  static const rowIconSize = 15.0;
+  static const groupPaddingY = 4.0;
+  static const rowIconSize = 16.0;
   static const rowIconGap = 12.0;
   static const keycapMinWidth = 22.0;
   static const keycapHeight = 20.0;

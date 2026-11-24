@@ -43,17 +43,17 @@ void main() {
     await tester.drag(settingsContentList(), const Offset(0, -800));
     await tester.pumpAndSettle();
     expect(tester.getRect(sidebar), before);
-    expect(find.text('辅助功能权限'), findsOneWidget);
+    expect(find.text('辅助功能'), findsOneWidget);
     expect(find.text('所有支持读取选区的应用均可翻译。'), findsNothing);
     expect(find.text('已授权，可截取屏幕'), findsNothing);
-    expect(find.text('屏幕录制权限'), findsOneWidget);
+    expect(find.text('屏幕录制'), findsOneWidget);
     // 两项授权必须在同一卡片；登录启动不能混入权限组。
     final accessibilityGroup = find.ancestor(
-      of: find.text('辅助功能权限'),
+      of: find.text('辅助功能'),
       matching: find.byType(NativeGlassGroup),
     );
     final screenGroup = find.ancestor(
-      of: find.text('屏幕录制权限'),
+      of: find.text('屏幕录制'),
       matching: find.byType(NativeGlassGroup),
     );
     expect(tester.element(accessibilityGroup), tester.element(screenGroup));
@@ -61,17 +61,17 @@ void main() {
       find.descendant(of: accessibilityGroup, matching: find.text('登录时启动')),
       findsNothing,
     );
-    // 边界：「安装 Apple 离线翻译语言包」是权限卡片的第三行，位于屏幕录制权限之下，行高不小于 56pt（#67、#98）；
-    // 该行带标题与语言包状态两行文字，56pt 下限不能因双行而失效。
+    // 边界：「Apple 离线翻译语言包」是权限卡片的第三行，位于屏幕录制之下；带标题与状态两行文字，
+    // 行高不小于说明行下限 60pt（#67、#98）。
     final languagesRow = find.byKey(const ValueKey('离线翻译语言'));
-    expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(56));
+    expect(tester.getSize(languagesRow).height, greaterThanOrEqualTo(60));
     expect(
-      find.descendant(of: accessibilityGroup, matching: find.text('前往下载')),
+      find.descendant(of: accessibilityGroup, matching: find.text('管理…')),
       findsOneWidget,
     );
     expect(
       tester.getRect(languagesRow).top,
-      greaterThanOrEqualTo(tester.getRect(find.text('屏幕录制权限')).bottom),
+      greaterThanOrEqualTo(tester.getRect(find.text('屏幕录制')).bottom),
     );
     // 边界：登录时启动是通用页最下方的分组，位于权限卡片之后。
     expect(
@@ -80,7 +80,7 @@ void main() {
     );
 
     await openSettingsPage(tester, '操作');
-    expect(find.text('屏幕录制权限'), findsNothing);
+    expect(find.text('屏幕录制'), findsNothing);
     final shortcutLabel = find.text('区域截图快捷键');
     final shortcutButton = find.byKey(const ValueKey('区域截图快捷键'));
     expect(
@@ -271,7 +271,7 @@ void main() {
     expect(find.text('点击录制；录制完成后自动保存；检查系统保留组合和可识别的全局占用。'), findsNothing);
     expect(find.byKey(const ValueKey('全局翻译快捷键')).hitTestable(), findsOneWidget);
     expect(maxScroll(), 0);
-    // 外观、强调色与玻璃透明度位于「个性化」；「通用」只保留权限、语言包与登录启动（#1、#67）。
+    // 外观、强调色与窗口透明度位于「个性化」；「通用」只保留权限、语言包与登录启动（#1、#67）。
     await openSettingsPage(tester, '通用');
     expect(find.text('外观'), findsNothing);
     expect(find.text('强调色'), findsNothing);
@@ -279,7 +279,7 @@ void main() {
     await openSettingsPage(tester, '个性化');
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('强调色'), findsOneWidget);
-    expect(find.textContaining('玻璃透明度'), findsOneWidget);
+    expect(find.text('窗口透明度'), findsOneWidget);
     expect(maxScroll(), 0, reason: '个性化');
     // 除四个列表子页外，其余子页在默认窗口同样一屏完整展示（#67）。
     for (final page in ['保存与导出', '录制', '操作']) {
@@ -395,10 +395,7 @@ void main() {
             children: const [
               NativeGlassSettingRow(
                 title: '快捷键示例',
-                leading: NativeGlassRowIcon(
-                  icon: Icons.keyboard_outlined,
-                  tint: Color(0xFF0A84FF),
-                ),
+                leading: NativeGlassRowIcon(icon: Icons.keyboard_outlined),
                 child: NativeGlassKeycaps(tokens: ['⇧', '⌘', '@']),
               ),
             ],

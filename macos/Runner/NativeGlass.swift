@@ -29,21 +29,39 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         }
     }
 
-    /// 无参数；返回已提交的视觉字段与当前解析强调色（浅、深外观各一份），固定强调色优先于系统强调色（#142、#144）。
-    static func appearanceSnapshot() -> [String: Any] {
-        let preferences = AppPreferences.current
-        let accentMode = preferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
-        let swatch = AppConstants.accentSwatches[accentMode]
-        return [AppConstants.glassAppearanceKey: preferences[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem,
-                AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
-                AppConstants.accentLightKey: swatch?.light ?? accentARGB(.aqua),
-                AppConstants.accentDarkKey: swatch?.dark ?? accentARGB(.darkAqua)]
+    /// 设置页拖动透明度或调色时尚未保存的视觉字段（glassOpacity、accentColor）；只覆盖外观快照，不写偏好。
+    /// 偏好保存成功或设置页清除预览时置空，各窗口随即回到已保存的值（#144）。
+    static var preview: [String: Any] = [:]
+
+    /// 无参数；返回已保存偏好叠加预览字段后的视觉偏好，预览字段优先。
+    private static var visualPreferences: [String: Any] {
+        AppPreferences.current.merging(preview) { _, previewed in previewed }
     }
 
-    /// appearance 为目标绘制外观；若用户在个性化选中固定强调色则解析对应 sRGB 颜色，否则跟随系统强调色（#144）。
+    /// mode 为强调色偏好（预设名或 #RRGGBB）；返回浅、深外观的 sRGB ARGB，跟随系统或无法解析时为 nil。
+    /// 自定义色的深色值由浅色值向白混合 accentCustomDarkLift 得到（#144）。
+    static func accentPair(_ mode: String) -> (light: Int, dark: Int)? {
+        if let swatch = AppConstants.accentSwatches[mode] { return swatch }
+        guard mode.count == 7, mode.hasPrefix("#"), let rgb = Int(mode.dropFirst(), radix: 16) else { return nil }
+        let lift = { (channel: Int) in channel + Int((Double(255 - channel) * AppConstants.accentCustomDarkLift).rounded()) }
+        let dark = lift((rgb >> 16) & 0xFF) << 16 | lift((rgb >> 8) & 0xFF) << 8 | lift(rgb & 0xFF)
+        return (0xFF00_0000 | rgb, 0xFF00_0000 | dark)
+    }
+
+    /// 无参数；返回视觉字段（含预览）与当前解析强调色（浅、深外观各一份），固定或自定义强调色优先于系统强调色（#142、#144）。
+    static func appearanceSnapshot() -> [String: Any] {
+        let preferences = visualPreferences
+        let pair = accentPair(preferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem)
+        return [AppConstants.glassAppearanceKey: preferences[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem,
+                AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
+                AppConstants.accentLightKey: pair?.light ?? accentARGB(.aqua),
+                AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua)]
+    }
+
+    /// appearance 为目标绘制外观；若用户在个性化选中预设或自定义强调色（含预览）则解析对应 sRGB 颜色，否则跟随系统强调色（#144）。
     static func resolvedAccentNSColor(for appearance: NSAppearance) -> NSColor {
-        let accentMode = AppPreferences.current[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
-        guard let swatch = AppConstants.accentSwatches[accentMode] else {
+        let accentMode = visualPreferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
+        guard let swatch = accentPair(accentMode) else {
             return NSColor.controlAccentColor
         }
         let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

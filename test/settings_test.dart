@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Color;
 
 import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/settings/service_config.dart';
@@ -396,5 +397,37 @@ void main() {
       accentColor: 'neonPink',
     );
     expect(invalid.validate, throwsFormatException);
+  });
+
+  test('自定义强调色只接受大写 #RRGGBB，并推导浅、深两套颜色（#144）', () {
+    // 作用：验证自定义强调色的偏好校验与浅/深色推导（深色由浅色向白混合 35%）。
+    // 边界：#2EA3D6 合法；小写、5 位、缺 # 均拒绝；#000000 深色为 89/255 灰，#FFFFFF 深色仍为白；预设名返回预设色，system 返回 null。
+    for (final value in ['#2EA3D6', '#000000', '#FFFFFF']) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        accentColor: value,
+      );
+      expect(settings.validate, returnsNormally, reason: value);
+    }
+    for (final value in ['#2ea3d6', '#2EA3D', '2EA3D6']) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        accentColor: value,
+      );
+      expect(settings.validate, throwsFormatException, reason: value);
+    }
+    final custom = AccentColors.pairOf('#2EA3D6')!;
+    expect(custom.light, const Color(0xFF2EA3D6));
+    expect(
+      AccentColors.pairOf('#000000')!.dark.toARGB32(),
+      const Color(0xFF595959).toARGB32(),
+    );
+    expect(AccentColors.pairOf('#FFFFFF')!.dark.toARGB32(), 0xFFFFFFFF);
+    expect(
+      AccentColors.pairOf(AccentColors.blue),
+      AccentColors.swatches[AccentColors.blue],
+    );
+    expect(AccentColors.pairOf(AccentColors.system), isNull);
+    expect(AccentColors.customValue(const Color(0xFF2EA3D6)), '#2EA3D6');
   });
 }

@@ -285,7 +285,8 @@ class AppSettings {
         glassOpacity > 1) {
       throw const FormatException('外观模式或玻璃透明度无效。');
     }
-    if (!AccentColors.values.contains(accentColor)) {
+    if (!AccentColors.values.contains(accentColor) &&
+        !AccentColors.isCustom(accentColor)) {
       throw const FormatException('强调色设置无效。');
     }
     for (final service in services) {

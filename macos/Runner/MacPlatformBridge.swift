@@ -484,6 +484,11 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 // status 只查询系统语言包状态，不触发下载；回复留在主线程。
                 result(await SystemTranslationService.status(pairs: pairs))
             }
+        case AppConstants.previewAppearanceMethod:
+            // 只覆盖外观快照并广播，不写偏好；nil 清除预览，各窗口回到已保存的值（#144）。
+            NativeGlassFactory.preview = call.arguments as? [String: Any] ?? [:]
+            NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
+            result(nil)
         case AppConstants.systemStatusMethod:
             result([
                 "accessibility": AccessibilitySelection.isTrusted(prompt: false),
@@ -651,7 +656,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
             // 凭据与系统副作用成功后才保存不含密钥的偏好。
             UserDefaults.standard.set(settings, forKey: AppConstants.preferencesKey)
-            // 只有配置事务提交后广播外观，所有已打开引擎共享同一已保存快照。
+            // 只有配置事务提交后广播外观，所有已打开引擎共享同一已保存快照；拖动中的预览随保存结束。
+            NativeGlassFactory.preview = [:]
             NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
             screenshot.toolbarPreferencesChanged()
             // 菜单由主执行器管理，偏好事务完成后在其执行器上刷新可见状态。

@@ -45,7 +45,7 @@ abstract final class PreferenceKeys {
 
   static const glassOpacity = 'glassOpacity';
 
-  /// 个性化强调色偏好；取值见 AccentColors，默认跟随系统，与 Swift AppConstants.accentColorKey 同步（#144）。
+  /// 个性化强调色偏好；取值为 AccentColors.values 或自定义 #RRGGBB，默认跟随系统，与 Swift AppConstants.accentColorKey 同步（#144）。
   static const accentColor = 'accentColor';
 
   static const launchAtLogin = 'launchAtLogin';

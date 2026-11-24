@@ -836,54 +836,23 @@ class NativeGlassMenuItem extends StatelessWidget {
   );
 }
 
-/// 设置行左侧语义圆角图标锚点（#67 方案 A）；28×28pt 渐变容器配合顶部微高光，帮助扫视与近视模糊状态下快速定位功能分类。
+/// 设置行左侧图标锚点（#67、#144）：16pt 单色线性图标，次要文字色，无底块、渐变与投影；
+/// 只帮助扫读定位，内容区的颜色留给待处理状态。读屏器跳过图标，由行文字承载语义。
 class NativeGlassRowIcon extends StatelessWidget {
-  /// icon 为图标字形，tint 为功能族语义主色。
-  const NativeGlassRowIcon({super.key, required this.icon, required this.tint});
+  /// icon 为描边图标字形。
+  const NativeGlassRowIcon({super.key, required this.icon});
 
   final IconData icon;
-  final Color tint;
 
-  /// context 提供明暗环境；返回纯装饰性的 28×28 立体图标块，读屏器跳过该图标由行文字承载语义。
+  /// context 提供主题配色；返回次要色的 16pt 图标。
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return ExcludeSemantics(
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [tint, tint.withValues(alpha: 0.78)],
-          ),
-          shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(GlassMetrics.rowIconRadius),
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: dark ? 0.24 : 0.42),
-              width: GlassMetrics.groupBorderWidth,
-            ),
-          ),
-          shadows: [
-            BoxShadow(
-              color: tint.withValues(alpha: dark ? 0.28 : 0.22),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: SizedBox.square(
-          dimension: GlassMetrics.rowIconBox,
-          child: Center(
-            child: Icon(
-              icon,
-              size: GlassMetrics.rowIconSize,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Icon(
+      icon,
+      size: GlassMetrics.rowIconSize,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+  );
 }
 
 /// 快捷键机械立体键帽组（#67 方案 A）；每个修饰键与主键渲染为独立微型键帽，读屏按空格串联读取完整组合。
@@ -943,7 +912,7 @@ class NativeGlassKeycaps extends StatelessWidget {
                     child: Text(
                       tokens[i],
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: GlassMetrics.statusFont,
                         height: 1,
                         fontWeight: FontWeight.w600,
                         color: colors.onSurface,
@@ -1035,63 +1004,41 @@ class NativeGlassSettingRow extends StatelessWidget {
   );
 }
 
-/// 授权状态标签（#67 第 14 条、#142）：带圆点的固定语义色胶囊，不随系统强调色变化。
+/// 权限状态（#142 第 14 条）：已开启时为次要色对勾与「已开启」，未开启时为橙色警告与「未开启」；
+/// 颜色只留给需要处理的状态，不随系统强调色变化。
 class NativeGlassStatus extends StatelessWidget {
-  /// granted 为真显示绿色「已授权」，为假显示橙色「未授权」；label 可覆写展示与语义文字。
+  /// granted 为是否已开启；label 可覆写展示与语义文字。
   const NativeGlassStatus({super.key, required this.granted, this.label});
 
   final bool granted;
   final String? label;
 
-  /// context 提供明暗外观；返回高 18、圆角 9、左右内边距 8 的语义状态标签。
+  /// context 提供明暗外观；返回 14pt 图标加 12pt 文字的状态。
   @override
   Widget build(BuildContext context) {
-    final text = label ?? (granted ? '已授权' : '未授权');
+    final text = label ?? (granted ? '已开启' : '未开启');
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // 固定语义色（#67 第 14 条、#144）：浅色取深绿/深橙与 12% 同色底，深色取亮绿/亮橙，满足 WCAG 2.2 AA 4.5:1。
-    final foreground = granted
-        ? (dark ? const Color(0xFF32D74B) : const Color(0xFF126326))
+    // 未开启用固定橙色（浅 #8A4A00 / 深 #FF9F0A），在窗口底色上满足 WCAG 2.2 AA 4.5:1（#144）。
+    final color = granted
+        ? Theme.of(context).colorScheme.onSurfaceVariant
         : (dark ? const Color(0xFFFF9F0A) : const Color(0xFF8A4A00));
-    final background = foreground.withValues(
-      alpha: dark ? (granted ? 0.16 : 0.18) : 0.12,
-    );
     return Semantics(
       container: true,
       label: text,
-      child: Container(
-        height: GlassMetrics.statusHeight,
-        padding: const EdgeInsets.symmetric(
-          horizontal: GlassMetrics.statusPaddingX,
-        ),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(GlassMetrics.statusRadius),
-        ),
+      child: ExcludeSemantics(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: foreground,
-                  shape: BoxShape.circle,
-                ),
-                child: const SizedBox.square(
-                  dimension: GlassMetrics.statusDotSize,
-                ),
-              ),
+            Icon(
+              granted ? Icons.check : Icons.warning_amber_rounded,
+              size: GlassMetrics.statusIcon,
+              color: color,
             ),
-            const SizedBox(width: GlassMetrics.statusDotGap),
-            ExcludeSemantics(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: GlassMetrics.statusFont,
-                  height: 1,
-                  fontWeight: FontWeight.w500,
-                  color: foreground,
-                ),
-              ),
+            const SizedBox(width: GlassMetrics.space4),
+            Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall!
+                  .copyWith(color: color),
             ),
           ],
         ),
@@ -1100,82 +1047,58 @@ class NativeGlassStatus extends StatelessWidget {
   }
 }
 
-/// 同组设置共享阅读背景；材料不逐行重复折射，行间自动插入 0.5pt 细线，支持外置眉标与顶部镜面高光（#67 第 14 条、#144）。
+/// 同组设置共享一张纯色卡片（#67、#144）：圆角 12、0.5pt 外轮廓，无阴影与内高光；左右内边距 16、上下 4，
+/// 行间 0.5pt 细线从行文字左缘起画；可选外置眉标左缩进 16、与卡片间距 8，只有一行的分组不传眉标。
 class NativeGlassGroup extends StatelessWidget {
-  /// children 为按顺序排列的设置行，title 为可选外置小标题眉标；高度由实际行高、32pt内边距及行间 0.5pt 细线决定。
-  const NativeGlassGroup({super.key, required this.children, this.title});
+  /// children 为按顺序排列的设置行；title 为可选眉标；dividerIndent 为细线相对卡片内容左缘的缩进，
+  /// 默认等于 16pt 行图标加 12pt 间距，行没有图标时传 0。
+  const NativeGlassGroup({
+    super.key,
+    required this.children,
+    this.title,
+    this.dividerIndent = GlassMetrics.rowIconSize + GlassMetrics.rowIconGap,
+  });
   final List<Widget> children;
   final String? title;
+  final double dividerIndent;
 
-  /// context 提供语义底色与明暗外观；返回16pt连续圆角、带微高光描边与 n−1 条细线的分组。
+  /// context 提供语义底色与明暗外观；返回带 n−1 条细线的分组。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    final dividerColor = (dark ? Colors.white : Colors.black).withValues(
-      alpha: dark ? 0.08 : 0.06,
-    );
-    final surfaceColor = dark
-        ? const Color(0xFF2B2C32).withValues(alpha: 0.72)
-        : Colors.white.withValues(alpha: 0.86);
-    final outerBorder = dark
-        ? Colors.white.withValues(alpha: 0.11)
-        : Colors.black.withValues(alpha: 0.07);
-    final topHighlight = dark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.white;
+    final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
     final card = DecoratedBox(
-      // 卡片外轮廓、柔和底影与顶部 1px 内高光共同建立三层桌面景深。
       decoration: ShapeDecoration(
-        color: surfaceColor,
+        color: dark ? const Color(0xFF232326) : Colors.white,
         shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(GlassMetrics.panelRadius),
-          side: BorderSide(
-            color: outerBorder,
-            width: GlassMetrics.groupBorderWidth,
-          ),
+          borderRadius: BorderRadius.circular(GlassMetrics.groupRadius),
+          side: BorderSide(color: line, width: GlassMetrics.groupBorderWidth),
         ),
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.24 : 0.04),
-            blurRadius: dark ? 14 : 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
-      child: ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(GlassMetrics.panelRadius),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 1,
-              right: 1,
-              top: 0,
-              height: 1,
-              child: IgnorePointer(child: ColoredBox(color: topHighlight)),
-            ),
-            // 内层透明 Material 让组内 ListTile 的焦点与波纹绘制在玻璃表面之上。
-            Material(
-              type: MaterialType.transparency,
-              child: Padding(
-                padding: const EdgeInsets.all(GlassMetrics.panelPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < children.length; i++) ...[
-                      if (i > 0)
-                        Divider(
-                          height: GlassMetrics.groupDividerThickness,
-                          thickness: GlassMetrics.groupDividerThickness,
-                          color: dividerColor,
-                        ),
-                      children[i],
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
+      // 内层透明 Material 让组内 ListTile 的焦点与波纹绘制在卡片之上。
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: GlassMetrics.panelPadding,
+            vertical: GlassMetrics.groupPaddingY,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: GlassMetrics.groupDividerThickness,
+                    thickness: GlassMetrics.groupDividerThickness,
+                    indent: dividerIndent,
+                    color: line,
+                  ),
+                children[i],
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -1188,7 +1111,7 @@ class NativeGlassGroup extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(
-                    left: GlassMetrics.space4,
+                    left: GlassMetrics.groupHeaderIndent,
                     bottom: GlassMetrics.groupHeaderGap,
                   ),
                   child: Text(
@@ -2317,6 +2240,10 @@ abstract final class NativeGlassTheme {
               ? Color.lerp(accent, Colors.white, 0.35)
               : Color.lerp(accent, Colors.black, 0.25),
           onPrimary: dark ? Colors.black : Colors.white,
+          // 错误色取苹果红：深色 systemRed；浅色 systemRed（#FF3B30）作正文只有 3.3:1，
+          // 改用同色系高对比红 #D70015（5.0:1），白字放在其上同样达标（#67、#144）。
+          error: dark ? const Color(0xFFFF453A) : const Color(0xFFD70015),
+          onError: Colors.white,
         );
     final controlShape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
@@ -2355,15 +2282,21 @@ abstract final class NativeGlassTheme {
           height: GlassMetrics.captionLine / GlassMetrics.captionFont,
           color: colors.onSurfaceVariant,
         ),
+        // 字号只用 11 / 12 / 13 / 15 / 20 五级（#144 第 1 条）；bodyLarge 保持 13，Material 输入框与列表标题默认用它。
+        labelSmall: text.copyWith(
+          fontSize: GlassMetrics.statusFont,
+          height: 16 / GlassMetrics.statusFont,
+          fontWeight: FontWeight.w600,
+        ),
         titleSmall: text.copyWith(
-          fontSize: 14,
-          height: 20 / 14,
+          fontSize: 15,
+          height: 22 / 15,
           fontWeight: FontWeight.w600,
         ),
         headlineSmall: text.copyWith(
-          fontSize: 20,
-          height: 26 / 20,
-          fontWeight: FontWeight.w700,
+          fontSize: GlassMetrics.pageTitleFont,
+          height: 26 / GlassMetrics.pageTitleFont,
+          fontWeight: FontWeight.w600,
         ),
       ),
       iconTheme: IconThemeData(
@@ -2373,6 +2306,11 @@ abstract final class NativeGlassTheme {
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.standard,
       splashFactory: NoSplash.splashFactory,
+      // 带行图标的列表行：16pt 图标列加 12pt 图文间距，文字与分组细线起点对齐（#67、#144）。
+      listTileTheme: const ListTileThemeData(
+        minLeadingWidth: GlassMetrics.rowIconSize,
+        horizontalTitleGap: GlassMetrics.rowIconGap,
+      ),
       colorScheme: colors,
       extensions: [GlassAccent(accent)],
       brightness: brightness,
