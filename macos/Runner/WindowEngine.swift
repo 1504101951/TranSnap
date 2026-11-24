@@ -109,11 +109,13 @@ enum WindowEngine {
     }
 
     /// flutter 为已运行引擎的视图控制器，title/size 为窗口标题与内容尺寸，minSize 为最小尺寸（为空不限制），
-    /// delegate 接收窗口事件，autosaveName 为可选的窗口位置与尺寸记忆键（首次无记录时居中）；
+    /// delegate 接收窗口事件，autosaveName 为可选的窗口位置与尺寸记忆键（首次无记录时居中），
+    /// fullSizeTitlebar 为真时隐藏系统标题栏文字并让 Flutter 内容通顶承载全高侧边栏（#67）；
     /// 返回关闭时不释放、透明承载原生玻璃内容但尚未显示的普通窗口（#126、#144）。
     static func makeWindow(flutter: FlutterViewController, title: String, size: NSSize, minSize: NSSize?,
                            delegate: NSWindowDelegate,
-                           autosaveName: NSWindow.FrameAutosaveName? = nil) -> NSWindow {
+                           autosaveName: NSWindow.FrameAutosaveName? = nil,
+                           fullSizeTitlebar: Bool = false) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -121,12 +123,15 @@ enum WindowEngine {
         )
         window.delegate = delegate
         window.title = title
+        if fullSizeTitlebar {
+            window.titleVisibility = .hidden
+        }
         if let minSize { window.minSize = minSize }
         window.isReleasedWhenClosed = false
         // Flutter 控件绘制在原生玻璃材料上；窗口本身透明承载，保持普通层级。
         window.isOpaque = false
         window.backgroundColor = .clear
-        NativeGlassFactory.installContent(flutter, in: window)
+        NativeGlassFactory.installContent(flutter, in: window, edgeToEdgeTop: fullSizeTitlebar)
         // Flutter 控制器初始视图可为零尺寸；绑定后先设定基准内容尺寸，再恢复用户调整过的几何位置。
         window.setContentSize(size)
         if let autosaveName {

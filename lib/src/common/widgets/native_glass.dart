@@ -1537,16 +1537,18 @@ typedef NativeGlassSidebarSection<T> = ({
 
 /// 设置窗口左侧两级导航（#67）：玻璃材料、固定宽度，不随正文滚动；一级分组始终展开。
 class NativeGlassSidebar<T> extends StatelessWidget {
-  /// value 为当前子页，sections 为一级分组，onChanged 接收被点选的子页。
+  /// value 为当前子页，sections 为一级分组，onChanged 接收被点选的子页，topPadding 为顶部避让窗口按钮的留白。
   const NativeGlassSidebar({
     super.key,
     required this.value,
     required this.sections,
     required this.onChanged,
+    this.topPadding = GlassMetrics.sidebarPadding,
   });
   final T value;
   final List<NativeGlassSidebarSection<T>> sections;
   final ValueChanged<T> onChanged;
+  final double topPadding;
 
   /// 无参数；计算当前选中项在列表内容坐标系中的纵向起点与高度，未命中时返回 null。
   ({double top, double height})? _selectedGeometry() {
@@ -1642,8 +1644,9 @@ class NativeGlassSidebar<T> extends StatelessWidget {
         width: GlassMetrics.sidebarWidth,
         height: double.infinity,
         child: ListView(
-          padding: const EdgeInsets.symmetric(
-            vertical: GlassMetrics.sidebarPadding,
+          padding: EdgeInsets.only(
+            top: topPadding,
+            bottom: GlassMetrics.sidebarPadding,
           ),
           children: [
             Stack(

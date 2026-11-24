@@ -120,8 +120,8 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         NativeGlassContainerView(content: content, frame: NSRect(origin: .zero, size: size), cornerRadius: cornerRadius)
     }
 
-    /// controller为Flutter内容，window为面板或结果窗口；背景贯穿窗口，交互内容遵守视图安全区域。
-    static func installContent(_ controller: FlutterViewController, in window: NSWindow) {
+    /// controller为Flutter内容，window为面板或结果窗口，edgeToEdgeTop为真时Flutter内容延展到窗口最顶沿（供全高侧边栏避让红黄绿灯）；背景贯穿窗口，交互内容遵守视图或自定义安全区域。
+    static func installContent(_ controller: FlutterViewController, in window: NSWindow, edgeToEdgeTop: Bool = false) {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
@@ -131,13 +131,13 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         let view = controller.view
         view.translatesAutoresizingMaskIntoConstraints = false
         content.view.addSubview(view)
-        // 无标题面板也有视图安全区域；系统在标题栏和窗口尺寸改变时维护其边界。
-        let guide = content.view.safeAreaLayoutGuide
+        // 无标题面板也有视图安全区域；全高侧边栏窗口由 Flutter 自己留出顶部红黄绿灯安全区。
+        let topAnchor = edgeToEdgeTop ? content.view.topAnchor : content.view.safeAreaLayoutGuide.topAnchor
         NSLayoutConstraint.activate([
             view.leadingAnchor.constraint(equalTo: content.view.leadingAnchor),
             view.trailingAnchor.constraint(equalTo: content.view.trailingAnchor),
             view.bottomAnchor.constraint(equalTo: content.view.bottomAnchor),
-            view.topAnchor.constraint(equalTo: guide.topAnchor),
+            view.topAnchor.constraint(equalTo: topAnchor),
         ])
         applyAppearance(to: window)
     }

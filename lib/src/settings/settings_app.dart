@@ -840,6 +840,7 @@ class _SettingsPageState extends State<_SettingsPage>
             key: const ValueKey('settings-sidebar'),
             value: _page,
             sections: _sidebarSections,
+            topPadding: 38,
             onChanged: _openPage,
           ),
           Expanded(
@@ -849,7 +850,7 @@ class _SettingsPageState extends State<_SettingsPage>
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     GlassMetrics.pagePadding,
-                    GlassMetrics.space12,
+                    GlassMetrics.space24,
                     GlassMetrics.pagePadding,
                     GlassMetrics.space16,
                   ),

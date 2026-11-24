@@ -289,22 +289,13 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         NativeGlassGroup(
+          title: 'MCP 接口',
           dividerIndent: 0,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'MCP 接口',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: GlassMetrics.space8),
-                NativeGlassSwitchTile(
-                  title: '允许 agent 截图',
-                  value: widget.enabled,
-                  onChanged: widget.onChanged,
-                ),
-              ],
+            NativeGlassSwitchTile(
+              title: '允许 agent 截图',
+              value: widget.enabled,
+              onChanged: widget.onChanged,
             ),
             // 操控依赖 MCP 接口；「允许 agent 截图」关闭时该行禁用（#67「设置 MCP 页」）。
             NativeGlassSwitchTile(
@@ -312,23 +303,35 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
               value: widget.controlEnabled,
               onChanged: widget.enabled ? widget.onControlChanged : null,
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('helper 路径'),
-                  const SizedBox(height: GlassMetrics.labelGap),
-                  // 完整路径可选中复制，超长换行，不截断、不缩小字号。
-                  SelectableText(
-                    _helperPath ?? '',
-                    key: const ValueKey('mcp-helper-path'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: GlassMetrics.space8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _textButton(
+            // 路径与复制按钮同行排布，让 MCP 页在 760×640 默认窗口内一屏完整展示无滚动条（#67）。
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: GlassMetrics.captionRowHeight,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: GlassMetrics.space8,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('helper 路径'),
+                          const SizedBox(height: GlassMetrics.space4),
+                          // 完整路径可选中复制，超长换行，不截断、不缩小字号。
+                          SelectableText(
+                            _helperPath ?? '',
+                            key: const ValueKey('mcp-helper-path'),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: GlassMetrics.space12),
+                    _textButton(
                       const ValueKey('mcp-copy-config'),
                       // 隐藏的最长文案占位，反馈文字切换时按钮宽度不变。
                       Stack(
@@ -342,78 +345,55 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                       ),
                       copy,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
         NativeGlassGroup(
+          title: '接入平台',
           dividerIndent: 0,
           children: [
             if (_loadError != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    '接入平台',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: GlassMetrics.space8),
-                  NativeGlassBanner(
-                    message: _loadError!,
-                    isError: true,
-                    action: NativeGlassSurface(
-                      material: true,
-                      child: TextButton(
-                        onPressed: _loadHelper,
-                        child: const Text('重试加载'),
-                      ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: GlassMetrics.space8,
+                ),
+                child: NativeGlassBanner(
+                  message: _loadError!,
+                  isError: true,
+                  action: NativeGlassSurface(
+                    material: true,
+                    child: TextButton(
+                      onPressed: _loadHelper,
+                      child: const Text('重试加载'),
                     ),
                   ),
-                ],
+                ),
               )
             else if (_service == null && _loadingHelper)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    '接入平台',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: GlassMetrics.space8),
-                  Row(
-                    children: [
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: GlassMetrics.space8),
-                      Text(
-                        '正在检测接入平台…',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: GlassMetrics.space12,
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: GlassMetrics.space8),
+                    Text(
+                      '正在检测接入平台…',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               )
             else
-              for (final (index, platform) in mcpPlatforms.indexed)
-                if (index == 0)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        '接入平台',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: GlassMetrics.space8),
-                      _platformRow(platform),
-                    ],
-                  )
-                else
-                  _platformRow(platform),
+              for (final platform in mcpPlatforms) _platformRow(platform),
           ],
         ),
       ],

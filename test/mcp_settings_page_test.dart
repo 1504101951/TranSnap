@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
@@ -67,6 +68,7 @@ void main() {
     List<Map<String, Object?>>? saved,
     List<String>? clipboard,
     _FakeMcpService? service,
+    Size windowSize = const Size(800, 2400),
   }) async {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -99,8 +101,8 @@ void main() {
       messenger.setMockMethodCallHandler(channel, null);
       messenger.setMockMethodCallHandler(SystemChannels.platform, null);
     });
-    // 窗口足够高，MCP 页全部分组同时布局，便于直接点击。
-    tester.view.physicalSize = const Size(800, 2400);
+    // 默认测试视图高度可传入覆盖；常规用例展开全部内容便于直接点击。
+    tester.view.physicalSize = windowSize;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -354,6 +356,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('未找到 MCP 组件'), findsNothing);
     expect(find.byKey(const ValueKey('mcp-platform-codex')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('默认 760×640 窗口下 MCP 子页一屏完整展示、无滚动条，侧边栏避让顶部安全区（#67）', (
+    tester,
+  ) async {
+    // 作用：验证外置眉标、同行 helper 路径与复制按钮及全高侧边栏避让顶部后，MCP 页在默认窗口不产生滚动。
+    // 边界：760×640 视口下正文主列表 maxScrollExtent == 0，侧边栏 topPadding == 38。
+    await open(tester, windowSize: const Size(760, 640));
+    final sidebar = tester.widget<NativeGlassSidebar<SettingsPage>>(
+      find.byKey(const ValueKey('settings-sidebar')),
+    );
+    expect(sidebar.topPadding, 38);
+
+    final contentList = find.descendant(
+      of: find.byType(SettingsApp),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is ListView &&
+            widget.padding ==
+                const EdgeInsets.fromLTRB(
+                  GlassMetrics.pagePadding,
+                  0,
+                  GlassMetrics.pagePadding,
+                  GlassMetrics.pagePadding,
+                ),
+      ),
+    );
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: contentList, matching: find.byType(Scrollable)).first,
+    );
+    expect(scrollable.position.maxScrollExtent, 0);
     expect(tester.takeException(), isNull);
   });
 }
