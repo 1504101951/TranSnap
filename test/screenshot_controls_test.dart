@@ -760,26 +760,33 @@ void main() {
     );
     expect(find.byKey(const Key('screenshot-grid-group-1')), findsOneWidget);
     expect(find.byKey(const Key('screenshot-grid-group-2')), findsNothing);
-    final none = find.byKey(
-      const Key('toolbar-group-label-screenshot-grid-group-0'),
-    );
-    final command = find.byKey(
-      const Key('toolbar-group-label-screenshot-grid-group-1'),
-    );
-    expect(tester.widget<Text>(none).data, '无');
-    expect(tester.widget<Text>(command).data, '⌘');
+    // 工具栏不显示组合标签；未按修饰键时「无」组凸起并在按钮角上显示 1–6，⌘ 组不显示键位（#67）。
     expect(
-      tester.getCenter(command).dx,
-      lessThan(tester.getTopLeft(find.byKey(Key(first))).dx),
+      find.byKey(const Key('toolbar-group-label-screenshot-grid-group-0')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('screenshot-grid-group-0')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('screenshot-grid-group-1')),
+        matching: find.text('1'),
+      ),
+      findsNothing,
     );
     expect(find.byKey(Key('toolbar-badge-$third')), findsNothing);
   });
 
-  testWidgets('工具栏每行两组两端对齐，三级行插在父级所在行之后，放不下时每行一组（#141）', (tester) async {
+  testWidgets('工具栏每行两组以分隔线隔开，三级行插在父级所在行之后，放不下时每行一组（#141、#67）', (tester) async {
     // 作用：两组并排节省厚度；录制目标等附加行紧跟父级所在行，不落到工具栏最底部。
-    // 边界：默认 3 组时无修饰组与 ⌘ 组同行，⌘ 组右缘贴工具栏右内边距 8pt，两组间距不小于 12pt，⌥ 组在下一行；
+    // 边界：默认 3 组时无修饰组与 ⌘ 组同行，⌘ 组右缘贴工具栏右内边距 8pt，两组间隔为 8 + 1 + 8 = 17pt，⌥ 组在下一行；
     // 截图（无修饰第 2 格）的子级组与录制目标行依次插在第一行与 ⌥ 组之间；
-    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 516pt，改为每行一组。
+    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 441 + 16 = 457pt，改为每行一组。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-lines');
@@ -814,7 +821,7 @@ void main() {
     final group2 = rect('screenshot-grid-group-2');
     expect(group1.top, group0.top);
     expect(group1.right, toolbar.right - 8);
-    expect(group1.left - group0.right, greaterThanOrEqualTo(12));
+    expect(group1.left - group0.right, ToolbarGrid.groupSpan);
     expect(group2.top, greaterThan(group0.top));
     expect(group2.left, group0.left);
     final children = rect('screenshot-children-group-0');
@@ -959,7 +966,9 @@ void main() {
     final childrenRect = tester.getRect(children);
     expect(
       horizontal ? childrenRect.top : childrenRect.left,
-      (horizontal ? parentGroupRect.bottom : parentGroupRect.right) + 4,
+      (horizontal ? parentGroupRect.bottom : parentGroupRect.right) +
+          4 +
+          ToolbarGrid.trayPadding,
     );
     await tester.pumpAndSettle();
   });
@@ -1071,7 +1080,9 @@ void main() {
     final attrGroupRect = tester.getRect(attrGroup);
     expect(
       horizontal ? attrGroupRect.top : attrGroupRect.left,
-      (horizontal ? rectGroupRect.bottom : rectGroupRect.right) + 4,
+      (horizontal ? rectGroupRect.bottom : rectGroupRect.right) +
+          4 +
+          ToolbarGrid.trayPadding,
     );
     await tester.pumpAndSettle();
 
@@ -1200,7 +1211,7 @@ void main() {
 
   testWidgets('画笔工具下展开美化不漏出画笔属性，且次级行靠起点排列不左右分散（#67、#141）', (tester) async {
     // 作用：验证处于绘图工具时展开「美化」只显示美化自身子级（贴纸）与美化参数行，收起美化后恢复绘图属性；
-    // 同时验证同排存在多个次级组时靠起点紧邻排列（间距 ToolbarGrid.groupGap=12pt），不做 spaceBetween 两端拉扯。
+    // 同时验证子级与属性同在一个托盘：托盘起点对齐锚点按钮，组间为 4 + 1 + 4 = 9pt 短分隔线（#67）。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-beautify-isolation');
@@ -1228,7 +1239,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
 
-    // 1. 切到画笔确认存在画笔属性组，再点「美化」不应漏出画笔属性且贴纸行紧贴左缘。
+    // 1. 切到画笔确认存在画笔属性组，再点「美化」不应漏出画笔属性，贴纸托盘起点对齐「美化」按钮（#67）。
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
     expect(
@@ -1243,13 +1254,14 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('screenshot-beautify-row')), findsOneWidget);
-    final grid0 = tester.getRect(
-      find.byKey(const Key('screenshot-grid-group-0')),
-    );
     final stickerGroup = tester.getRect(
       find.byKey(const Key('screenshot-children-group-0')),
     );
-    expect(stickerGroup.left, grid0.left);
+    expect(
+      stickerGroup.left,
+      tester.getRect(find.byKey(const Key(ScreenshotActions.beautify))).left +
+          ToolbarGrid.trayPadding,
+    );
 
     // 2. 再次点「美化」关闭美化行后，当前画笔工具的属性组恢复展示。
     await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
@@ -1260,7 +1272,7 @@ void main() {
       findsOneWidget,
     );
 
-    // 3. 自定义同时带子级与属性的工具（如把箭头放到图形下），两者同行靠起点间距 12pt，不两端对齐。
+    // 3. 自定义同时带子级与属性的工具（如把箭头放到图形下），两者在同一托盘内以短分隔线隔开。
     final columns = [
       for (final column in ScreenshotToolbarPreferences().columns)
         ToolbarColumn(column.modifiers, [
@@ -1308,8 +1320,16 @@ void main() {
       find.byKey(const Key('screenshot-grid-group-0')),
     );
     expect(childRect.top, attrRect.top);
-    expect(childRect.left, customGrid0.left);
-    expect(attrRect.left - childRect.right, ToolbarGrid.groupGap);
+    expect(customGrid0.top, lessThan(childRect.top));
+    expect(
+      childRect.left,
+      tester.getRect(find.byKey(const Key(ScreenshotActions.rect))).left +
+          ToolbarGrid.trayPadding,
+    );
+    expect(
+      attrRect.left - childRect.right,
+      ToolbarGrid.traySeparatorGap * 2 + 1,
+    );
     expect(tester.takeException(), isNull);
   });
 

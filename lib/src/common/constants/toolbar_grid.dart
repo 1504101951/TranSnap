@@ -41,14 +41,26 @@ abstract final class ToolbarGrid {
   static const slots = 6;
   static const maxColumns = 8;
 
-  /// 截图工具栏每行（竖放为每列）并排的组数，两组之间的最小间距（#67）。
+  /// 截图工具栏每行（竖放为每列）并排的组数（#67）。
   static const groupsPerLine = 2;
-  static const groupGap = 12.0;
 
-  /// 截图工具栏组合标签的尺寸：横放时宽（高同按钮 32），竖放时高（宽同按钮 32），字号（#67）。
-  static const groupLabelWidth = 28.0;
-  static const groupLabelHeight = 20.0;
-  static const groupLabelFont = 11.0;
+  /// 同行两组之间的分隔线：两侧各 8pt 留白，线宽 1pt、长 20pt（竖放为横线）（#67）。
+  static const groupDividerGap = 8.0;
+  static const groupDividerLength = 20.0;
+
+  /// 同行两组的间隔总长：留白 + 线宽 + 留白。
+  static const groupSpan = groupDividerGap * 2 + 1;
+
+  /// 子级与属性托盘（#67）：高与主行同为 32pt，内边距 2pt，按钮 28pt、间距 4pt，圆角 9（按钮 7 加内边距 2，内外同心），
+  /// 指向锚点的三角高 4pt（等于行间距）、底宽 12pt；托盘内各组之间 1pt×16pt 短分隔线，两侧各 4pt。
+  static const trayPadding = 2.0;
+  static const trayButton = 28.0;
+  static const trayButtonRadius = 7.0;
+  static const trayRadius = 9.0;
+  static const trayCaretHeight = 4.0;
+  static const trayCaretWidth = 12.0;
+  static const traySeparatorLength = 16.0;
+  static const traySeparatorGap = 4.0;
 
   /// 默认列的组合：无、⌘、⌥。
   static const defaultModifiers = [

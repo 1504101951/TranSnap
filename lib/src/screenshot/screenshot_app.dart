@@ -1,4 +1,5 @@
 import 'drawing_preferences.dart';
+import '../common/constants/motion_metrics.dart';
 import '../common/constants/preference_keys.dart';
 
 import 'dart:async';
@@ -182,6 +183,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   ScreenshotTool _tool = ScreenshotTool.crop;
   bool _busy = false;
+
+  /// 当前按住的修饰键位掩码（不含 Shift）；0 表示未按住，此时「无」组凸起（#67）。
+  int _heldModifiers = 0;
 
   /// 当前或最近一次等待对应的工具栏功能（复制、保存、贴图、识别文字、翻译文字、长截图、录制、实时翻译）；
   /// 等待期间该按钮外显示进度环；没有对应按钮时为 null（#142）。
@@ -391,17 +395,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     Map<String, VoidCallback?> actions,
     int perLine,
   ) {
-    // pair 把组按每行 perLine 个切成行。
-    List<_ToolbarLine> pair(List<_ToolbarCells> groups) => [
-      for (var start = 0; start < groups.length; start += perLine)
-        (
-          groups: groups.sublist(
-            start,
-            math.min(start + perLine, groups.length),
-          ),
-          strip: null,
-        ),
-    ];
+    // pair 把组按每行 perLine 个切成行；indent 为这些行沿主轴的起点缩进。
+    List<_ToolbarLine> pair(List<_ToolbarCells> groups, {double indent = 0}) =>
+        [
+          for (var start = 0; start < groups.length; start += perLine)
+            (
+              groups: groups.sublist(
+                start,
+                math.min(start + perLine, groups.length),
+              ),
+              strip: null,
+              indent: indent,
+            ),
+        ];
     List<List<String>> chunk(List<String> ids) => [
       for (var start = 0; start < ids.length; start += ToolbarGrid.slots)
         ids.sublist(start, math.min(start + ToolbarGrid.slots, ids.length)),
@@ -412,13 +418,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (
           key: 'screenshot-children-group-$index',
           cells: <String?>[...cells],
-          label: null,
+          modifiers: null,
         ),
       for (final (index, cells) in chunk(attributes).indexed)
         (
           key: 'screenshot-attributes-group-$index',
           cells: <String?>[...cells],
-          label: null,
+          modifiers: null,
         ),
     ];
     final anchor = _group ?? _activeId;
@@ -440,13 +446,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           column.slots.contains(closing.parent)) {
         closingGroup = groups.length;
       }
-      final label = column.modifiers == 0
-          ? '无'
-          : ToolbarModifiers.label(column.modifiers);
       groups.add((
         key: 'screenshot-grid-group-$index',
         cells: cells,
-        label: label,
+        modifiers: column.modifiers,
       ));
     }
     // 等待中的功能按钮在工具栏可见时由它自己显示进度环；否则在末尾状态组显示同样的进度环格（#142）。
@@ -459,9 +462,30 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if (_busy && !shown.contains(_busyId)) _busyCell,
     ];
     if (status.isNotEmpty) {
-      groups.add((key: 'screenshot-status-group', cells: status, label: null));
+      groups.add((
+        key: 'screenshot-status-group',
+        cells: status,
+        modifiers: null,
+      ));
     }
     final lines = pair(groups);
+    // indentFor 返回托盘对齐锚点按钮时的起点缩进：锚点所在行内前面各组长度与分隔间隔，加锚点格位 × 36（#67）。
+    double indentFor(int? groupIndex, String? id) {
+      if (groupIndex == null || id == null) return 0;
+      final cell = groups[groupIndex].cells.indexOf(id);
+      if (cell < 0) return 0;
+      var indent = cell * 36.0;
+      for (
+        var index = groupIndex - groupIndex % perLine;
+        index < groupIndex;
+        index++
+      ) {
+        indent +=
+            _cellsLength(groups[index].cells.length) + ToolbarGrid.groupSpan;
+      }
+      return indent;
+    }
+
     // extra 记录插在第 i 行之前的行。
     final extra = <int, List<_ToolbarLine>>{};
     // 正在收起的子级组插在它原父级所在行之后，播完液态收起后移除（#142）。
@@ -480,9 +504,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             (
               key: 'screenshot-closing-group-$index',
               cells: <String?>[...cells],
-              label: null,
+              modifiers: null,
             ),
-        ]),
+        ], indent: indentFor(closingGroup, closing.parent)),
       );
     }
     // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
@@ -490,9 +514,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ? lines.length
         : anchorGroup ~/ perLine + 1;
     (extra[after] ??= []).addAll([
-      ...pair(inserted),
+      ...pair(inserted, indent: indentFor(anchorGroup, anchor)),
       for (final key in _strips().keys)
-        (groups: const <_ToolbarCells>[], strip: key),
+        (groups: const <_ToolbarCells>[], strip: key, indent: 0.0),
     ]);
     return [
       for (var index = 0; index <= lines.length; index++) ...[
@@ -521,28 +545,47 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       'recording-applications-row': math.max(1, _recordingApplications.length),
   };
 
+  /// count 为一组格数；返回主行一组沿主轴的长度：格数 × 32 与 4pt 间距。
+  static double _cellsLength(int count) =>
+      count * 32.0 + math.max(0, count - 1) * 4;
+
+  /// line 为工具栏一行；返回它是否为子级或属性托盘（含正在收起的子级）。
+  static bool _isTray(_ToolbarLine line) =>
+      line.groups.isNotEmpty &&
+      line.groups.first.modifiers == null &&
+      line.groups.first.key != 'screenshot-status-group';
+
   /// actions 为当前可用动作，perLine 为每行并排的组数；返回供 _EditorSurface 计算工具栏尺寸的各行长度（pt）：
   /// lengths 为各行沿主轴的长度，grouped 为组行中最长的一行（附加行可滚动，不计入）。
-  /// 组长为组合标签（或同尺寸空位）加格数×32 与 4pt 间距，同行两组之间至少 ToolbarGrid.groupGap；附加行按其按钮数计算（#67）。
-  /// 标签按横放宽度 28pt 计入；竖放时标签只占 20pt，工具栏末端多留最多两组的 8pt 空白，不影响按钮位置。
+  /// 主行组长为格数×32 与 4pt 间距，同行两组之间为分隔间隔 17；托盘为缩进加内边距、28pt 按钮与组间短分隔线；
+  /// 附加行按其按钮数计算（#67）。
   ({List<double> lengths, double grouped}) _lineLengths(
     Map<String, VoidCallback?> actions,
     int perLine,
   ) {
-    double run(int count) => count * 32.0 + math.max(0, count - 1) * 4;
+    double run(int count) => _cellsLength(count);
+    double trayRun(int count) =>
+        count * ToolbarGrid.trayButton + math.max(0, count - 1) * 4;
     final strips = _strips();
     final lines = _toolbarLines(actions, perLine);
-    double length(_ToolbarLine line) => line.strip == null
-        ? line.groups.fold(
-                0.0,
-                (sum, group) =>
-                    sum +
-                    ToolbarGrid.groupLabelWidth +
-                    4 +
-                    run(group.cells.length),
-              ) +
-              (line.groups.length - 1) * ToolbarGrid.groupGap
-        : run(strips[line.strip]!);
+    double length(_ToolbarLine line) {
+      if (line.strip != null) return run(strips[line.strip]!);
+      if (_isTray(line)) {
+        return line.indent +
+            ToolbarGrid.trayPadding * 2 +
+            line.groups.fold(
+              0.0,
+              (sum, group) => sum + trayRun(group.cells.length),
+            ) +
+            (line.groups.length - 1) * (ToolbarGrid.traySeparatorGap * 2 + 1);
+      }
+      return line.groups.fold(
+            0.0,
+            (sum, group) => sum + run(group.cells.length),
+          ) +
+          (line.groups.length - 1) * ToolbarGrid.groupSpan;
+    }
+
     return (
       lengths: [for (final line in lines) length(line)],
       grouped: [
@@ -553,11 +596,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
+  /// event 为任意键盘事件；按住的修饰键组合变化时刷新工具栏凸起分区，不拦截事件，返回 false（#67）。
+  bool _onModifierKey(KeyEvent event) {
+    final held = ToolbarModifiers.pressed() & ~ToolbarModifiers.shift;
+    if (held != _heldModifiers && mounted) {
+      setState(() => _heldModifiers = held);
+    }
+    return false;
+  }
+
   /// 无参数；先监听再拉取快照，首张截图无需等待引擎启动通知，无返回值。
   @override
   void initState() {
     super.initState();
     _document.addListener(_onDocumentChanged);
+    HardwareKeyboard.instance.addHandler(_onModifierKey);
     widget.channel.setMethodCallHandler((call) async {
       if (call.method == MethodNames.screenshotToolbarChanged) {
         // 当前单一截图引擎是绘图属性的唯一编辑入口；旧保存回声不能回滚较新的本地输入。
@@ -2619,6 +2672,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 无参数；解除原生回调与文档监听，无返回值。
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onModifierKey);
     _feedbackTimer?.cancel();
     _picker.dispose();
     _toolbarRect.dispose();
@@ -3205,10 +3259,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       '${ScreenshotActions.brushPrefix}mosaic': Icons.grid_on,
       '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
     };
-    // 普通操作由外层 NativeGlassButtonFeedback 统一提供悬停、微缩与 2pt 强调色焦点环；
-    // 选中工具及所属父级与当前图形/画笔模式统一采用高对比强调色实底配对比前景色（#67、#144）。
-    Widget button(String id) {
-      // 高亮正在使用的功能，以及第二行所属的父级。
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final reduced = AppMotion.reduced(context);
+    // 按钮静息无底，NativeGlassButtonFeedback 提供悬停叠层、按下微缩与 2pt 强调色焦点环；
+    // 选中工具及所属父级与当前图形/画笔模式为强调色实底配前景色（#67、#144）。
+    /// id 为功能；compact 为托盘内 28pt 按钮，raised 为所在分区处于凸起态（按住对应修饰键），
+    /// digit 为凸起时右上角显示的 1–6 键位；返回带等待进度环的按钮。
+    Widget button(
+      String id, {
+      bool compact = false,
+      bool raised = false,
+      int? digit,
+    }) {
+      // 高亮正在使用的功能，以及子级托盘所属的父级。
       final selected =
           id == _activeId ||
           id == _group ||
@@ -3217,11 +3280,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               '${ScreenshotActions.brushPrefix}${(_styleSelection?.shapeMode ?? _shapeMode).name}';
       final accentFill = NativeGlassTheme.accentFillOf(context);
       final onAccent = NativeGlassTheme.onAccentOf(context);
-      final child = Semantics(
+      final size = compact ? ToolbarGrid.trayButton : 32.0;
+      final radius = compact ? ToolbarGrid.trayButtonRadius : 8.0;
+      final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
+      final iconButton = Semantics(
         selected: selected,
         child: SizedBox(
-          width: 32,
-          height: 32,
+          width: size,
+          height: size,
           child: IconButton(
             key: Key(id),
             tooltip:
@@ -3229,73 +3295,123 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             onPressed: actions[id],
             style: ButtonStyle(
               padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-              backgroundColor: WidgetStatePropertyAll(
-                selected ? accentFill : Colors.transparent,
-              ),
+              backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
               foregroundColor: WidgetStatePropertyAll(
                 selected ? onAccent : colors.onSurface,
               ),
               shape: WidgetStatePropertyAll(
                 RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(radius),
                 ),
               ),
             ),
-            icon: Icon(icons[id] ?? Icons.circle, size: 16),
+            icon: Icon(icons[id] ?? Icons.circle, size: compact ? 14 : 16),
           ),
         ),
       );
-      // 每个模式同样需要材料承载并由共享表面控制进度环，结构不随等待变化（#142）。
-      final surface = NativeGlassSurface(
-        material: true,
-        busy: _busy && id == _busyId,
-        child: child,
+      // 底色：选中为强调色实底；凸起为浅 #FFFFFF / 深 #3D3D41 实底加 0.5pt 细边与阴影、上移 1pt；其余无底。
+      final face = AnimatedContainer(
+        duration: reduced ? Duration.zero : GlassMetrics.transition,
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, raised && !reduced ? -1 : 0, 0),
+        // 细边放在前景装饰里：Container 会把 decoration 的边框宽度计入内边距，按钮会变宽。
+        foregroundDecoration: raised && !selected
+            ? ShapeDecoration(
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.circular(radius),
+                  side: BorderSide(color: line, width: 0.5),
+                ),
+              )
+            : null,
+        decoration: ShapeDecoration(
+          color: selected
+              ? accentFill
+              : raised
+              ? (dark ? const Color(0xFF3D3D41) : Colors.white)
+              : Colors.transparent,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(radius),
+          ),
+          shadows: raised
+              ? const [
+                  BoxShadow(
+                    color: Color(0x38000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ]
+              : const [],
+        ),
+        child: Stack(
+          children: [
+            NativeGlassButtonFeedback(
+              radius: radius,
+              enabled: actions[id] != null,
+              bezel: false,
+              child: iconButton,
+            ),
+            // 凸起时右上角显示键位 1–6（9pt w700），提示按下哪个数字键调用。
+            if (raised && digit != null)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: IgnorePointer(
+                  child: Text(
+                    '$digit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      height: 1,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? onAccent : colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+      // 等待中的按钮外圈显示进度环，结构不随等待变化（#142）。
+      final ring = BusyRing(
+        active: _busy && id == _busyId,
+        color: NativeGlassTheme.accentOf(context),
+        radius: radius + MotionMetrics.busyRingOutset,
+        child: face,
       );
       // 贴纸按钮挂锚点，供贴纸下拉框定位。
       final anchored = id == ScreenshotActions.sticker
-          ? KeyedSubtree(key: _stickerAnchor, child: surface)
-          : surface;
+          ? KeyedSubtree(key: _stickerAnchor, child: ring)
+          : ring;
       return KeyedSubtree(
         key: _buttonKeys.putIfAbsent(id, GlobalKey.new),
         child: anchored,
       );
     }
 
-    // 每组沿工具栏方向先放组合标签（横放在左、竖放在上），再排 6 格；空位留出 32×32pt（#141）。
-    /// group 为一组格；返回沿工具栏方向排列的标签与格子，插入的子级、属性与状态组标签处留空并带弹簧入场（#142）。
-    Widget groupOf(_ToolbarCells group) {
-      final label = group.label;
-      final lead = SizedBox(
-        width: axis == Axis.horizontal ? ToolbarGrid.groupLabelWidth : 32,
-        height: axis == Axis.horizontal ? 32 : ToolbarGrid.groupLabelHeight,
-        child: label == null
-            ? null
-            : Center(
-                child: Text(
-                  label,
-                  key: Key('toolbar-group-label-${group.key}'),
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: ToolbarGrid.groupLabelFont,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-      );
+    /// group 为一组格，compact 为托盘内 28pt 尺寸；返回沿工具栏方向排列的格子：
+    /// 配置组按住对应修饰键时凸起并显示键位（未按修饰键时「无」组凸起），按住其他组合时降到 40%；
+    /// 插入的子级与属性组由 LiquidSplit 从锚点按钮液态展开（#67、#142）。
+    Widget groupOf(_ToolbarCells group, {bool compact = false}) {
+      final size = compact ? ToolbarGrid.trayButton : 32.0;
+      final raised =
+          group.modifiers != null && group.modifiers == _heldModifiers;
       final cells = [
-        for (final id in group.cells)
+        for (final (slot, id) in group.cells.indexed)
           if (id == null)
-            const SizedBox(width: 32, height: 32)
+            SizedBox(width: size, height: size)
           else if (id == _busyCell)
             BusyRing(
               key: const Key(_busyCell),
               active: true,
               color: NativeGlassTheme.accentOf(context),
-              child: const SizedBox(width: 32, height: 32),
+              child: SizedBox(width: size, height: size),
             )
           else
-            button(id),
+            button(
+              id,
+              compact: compact,
+              raised: raised,
+              digit: group.modifiers == null ? null : slot + 1,
+            ),
       ];
       // 子级组、工具属性组统一由 LiquidSplit 从锚点按钮液态分裂展开；收起中的组保持同一组件键以原位反向快速收回（#67、#142）。
       final isClosing = group.key.startsWith('screenshot-closing-group-');
@@ -3320,7 +3436,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           key: ValueKey('liquid-$parent-$kind-$chunkIndex'),
           flexKey: Key(group.key),
           axis: axis,
-          lead: lead,
           items: cells,
           anchor: _buttonKeys.putIfAbsent(parent, GlobalKey.new),
           color: NativeGlassTheme.accentOf(context),
@@ -3335,12 +3450,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         direction: axis,
         mainAxisSize: MainAxisSize.min,
         spacing: 4,
-        children: [lead, ...cells],
+        children: cells,
       );
-      if (label != null) return row;
-      return BouncyPresence(
-        key: ValueKey('presence-${group.key}'),
-        fromScale: 0.90,
+      if (group.modifiers == null) {
+        return BouncyPresence(
+          key: ValueKey('presence-${group.key}'),
+          fromScale: 0.90,
+          child: row,
+        );
+      }
+      // 按住某个修饰键组合时，其余分区（含「无」）降到 40%。
+      return AnimatedOpacity(
+        opacity: _heldModifiers != 0 && !raised ? 0.4 : 1,
+        duration: reduced ? Duration.zero : GlassMetrics.transition,
         child: row,
       );
     }
@@ -3607,35 +3729,144 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             ),
         ], anchorId: 'recording-target-application'),
     };
-    // 各行沿交叉方向依次排列；主配置组行（带修饰标签）同行两组时两端对齐（#141），次级插入行与状态组紧邻起点排列。
+    final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
+    // separator 返回沿交叉方向的分隔线：主行组间 1pt×20、两侧各 8；托盘内组间 1pt×16、两侧各 4（#67）。
+    Widget separator({required bool tray}) {
+      final length = tray
+          ? ToolbarGrid.traySeparatorLength
+          : ToolbarGrid.groupDividerLength;
+      final gap = tray
+          ? ToolbarGrid.traySeparatorGap
+          : ToolbarGrid.groupDividerGap;
+      return Padding(
+        padding: axis == Axis.horizontal
+            ? EdgeInsets.symmetric(horizontal: gap)
+            : EdgeInsets.symmetric(vertical: gap),
+        child: Center(
+          child: SizedBox(
+            width: axis == Axis.horizontal ? 1 : length,
+            height: axis == Axis.horizontal ? length : 1,
+            child: ColoredBox(color: line),
+          ),
+        ),
+      );
+    }
+
+    // tray 把子级与属性组放进锚点按钮下方的凹槽托盘：起点缩进对齐锚点，底色浅 6% 黑 / 深 30% 黑并带内阴影，
+    // 顶部（竖放为左侧）4pt 三角指向锚点按钮中心（#67）。
+    final trayColor = dark ? const Color(0x4D000000) : const Color(0x0F000000);
+    Widget tray(_ToolbarLine row) {
+      final children = <Widget>[];
+      for (final (index, group) in row.groups.indexed) {
+        if (index > 0) children.add(separator(tray: true));
+        children.add(groupOf(group, compact: true));
+      }
+      final body = DecoratedBox(
+        decoration: ShapeDecoration(
+          color: trayColor,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(ToolbarGrid.trayRadius),
+          ),
+          shadows: const [
+            BoxShadow(
+              color: Color(0x24000000),
+              blurRadius: 2,
+              offset: Offset(0, 1),
+              blurStyle: BlurStyle.inner,
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(ToolbarGrid.trayPadding),
+          child: Flex(
+            direction: axis,
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
+        ),
+      );
+      // 三角中心对齐锚点格中心：托盘起点即锚点格起点，锚点格中心在 16pt 处。
+      final caret = Positioned(
+        left: axis == Axis.horizontal
+            ? 16 - ToolbarGrid.trayCaretWidth / 2
+            : -ToolbarGrid.trayCaretHeight,
+        top: axis == Axis.horizontal
+            ? -ToolbarGrid.trayCaretHeight
+            : 16 - ToolbarGrid.trayCaretWidth / 2,
+        child: CustomPaint(
+          size: axis == Axis.horizontal
+              ? const Size(
+                  ToolbarGrid.trayCaretWidth,
+                  ToolbarGrid.trayCaretHeight,
+                )
+              : const Size(
+                  ToolbarGrid.trayCaretHeight,
+                  ToolbarGrid.trayCaretWidth,
+                ),
+          painter: _TrayCaretPainter(color: trayColor, axis: axis),
+        ),
+      );
+      return Padding(
+        padding: axis == Axis.horizontal
+            ? EdgeInsets.only(left: row.indent)
+            : EdgeInsets.only(top: row.indent),
+        child: Stack(clipBehavior: Clip.none, children: [body, caret]),
+      );
+    }
+
+    // 各行沿交叉方向依次排列：主行组间以分隔线隔开、从起点排列；子级与属性为托盘；附加行原样（#67、#141）。
     final groups = Flex(
       direction: cross,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 4,
       children: [
-        for (final line in _toolbarLines(actions, perLine))
+        for (final row in _toolbarLines(actions, perLine))
           SizedBox(
             width: axis == Axis.vertical ? 32 : null,
             height: axis == Axis.horizontal ? 32 : null,
-            child: line.strip == null
+            child: row.strip != null
+                ? strips[row.strip]!
+                : _isTray(row)
                 ? Flex(
                     direction: axis,
-                    mainAxisAlignment:
-                        line.groups.isNotEmpty &&
-                            line.groups.first.label != null
-                        ? MainAxisAlignment.spaceBetween
-                        : MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: ToolbarGrid.groupGap,
-                    children: [for (final group in line.groups) groupOf(group)],
+                    children: [tray(row)],
                   )
-                : strips[line.strip]!,
+                : Flex(
+                    direction: axis,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final (index, group) in row.groups.indexed) ...[
+                        if (index > 0) separator(tray: false),
+                        groupOf(group),
+                      ],
+                    ],
+                  ),
           ),
       ],
     );
-    // 响应文字由画布外层独立定位，工具组始终使用完整工具栏空间。
-    return SizedBox(
+    // 工具栏为实底面板（不用液态玻璃）：浅 #FBFBFC / 深 #2A2A2D、r16、0.5pt 描边、0 10 28 阴影（#67）。
+    return DecoratedBox(
       key: const Key('screenshot-toolbar'),
+      decoration: ShapeDecoration(
+        color: dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.14),
+            width: 0.5,
+          ),
+        ),
+        shadows: const [
+          BoxShadow(
+            color: Color(0x38000000),
+            blurRadius: 28,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
       child: Padding(padding: const EdgeInsets.all(8), child: groups),
     );
   }
@@ -4597,11 +4828,16 @@ class _OverlayPainter extends CustomPainter {
 }
 
 /// 截图工具栏的一组格：key 为组身份，cells 为按顺序的功能（null 为空位），
-/// label 为配置组的组合标签（无修饰为「无」），插入的子级、属性与状态组为 null（#141）。
-typedef _ToolbarCells = ({String key, List<String?> cells, String? label});
+/// modifiers 为配置组的修饰键位掩码（无修饰为 0），插入的子级、属性与状态组为 null（#141）。
+typedef _ToolbarCells = ({String key, List<String?> cells, int? modifiers});
 
-/// 截图工具栏的一行（竖放为一列）：groups 为并排的组，strip 为附加行的键；两者只有一个非空（#141）。
-typedef _ToolbarLine = ({List<_ToolbarCells> groups, String? strip});
+/// 截图工具栏的一行（竖放为一列）：groups 为并排的组，strip 为附加行的键，两者只有一个非空；
+/// indent 为沿主轴的起点缩进，子级与属性托盘用它对齐锚点按钮，其余行为 0（#141、#67）。
+typedef _ToolbarLine = ({
+  List<_ToolbarCells> groups,
+  String? strip,
+  double indent,
+});
 
 /// 一块截图译文浮层；text 为段落译文，rect 为该段在源图中的像素矩形（#138）。
 class _OcrOverlay {
@@ -4695,4 +4931,32 @@ class _FitText extends StatelessWidget {
       );
     },
   );
+}
+
+/// 托盘指向锚点按钮的三角：横放时尖朝上，竖放时尖朝左；color 为托盘底色（#67）。
+class _TrayCaretPainter extends CustomPainter {
+  const _TrayCaretPainter({required this.color, required this.axis});
+
+  final Color color;
+  final Axis axis;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = axis == Axis.horizontal
+        ? (Path()
+            ..moveTo(0, size.height)
+            ..lineTo(size.width / 2, 0)
+            ..lineTo(size.width, size.height)
+            ..close())
+        : (Path()
+            ..moveTo(size.width, 0)
+            ..lineTo(0, size.height / 2)
+            ..lineTo(size.width, size.height)
+            ..close());
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_TrayCaretPainter old) =>
+      old.color != color || old.axis != axis;
 }

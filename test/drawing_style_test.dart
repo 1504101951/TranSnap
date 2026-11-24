@@ -1,3 +1,4 @@
+import 'package:translate_app/src/common/constants/toolbar_grid.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/screenshot/drawing_preferences.dart';
@@ -443,13 +444,14 @@ void main() {
     expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
-    // 工具栏横放：图形在第 1 行，属性组作为一行紧跟其下，挤开后续行（#141）。
+    // 工具栏横放：图形在第 1 行，属性托盘作为一行紧跟其下（行间距 4 加托盘内边距），挤开后续行（#141、#67）。
     expect(
       tester
           .getRect(find.byKey(const Key('screenshot-attributes-group-0')))
           .top,
       tester.getRect(find.byKey(const Key('screenshot-grid-group-0'))).bottom +
-          4,
+          4 +
+          ToolbarGrid.trayPadding,
     );
     await tap('${ScreenshotActions.shapePrefix}circle');
     await color('FF3B30', 'FF9500');
@@ -467,12 +469,21 @@ void main() {
     await tester.pump();
     await tap('apply-stroke-width');
     await tap('${ScreenshotActions.brushPrefix}mosaic');
-    final modeMaterial = find.ancestor(
-      of: find.byKey(Key('${ScreenshotActions.brushPrefix}mosaic')),
-      matching: find.byType(NativeGlassSurface),
+    // 画笔模式按钮在属性托盘内，不再各带独立玻璃材料（#67）。
+    expect(
+      find.ancestor(
+        of: find.byKey(Key('${ScreenshotActions.brushPrefix}mosaic')),
+        matching: find.byType(NativeGlassSurface),
+      ),
+      findsNothing,
     );
-    expect(modeMaterial, findsOneWidget);
-    expect(tester.widget<NativeGlassSurface>(modeMaterial).material, isTrue);
+    expect(
+      find.ancestor(
+        of: find.byKey(Key('${ScreenshotActions.brushPrefix}mosaic')),
+        matching: find.byKey(const Key('screenshot-attributes-group-0')),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.width);
     expect(
