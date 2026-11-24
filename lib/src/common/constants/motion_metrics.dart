@@ -7,6 +7,18 @@ abstract final class MotionMetrics {
   static const bouncyDampingRatio = 0.62;
   static const bouncyExtraBounce = 0.08;
 
+  /// 选区触发按钮与译文卡片入场弹簧（#142 第 1 条）：周期 300ms、阻尼比 0.78（snappy 基础回弹 0.15 加 0.07），过冲很小。
+  static const presenceDuration = Duration(milliseconds: 300);
+  static const presenceExtraBounce = 0.07;
+
+  /// 图标 A 换成图标 B 的统一交叉过渡（#142 第 4 条）：160ms，旧图标缩到 0.6、模糊 2pt、淡出，新图标反向进入。
+  static const iconSwitchDuration = Duration(milliseconds: 160);
+  static const iconSwitchFromScale = 0.6;
+  static const iconSwitchBlur = 2.0;
+
+  /// 首字到达时加载骨架淡出时长（#142 第 2 条）。
+  static const skeletonFadeDuration = Duration(milliseconds: 120);
+
   /// 舒缓链式内容入场时长、错峰步进与初始模糊半径（#67：440ms、80ms、4pt）。
   static const gentleDuration = Duration(milliseconds: 440);
   static const staggerStep = Duration(milliseconds: 80);
@@ -23,18 +35,23 @@ abstract final class MotionMetrics {
   /// 光学棱镜倒角高光：1.25pt 描边、浅/暗峰值与冷暖色散（#67）。
   static const prismShaderAsset = 'shaders/optical_prism.frag';
   static const prismStrokeWidth = 1.25;
-  static const prismLightPeakOpacity = 0.75;
-  static const prismDarkPeakOpacity = 0.55;
+  static const prismLightPeakOpacity = 0.45;
+  static const prismDarkPeakOpacity = 0.30;
   static const prismDispersionOpacity = 0.16;
-  static const prismSweepDuration = Duration(milliseconds: 1100);
+  static const prismSweepDuration = Duration(milliseconds: 600);
   static const prismCoolTint = Color(0xFF64B5F6);
   static const prismWarmTint = Color(0xFFFFCA80);
 
-  /// 纯 Dart 矢量状态机微交互时序。
-  static const copyConfirmDuration = Duration(milliseconds: 1300);
+  /// 纯 Dart 矢量状态机微交互时序。复制确认共停留 1000ms：前 45%（450ms）完成描边打勾与 0.6→1.12→1 回弹（#142 第 4 条）。
+  static const copyConfirmDuration = Duration(milliseconds: 1000);
+  static const copyDrawFraction = 0.45;
+  static const copyPeakScale = 1.12;
   static const statusDrawDuration = Duration(milliseconds: 340);
   static const statusSpinDuration = Duration(milliseconds: 1200);
-  static const vocabBurstDuration = Duration(milliseconds: 550);
+
+  /// 生词本 8 粒子迸发 420ms，粒子外扩距离占图标边长的比例（14pt 图标约 12pt 半径）（#142 第 4 条）。
+  static const vocabBurstDuration = Duration(milliseconds: 420);
+  static const vocabBurstSpread = 0.23;
   static const speechWavePeriod = Duration(milliseconds: 900);
   static const recordingPulseDuration = Duration(milliseconds: 900);
 
@@ -49,8 +66,8 @@ abstract final class MotionMetrics {
   static const busyRingRadius = 10.0;
 
   /// 译文逐字显影（#67 第 8 条）：单字时长、错峰步进、同段错峰总长上限、起始模糊半径。
-  static const charRevealDuration = Duration(milliseconds: 260);
-  static const charRevealStagger = Duration(milliseconds: 18);
+  static const charRevealDuration = Duration(milliseconds: 180);
+  static const charRevealStagger = Duration(milliseconds: 12);
   static const charRevealMaxSpread = Duration(milliseconds: 600);
   static const charRevealBlur = 3.0;
 

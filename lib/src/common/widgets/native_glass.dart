@@ -622,7 +622,8 @@ class NativeGlassDropdown<T> extends StatelessWidget {
 class NativeGlassMenuButton<T> extends StatefulWidget {
   /// value/items 是选中值和有序选项；onChanged 为空表示禁用；
   /// dense 为真时不设最小宽度、左右内边距 6pt，用于截图工具栏编辑器 72pt 宽的组头（#67）；
-  /// flat 非空时触发器用该平面装饰代替独立玻璃材料，与周围平面格子同底（#67 原生克制风格）。
+  /// flat 非空时触发器用该平面装饰代替独立玻璃材料，与周围平面格子同底（#67 原生克制风格）；
+  /// quiet 为真时触发器是按内容宽度的次级文字菜单：12pt 次要色文字加 12pt 下箭头、左右内边距 6、圆角 6、无底（#134 服务菜单）。
   const NativeGlassMenuButton({
     super.key,
     required this.value,
@@ -630,12 +631,14 @@ class NativeGlassMenuButton<T> extends StatefulWidget {
     required this.onChanged,
     this.dense = false,
     this.flat,
+    this.quiet = false,
   });
   final T value;
   final Map<T, String> items;
   final ValueChanged<T>? onChanged;
   final bool dense;
   final Decoration? flat;
+  final bool quiet;
 
   /// 无参数；创建触发器和当前菜单项的焦点状态。
   @override
@@ -688,40 +691,90 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
           ],
         ),
       ],
-      builder: (context, controller, _) => ConstrainedBox(
-        constraints: BoxConstraints(
-          minWidth: widget.dense ? 0 : GlassMetrics.dropdownMinWidth,
-          maxWidth: GlassMetrics.dropdownMaxWidth,
-        ),
-        child: _surface(
-          TextButton(
-            focusNode: _buttonFocus,
-            onPressed: onChanged == null
-                ? null
-                : () => controller.isOpen
-                      ? controller.close()
-                      : controller.open(),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(
-                horizontal: widget.dense ? 6 : 10,
-                vertical: 5,
+      builder: (context, controller, _) => widget.quiet
+          ? _quietTrigger(context, controller)
+          : ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: widget.dense ? 0 : GlassMetrics.dropdownMinWidth,
+                maxWidth: GlassMetrics.dropdownMaxWidth,
               ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    items[value] ??
-                        (items.isNotEmpty ? items.values.first : ''),
-                    textAlign: TextAlign.left,
-                    maxLines: widget.dense ? 1 : null,
-                    overflow: widget.dense ? TextOverflow.ellipsis : null,
+              child: _surface(
+                TextButton(
+                  focusNode: _buttonFocus,
+                  onPressed: onChanged == null
+                      ? null
+                      : () => controller.isOpen
+                            ? controller.close()
+                            : controller.open(),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: widget.dense ? 6 : 10,
+                      vertical: 5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          items[value] ??
+                              (items.isNotEmpty ? items.values.first : ''),
+                          textAlign: TextAlign.left,
+                          maxLines: widget.dense ? 1 : null,
+                          overflow: widget.dense ? TextOverflow.ellipsis : null,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.unfold_more, size: 12),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                const Icon(Icons.unfold_more, size: 12),
-              ],
+              ),
             ),
+    );
+  }
+
+  /// context 提供主题，controller 控制菜单开合；返回次级文字菜单触发器，宽度按内容、最大 240pt。
+  Widget _quietTrigger(BuildContext context, MenuController controller) {
+    final style = Theme.of(context).textTheme.bodySmall!;
+    final onChanged = widget.onChanged;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: GlassMetrics.dropdownMaxWidth,
+      ),
+      child: NativeGlassButtonFeedback(
+        radius: GlassMetrics.menuItemRadius,
+        enabled: onChanged != null,
+        child: TextButton(
+          focusNode: _buttonFocus,
+          onPressed: onChanged == null
+              ? null
+              : () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, GlassMetrics.hitSize),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            foregroundColor: style.color,
+            textStyle: style,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.menuItemRadius),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  widget.items[widget.value] ??
+                      (widget.items.isNotEmpty
+                          ? widget.items.values.first
+                          : ''),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: GlassMetrics.space4),
+              const Icon(Icons.expand_more, size: 12),
+            ],
           ),
         ),
       ),
@@ -931,18 +984,21 @@ class NativeGlassKeycaps extends StatelessWidget {
 
 /// 常规设置行；文字与右侧控件不足时按Spec换行，不压缩字号。
 class NativeGlassSettingRow extends StatelessWidget {
-  /// title 为独立字段名称，child 为宽度最多240pt的控件，caption为可换行说明，leading 为可选左侧语义图标锚点。
+  /// title 为独立字段名称，child 为宽度最多240pt的控件，caption为可换行说明，leading 为可选左侧语义图标锚点，
+  /// captionWarning 为真时说明行以橙色（浅 #8A4A00 / 深 #FF9F0A）显示提示。
   const NativeGlassSettingRow({
     super.key,
     required this.title,
     required this.child,
     this.caption,
     this.leading,
+    this.captionWarning = false,
   });
   final String title;
   final String? caption;
   final Widget child;
   final Widget? leading;
+  final bool captionWarning;
 
   /// context 提供文字缩放；以可用宽度判断是否保持左右两列。
   @override
@@ -954,7 +1010,16 @@ class NativeGlassSettingRow extends StatelessWidget {
         children: [
           Text(title),
           if (caption != null)
-            Text(caption!, style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              caption!,
+              style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                color: captionWarning
+                    ? (Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFFFF9F0A)
+                          : const Color(0xFF8A4A00))
+                    : null,
+              ),
+            ),
         ],
       );
       final titleWithIcon = leading == null
@@ -2145,13 +2210,20 @@ abstract final class NativeGlassTheme {
     return (math.max(l1, l2) + 0.05) / (math.min(l1, l2) + 0.05);
   }
 
-  /// accent 为系统强调色；返回满足 WCAG 2.2 AA（>= 4.5:1）的实底填充与自适应前景字色（#67、#144）。
-  static ({Color fill, Color foreground}) accentColorsFor(Color accent) {
+  /// accent 为强调色，foreground 为前景偏好（AccentForegrounds 或 #RRGGBB）；返回实底填充与前景色（#67、#144）。
+  /// 白色、黑色或自定义：实底保持原色，前景用所选颜色，对比度不作调整（设置页提示）。
+  /// 自动：白字达 4.5:1 用白字；否则浅亮强调色配深字 #1C1C1E；其余把实底向黑压暗到白字达标。
+  static ({Color fill, Color foreground}) accentColorsFor(
+    Color accent, {
+    String foreground = AccentForegrounds.auto,
+  }) {
+    final fixed = AccentForegrounds.colorOf(foreground);
+    if (fixed != null) return (fill: accent, foreground: fixed);
     if (contrastRatio(Colors.white, accent) >= 4.5) {
       return (fill: accent, foreground: Colors.white);
     }
     const darkInk = Color(0xFF1C1C1E);
-    // 仅浅亮强调色（如亮黄/绿/橙）保留原色配深字；中深蓝与品红适度向黑压暗以维持高雅白字。
+    // 浅亮强调色（如亮黄/绿/橙）保留原色配深字；中深色适度向黑压暗以维持白字。
     if (accent.computeLuminance() >= 0.27 &&
         contrastRatio(darkInk, accent) >= 4.5) {
       return (fill: accent, foreground: darkInk);
@@ -2220,7 +2292,10 @@ abstract final class NativeGlassTheme {
   ]) {
     final dark = brightness == Brightness.dark;
     final accent = dark ? appearance.accentDark : appearance.accentLight;
-    final accentPair = accentColorsFor(accent);
+    final accentPair = accentColorsFor(
+      accent,
+      foreground: appearance.accentForeground,
+    );
     final colors =
         ColorScheme.fromSeed(
           seedColor: accent,
@@ -2312,7 +2387,9 @@ abstract final class NativeGlassTheme {
         horizontalTitleGap: GlassMetrics.rowIconGap,
       ),
       colorScheme: colors,
-      extensions: [GlassAccent(accent)],
+      extensions: [
+        GlassAccent(accent, foreground: appearance.accentForeground),
+      ],
       brightness: brightness,
       scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: AppBarTheme(
@@ -2543,11 +2620,15 @@ class GlassAppearance {
     this.opacity = 0.8,
     this.accentLight = const Color(0xFF007AFF),
     this.accentDark = const Color(0xFF0A84FF),
+    this.accentForeground = AccentForegrounds.auto,
   });
   final String mode;
   final double opacity;
   final Color accentLight;
   final Color accentDark;
+
+  /// 强调色实底上的前景偏好（AccentForegrounds 或 #RRGGBB）。
+  final String accentForeground;
   static final current = ValueNotifier(const GlassAppearance());
   static const channel = MethodChannel(ChannelNames.appearance);
 
@@ -2569,11 +2650,18 @@ class GlassAppearance {
     if (accentLight is! int || accentDark is! int) {
       throw const FormatException('外观快照缺少系统强调色。');
     }
+    final foreground =
+        map[PreferenceKeys.accentForeground] as String? ??
+        AccentForegrounds.auto;
+    if (!AccentForegrounds.isValid(foreground)) {
+      throw const FormatException('外观快照的前景色无效。');
+    }
     return GlassAppearance(
       mode: mode,
       opacity: opacity,
       accentLight: Color(accentLight),
       accentDark: Color(accentDark),
+      accentForeground: foreground,
     );
   }
 
@@ -2668,22 +2756,34 @@ class _GlassMaterialScope extends InheritedWidget {
 
 /// 主题携带的系统强调色（#142）；经 NativeGlassTheme.accentOf 读取，明暗切换时随主题插值，并派生满足 WCAG AA 的实底与前景色。
 class GlassAccent extends ThemeExtension<GlassAccent> {
-  /// color 为当前外观下解析的系统强调色。
-  const GlassAccent(this.color);
+  /// color 为当前外观下解析的强调色，foreground 为实底前景偏好（AccentForegrounds 或 #RRGGBB）。
+  const GlassAccent(this.color, {this.foreground = AccentForegrounds.auto});
   final Color color;
+  final String foreground;
 
-  /// 无参数；返回适配 WCAG 2.2 AA（>= 4.5:1）的选中实底颜色。
-  Color get fill => NativeGlassTheme.accentColorsFor(color).fill;
+  /// 无参数；返回选中实底颜色。
+  Color get fill =>
+      NativeGlassTheme.accentColorsFor(color, foreground: foreground).fill;
 
-  /// 无参数；返回与 fill 配对的前景字色。
-  Color get onAccent => NativeGlassTheme.accentColorsFor(color).foreground;
+  /// 无参数；返回与 fill 配对的前景色。
+  Color get onAccent => NativeGlassTheme.accentColorsFor(
+    color,
+    foreground: foreground,
+  ).foreground;
 
-  /// color 为替换值；返回新的强调色扩展。
+  /// color/foreground 为替换值；返回新的强调色扩展。
   @override
-  GlassAccent copyWith({Color? color}) => GlassAccent(color ?? this.color);
+  GlassAccent copyWith({Color? color, String? foreground}) => GlassAccent(
+    color ?? this.color,
+    foreground: foreground ?? this.foreground,
+  );
 
-  /// other 为目标主题的扩展，t 为插值进度；返回颜色插值后的扩展。
+  /// other 为目标主题的扩展，t 为插值进度；返回颜色插值后的扩展，前景偏好过半时切换。
   @override
-  GlassAccent lerp(covariant GlassAccent? other, double t) =>
-      other == null ? this : GlassAccent(Color.lerp(color, other.color, t)!);
+  GlassAccent lerp(covariant GlassAccent? other, double t) => other == null
+      ? this
+      : GlassAccent(
+          Color.lerp(color, other.color, t)!,
+          foreground: t < 0.5 ? foreground : other.foreground,
+        );
 }

@@ -244,13 +244,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);
-      // 首屏优先展示译文；比较真实布局坐标，避免仅验证两个文本都存在。
+      // 单栏布局译文在上、原文在下且左缘对齐（#134）；比较真实布局坐标，避免仅验证两个文本都存在。
+      expect(
+        tester.getTopLeft(find.text('你好')).dy,
+        lessThan(tester.getTopLeft(find.text('Hello')).dy),
+      );
       expect(
         tester.getTopLeft(find.text('你好')).dx,
-        lessThan(tester.getTopLeft(find.text('Hello')).dx),
+        tester.getTopLeft(find.text('Hello')).dx,
       );
+      // 原文的复制在悬停原文时出现；译文的复制在底部操作行。
       expect(find.byTooltip('复制原文'), findsOneWidget);
-      expect(find.byTooltip('复制译文'), findsOneWidget);
+      expect(find.text('复制译文'), findsOneWidget);
       // 标题下缘空白也能拖动；正文/关闭保持独立，拖动不改变结果内容或会话。
       // 边界：标题区高 44pt（#134），在距顶 40pt 处起拖仍属拖动区。
       final dragArea = find.byKey(const ValueKey('result-drag-area'));
@@ -271,8 +276,8 @@ void main() {
     },
   );
 
-  testWidgets('两栏各有朗读按钮，点击分别朗读结果栏与原文栏，空栏禁用', (tester) async {
-    // 边界：结果栏为空（翻译刚开始）时只能朗读原文；两栏都有内容时各自回报所属栏。
+  testWidgets('底部「朗读」朗读译文，悬停原文的「朗读原文」朗读原文，空内容禁用（#101、#134）', (tester) async {
+    // 边界：译文为空（翻译刚开始）时底部「朗读」禁用、「朗读原文」可用；两者都有内容时各自回报 false（译文）与 true（原文）。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -298,13 +303,24 @@ void main() {
         ),
       ),
     );
-    IconButton speaker(String tooltip) => tester.widget<IconButton>(
-      find
-          .widgetWithIcon(IconButton, Icons.volume_up_rounded)
-          .at(tooltip == '朗读译文' ? 0 : 1),
+    TextButton footer(String label) => tester.widget<TextButton>(
+      find.ancestor(
+        of: find.text(label),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      ),
     );
-    expect(speaker('朗读译文').onPressed, isNull);
-    expect(speaker('朗读原文').onPressed, isNotNull);
+    expect(footer('朗读').onPressed, isNull);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('朗读原文'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
     session.snapshot = const TranslationSnapshot(
       phase: TranslationPhase.completed,
       sourceText: 'Hello',
@@ -312,9 +328,68 @@ void main() {
     );
     session.notifyListeners();
     await tester.pump();
-    await tester.tap(find.byTooltip('朗读译文'));
+    await tester.tap(find.text('朗读'));
     await tester.tap(find.byTooltip('朗读原文'));
     expect(spoken, [false, true]);
+  });
+
+  testWidgets('卡片布局：单栏按内容定高，多段配对、词典或超过 420pt 改为 720×420 对照（#134）', (
+    tester,
+  ) async {
+    // 作用：验证 layoutFor 的单栏判定与高度，它同时决定卡片布局与原生窗口尺寸。
+    // 边界：一行译文 22 + 间距 8 + 一行原文 17 + 固定部分 100.5 = 147.5，向上取整为 148；
+    // 两组段落配对直接对照；单栏内容超过 420pt（长译文）改为对照；未到达的译文按两行骨架估算为 44。
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+    );
+    addTearDown(session.dispose);
+    ({bool single, Size size}) layout(TranslationSnapshot snapshot) {
+      session.snapshot = snapshot;
+      return TranslationOverlay.layoutFor(session, TextScaler.noScaling);
+    }
+
+    expect(
+      layout(
+        const TranslationSnapshot(
+          phase: TranslationPhase.completed,
+          sourceText: 'Hello',
+          translatedText: '你好',
+        ),
+      ),
+      (single: true, size: const Size(560, 148)),
+    );
+    expect(
+      layout(
+        const TranslationSnapshot(
+          phase: TranslationPhase.translating,
+          sourceText: 'Hello',
+          translatedText: '',
+        ),
+      ).size,
+      const Size(560, 170),
+    );
+    expect(
+      layout(
+        const TranslationSnapshot(
+          phase: TranslationPhase.completed,
+          sourceText: 'A. B.',
+          translatedText: '甲。乙。',
+          pairs: [TranslationPair('A.', '甲。'), TranslationPair('B.', '乙。')],
+        ),
+      ),
+      (single: false, size: const Size(720, 420)),
+    );
+    expect(
+      layout(
+        TranslationSnapshot(
+          phase: TranslationPhase.completed,
+          sourceText: 'Hello',
+          translatedText: '很长的译文' * 200,
+        ),
+      ),
+      (single: false, size: const Size(720, 420)),
+    );
   });
 
   testWidgets('已验证的语义段落按译文原文成对展示', (tester) async {
@@ -410,11 +485,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('查到词典：左 2/5 上译文下原文用 18pt，右 3/5 词典栏头依次为生词本、朗读、复制（#134）', (
+  testWidgets('查到词典：左 2/5 上译文下原文 15pt 半粗，右 3/5 词典；生词本在底部，复制词典在悬停词典时出现（#134）', (
     tester,
   ) async {
-    // 边界：720pt 宽卡片左栏占 288pt，词典栏从 x=288 起；译文在原文上方且同在左栏；
-    // 词典栏头三个按钮从左到右为加入生词本、朗读词典、复制词典，可见按钮 24pt。
+    // 边界：720pt 宽卡片左栏占 288pt，词典栏从 x=288 起；译文在原文上方且同在左栏、字号 15 字重 w600；
+    // 「加入生词本」在底部操作行，「复制词典」为词典栏头 24pt 可见按钮。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -431,19 +506,27 @@ void main() {
     final source = tester.getTopLeft(find.text('pot'));
     expect(translated.dx, source.dx);
     expect(translated.dy, lessThan(source.dy));
-    expect(tester.widget<EditableText>(find.text('你好')).style.fontSize, 18);
+    final style = tester.widget<EditableText>(find.text('你好')).style;
+    expect(style.fontSize, 15);
+    expect(style.fontWeight, FontWeight.w600);
     final dictionaryX = tester.getTopLeft(find.text('词典')).dx;
     expect(dictionaryX, greaterThan(288));
     expect(translated.dx, lessThan(288));
-    final buttons = [
-      '加入生词本',
-      '朗读词典',
-      '复制词典',
-    ].map((tooltip) => tester.getRect(find.byTooltip(tooltip))).toList();
-    expect(buttons[0].left, lessThan(buttons[1].left));
-    expect(buttons[1].left, lessThan(buttons[2].left));
-    expect(buttons[1].left - buttons[0].right, 4);
-    expect(buttons[0].size, const Size(24, 24));
+    expect(find.text('加入生词本'), findsOneWidget);
+    expect(
+      tester.getSize(
+        find.descendant(
+          of: find
+              .ancestor(
+                of: find.byTooltip('复制词典'),
+                matching: find.byType(SizedBox),
+              )
+              .first,
+          matching: find.byType(IconButton),
+        ),
+      ),
+      const Size(24, 24),
+    );
     expect(find.text('A. noun'), findsOneWidget);
   });
 
@@ -458,8 +541,10 @@ void main() {
     session.begin(sessionId: 'same', text: '今天天气很好');
     await pumpCard(tester, session);
     expect(session.sourceIsTarget, isTrue);
-    expect(find.byTooltip('复制原文'), findsOneWidget);
-    expect(find.byTooltip('复制译文'), findsNothing);
+    // 原文是唯一正文：底部复制作用于原文，没有译文入口，也没有悬停原文块。
+    expect(find.text('复制原文'), findsOneWidget);
+    expect(find.text('复制译文'), findsNothing);
+    expect(find.byTooltip('复制原文'), findsNothing);
     expect(find.text('今天天气很好'), findsOneWidget);
   });
 
@@ -554,9 +639,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('译文为空的失败卡片在正文展示 NativeGlassBanner 及单一重试入口（#144）', (
-    tester,
-  ) async {
+  testWidgets('译文为空的失败卡片在正文展示 NativeGlassBanner 及单一重试入口（#144）', (tester) async {
     // 作用：验证失败且无译文时错误原因显示在正文横向提示条并保留单一重试按钮。
     // 边界：canRetry 为真时正文提示条展示原文案与「重试」且标题栏不重复出现第二个「重试」。
     tester.view.physicalSize = const Size(720, 420);
@@ -598,11 +681,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('词典与原文栏统一按 speakSource 同步朗读切换与外部 speakingSource 状态（#144）', (
+  testWidgets('原文栏「朗读原文」与底部「朗读」各自切换，并同步外部 speakingSource 状态（#101、#144）', (
     tester,
   ) async {
-    // 作用：验证词典栏与原文栏共用 source 朗读状态、不发生状态反转，且支持外部 speakingSource 受控同步。
-    // 边界：词典视图点击「朗读词典」后词典与原文两栏均切换为「停止朗读」，译文栏保持「朗读译文」。
+    // 作用：验证原文（含词典单词发音）与译文分别朗读、不发生状态反转，且支持外部 speakingSource 受控同步。
+    // 边界：词典布局点击「朗读原文」后原文按钮变为「停止朗读」，底部仍为「朗读」；外部 speakingSource=false 时底部为「停止朗读」。
     tester.view.physicalSize = const Size(720, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -619,63 +702,42 @@ void main() {
     addTearDown(session.dispose);
     session.begin(sessionId: 'dict-speak', text: 'pot');
     final spoken = <bool>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: TranslationOverlay(
-          session: session,
-          onActivate: () {},
-          onDismiss: () {},
-          onDrag: () {},
-          onMode: session.switchMode,
-          onService: session.switchService,
-          onSpeak: spoken.add,
-          onAddVocabulary: () {},
-        ),
+    Widget card({bool? speakingSource}) => MaterialApp(
+      home: TranslationOverlay(
+        session: session,
+        speakingSource: speakingSource,
+        onActivate: () {},
+        onDismiss: () {},
+        onDrag: () {},
+        onMode: session.switchMode,
+        onService: session.switchService,
+        onSpeak: spoken.add,
+        onAddVocabulary: () {},
       ),
     );
+    await tester.pumpWidget(card());
     await session.activate();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('朗读词典'));
+    await tester.tap(find.byTooltip('朗读原文'));
     await tester.pump();
     expect(spoken, [true]);
-    expect(find.byTooltip('停止朗读'), findsNWidgets(2));
-    expect(find.byTooltip('朗读词典'), findsNothing);
-    expect(find.byTooltip('朗读原文'), findsNothing);
-    expect(find.byTooltip('朗读译文'), findsOneWidget);
+    expect(find.byTooltip('停止朗读'), findsOneWidget);
+    expect(find.text('朗读'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('停止朗读').first);
+    await tester.tap(find.byTooltip('停止朗读'));
     await tester.pump();
     expect(spoken, [true, true]);
-    expect(find.byTooltip('朗读词典'), findsOneWidget);
     expect(find.byTooltip('朗读原文'), findsOneWidget);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: TranslationOverlay(
-          session: session,
-          speakingSource: false,
-          onActivate: () {},
-          onDismiss: () {},
-          onDrag: () {},
-          onMode: session.switchMode,
-          onService: session.switchService,
-          onSpeak: spoken.add,
-          onAddVocabulary: () {},
-        ),
-      ),
-    );
+    await tester.pumpWidget(card(speakingSource: false));
     await tester.pump();
-    expect(find.byTooltip('停止朗读'), findsOneWidget);
-    expect(find.byTooltip('朗读译文'), findsNothing);
+    expect(find.text('停止朗读'), findsOneWidget);
     expect(find.byTooltip('朗读原文'), findsOneWidget);
-    expect(find.byTooltip('朗读词典'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('词典释义词条采用 16pt 半粗标题并用纯文本间距替代 WidgetSpan（#144）', (
-    tester,
-  ) async {
+  testWidgets('词典释义词条采用 16pt 半粗标题并用纯文本间距替代 WidgetSpan（#144）', (tester) async {
     // 作用：验证词条标题可读字号与连续选区复制安全性。
     // 边界：headword Span 使用 16pt / w600 / 24pt 行高，RichText 子节点中无任何 WidgetSpan。
     await tester.pumpWidget(
@@ -696,8 +758,9 @@ void main() {
       ),
     );
     final root = rich.text as TextSpan;
-    final headword =
-        root.text != null ? root : root.children!.first as TextSpan;
+    final headword = root.text != null
+        ? root
+        : root.children!.first as TextSpan;
     expect(headword.text, 'pot');
     expect(headword.style?.fontSize, 16);
     expect(headword.style?.fontWeight, FontWeight.w600);

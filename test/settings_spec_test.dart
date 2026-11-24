@@ -272,7 +272,7 @@ void main() {
     expect(find.byKey(const ValueKey('全局翻译快捷键')).hitTestable(), findsOneWidget);
     expect(maxScroll(), 0);
     // 外观、强调色与窗口透明度位于「个性化」；「通用」只保留权限、语言包与登录启动（#1、#67）。
-    await openSettingsPage(tester, '通用');
+    await openSettingsPage(tester, '权限与启动');
     expect(find.text('外观'), findsNothing);
     expect(find.text('强调色'), findsNothing);
     expect(maxScroll(), 0, reason: '通用');

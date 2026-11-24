@@ -44,6 +44,7 @@ class AppSettings {
     this.glassAppearance = AppearanceModes.system,
     this.glassOpacity = 0.8,
     this.accentColor = AccentColors.system,
+    this.accentForeground = AccentForegrounds.auto,
     this.launchAtLogin = false,
     Map<String, String>? excludedApps,
     List<GlossaryEntry>? glossary,
@@ -129,6 +130,7 @@ class AppSettings {
   String glassAppearance;
   double glassOpacity;
   String accentColor;
+  String accentForeground;
   bool launchAtLogin;
   final Map<String, String> excludedApps;
 
@@ -237,6 +239,9 @@ class AppSettings {
           (map[PreferenceKeys.glassOpacity] as num?)?.toDouble() ?? 0.8,
       accentColor:
           map[PreferenceKeys.accentColor] as String? ?? AccentColors.system,
+      accentForeground:
+          map[PreferenceKeys.accentForeground] as String? ??
+          AccentForegrounds.auto,
       launchAtLogin: map[PreferenceKeys.launchAtLogin] as bool? ?? false,
       excludedApps: Map<String, String>.from(
         map[PreferenceKeys.excludedApps] as Map? ?? {},
@@ -288,6 +293,9 @@ class AppSettings {
     if (!AccentColors.values.contains(accentColor) &&
         !AccentColors.isCustom(accentColor)) {
       throw const FormatException('强调色设置无效。');
+    }
+    if (!AccentForegrounds.isValid(accentForeground)) {
+      throw const FormatException('前景色设置无效。');
     }
     for (final service in services) {
       service.validate();
@@ -405,6 +413,7 @@ class AppSettings {
     PreferenceKeys.glassAppearance: glassAppearance,
     PreferenceKeys.glassOpacity: glassOpacity,
     PreferenceKeys.accentColor: accentColor,
+    PreferenceKeys.accentForeground: accentForeground,
     PreferenceKeys.launchAtLogin: launchAtLogin,
     PreferenceKeys.excludedApps: excludedApps,
     PreferenceKeys.glossary: [for (final entry in glossary) entry.toMap()],

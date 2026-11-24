@@ -78,8 +78,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('五组纯 Dart 矢量状态机：状态切换正确，复制确认 1.3 秒自动回弹且无残留计时器', (tester) async {
-    // 边界：朗读空闲保留 Icons.volume_up_rounded；复制触发后先变为对勾绘制，1.3s 结束自动恢复 Icons.copy_rounded。
+  testWidgets('五组纯 Dart 矢量状态机：状态切换正确，图标交叉过渡后旧图标移除，复制确认 1 秒复原且无残留计时器', (
+    tester,
+  ) async {
+    // 边界：朗读空闲保留 Icons.volume_up_rounded；复制触发后先变为对勾绘制，1000ms 结束复原为 Icons.copy_rounded；
+    // 图标之间 160ms 交叉过渡，过渡期间新旧图标并存，过渡结束（等待 200ms）后旧图标移除。
     var phase = TranslationPhase.translating;
     var speaking = false;
     var saved = false;
@@ -128,14 +131,16 @@ void main() {
       elapsed = 1;
     });
     await tester.pump();
-    expect(find.byIcon(Icons.volume_up_rounded), findsNothing);
     expect(find.byIcon(Icons.bookmark_added), findsOneWidget);
+    // 交叉过渡进行中旧图标仍在淡出；200ms 后过渡结束，旧图标移除。
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byIcon(Icons.volume_up_rounded), findsNothing);
+    expect(find.byIcon(Icons.bookmark_add_outlined), findsNothing);
     expect(find.byIcon(Icons.copy_rounded), findsNothing);
 
-    // 先推进一帧以锚定 Ticker 起始时间戳，再等待 1.3s 确认回弹完成并自然收敛。
-    await tester.pump(const Duration(milliseconds: 16));
+    // 等满复制确认停留时长后复原，再等交叉过渡结束。
     await tester.pump(MotionMetrics.copyConfirmDuration);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
 
     update(() {

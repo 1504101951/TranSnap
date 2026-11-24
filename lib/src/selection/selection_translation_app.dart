@@ -46,7 +46,6 @@ class TranslateApp extends StatefulWidget {
 /// 绑定选区会话与浮层生命周期，不创建独立配置或历史存储。
 class _TranslateAppState extends State<TranslateApp> {
   static const _triggerSize = TranslationOverlay.triggerWindowSize;
-  static const _resultSize = Size(720, 420);
   late final StreamSubscription<PlatformEvent> _bridgeSubscription;
 
   /// 最近一次请求原生设置的浮层会话与尺寸。
@@ -122,7 +121,8 @@ class _TranslateAppState extends State<TranslateApp> {
           widget.overlay.hideOverlay(sessionId: sessionId);
           return;
         }
-        final size = explicit ? _resultSize : _triggerSize;
+        // 结果尺寸与卡片布局共用 TranslationOverlay.layoutFor：单栏按内容定高，对照与词典为 720×420（#134）。
+        final size = explicit ? _resultSize() : _triggerSize;
         if (explicit) {
           unawaited(_activate(readSelection: false));
         }
@@ -149,6 +149,12 @@ class _TranslateAppState extends State<TranslateApp> {
     }
   }
 
+  /// 无参数；返回当前会话的结果卡片窗口尺寸，与卡片布局判定一致（#134）。
+  Size _resultSize() => TranslationOverlay.layoutFor(
+    widget.session,
+    MediaQuery.textScalerOf(context),
+  ).size;
+
   /// 无参数；按当前会话阶段更新原生窗口尺寸，无返回值。
   void _syncOverlaySize() {
     final id = widget.session.sessionId;
@@ -159,7 +165,9 @@ class _TranslateAppState extends State<TranslateApp> {
       widget.overlay.hideOverlay(sessionId: id);
       return;
     }
-    final size = phase == TranslationPhase.trigger ? _triggerSize : _resultSize;
+    final size = phase == TranslationPhase.trigger
+        ? _triggerSize
+        : _resultSize();
     // 译文增量期间会话频繁通知；同一会话尺寸没变时不重复请求原生。
     if (_sizedOverlay == (id, size)) return;
     _sizedOverlay = (id, size);

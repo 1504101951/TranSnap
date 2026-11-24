@@ -48,6 +48,9 @@ abstract final class PreferenceKeys {
   /// 个性化强调色偏好；取值为 AccentColors.values 或自定义 #RRGGBB，默认跟随系统，与 Swift AppConstants.accentColorKey 同步（#144）。
   static const accentColor = 'accentColor';
 
+  /// 强调色实底上的前景偏好；取值为 AccentForegrounds.values 或自定义 #RRGGBB，默认自动，与 Swift AppConstants.accentForegroundKey 同步（#144）。
+  static const accentForeground = 'accentForeground';
+
   static const launchAtLogin = 'launchAtLogin';
 
   static const primaryLanguage = 'primaryLanguage';

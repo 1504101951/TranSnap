@@ -108,17 +108,15 @@ class _SettingsPageState extends State<_SettingsPage>
   /// 侧边栏两级分组（#67）；通用与 MCP 没有子页，分组本身可选中。
   static const List<NativeGlassSidebarSection<SettingsPage>> _sidebarSections =
       [
+        // 「通用」为分组标签：权限与启动、个性化（外观、强调色、窗口透明度）两个子页（#1、#67）。
         (
           title: '通用',
           icon: Icons.tune,
-          value: SettingsPage.general,
-          children: {},
-        ),
-        (
-          title: '个性化',
-          icon: Icons.palette_outlined,
-          value: SettingsPage.personalization,
-          children: {},
+          value: null,
+          children: {
+            SettingsPage.general: '权限与启动',
+            SettingsPage.personalization: '个性化',
+          },
         ),
         (
           title: '翻译',
@@ -393,6 +391,19 @@ class _SettingsPageState extends State<_SettingsPage>
     ),
     child: Text(label),
   );
+
+  /// context 提供当前外观的强调色，settings 为草稿；前景色不是「自动」且与强调色对比度低于 4.5:1 时
+  /// 返回提示文字，否则返回 null（#144）。
+  String? _foregroundWarning(BuildContext context, AppSettings settings) {
+    final foreground = AccentForegrounds.colorOf(settings.accentForeground);
+    if (foreground == null) return null;
+    final ratio = NativeGlassTheme.contrastRatio(
+      foreground,
+      NativeGlassTheme.accentOf(context),
+    );
+    if (ratio >= 4.5) return null;
+    return '与当前强调色对比度 ${ratio.toStringAsFixed(1)}:1，低于 4.5:1，可能看不清';
+  }
 
   /// fields 为待预览的视觉字段（PreferenceKeys.glassOpacity / accentColor），null 清除预览；
   /// 原生只广播到所有窗口、不写偏好，保存成功后原生自动清除。返回发送完成的 Future（#144）。
@@ -960,8 +971,23 @@ class _SettingsPageState extends State<_SettingsPage>
                                     leading: const NativeGlassRowIcon(
                                       icon: Icons.palette_outlined,
                                     ),
-                                    child: _AccentColorPicker(
+                                    child: _SwatchPicker(
+                                      keyPrefix: 'accent-color',
+                                      options: [
+                                        for (final id in AccentColors.values)
+                                          (
+                                            id: id,
+                                            label: AccentColors.labels[id]!,
+                                            colors: AccentColors.swatches[id],
+                                            sweep: id == AccentColors.system
+                                                ? _AccentColorSwatch.systemSweep
+                                                : null,
+                                            icon: null,
+                                          ),
+                                      ],
                                       value: settings.accentColor,
+                                      customColors: (value) =>
+                                          AccentColors.pairOf(value)!,
                                       onChanged: (value) => _edit(
                                         () => settings.accentColor = value,
                                       ),
@@ -971,6 +997,67 @@ class _SettingsPageState extends State<_SettingsPage>
                                             ? null
                                             : {
                                                 PreferenceKeys.accentColor:
+                                                    value,
+                                              },
+                                      ),
+                                    ),
+                                  ),
+                                  // 强调色实底上的前景（图标线条与文字）；非自动且对比度不足时说明行改为橙色提示（#144）。
+                                  NativeGlassSettingRow(
+                                    title: '前景色',
+                                    caption:
+                                        _foregroundWarning(context, settings) ??
+                                        '强调色实底上的图标线条与文字',
+                                    captionWarning:
+                                        _foregroundWarning(context, settings) !=
+                                        null,
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.format_color_text_outlined,
+                                    ),
+                                    child: _SwatchPicker(
+                                      keyPrefix: 'accent-foreground',
+                                      options: [
+                                        (
+                                          id: AccentForegrounds.auto,
+                                          label: AccentForegrounds
+                                              .labels[AccentForegrounds.auto]!,
+                                          colors: null,
+                                          sweep: null,
+                                          icon: Icons.contrast,
+                                        ),
+                                        for (final id in [
+                                          AccentForegrounds.white,
+                                          AccentForegrounds.black,
+                                        ])
+                                          (
+                                            id: id,
+                                            label:
+                                                AccentForegrounds.labels[id]!,
+                                            colors: (
+                                              light:
+                                                  AccentForegrounds.colors[id]!,
+                                              dark:
+                                                  AccentForegrounds.colors[id]!,
+                                            ),
+                                            sweep: null,
+                                            icon: null,
+                                          ),
+                                      ],
+                                      value: settings.accentForeground,
+                                      customColors: (value) {
+                                        final color = AccentForegrounds.colorOf(
+                                          value,
+                                        )!;
+                                        return (light: color, dark: color);
+                                      },
+                                      onChanged: (value) => _edit(
+                                        () => settings.accentForeground = value,
+                                      ),
+                                      onPreview: (value) => _previewAppearance(
+                                        value == null
+                                            ? null
+                                            : {
+                                                PreferenceKeys.accentForeground:
                                                     value,
                                               },
                                       ),
@@ -1387,9 +1474,9 @@ class _SettingsPageState extends State<_SettingsPage>
                                           : settings.screenshotSaveDirectory,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodySmall,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
                                     ),
                                     trailing: Wrap(
                                       spacing: 4,
@@ -1735,81 +1822,90 @@ class _SubpageReveal extends StatelessWidget {
   }
 }
 
-/// 个性化页「强调色」色点选择器（#67、#144）：跟随系统、6 种预设色与末位「自定义」调色盘，
-/// 支持鼠标悬停微放、按下微缩、键盘焦点环与选中白点指示。预设色点击即保存；自定义在色点下方展开调色盘，
+/// 色点选择器中的一个预设：id 为偏好值，label 为提示与读屏名，colors 为浅/深外观实心色，
+/// sweep 为多色圆环，icon 为未选中时的中心图标；三者都为空时为中性底。
+typedef _SwatchOption = ({
+  String id,
+  String label,
+  ({Color light, Color dark})? colors,
+  List<Color>? sweep,
+  IconData? icon,
+});
+
+/// 个性化页色点选择器（#67、#144），强调色与前景色两行共用：若干预设与末位「自定义」调色盘，
+/// 支持鼠标悬停微放、按下微缩、键盘焦点环与选中白点指示。预设点击即保存；自定义在色点下方展开纯色调色盘，
 /// 调色时实时预览，「应用」保存，「取消」恢复。
-class _AccentColorPicker extends StatefulWidget {
-  /// value 为当前偏好（AccentColors.values 或 #RRGGBB），onChanged 回传要保存的新值，
+class _SwatchPicker extends StatefulWidget {
+  /// keyPrefix 为色点测试键前缀，options 为预设，value 为当前偏好（预设 id 或 #RRGGBB），
+  /// customColors 返回自定义值在浅/深外观下的显示色，onChanged 回传要保存的新值，
   /// onPreview 回传调色中的 #RRGGBB 供全窗口预览，null 表示清除预览。
-  const _AccentColorPicker({
+  const _SwatchPicker({
+    required this.keyPrefix,
+    required this.options,
     required this.value,
+    required this.customColors,
     required this.onChanged,
     required this.onPreview,
   });
 
+  final String keyPrefix;
+  final List<_SwatchOption> options;
   final String value;
+  final ({Color light, Color dark}) Function(String value) customColors;
   final ValueChanged<String> onChanged;
   final ValueChanged<String?> onPreview;
 
-  /// 「自定义」色点的多色圆环，与「跟随系统」的系统色圆环区分。
-  static const customSweep = [
-    Color(0xFFFF5F57),
-    Color(0xFFFEBC2E),
-    Color(0xFF28C840),
-    Color(0xFF2EC4AE),
-    Color(0xFF4C8DFF),
-    Color(0xFF6E56CF),
-    Color(0xFFF06A97),
-    Color(0xFFFF5F57),
-  ];
-
   @override
-  State<_AccentColorPicker> createState() => _AccentColorPickerState();
+  State<_SwatchPicker> createState() => _SwatchPickerState();
 }
 
 /// 持有自定义调色盘是否展开；颜色与保存状态由设置草稿承载。
-class _AccentColorPickerState extends State<_AccentColorPicker> {
+class _SwatchPickerState extends State<_SwatchPicker> {
   bool _editing = false;
 
-  /// context 提供明暗环境与强调色主题；返回 8 个 32×32pt 命中圆点，自定义展开时在下方显示调色盘。
+  /// context 提供明暗环境与强调色主题；返回 32×32pt 命中圆点行，自定义展开时在下方显示调色盘。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final custom = AccentColors.isCustom(widget.value);
+    final customColors = custom ? widget.customColors(widget.value) : null;
     // 调色盘初始色：已有自定义色用它，否则用当前生效的强调色。
-    final initial =
-        AccentColors.pairOf(widget.value)?.light ??
-        NativeGlassTheme.accentOf(context);
+    final initial = customColors?.light ?? NativeGlassTheme.accentOf(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
+          spacing: 2,
           children: [
-            for (final (index, id) in AccentColors.values.indexed) ...[
-              if (index > 0) const SizedBox(width: 2),
+            for (final option in widget.options)
               _AccentColorSwatch(
-                id: id,
-                label: AccentColors.labels[id]!,
-                selected: widget.value == id,
-                swatchColor: switch (AccentColors.swatches[id]) {
+                id: option.id,
+                keyPrefix: widget.keyPrefix,
+                label: option.label,
+                selected: widget.value == option.id,
+                swatchColor: switch (option.colors) {
                   null => null,
                   final pair => dark ? pair.dark : pair.light,
                 },
+                sweep: option.sweep,
+                icon: option.icon,
                 onSelected: () {
                   setState(() => _editing = false);
-                  widget.onChanged(id);
+                  widget.onChanged(option.id);
                 },
               ),
-            ],
-            const SizedBox(width: 2),
+            // 「自定义」未选中时为中性底加取色笔图标，与多色圆环区分；选中后显示所选颜色。
             _AccentColorSwatch(
               id: 'custom',
+              keyPrefix: widget.keyPrefix,
               label: '自定义',
               selected: custom,
-              swatchColor: null,
-              sweep: _AccentColorPicker.customSweep,
+              swatchColor: customColors == null
+                  ? null
+                  : (dark ? customColors.dark : customColors.light),
+              icon: custom ? null : Icons.colorize_outlined,
               onSelected: () => setState(() => _editing = !_editing),
             ),
           ],
@@ -1841,17 +1937,20 @@ class _AccentColorPickerState extends State<_AccentColorPicker> {
   }
 }
 
-/// 单个可聚焦/可悬停的强调色色点按钮；swatchColor 为空时显示多色圆环（跟随系统或自定义），其余展示当前明暗外观对应的预设色。
+/// 单个可聚焦/可悬停的强调色色点按钮：swatchColor 为实心色，sweep 为多色圆环（跟随系统），
+/// 两者都为空时为中性底（未设置的自定义）；icon 为未选中时叠在中心的图标。
 class _AccentColorSwatch extends StatefulWidget {
-  /// id 为协议值，label 为提示与读屏名，selected 为选中态，swatchColor 为固定色值（null 表示多色圆环），
-  /// sweep 为多色圆环的颜色序列，onSelected 为选中回调。
+  /// id 为协议值，label 为提示与读屏名，selected 为选中态，swatchColor 为实心色值，
+  /// sweep 为多色圆环的颜色序列，icon 为中心图标，onSelected 为选中回调。
   const _AccentColorSwatch({
     required this.id,
+    this.keyPrefix = 'accent-color',
     required this.label,
     required this.selected,
     required this.swatchColor,
     required this.onSelected,
-    this.sweep = systemSweep,
+    this.sweep,
+    this.icon,
   });
 
   /// 「跟随系统」的多色圆环，取 macOS 常见系统强调色。
@@ -1865,10 +1964,14 @@ class _AccentColorSwatch extends StatefulWidget {
   ];
 
   final String id;
+
+  /// 测试键前缀：强调色为 accent-color，前景色为 accent-foreground。
+  final String keyPrefix;
   final String label;
   final bool selected;
   final Color? swatchColor;
-  final List<Color> sweep;
+  final List<Color>? sweep;
+  final IconData? icon;
   final VoidCallback onSelected;
 
   @override
@@ -1895,27 +1998,23 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
         ? 1.08
         : 1.0;
 
-    final BoxDecoration fillDecoration;
-    if (widget.swatchColor == null) {
-      // 「跟随系统」与「自定义」以多色圆环区分固定单色，摘镜或浅色下仍一眼可辨。
-      fillDecoration = BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: SweepGradient(colors: widget.sweep),
-        border: Border.all(
-          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.16),
-          width: GlassMetrics.groupBorderWidth,
-        ),
-      );
-    } else {
-      fillDecoration = BoxDecoration(
-        shape: BoxShape.circle,
-        color: widget.swatchColor,
-        border: Border.all(
-          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.16),
-          width: GlassMetrics.groupBorderWidth,
-        ),
-      );
-    }
+    // 实心色、多色圆环（跟随系统）或中性底（未设置的自定义）三选一，外加 0.5pt 浅描边。
+    final sweep = widget.sweep;
+    final fillDecoration = BoxDecoration(
+      shape: BoxShape.circle,
+      color:
+          widget.swatchColor ??
+          (sweep == null
+              ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08)
+              : null),
+      gradient: widget.swatchColor == null && sweep != null
+          ? SweepGradient(colors: sweep)
+          : null,
+      border: Border.all(
+        color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.16),
+        width: GlassMetrics.groupBorderWidth,
+      ),
+    );
 
     return Semantics(
       label: widget.label,
@@ -1946,7 +2045,7 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
               onPointerUp: (_) => setState(() => _pressed = false),
               onPointerCancel: (_) => setState(() => _pressed = false),
               child: GestureDetector(
-                key: ValueKey('accent-color-${widget.id}'),
+                key: ValueKey('${widget.keyPrefix}-${widget.id}'),
                 excludeFromSemantics: true,
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onSelected,
@@ -1979,7 +2078,15 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
                         ),
                         child: DecoratedBox(
                           decoration: fillDecoration,
-                          child: widget.selected
+                          child: !widget.selected && widget.icon != null
+                              ? Icon(
+                                  widget.icon,
+                                  size: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                )
+                              : widget.selected
                               ? Center(
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(

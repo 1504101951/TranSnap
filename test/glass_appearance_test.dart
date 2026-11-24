@@ -197,6 +197,48 @@ void main() {
     expect(saved[PreferenceKeys.accentColor], AccentColors.system);
   });
 
+  testWidgets('前景色：选「白色」保存 white 并改变强调色实底前景；对比不足时说明行提示（#144）', (tester) async {
+    // 作用：验证「前景色」选择持久化为 accentForeground，并在非自动且对比度 < 4.5:1 时显示提示，选回「自动」后提示消失。
+    // 边界：默认强调色为浅色系统蓝 #007AFF，白字对比约 4.0:1 < 4.5，选「白色」出现提示；「自动」不提示。
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var saved = <String, Object?>{'revision': 0};
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true};
+        case MethodNames.getSettings:
+          return saved;
+        case MethodNames.saveSettings:
+          saved = Map<String, Object?>.from(call.arguments as Map)
+            ..remove('credentials')
+            ..['revision'] = (saved['revision'] as int) + 1;
+          return saved;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+    await openSettingsPage(tester, '个性化');
+    expect(saved[PreferenceKeys.accentForeground], isNull);
+    expect(find.text('强调色实底上的图标线条与文字'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('accent-foreground-white')));
+    await tester.pumpAndSettle();
+    expect(saved[PreferenceKeys.accentForeground], AccentForegrounds.white);
+    expect(find.textContaining('低于 4.5:1，可能看不清'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('accent-foreground-auto')));
+    await tester.pumpAndSettle();
+    expect(saved[PreferenceKeys.accentForeground], AccentForegrounds.auto);
+    expect(find.textContaining('低于 4.5:1'), findsNothing);
+  });
+
   testWidgets('自定义强调色：调色盘「应用」保存大写 HEX，「取消」不改变已保存值（#144）', (tester) async {
     // 作用：验证末位「自定义」色点展开调色盘，确认后把颜色以 #RRGGBB 保存，取消保留原值。
     // 边界：HEX 输入小写 2ea3d6 也按大写 #2EA3D6 保存；第二次输入 112233 后取消，保存值仍为 #2EA3D6。

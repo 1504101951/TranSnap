@@ -271,6 +271,8 @@ enum AppConstants {
     static let glassOpacityKey = "glassOpacity"
     /// 个性化强调色偏好与六种经典色表（sRGB ARGB 整数），与 Dart AccentColors 同步（#144）。
     static let accentColorKey = "accentColor"
+    /// 强调色实底上的前景偏好（auto / white / black / #RRGGBB），随外观快照原样下发，与 Dart PreferenceKeys.accentForeground 同步（#144）。
+    static let accentForegroundKey = "accentForeground"
     static let accentSystem = "system"
     /// 强调色预设的浅、深两套 sRGB ARGB 值，与 Dart AccentColors.swatches 同步；自定义色为 #RRGGBB（#144）。
     static let accentSwatches: [String: (light: Int, dark: Int)] = [
@@ -593,8 +595,8 @@ enum AppConstants {
     static let overlayResizeAnimationDuration: TimeInterval = 0.24
     static let overlayFadeInDuration: TimeInterval = 0.16
     /// 实时翻译盖层逐字显影参数：单字时长（秒）、错峰间隔（秒）、错峰总长上限（秒）与初始模糊半径（pt），与 Dart MotionMetrics 一致（#142）。
-    static let charRevealDuration: TimeInterval = 0.26
-    static let charRevealStagger: TimeInterval = 0.018
+    static let charRevealDuration: TimeInterval = 0.18
+    static let charRevealStagger: TimeInterval = 0.012
     static let charRevealMaxSpread: TimeInterval = 0.60
     static let charRevealBlur: CGFloat = 3
     /// 实时翻译盖层块最小可读字号（pt）、内边距与圆角（#144 U-31）。

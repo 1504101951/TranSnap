@@ -399,6 +399,30 @@ void main() {
     expect(invalid.validate, throwsFormatException);
   });
 
+  test('前景色偏好默认自动，接受自动、白色、黑色与大写 #RRGGBB，其余拒绝（#144）', () {
+    // 作用：验证 AppSettings.accentForeground 往返序列化与校验。
+    // 边界：缺失字段为 auto；auto/white/black/#00FF00 通过；小写 HEX 与 'gray' 拒绝。
+    expect(
+      AppSettings.fromMap({'primaryLanguage': 'zh-CN'}).accentForeground,
+      AccentForegrounds.auto,
+    );
+    for (final value in ['auto', 'white', 'black', '#00FF00']) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        accentForeground: value,
+      );
+      expect(settings.validate, returnsNormally, reason: value);
+      expect(AppSettings.fromMap(settings.toMap()).accentForeground, value);
+    }
+    for (final value in ['#00ff00', 'gray']) {
+      final settings = AppSettings(
+        primaryLanguage: 'zh-CN',
+        accentForeground: value,
+      );
+      expect(settings.validate, throwsFormatException, reason: value);
+    }
+  });
+
   test('自定义强调色只接受大写 #RRGGBB，并推导浅、深两套颜色（#144）', () {
     // 作用：验证自定义强调色的偏好校验与浅/深色推导（深色由浅色向白混合 35%）。
     // 边界：#2EA3D6 合法；小写、5 位、缺 # 均拒绝；#000000 深色为 89/255 灰，#FFFFFF 深色仍为白；预设名返回预设色，system 返回 null。

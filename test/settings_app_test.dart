@@ -257,7 +257,7 @@ void main() {
   });
 
   testWidgets('侧边栏：点选二级行切换子页并显示标题，一级标签不切换，切换保留未保存草稿', (tester) async {
-    // 边界：「翻译」「截图」是只作标签的一级行，点击后仍停在当前子页；「通用」「MCP」本身是子页；
+    // 边界：「通用」「翻译」「截图」是只作标签的一级行，点击后仍停在当前子页；「MCP」本身是子页，「个性化」在「通用」之下；
     // 标题与侧边栏同名，所以可见文字出现 2 次；快捷键页开启的开关在往返其他子页后仍为开启。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
@@ -291,14 +291,17 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
 
-    // 默认通用子页：侧边栏行与标题各一处；登录与权限可见，其他子页内容不可见。
-    expect(find.text('通用'), findsNWidgets(2));
+    // 默认「权限与启动」子页：侧边栏行与标题各一处；登录与权限可见，其他子页内容不可见。
+    expect(find.text('权限与启动'), findsNWidgets(2));
+    expect(find.text('通用'), findsOneWidget);
     expect(find.text('登录时启动'), findsOneWidget);
     expect(find.text('屏幕录制'), findsOneWidget);
     expect(find.text('翻译语言'), findsNothing);
     expect(find.text('截图目录'), findsNothing);
     for (final label in [
       '通用',
+      '权限与启动',
+      '个性化',
       '翻译',
       '语言与服务',
       '服务列表',
@@ -315,7 +318,9 @@ void main() {
       expect(settingsSidebarRow(label), findsOneWidget);
     }
 
-    // 一级标签不可点：停留在通用子页。
+    // 一级标签不可点：停留在「权限与启动」子页。
+    await tester.tap(settingsSidebarRow('通用'));
+    await tester.pumpAndSettle();
     await tester.tap(settingsSidebarRow('翻译'));
     await tester.pumpAndSettle();
     await tester.tap(settingsSidebarRow('截图'));
@@ -862,7 +867,9 @@ void main() {
     expect(state[PreferenceKeys.scrollCaptureMode], 'automatic');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图录制页：指针开关默认关闭，点击特效下拉7项可选，右键与拖动区分默认开启并可自动保存（#105、#143）', (tester) async {
+  testWidgets('截图录制页：指针开关默认关闭，点击特效下拉7项可选，右键与拖动区分默认开启并可自动保存（#105、#143）', (
+    tester,
+  ) async {
     // 边界：缺省时截图包含指针为 false、点击特效为 off、区分右键为 true；切换下拉与开关后各自写入规范偏好值。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
@@ -915,10 +922,14 @@ void main() {
       scrollable: settingsContentScrollable(),
     );
     expect(
-      tester.widget<NativeGlassDropdown<RecordingClickEffect>>(effectDropdown).value,
+      tester
+          .widget<NativeGlassDropdown<RecordingClickEffect>>(effectDropdown)
+          .value,
       RecordingClickEffect.off,
     );
-    await tester.tap(find.descendant(of: effectDropdown, matching: find.text('关闭')));
+    await tester.tap(
+      find.descendant(of: effectDropdown, matching: find.text('关闭')),
+    );
     await tester.pumpAndSettle();
     for (final effect in RecordingClickEffect.values) {
       expect(find.text(effect.label), findsWidgets);
@@ -937,7 +948,10 @@ void main() {
     );
     expect(tester.widget<NativeGlassSwitchTile>(distinctTile).value, isTrue);
     await tester.tap(
-      find.descendant(of: distinctTile, matching: find.byType(NativeGlassSwitch)),
+      find.descendant(
+        of: distinctTile,
+        matching: find.byType(NativeGlassSwitch),
+      ),
     );
     await tester.pumpAndSettle();
     expect(state[PreferenceKeys.recordingClickRightDistinct], isFalse);
@@ -1051,7 +1065,7 @@ void main() {
     // 离开再回到通用子页会重新查询；这次以异常返回。
     reply = Completer<String>();
     await openSettingsPage(tester, '快捷键');
-    await openSettingsPage(tester, '通用');
+    await openSettingsPage(tester, '权限与启动');
     expect(find.text('正在检查语言包…'), findsOneWidget);
     reply.completeError(
       PlatformException(
@@ -1104,17 +1118,15 @@ void main() {
       isNull,
     );
 
-    await openSettingsPage(tester, '通用');
+    await openSettingsPage(tester, '权限与启动');
     expect(
-      tester.widget<FilledButton>(find.widgetWithText(FilledButton, '授权…')).onPressed,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '授权…'))
+          .onPressed,
       isNotNull,
     );
 
-    pendingShortcut.complete({
-      'keyCode': 1,
-      'modifiers': 256,
-      'label': '⌘ S',
-    });
+    pendingShortcut.complete({'keyCode': 1, 'modifiers': 256, 'label': '⌘ S'});
     await tester.pumpAndSettle();
     expect(saved, isFalse);
 
@@ -1170,7 +1182,9 @@ void main() {
 
     await tester.tap(find.text(RecordingClickEffect.off.label));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, RecordingClickEffect.optical.label));
+    await tester.tap(
+      find.widgetWithText(MenuItemButton, RecordingClickEffect.optical.label),
+    );
     await tester.pumpAndSettle();
     expect(distinctSwitch().onChanged, isNotNull);
 

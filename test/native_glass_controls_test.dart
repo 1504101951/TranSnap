@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motor/motor.dart';
+import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 
@@ -285,9 +286,9 @@ void main() {
     expect(find.text('已开启'), findsOneWidget);
     expect(
       statusTextColor(),
-      Theme.of(
-        tester.element(find.byType(NativeGlassStatus)),
-      ).colorScheme.onSurfaceVariant,
+      Theme.of(tester.element(find.byType(NativeGlassStatus)))
+          .colorScheme
+          .onSurfaceVariant,
     );
     expect(tester.getSemantics(find.byType(NativeGlassStatus)).label, '已开启');
 
@@ -355,8 +356,9 @@ void main() {
   });
 
   test('动态强调色文字对比度与静息边框全达 WCAG 2.2 AA 标准（U-12、U-23）', () {
-    // 作用：验证各 macOS 系统强调色下 accentColorsFor 均满足 >= 4.5:1，默认深浅蓝保白字，且边框达 >= 3.0:1。
-    // 边界：覆盖浅/深苹果蓝、亮黄、苹果绿、琥珀橙、品红、紫罗兰与石墨灰。
+    // 作用：验证「自动」前景下各强调色 accentColorsFor 均满足 >= 4.5:1，边框达 >= 3.0:1；固定前景时实底保持原色。
+    // 边界：覆盖浅/深苹果蓝、亮黄、苹果绿、琥珀橙、品红、紫罗兰、石墨灰与深色外观的晴空蓝 #4C8DFF；
+    // 自动：深浅蓝为白字、亮黄为深字 #1C1C1E；选「白色」时亮黄实底不压暗、前景为白（对比不足由设置页提示）；自定义 #FF0000 原样使用。
     const accents = [
       Color(0xFF007AFF),
       Color(0xFF0A84FF),
@@ -366,6 +368,7 @@ void main() {
       Color(0xFFAF52DE),
       Color(0xFF953D96),
       Color(0xFF8E8E93),
+      Color(0xFF4C8DFF),
     ];
     for (final accent in accents) {
       final pair = NativeGlassTheme.accentColorsFor(accent);
@@ -386,6 +389,20 @@ void main() {
     expect(
       NativeGlassTheme.accentColorsFor(const Color(0xFFFFCC00)).foreground,
       const Color(0xFF1C1C1E),
+    );
+    expect(
+      NativeGlassTheme.accentColorsFor(
+        const Color(0xFFFFCC00),
+        foreground: AccentForegrounds.white,
+      ),
+      (fill: const Color(0xFFFFCC00), foreground: Colors.white),
+    );
+    expect(
+      NativeGlassTheme.accentColorsFor(
+        const Color(0xFF2F6FE4),
+        foreground: '#FF0000',
+      ),
+      (fill: const Color(0xFF2F6FE4), foreground: const Color(0xFFFF0000)),
     );
 
     final lightTheme = NativeGlassTheme.data(Brightness.light);
@@ -434,8 +451,14 @@ void main() {
     final theme = Theme.of(context);
     expect(theme.sliderTheme.activeTrackColor, amber);
     expect(theme.sliderTheme.overlayColor, amber.withValues(alpha: 0.24));
-    expect(theme.sliderTheme.overlayShape, isNot(SliderComponentShape.noOverlay));
-    expect(theme.checkboxTheme.fillColor?.resolve({WidgetState.selected}), amber);
+    expect(
+      theme.sliderTheme.overlayShape,
+      isNot(SliderComponentShape.noOverlay),
+    );
+    expect(
+      theme.checkboxTheme.fillColor?.resolve({WidgetState.selected}),
+      amber,
+    );
     expect(theme.textSelectionTheme.cursorColor, amber);
     expect(theme.progressIndicatorTheme.color, amber);
     final switchContainer = tester
@@ -449,82 +472,91 @@ void main() {
     expect((switchContainer.decoration as BoxDecoration).color, amber);
   });
 
-  testWidgets('NativeGlassSurface 穿透包装层识别按钮并提供悬停、0.96 按压微缩与 2pt 焦点环（U-01、#144）', (
-    tester,
-  ) async {
-    // 作用：确认工具栏按钮常见的 Semantics -> SizedBox -> IconButton 包装不会绕过微交互与键盘焦点环。
-    // 边界：悬停出现叠层；按下在常规动态效果下缩放为 0.96、减弱动态效果下保持 1.0；Tab 聚焦绘 2pt 强调色边框。
-    const accent = Color(0xFFAF52DE);
-    final appearance = const GlassAppearance(
-      mode: 'light',
-      accentLight: accent,
-      accentDark: accent,
-    );
-    Widget buildButton({required bool reduced}) => MediaQuery(
-      data: MediaQueryData(disableAnimations: reduced),
-      child: MaterialApp(
-        theme: NativeGlassTheme.data(Brightness.light, appearance),
-        home: Scaffold(
-          body: Center(
-            child: NativeGlassSurface(
-              material: true,
-              child: Semantics(
-                button: true,
-                label: '矩形标注',
-                child: SizedBox.square(
-                  dimension: 32,
-                  child: IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.crop_square),
+  testWidgets(
+    'NativeGlassSurface 穿透包装层识别按钮并提供悬停、0.96 按压微缩与 2pt 焦点环（U-01、#144）',
+    (tester) async {
+      // 作用：确认工具栏按钮常见的 Semantics -> SizedBox -> IconButton 包装不会绕过微交互与键盘焦点环。
+      // 边界：悬停出现叠层；按下在常规动态效果下缩放为 0.96、减弱动态效果下保持 1.0；Tab 聚焦绘 2pt 强调色边框。
+      const accent = Color(0xFFAF52DE);
+      final appearance = const GlassAppearance(
+        mode: 'light',
+        accentLight: accent,
+        accentDark: accent,
+      );
+      Widget buildButton({required bool reduced}) => MediaQuery(
+        data: MediaQueryData(disableAnimations: reduced),
+        child: MaterialApp(
+          theme: NativeGlassTheme.data(Brightness.light, appearance),
+          home: Scaffold(
+            body: Center(
+              child: NativeGlassSurface(
+                material: true,
+                child: Semantics(
+                  button: true,
+                  label: '矩形标注',
+                  child: SizedBox.square(
+                    dimension: 32,
+                    child: IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.crop_square),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpWidget(buildButton(reduced: false));
-    await tester.pumpAndSettle();
-    expect(find.byType(NativeGlassButtonFeedback), findsOneWidget);
+      await tester.pumpWidget(buildButton(reduced: false));
+      await tester.pumpAndSettle();
+      expect(find.byType(NativeGlassButtonFeedback), findsOneWidget);
 
-    final target = tester.getCenter(find.byType(IconButton));
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(target);
-    await tester.pumpAndSettle();
-    var overlay = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
-    expect((overlay.decoration as ShapeDecoration).color!.a, greaterThan(0));
+      final target = tester.getCenter(find.byType(IconButton));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(target);
+      await tester.pumpAndSettle();
+      var overlay = tester.widget<AnimatedContainer>(
+        find.byType(AnimatedContainer),
+      );
+      expect((overlay.decoration as ShapeDecoration).color!.a, greaterThan(0));
 
-    await mouse.down(target);
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
-      GlassMetrics.buttonPressedScale,
-    );
-    await mouse.up();
-    await tester.pumpAndSettle();
-    await mouse.removePointer();
+      await mouse.down(target);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+        GlassMetrics.buttonPressedScale,
+      );
+      await mouse.up();
+      await tester.pumpAndSettle();
+      await mouse.removePointer();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pumpAndSettle();
-    overlay = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
-    final border = (overlay.decoration as ShapeDecoration).shape
-        as RoundedSuperellipseBorder;
-    expect(border.side.width, GlassMetrics.focusRingWidth);
-    expect(border.side.color, accent);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      overlay = tester.widget<AnimatedContainer>(
+        find.byType(AnimatedContainer),
+      );
+      final border =
+          (overlay.decoration as ShapeDecoration).shape
+              as RoundedSuperellipseBorder;
+      expect(border.side.width, GlassMetrics.focusRingWidth);
+      expect(border.side.color, accent);
 
-    // 边界：减少动态效果开启时按下仍响应，但缩放保持 1.0。
-    await tester.pumpWidget(buildButton(reduced: true));
-    await tester.pump();
-    final press = await tester.startGesture(
-      tester.getCenter(find.byType(IconButton)),
-    );
-    await tester.pump();
-    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.0);
-    await press.up();
-  });
+      // 边界：减少动态效果开启时按下仍响应，但缩放保持 1.0。
+      await tester.pumpWidget(buildButton(reduced: true));
+      await tester.pump();
+      final press = await tester.startGesture(
+        tester.getCenter(find.byType(IconButton)),
+      );
+      await tester.pump();
+      expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+        1.0,
+      );
+      await press.up();
+    },
+  );
 
   testWidgets('菜单空项容错、flat 反馈、长菜单滚动、行内报错与危险确认对话框与横幅（U-04、U-13、U-21、U-26）', (
     tester,

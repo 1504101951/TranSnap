@@ -36,7 +36,7 @@ abstract final class AccentColors {
     graphite: '石墨',
   };
 
-  /// 预设色浅色值配白字 ≥ 4.5:1，深色值配 #1C1C1E 深字 ≥ 5.3:1（#144）。
+  /// 预设色浅色值配白字 ≥ 4.5:1；深色值较亮，用于深色背景上的强调文字与描边，做实底时由 accentColorsFor 压暗以配白字（#144）。
   static const swatches = <String, ({Color light, Color dark})>{
     blue: (light: Color(0xFF2F6FE4), dark: Color(0xFF4C8DFF)),
     purple: (light: Color(0xFF6E56CF), dark: Color(0xFF9B8AFB)),
@@ -68,4 +68,31 @@ abstract final class AccentColors {
       dark: Color.lerp(light, const Color(0xFFFFFFFF), customDarkLift)!,
     );
   }
+}
+
+/// 强调色实底上的前景（图标线条与文字）偏好：自动、白色、黑色或自定义 #RRGGBB；默认自动，
+/// 与 Swift AppConstants.accentForegroundKey 同步（#144）。
+abstract final class AccentForegrounds {
+  static const auto = 'auto';
+  static const white = 'white';
+  static const black = 'black';
+  static const values = [auto, white, black];
+  static const labels = {auto: '自动', white: '白色', black: '黑色'};
+
+  /// 固定前景色：白色 #FFFFFF、黑色 #1C1C1E。
+  static const colors = <String, Color>{
+    white: Color(0xFFFFFFFF),
+    black: Color(0xFF1C1C1E),
+  };
+
+  /// value 为偏好值；返回它是否为合法的前景偏好。
+  static bool isValid(String value) =>
+      values.contains(value) || AccentColors.isCustom(value);
+
+  /// value 为偏好值；返回固定或自定义前景色，「自动」与无法解析时为 null。
+  static Color? colorOf(String value) =>
+      colors[value] ??
+      (AccentColors.isCustom(value)
+          ? Color(0xFF000000 | int.parse(value.substring(1), radix: 16))
+          : null);
 }

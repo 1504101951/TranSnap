@@ -66,7 +66,7 @@ void main() {
     expect(saved[PreferenceKeys.glassAppearance], 'dark');
     expect(find.text('深色'), findsOneWidget);
     expect(find.text('保存设置'), findsNothing);
-    await openSettingsPage(tester, '通用');
+    await openSettingsPage(tester, '权限与启动');
     expect(
       tester.widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch)).value,
       true,

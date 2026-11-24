@@ -54,6 +54,7 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         let pair = accentPair(preferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem)
         return [AppConstants.glassAppearanceKey: preferences[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem,
                 AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
+                AppConstants.accentForegroundKey: preferences[AppConstants.accentForegroundKey] as? String ?? "auto",
                 AppConstants.accentLightKey: pair?.light ?? accentARGB(.aqua),
                 AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua)]
     }

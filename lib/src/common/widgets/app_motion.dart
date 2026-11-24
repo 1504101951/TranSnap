@@ -25,15 +25,67 @@ abstract final class AppMotion {
           extraBounce: MotionMetrics.bouncyExtraBounce,
           snapToEnd: true,
         );
+
+  /// context 提供无障碍偏好；返回选区触发按钮与译文卡片入场用的快速弹簧（300ms、阻尼约 0.78），减少动态效果时为零时长。
+  static Motion presence(BuildContext context) => reduced(context)
+      ? const Motion.linear(Duration.zero)
+      : const CupertinoMotion.snappy(
+          duration: MotionMetrics.presenceDuration,
+          extraBounce: MotionMetrics.presenceExtraBounce,
+          snapToEnd: true,
+        );
+
+  /// context 提供无障碍偏好，child 为当前图标（须带区分状态的 key）；返回统一的图标交叉过渡：
+  /// 旧图标缩到 0.6、模糊 2pt、淡出，新图标反向进入，160ms；减少动态效果时直接切换（#142 第 4 条）。
+  static Widget iconSwitcher(BuildContext context, Widget child) =>
+      AnimatedSwitcher(
+        duration: reduced(context)
+            ? Duration.zero
+            : MotionMetrics.iconSwitchDuration,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween(
+              begin: MotionMetrics.iconSwitchFromScale,
+              end: 1.0,
+            ).animate(animation),
+            child: AnimatedBuilder(
+              animation: animation,
+              child: child,
+              builder: (context, child) {
+                final sigma =
+                    (1 - animation.value) * MotionMetrics.iconSwitchBlur;
+                return sigma < 0.01
+                    ? child!
+                    : ImageFiltered(
+                        imageFilter: ui.ImageFilter.blur(
+                          sigmaX: sigma,
+                          sigmaY: sigma,
+                        ),
+                        child: child,
+                      );
+              },
+            ),
+          ),
+        ),
+        child: child,
+      );
 }
 
 /// 首次挂载或键变更时的 Bouncy 物理弹性进场（#142）；收敛后剥离变换包装，避免静态阶段亚像素偏差。
 class BouncyPresence extends StatefulWidget {
-  /// child 为受控组件，fromScale 为起始缩放比；减少动态效果时直接输出 child。
-  const BouncyPresence({super.key, required this.child, this.fromScale = 0.92});
+  /// child 为受控组件，fromScale 为起始缩放比，quick 为真时用 300ms 快速弹簧（选区触发按钮与译文卡片）；
+  /// 减少动态效果时直接输出 child。
+  const BouncyPresence({
+    super.key,
+    required this.child,
+    this.fromScale = 0.92,
+    this.quick = false,
+  });
 
   final Widget child;
   final double fromScale;
+  final bool quick;
 
   /// 无参数；创建弹性进场收敛跟踪状态。
   @override
@@ -50,7 +102,9 @@ class _BouncyPresenceState extends State<BouncyPresence> {
     return SingleMotionBuilder(
       from: widget.fromScale,
       value: 1.0,
-      motion: AppMotion.bouncy(context),
+      motion: widget.quick
+          ? AppMotion.presence(context)
+          : AppMotion.bouncy(context),
       onAnimationStatusChanged: (status) {
         if (status == AnimationStatus.completed && !_settled && mounted) {
           setState(() => _settled = true);
@@ -818,31 +872,34 @@ class _SpeechWaveIconState extends State<SpeechWaveIcon>
 
   @override
   Widget build(BuildContext context) {
+    // 喇叭与声波之间统一交叉过渡（#142 第 4 条）。
     if (!widget.speaking) {
-      return Icon(Icons.volume_up_rounded, size: widget.size);
+      return AppMotion.iconSwitcher(
+        context,
+        Icon(
+          Icons.volume_up_rounded,
+          key: const ValueKey('speech-idle'),
+          size: widget.size,
+        ),
+      );
     }
     final primary = Theme.of(context).colorScheme.primary;
     final reduced = AppMotion.reduced(context);
-    final wave = SizedBox.square(
-      dimension: widget.size,
-      child: AnimatedBuilder(
-        animation: _waveController,
-        builder: (context, _) => CustomPaint(
-          painter: _SpeechWavePainter(
-            phase: reduced ? 0.25 : _waveController.value,
-            color: primary,
+    return AppMotion.iconSwitcher(
+      context,
+      SizedBox.square(
+        key: const ValueKey('speech-wave'),
+        dimension: widget.size,
+        child: AnimatedBuilder(
+          animation: _waveController,
+          builder: (context, _) => CustomPaint(
+            painter: _SpeechWavePainter(
+              phase: reduced ? 0.25 : _waveController.value,
+              color: primary,
+            ),
           ),
         ),
       ),
-    );
-    if (reduced) return wave;
-    return SingleMotionBuilder(
-      from: 0.72,
-      value: 1.0,
-      motion: AppMotion.bouncy(context),
-      child: wave,
-      builder: (context, scale, child) =>
-          Transform.scale(scale: scale, child: child),
     );
   }
 }
@@ -956,14 +1013,10 @@ class _VocabularyBookmarkIconState extends State<VocabularyBookmarkIcon>
               },
             ),
           ),
-          SingleMotionBuilder(
-            key: ValueKey(widget.saved),
-            from: widget.saved ? 0.68 : 1.08,
-            value: 1.0,
-            motion: AppMotion.bouncy(context),
-            child: icon,
-            builder: (context, scale, child) =>
-                Transform.scale(scale: scale, child: child),
+          // 未加入与已加入图标统一交叉过渡（#142 第 4 条）。
+          AppMotion.iconSwitcher(
+            context,
+            KeyedSubtree(key: ValueKey(widget.saved), child: icon),
           ),
         ],
       ),
@@ -985,7 +1038,9 @@ class _SparkBurstPainter extends CustomPainter {
     final baseR = size.shortestSide * 0.42;
     for (var i = 0; i < 8; i++) {
       final angle = (i * math.pi) / 4;
-      final dist = baseR + progress * (size.shortestSide * 0.55);
+      final dist =
+          baseR +
+          progress * (size.shortestSide * MotionMetrics.vocabBurstSpread);
       final pos =
           center + Offset(math.cos(angle) * dist, math.sin(angle) * dist);
       canvas.drawCircle(pos, 1.2 * (1.0 - progress * 0.4), paint);
@@ -1078,8 +1133,16 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
   @override
   Widget build(BuildContext context) {
     final active = widget.copied || _transientActive;
+    // 复制图标与对勾之间统一交叉过渡（#142 第 4 条）。
     if (!active) {
-      return Icon(Icons.copy_rounded, size: widget.size);
+      return AppMotion.iconSwitcher(
+        context,
+        Icon(
+          Icons.copy_rounded,
+          key: const ValueKey('copy-idle'),
+          size: widget.size,
+        ),
+      );
     }
     final reduced = AppMotion.reduced(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -1093,28 +1156,35 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
         child: AnimatedBuilder(
           animation: _confirmController,
           builder: (context, _) {
-            // 前 26% 时长完成描边打勾与扩散微环，其余时间保持清晰对勾直至回弹。
-            final drawProgress = reduced
+            // 前 45%（450ms）完成描边打勾、扩散微环与 0.6→1.12→1 回弹，其余时间保持清晰对勾直至复原。
+            final phase = reduced
                 ? 1.0
-                : (_confirmController.value / 0.26).clamp(0.0, 1.0);
-            return CustomPaint(
-              painter: _CopyConfirmPainter(
-                progress: drawProgress,
-                color: success,
+                : (_confirmController.value / MotionMetrics.copyDrawFraction)
+                      .clamp(0.0, 1.0);
+            final scale = phase < 0.55
+                ? ui.lerpDouble(
+                    MotionMetrics.iconSwitchFromScale,
+                    MotionMetrics.copyPeakScale,
+                    Curves.easeOut.transform(phase / 0.55),
+                  )!
+                : ui.lerpDouble(
+                    MotionMetrics.copyPeakScale,
+                    1.0,
+                    Curves.easeInOut.transform((phase - 0.55) / 0.45),
+                  )!;
+            return Transform.scale(
+              scale: scale,
+              child: CustomPaint(
+                painter: _CopyConfirmPainter(progress: phase, color: success),
               ),
             );
           },
         ),
       ),
     );
-    if (reduced) return check;
-    return SingleMotionBuilder(
-      from: 0.72,
-      value: 1.0,
-      motion: AppMotion.bouncy(context),
-      child: check,
-      builder: (context, scale, child) =>
-          Transform.scale(scale: scale, child: child),
+    return AppMotion.iconSwitcher(
+      context,
+      KeyedSubtree(key: const ValueKey('copy-done'), child: check),
     );
   }
 }

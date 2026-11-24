@@ -5,7 +5,6 @@ import 'package:translate_app/src/common/constants/bridge_event_types.dart';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -325,20 +324,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(history.page(), hasLength(1));
 
-    /// label 为菜单选项；打开卡片标题区的模式菜单并选择该项，等待处理结束。
-    Future<void> choose(String label) async {
-      await tester.tap(find.byType(NativeGlassMenuButton<TextMode>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, label));
+    /// mode 为目标模式；点击卡片标题区对应的模式标签，等待处理结束。
+    Future<void> choose(TextMode mode) async {
+      await tester.tap(find.byKey(ValueKey('mode-tab-${mode.name}')));
       await tester.pumpAndSettle();
     }
 
-    // 边界：润色完整成功也不属于翻译历史。
-    await choose('润色');
+    // 边界：润色完整成功也不属于翻译历史；底部复制按钮随模式显示「复制润色」。
+    await choose(TextMode.polish);
     expect(session.snapshot.translatedText, 'Hello.');
-    expect(find.text('润色结果'), findsOneWidget);
+    expect(find.text('复制润色'), findsOneWidget);
     expect(history.page(), hasLength(1));
-    await choose('翻译');
+    await choose(TextMode.translate);
     expect(session.snapshot.translatedText, '你好');
     expect(history.page(), hasLength(2));
     expect(tester.takeException(), isNull);
@@ -416,19 +413,19 @@ void main() {
     expect(looked, ['serendipity']);
     expect(find.text('词典'), findsOneWidget);
     expect(find.text('serendipity | noun 机缘凑巧'), findsOneWidget);
-    await tester.tap(find.byTooltip('加入生词本'));
+    await tester.tap(find.text('加入生词本'));
     await tester.pump();
-    expect(find.byTooltip('已加入生词本'), findsOneWidget);
+    expect(find.text('已加入生词本'), findsOneWidget);
     expect(
       [for (final e in vocabulary.list()) (e.word, e.translation)],
       [('serendipity', '机缘凑巧')],
     );
 
-    // 边界二：超过三个词的句子不查词典，右栏仍为原文，也没有加入按钮。
+    // 边界二：超过三个词的句子不查词典，卡片为单栏译文与原文，没有词典栏，也没有加入按钮。
     await translate('sentence', 'this is a long sentence');
     expect(looked, ['serendipity']);
-    expect(find.text('原文'), findsOneWidget);
-    expect(find.byTooltip('加入生词本'), findsNothing);
+    expect(find.text('词典'), findsNothing);
+    expect(find.text('加入生词本'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
