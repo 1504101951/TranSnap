@@ -686,11 +686,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   /// actions 为当前可用动作，perLine 为每行并排的分区块数；返回供 _EditorSurface 计算工具栏尺寸的数值（pt）：
   /// lengths 为各行沿主轴的长度，grouped 为分区行与二级托盘中最长的一行（三级托盘可滚动，不计入），
-  /// thickness 为各行厚度之和加行间距（#67）。
-  ({List<double> lengths, double grouped, double thickness}) _lineLengths(
-    Map<String, VoidCallback?> actions,
-    int perLine,
-  ) {
+  /// blocks 为分区行中最长的一行，供工具栏居中对齐选区（托盘展开不改变它），thickness 为各行厚度之和加行间距（#67）。
+  ({List<double> lengths, double grouped, double blocks, double thickness})
+  _lineLengths(Map<String, VoidCallback?> actions, int perLine) {
     final strips = _strips();
     final lines = _toolbarLines(actions, perLine);
     return (
@@ -699,6 +697,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         0.0,
         for (final line in lines)
           if (line.strip == null) _lineLength(line, strips),
+      ].reduce(math.max),
+      blocks: [
+        0.0,
+        for (final line in lines)
+          if (line.strip == null && !_isTray(line)) _lineLength(line, strips),
       ].reduce(math.max),
       thickness:
           lines.fold(0.0, (sum, line) => sum + _lineThickness(line)) +
@@ -4051,11 +4054,15 @@ class _EditorSurface extends StatefulWidget {
   final Size? displaySize;
 
   /// perLine 为每行并排的分区块数；返回工具栏各行（竖放为各列）沿主轴的长度（pt，含二级与三级托盘及状态组，
-  /// 空表示没有可见按钮）、分区行与二级托盘中最长一行的长度，以及各行厚度之和加行间距，
+  /// 空表示没有可见按钮）、分区行与二级托盘中最长一行的长度、分区行中最长一行的长度（居中用），以及各行厚度之和加行间距，
   /// 用于决定工具栏尺寸与是否改为每行一块（#67、#141）。
-  final ({List<double> lengths, double grouped, double thickness}) Function(
-    int perLine,
-  )
+  final ({
+    List<double> lengths,
+    double grouped,
+    double blocks,
+    double thickness,
+  })
+  Function(int perLine)
   lines;
 
   /// 本次截图的美化参数；非 null 时在选区外预览背景与阴影。
@@ -4149,10 +4156,16 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   resultSize.height,
                 );
           // 只按已提交选区定位；拖动过程中保持同一个图片坐标系。
-          // 工具栏没有整体背景板：长度取最长一行，至少容纳一个按钮；厚度为各行厚度之和加行间距（#67、#141）。
+          // 工具栏没有整体背景板：长度取最长一行，至少容纳一个按钮；按分区行长度居中对齐选区；厚度为各行厚度之和加行间距（#67、#141）。
           // placeFor 按各行长度与总厚度计算图片与工具栏位置。
           ScreenshotEditorLayout placeFor(
-            ({List<double> lengths, double grouped, double thickness}) lines,
+            ({
+              List<double> lengths,
+              double grouped,
+              double blocks,
+              double thickness,
+            })
+            lines,
           ) => ScreenshotEditorLayout.place(
             viewport: constraints.biggest,
             imageRect: resultRect,
@@ -4176,6 +4189,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             image: imageSize,
             crop: widget.document.cropRect,
             toolbarLength: [...lines.lengths, 32.0].reduce(math.max),
+            centerLength: lines.blocks,
             thickness: math.max(lines.thickness, ToolbarGrid.blockThickness),
           );
           var perLine = ToolbarGrid.groupsPerLine;

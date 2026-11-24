@@ -133,6 +133,46 @@ void main() {
     }
   });
 
+  test('工具栏居中对齐选区；居中被屏幕左右边挡住时竖放到另一侧，边角与全屏保持横放（#67）', () {
+    // 作用：验证放置规则把选区、工具栏长度与厚度转换成工具栏矩形与方向。
+    // 边界：视口 1000×640、边距与间距 8；两块并排的分区行长 504、两行厚 84。
+    // 选区中心 x=500 时横栏左缘＝500−252＝248；托盘展开使工具栏长到 560 时居中仍按 504 计算，左缘不变；
+    // 选区中心 x=140 时居中起点 −112 被左边挡住，竖直中心 260 使竖栏上缘恰为 8（能居中），改为竖放在选区右侧 x=240+8；
+    // 选区中心 x=860 时居中末端 1112 超过 992，竖放在选区左侧 x=760−8−84；
+    // 左上角选区竖直中心 110 使竖栏上缘 −142 越界（不能居中），保持横放并收回到左缘 8；
+    // 全屏选区四周没有空白，放进选区内距底边 8 并水平居中。
+    const viewport = Size(1000, 640);
+    // place 按选区 crop 与工具栏长度 length 计算布局，居中长度固定为分区行 504。
+    ScreenshotEditorLayout place(Rect crop, {double length = 504}) =>
+        ScreenshotEditorLayout.place(
+          viewport: viewport,
+          image: viewport,
+          crop: crop,
+          toolbarLength: length,
+          centerLength: 504,
+          thickness: 84,
+        );
+    final narrow = place(const Rect.fromLTWH(380, 150, 240, 200));
+    expect(narrow.axis, Axis.horizontal);
+    expect(narrow.toolbar, const Rect.fromLTWH(248, 358, 504, 84));
+    expect(
+      place(const Rect.fromLTWH(380, 150, 240, 200), length: 560).toolbar,
+      const Rect.fromLTWH(248, 358, 560, 84),
+    );
+    final nearLeft = place(const Rect.fromLTWH(40, 150, 200, 220));
+    expect(nearLeft.axis, Axis.vertical);
+    expect(nearLeft.toolbar, const Rect.fromLTWH(248, 8, 84, 504));
+    final nearRight = place(const Rect.fromLTWH(760, 150, 200, 220));
+    expect(nearRight.axis, Axis.vertical);
+    expect(nearRight.toolbar, const Rect.fromLTWH(668, 8, 84, 504));
+    final corner = place(const Rect.fromLTWH(20, 20, 240, 180));
+    expect(corner.axis, Axis.horizontal);
+    expect(corner.toolbar, const Rect.fromLTWH(8, 208, 504, 84));
+    final full = place(Offset.zero & viewport);
+    expect(full.axis, Axis.horizontal);
+    expect(full.toolbar, const Rect.fromLTWH(248, 548, 504, 84));
+  });
+
   testWidgets('默认窗口仅预览可重新框选，手动选区八点和边框可拉伸', (tester) async {
     // 初始窗口预览不能拦截新框选；用户框选后才显示八点和边线拉伸光标。
     tester.view.physicalSize = const Size(960, 740);
