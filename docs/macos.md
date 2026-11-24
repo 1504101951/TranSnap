@@ -4,7 +4,7 @@
 
 ## 可直接启动的 App
 
-脚本构建前按 Bundle ID 删除本机已有副本（见下节），再签名并验证 Release App，写出 `dist/TranslateApp.zip`。在暂存目录解压、检查归档、验签并核对 Bundle ID 后，安装到 `/Applications/TranslateApp.app`（访达「应用程序」）并注册 LaunchServices；ZIP 校验成功才安装。打包开始时已删除的副本，安装失败后不会恢复。可双击安装后的 App，或从 Spotlight 搜索 TranslateApp。偏好保存在 UserDefaults，脚本不清理偏好。
+脚本在构建开始前按 Bundle ID 删除本仓库 `build` 与 `dist` 中的旧副本，并在构建进行时删除本机其余副本（见下节），再签名并验证 Release App，写出 `dist/TranslateApp.zip`。在暂存目录解压、检查归档、验签并核对 Bundle ID 后，安装到 `/Applications/TranslateApp.app`（访达「应用程序」）并注册 LaunchServices；ZIP 校验成功才安装。清理阶段已经删除的副本，安装失败后不会恢复。可双击安装后的 App，或从 Spotlight 搜索 TranslateApp。偏好保存在 UserDefaults，脚本不清理偏好。
 
 ## 辅助功能授权与签名
 
@@ -33,7 +33,7 @@ App 不修改 TCC 数据库，也不添加只匹配 Bundle ID 的宽松自定义
 
 ## 旧 App 副本
 
-打包开始前，脚本清除本机 `TranslateApp.app` 与 `translate_app.app` 的旧副本（含废纸篓里带时间戳后缀的重名副本）以及 `~/Applications/TranslateApp.app`，安装完成后再检查一次，避免用户目录和「应用程序」各留一份。扫描路径与匹配方式见 `scripts/package-and-install-macos.sh` 中的注释。
+构建开始前，脚本清除本仓库 `build` 与 `dist` 中的 `TranslateApp.app` 与 `translate_app.app`（含带时间戳后缀的重名副本）。构建进行的同时，清除 `/Applications/TranslateApp.app`、`~/Applications/TranslateApp.app`、废纸篓、用户 DerivedData 和临时目录中的旧副本，并注销启动服务里的残留登记。后一步不删除 `build` 里的文件，也不删除本次 `dist/package.*` 暂存目录。安装完成后再检查一次 `~/Applications/TranslateApp.app`，避免用户目录和「应用程序」各留一份。扫描路径与匹配方式见 `scripts/package-and-install-macos.sh` 中的注释。
 
 - 只删除 Bundle ID 为 `com.coolyang.translateApp` 的包；没有 Info.plist 时，仅当可执行文件是 `translate_app` 才删除。
 - 正在运行的副本不删除。

@@ -1,5 +1,6 @@
 #!/bin/bash
-# 无参数；先强制退出正在运行的 TranslateApp，再清除旧副本、构建并校验 Release ZIP，成功后安装到访达「应用程序」。
+# 无参数；先强制退出正在运行的 TranslateApp，再清除 build 与 dist 里的旧副本。
+# 随后同时构建 Release，并清除本机其余旧副本。成功后校验 ZIP，安装到访达「应用程序」。
 # TRANSLATEAPP_SIGN_IDENTITY 可指定固定签名证书，缺省 TranslateApp Local Signing。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,6 +18,8 @@ install_stage=""
 candidate_file=""
 normalized_file=""
 ordered_file=""
+# 后台 flutter build 的进程号。空字符串表示没有待结束的构建。清理时先结束它，再删除正在写入的产物。
+build_pid=""
 # 身份缺失立即失败，避免产出每次更新都会失去TCC授权的临时签名包。先于删除执行，证书不可用时不碰已安装副本。
 if [[ "$identity" == "-" ]]; then
   echo "禁止ad-hoc交付；请配置固定代码签名证书。" >&2
@@ -58,31 +61,37 @@ should_remove_app() {
 }
 
 # 作用：列出磁盘和 LaunchServices 中的候选路径。
-# 参数：无。
-# 返回：标准输出每行一个路径。Spotlight 负责已索引副本。固定安装路径直接判断。find 只补索引经常漏掉的废纸篓、DerivedData、本仓库产物和临时目录。
+# 参数：scope 为 build 或 external。build 只查本仓库 build 与 dist。external 查安装位置、废纸篓、用户 DerivedData、临时目录，以及 Spotlight 和启动服务登记。
+# 返回：标准输出每行一个路径。Spotlight 负责已索引副本。固定安装路径直接判断。find 只补索引经常漏掉的废纸篓、DerivedData 和临时目录。
 list_app_candidates() {
-  mdfind "kMDItemCFBundleIdentifier == '${bundle_id}'" 2>/dev/null || true
-  mdfind 'kMDItemFSName == "TranslateApp.app" || kMDItemFSName == "translate_app.app"' 2>/dev/null || true
+  local scope="$1"
   local path root
-  # 这两个位置是安装目标。直接判断，避免遍历整个 /Applications。
-  for path in /Applications/TranslateApp.app "$HOME/Applications/TranslateApp.app"; do
-    if [[ -e "$path" ]]; then
-      printf '%s\n' "$path"
-    fi
-  done
-  for root in \
-    "$HOME/.Trash" \
-    "$HOME/Library/Developer/Xcode/DerivedData" \
-    "$PWD/build" \
-    "$PWD/dist" \
-    /private/tmp \
-    /tmp \
-    /var/folders
-  do
+  local -a roots
+  if [[ "$scope" == "external" ]]; then
+    mdfind "kMDItemCFBundleIdentifier == '${bundle_id}'" 2>/dev/null || true
+    mdfind 'kMDItemFSName == "TranslateApp.app" || kMDItemFSName == "translate_app.app"' 2>/dev/null || true
+    # 这两个位置是安装目标。直接判断，避免遍历整个 /Applications。
+    for path in /Applications/TranslateApp.app "$HOME/Applications/TranslateApp.app"; do
+      if [[ -e "$path" ]]; then
+        printf '%s\n' "$path"
+      fi
+    done
+    roots=(
+      "$HOME/.Trash"
+      "$HOME/Library/Developer/Xcode/DerivedData"
+      /private/tmp
+      /tmp
+      /var/folders
+    )
+  else
+    roots=("$PWD/build" "$PWD/dist")
+  fi
+  for root in "${roots[@]}"; do
     [[ -d "$root" ]] || continue
     # 第三、四种名字是废纸篓为重名副本追加的时间戳，Spotlight 经常不索引这些路径。
     find "$root" \( -iname 'TranslateApp.app' -o -iname 'translate_app.app' -o -iname 'TranslateApp *.app' -o -iname 'translate_app *.app' \) -prune -print 2>/dev/null || true
   done
+  [[ "$scope" == "external" ]] || return 0
   # 目录删除后启动服务仍保留测试副本和 dist/package.* 暂存路径，屏幕录制列表会继续显示它们。
   "$lsregister" -dump 2>/dev/null | /usr/bin/awk -v bundle="$bundle_id" '
     function emit() {
@@ -129,18 +138,28 @@ remove_app_copy() {
   removed_registration=1
 }
 
-# 作用：清除本机旧副本和启动服务里的残留登记。
-# 参数：无。读写外层 candidate_file、normalized_file、ordered_file、removed_registration。
-# 返回：无。找不到副本时照常继续打包，且不压缩 LaunchServices 数据库。
+# 作用：清除旧副本和启动服务里的残留登记。
+# 参数：scope 为 build 或 external。build 在构建开始前处理本仓库 build 与 dist。external 在构建进行时处理其余位置，并跳过 build 与本次打包暂存。
+# 返回：无。读写外层 candidate_file、normalized_file、ordered_file、removed_registration。找不到副本时照常继续打包，且不压缩 LaunchServices 数据库。
 remove_existing_copies() {
-  local path line physical
+  local scope="$1"
+  local path line physical prefix skipped build_physical stage_physical
+  local -a skip_prefixes
+  if [[ "$scope" != "build" && "$scope" != "external" ]]; then
+    echo "未知副本清理范围：$scope" >&2
+    exit 1
+  fi
   removed_registration=0
-  echo "正在查找本机 TranslateApp 与 translate_app 副本…"
+  if [[ "$scope" == "build" ]]; then
+    echo "正在清除构建目录中的旧副本…"
+  else
+    echo "正在查找本机其余 TranslateApp 与 translate_app 副本…"
+  fi
   candidate_file="$(mktemp)"
   normalized_file="$(mktemp)"
   ordered_file="$(mktemp)"
-  # list_app_candidates：汇总磁盘路径和 LaunchServices 登记。
-  list_app_candidates > "$candidate_file"
+  # list_app_candidates：按 scope 汇总候选路径。
+  list_app_candidates "$scope" > "$candidate_file"
   while IFS= read -r path || [[ -n "$path" ]]; do
     [[ -n "$path" ]] || continue
     if [[ -d "$path" ]]; then
@@ -154,6 +173,20 @@ remove_existing_copies() {
     [[ -n "$path" ]] || continue
     printf '%07d %s\n' "${#path}" "$path"
   done < "$normalized_file" | sort -nr > "$ordered_file"
+  # 候选名单收齐后再取物理路径。构建此时可能已经写出 translate_app.app，前缀要把这份产物排除。
+  skip_prefixes=()
+  if [[ "$scope" == "external" ]]; then
+    skip_prefixes+=("$PWD/build")
+    if [[ -d "$PWD/build" ]]; then
+      build_physical="$(cd "$PWD/build" && pwd -P)"
+      [[ "$build_physical" == "$PWD/build" ]] || skip_prefixes+=("$build_physical")
+    fi
+    if [[ -n "$package_stage" && -d "$package_stage" ]]; then
+      skip_prefixes+=("$package_stage")
+      stage_physical="$(cd "$package_stage" && pwd -P)"
+      [[ "$stage_physical" == "$package_stage" ]] || skip_prefixes+=("$stage_physical")
+    fi
+  fi
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -n "$line" ]] || continue
     path="${line:8}"
@@ -164,6 +197,16 @@ remove_existing_copies() {
         continue
         ;;
     esac
+    skipped=0
+    if [[ "${#skip_prefixes[@]}" -gt 0 ]]; then
+      for prefix in "${skip_prefixes[@]}"; do
+        case "$path" in
+          "$prefix"|"$prefix"/*) skipped=1 ;;
+        esac
+      done
+    fi
+    # 构建正在写入 build/macos。external 不删除该目录，也不删除本次 dist 暂存。
+    [[ "$skipped" == 0 ]] || continue
     if [[ -d "$path" ]]; then
       # should_remove_app：只放行本应用包。remove_app_copy：注销并删除。
       if should_remove_app "$path"; then
@@ -180,6 +223,10 @@ remove_existing_copies() {
   if [[ "$removed_registration" == 1 ]]; then
     "$lsregister" -gc >/dev/null
   fi
+  rm -f "$candidate_file" "$normalized_file" "$ordered_file"
+  candidate_file=""
+  normalized_file=""
+  ordered_file=""
 }
 
 # 作用：把 bundle 安装到目标路径。
@@ -197,12 +244,35 @@ install_bundle() {
   osascript -e "do shell script \"/bin/rm -rf '$dest' && /usr/bin/ditto '$src' '$dest'\" with administrator privileges"
 }
 
-# 作用：退出时先回滚安装，再清掉打包暂存和构建产物。
-# 参数：无。使用外层 install_stage、package_stage、built_app 和临时列表文件。
+# 作用：强制结束该进程及其子进程。
+# 参数：pid 为进程号。
+# 返回：无。进程已不在、或 pid 不是大于 1 的数字时忽略。
+# 适用条件：脚本已经放弃这次 flutter build，需要立刻放开 build 目录。构建进程树退出后才能删除其中的产物；若改为等待构建自己收尾，再去掉强制结束。
+kill_process_tree() {
+  local pid="$1"
+  local child
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  [[ "$pid" -gt 1 ]] || return 0
+  while IFS= read -r child; do
+    [[ -n "$child" ]] || continue
+    # kill_process_tree：先结束子进程，再结束当前进程。
+    kill_process_tree "$child"
+  done < <(pgrep -P "$pid" || true)
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+# 作用：退出时先结束尚未完成的构建，再回滚安装，并清掉打包暂存和构建产物。
+# 参数：无。使用外层 build_pid、install_stage、package_stage、built_app 和临时列表文件。
 # 返回：以进入 trap 时的状态码退出。回滚或删除暂存成功不能把失败变成成功退出。
 cleanup_on_exit() {
   local status=$?
-  # install_bundle：安装失败时把替换前的 App 装回去。打包开始时已删掉的副本不在 previous 里。
+  if [[ -n "$build_pid" ]]; then
+    # kill_process_tree：结束尚未退出的构建进程树，避免随后删掉正在写入的产物。
+    kill_process_tree "$build_pid"
+    wait "$build_pid" 2>/dev/null || true
+    build_pid=""
+  fi
+  # install_bundle：安装失败时把替换前的 App 装回去。更早删掉的副本不在 previous 里。
   if [[ "$status" != 0 && -n "$install_stage" && -d "$install_stage/previous" ]]; then
     install_bundle "$install_stage/previous" "$target" || true
   fi
@@ -255,15 +325,25 @@ quit_running_apps() {
 # 此时尚未注册 EXIT 清理；退出失败不会删掉已有构建产物。
 quit_running_apps
 # 只注册一次 EXIT。后注册的 trap 会替换先注册的，分开清理会留下另一个暂存目录。
+# INT 与 TERM 转入 EXIT，以便结束仍在后台运行的构建。
 trap cleanup_on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# remove_existing_copies：打包前清掉测试副本和旧安装，避免启动服务继续打开旧路径。
-remove_existing_copies
+# remove_existing_copies：先清掉 build 与 dist 里的旧包。构建会写入 build/macos，不能等构建开始后再删这里。
+remove_existing_copies build
 
 # 每次从空目录打包，避免已移除的资源残留并破坏签名。
 mkdir -p dist
 package_stage="$(mktemp -d dist/package.XXXXXX)"
-flutter build macos --release
+# 构建写入 build/macos。其余旧副本的查找和删除不进入该目录，因此与构建同时进行。
+flutter build macos --release &
+build_pid=$!
+remove_existing_copies external
+build_status=0
+wait "$build_pid" || build_status=$?
+build_pid=""
+[[ "$build_status" == 0 ]] || exit "$build_status"
 ditto "$built_app" "$package_stage/TranslateApp.app"
 sign_flags=(--force --sign "$identity")
 if [[ "$identity" == "Developer ID Application:"* ]]; then
