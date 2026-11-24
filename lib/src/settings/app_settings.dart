@@ -293,10 +293,10 @@ class AppSettings {
     }
     if (services.map((e) => e.id).toSet().length != services.length ||
         !{
-              ServiceConfig.builtinId,
-              ServiceConfig.systemId,
-              ...services.map((e) => e.id),
-            }.contains(defaultServiceId)) {
+          ServiceConfig.builtinId,
+          ServiceConfig.systemId,
+          ...services.map((e) => e.id),
+        }.contains(defaultServiceId)) {
       throw const FormatException('默认翻译服务不存在或配置标识重复。');
     }
     // 全局翻译与输入翻译两组语言各自满足同一规则（#99）。
@@ -346,7 +346,8 @@ class AppSettings {
       throw const FormatException('翻译、输入翻译与截图快捷键不能相同。');
     }
     // 全局快捷键独占注册，落在有工具的截图工具栏格位上会让该格在截图编辑中无法触发；两侧修改都在此拒绝（#141）。
-    for (final MapEntry(key: slot, value: purpose) in globalShortcutSlots.entries) {
+    for (final MapEntry(key: slot, value: purpose)
+        in globalShortcutSlots.entries) {
       final action = screenshotToolbar.actionAt(slot.modifiers, slot.digit);
       if (action != null) {
         throw FormatException(

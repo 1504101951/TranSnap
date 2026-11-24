@@ -887,15 +887,13 @@ class _SettingsPageState extends State<_SettingsPage>
                                           icon: Icons.language_outlined,
                                           tint: Color(0xFFAF52DE),
                                         ),
-                                        title: const Text(
-                                          '安装 Apple 离线翻译语言包',
-                                        ),
+                                        title: const Text('安装 Apple 离线翻译语言包'),
                                         // 打开通用页时查询的语言包状态；查询完成前显示检查中。
                                         subtitle: Text(
                                           _languagePackStatus ?? '正在检查语言包…',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
                                         ),
                                         trailing: NativeGlassSurface(
                                           material: true,
@@ -945,704 +943,754 @@ class _SettingsPageState extends State<_SettingsPage>
                                     ),
                                 ],
                               ),
-                      ] else if (_page == SettingsPage.personalization) ...[
-                        NativeGlassGroup(
-                          title: '外观与强调色',
-                          children: [
-                            NativeGlassSettingRow(
-                              title: '外观',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.contrast_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              child: NativeGlassSegments<String>(
-                                value: settings.glassAppearance,
-                                options: AppearanceModes.labels,
-                                onChanged: (value) => _edit(
-                                  () => settings.glassAppearance = value,
-                                ),
-                              ),
-                            ),
-                            NativeGlassSettingRow(
-                              title: '强调色',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.palette_outlined,
-                                tint: Color(0xFFAF52DE),
-                              ),
-                              child: _AccentColorPicker(
-                                value: settings.accentColor,
-                                onChanged: (value) => _edit(
-                                  () => settings.accentColor = value,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        NativeGlassGroup(
-                          title: '液态玻璃',
-                          children: [
-                            NativeGlassSettingRow(
-                              title:
-                                  '玻璃透明度 ${(100 * (1 - settings.glassOpacity)).round()}%',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.blur_on_outlined,
-                                tint: Color(0xFF5E5CE6),
-                              ),
-                              caption:
-                                  '更改后自动保存并应用到所有窗口；系统“减少透明度”开启时保持材料不透明。',
-                              // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳。
-                              child: SizedBox(
-                                width: 200,
-                                height: GlassMetrics.sliderHeight,
-                                child: Slider(
-                                  value: 1 - settings.glassOpacity,
-                                  min: 0,
-                                  max: 0.8,
-                                  divisions: 80,
-                                  label:
-                                      '${(100 * (1 - settings.glassOpacity)).round()}%',
-                                  // 按滑块的整数百分比换算，避免 1 - 0.8 略小于合法下限 0.2。
-                                  onChanged: (value) => _edit(
-                                    () => settings.glassOpacity =
-                                        (100 - (value * 100).round()) / 100,
-                                    submit: false,
-                                  ),
-                                  onChangeStart: (_) =>
-                                      _adjustingOpacity = true,
-                                  onChangeEnd: (_) {
-                                    _adjustingOpacity = false;
-                                    _save();
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.languages) ...[
-                        NativeGlassGroup(
-                          children: [
-                            // 标题行右侧切换编辑哪一组语言；输入翻译与全局翻译各自保存（#99）。
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: GlassMetrics.rowHeight,
-                              ),
-                              child: Row(
+                            ] else if (_page ==
+                                SettingsPage.personalization) ...[
+                              NativeGlassGroup(
+                                title: '外观与强调色',
                                 children: [
-                                  const Expanded(
-                                    child: Text(
-                                      '翻译语言',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                  NativeGlassSettingRow(
+                                    title: '外观',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.contrast_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    child: NativeGlassSegments<String>(
+                                      value: settings.glassAppearance,
+                                      options: AppearanceModes.labels,
+                                      onChanged: (value) => _edit(
+                                        () => settings.glassAppearance = value,
                                       ),
                                     ),
                                   ),
-                                  NativeGlassSegments<bool>(
-                                    value: _inputLanguages,
-                                    options: const {
-                                      false: '全局翻译',
-                                      true: '输入翻译',
-                                    },
-                                    onChanged: (value) =>
-                                        setState(() => _inputLanguages = value),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            _language(
-                              '主要语言',
-                              _inputLanguages
-                                  ? settings.inputPrimaryLanguage
-                                  : settings.primaryLanguage,
-                              (v) {
-                                if (_inputLanguages) {
-                                  settings.inputPrimaryLanguage = v;
-                                } else {
-                                  settings.primaryLanguage = v;
-                                }
-                              },
-                            ),
-                            _language(
-                              '次要语言（可选）',
-                              (_inputLanguages
-                                      ? settings.inputSecondaryLanguage
-                                      : settings.secondaryLanguage) ??
-                                  '',
-                              (v) {
-                                final secondary = v.isEmpty ? null : v;
-                                if (_inputLanguages) {
-                                  settings.inputSecondaryLanguage = secondary;
-                                } else {
-                                  settings.secondaryLanguage = secondary;
-                                }
-                              },
-                              optional: true,
-                              caption: '当翻译文本识别为主要语言时，会自动翻译成次要语言',
-                            ),
-                          ],
-                        ),
-                        NativeGlassGroup(
-                          title: '服务与提示词',
-                          children: [
-                            NativeGlassDropdown<String>(
-                              label: '默认翻译服务',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.hub_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              value: settings.defaultServiceId,
-                              items: {
-                                ServiceConfig.builtinId:
-                                    ServiceConfig.builtinName,
-                                ServiceConfig.systemId:
-                                    ServiceConfig.systemName,
-                                for (final service in settings.services)
-                                  service.id: service.displayName,
-                              },
-                              onChanged: (value) => _edit(
-                                () => settings.defaultServiceId = value,
-                              ),
-                            ),
-
-                            // 术语表（#104）与润色、纠错、解释的处理提示词（#100）同属模型服务设置，共用一行，不增加翻译页高度。
-                            NativeGlassSettingRow(
-                              title: '术语与提示词',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.auto_awesome_outlined,
-                                tint: Color(0xFFAF52DE),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton(
-                                      onPressed: _manageGlossary,
-                                      child: Text(
-                                        '管理术语（${settings.glossary.length}）',
-                                      ),
+                                  NativeGlassSettingRow(
+                                    title: '强调色',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.palette_outlined,
+                                      tint: Color(0xFFAF52DE),
                                     ),
-                                  ),
-                                  const SizedBox(width: GlassMetrics.actionGap),
-                                  NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton(
-                                      onPressed: _editPrompts,
-                                      child: const Text('编辑提示词…'),
+                                    child: _AccentColorPicker(
+                                      value: settings.accentColor,
+                                      onChanged: (value) => _edit(
+                                        () => settings.accentColor = value,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.services) ...[
-                        NativeGlassGroup(
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: GlassMetrics.rowHeight,
-                              ),
-                              child: Row(
+                              NativeGlassGroup(
+                                title: '液态玻璃',
                                 children: [
-                                  const Expanded(
-                                    child: Text(
-                                      '翻译服务',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                  NativeGlassSettingRow(
+                                    title:
+                                        '玻璃透明度 ${(100 * (1 - settings.glassOpacity)).round()}%',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.blur_on_outlined,
+                                      tint: Color(0xFF5E5CE6),
                                     ),
-                                  ),
-                                  NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton.icon(
-                                      onPressed: () => _editService(),
-                                      icon: const Icon(Icons.add, size: 18),
-                                      label: const Text('添加服务'),
+                                    caption:
+                                        '更改后自动保存并应用到所有窗口；系统“减少透明度”开启时保持材料不透明。',
+                                    // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳。
+                                    child: SizedBox(
+                                      width: 200,
+                                      height: GlassMetrics.sliderHeight,
+                                      child: Slider(
+                                        value: 1 - settings.glassOpacity,
+                                        min: 0,
+                                        max: 0.8,
+                                        divisions: 80,
+                                        label:
+                                            '${(100 * (1 - settings.glassOpacity)).round()}%',
+                                        // 按滑块的整数百分比换算，避免 1 - 0.8 略小于合法下限 0.2。
+                                        onChanged: (value) => _edit(
+                                          () => settings.glassOpacity =
+                                              (100 - (value * 100).round()) /
+                                              100,
+                                          submit: false,
+                                        ),
+                                        onChangeStart: (_) =>
+                                            _adjustingOpacity = true,
+                                        onChangeEnd: (_) {
+                                          _adjustingOpacity = false;
+                                          _save();
+                                        },
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            if (settings.services.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: GlassMetrics.space8,
-                                ),
-                                child: Text(
-                                  '暂无自定义翻译服务；默认使用谷歌翻译或 Apple 系统翻译。',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            for (final service in settings.services)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(service.displayName),
-                                subtitle: Text(
-                                  '${ServiceConfig.kinds[service.kind]}${service.isModel ? ' · ${service.model}' : ''}',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    NativeGlassSurface(
-                                      material: true,
-                                      child: IconButton(
-                                        tooltip: '编辑 ${service.displayName}',
-                                        icon: const Icon(Icons.edit_outlined),
-                                        onPressed: () => _editService(service),
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      width: GlassMetrics.actionGap,
-                                    ),
-                                    NativeGlassSurface(
-                                      material: true,
-                                      child: IconButton(
-                                        tooltip: '删除 ${service.displayName}',
-                                        onPressed: () =>
-                                            _confirmDeleteService(service),
-                                        icon: const Icon(Icons.delete_outline),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.shortcuts) ...[
-                        NativeGlassGroup(
-                          title: '触发方式',
-                          children: [
-                            NativeGlassSwitchTile(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.bolt_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: '仅使用快捷键',
-                              value: !settings.automatic,
-                              onChanged: (v) =>
-                                  _edit(() => settings.automatic = !v),
-                            ),
-                          ],
-                        ),
-                        NativeGlassGroup(
-                          title: '全局快捷键',
-                          children: [
-                            ..._shortcutBlock(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.translate_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: '全局翻译快捷键',
-                              code: settings.shortcutModifiers,
-                              label: settings.shortcutLabel,
-                              apply: (target, keyCode, modifiers, label) =>
-                                  target
-                                    ..shortcutKeyCode = keyCode
-                                    ..shortcutModifiers = modifiers
-                                    ..shortcutLabel = label,
-                            ),
-                            // 输入翻译把来源输入框的原文替换为译文（#99）。
-                            ..._shortcutBlock(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.edit_note_outlined,
-                                tint: Color(0xFF34C759),
-                              ),
-                              title: '输入翻译快捷键',
-                              code: settings.inputShortcutModifiers,
-                              label: settings.inputShortcutLabel,
-                              apply: (target, keyCode, modifiers, label) =>
-                                  target
-                                    ..inputShortcutKeyCode = keyCode
-                                    ..inputShortcutModifiers = modifiers
-                                    ..inputShortcutLabel = label,
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.exclusions) ...[
-                        NativeGlassGroup(
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: GlassMetrics.rowHeight,
-                              ),
-                              child: Row(
+                            ] else if (_page == SettingsPage.languages) ...[
+                              NativeGlassGroup(
                                 children: [
-                                  const Expanded(
-                                    child: Text(
-                                      '排除应用',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                  // 标题行右侧切换编辑哪一组语言；输入翻译与全局翻译各自保存（#99）。
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: GlassMetrics.rowHeight,
                                     ),
-                                  ),
-                                  NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton.icon(
-                                      onPressed: _addExclusion,
-                                      icon: const Icon(Icons.add, size: 18),
-                                      label: const Text('添加应用'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (settings.excludedApps.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: GlassMetrics.space8,
-                                ),
-                                child: Text(
-                                  '暂无排除应用；添加后在这些应用中不会自动触发选区翻译。',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            for (final app in settings.excludedApps.entries)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(app.value),
-                                trailing: NativeGlassSurface(
-                                  material: true,
-                                  child: IconButton(
-                                    tooltip: '移除排除项',
-                                    icon: const Icon(
-                                      Icons.remove_circle_outline,
-                                    ),
-                                    onPressed: () => _edit(
-                                      () =>
-                                          settings.excludedApps.remove(app.key),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.screenshotSave) ...[
-                        NativeGlassGroup(
-                          title: '截图目录',
-                          children: [
-                            ListTile(
-                              key: const ValueKey('截图目录'),
-                              contentPadding: EdgeInsets.zero,
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.folder_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: Text(
-                                settings.screenshotSaveDirectory.isEmpty
-                                    ? '系统图片目录/截图'
-                                    : settings.screenshotSaveDirectory,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: const Text('默认截图存放路径'),
-                              trailing: Wrap(
-                                spacing: 4,
-                                children: [
-                                  NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton(
-                                      onPressed: _chooseScreenshotDirectory,
-                                      child: const Text('选择路径'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        NativeGlassGroup(
-                          title: 'GIF 导出',
-                          children: [
-                            NativeGlassDropdown<int>(
-                              label: '帧率',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.movie_outlined,
-                                tint: Color(0xFFAF52DE),
-                              ),
-                              value: settings.gifFramesPerSecond,
-                              items: {
-                                for (var fps = 1; fps <= 30; fps++)
-                                  fps: '$fps fps',
-                              },
-                              onChanged: (fps) => _edit(
-                                () => settings.gifFramesPerSecond = fps,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: GlassMetrics.space12,
-                              ),
-                              child: NativeGlassField(
-                                label: '最大宽度（像素）',
-                                errorText: _gifWidthError,
-                                child: TextField(
-                                  key: const Key('gif-maximum-width'),
-                                  controller: _gifMaximumWidth,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    hintText: '不限制',
-                                  ),
-                                  // 留空保留原宽；非法非空值进入统一设置校验，不能当作无限制保存。
-                                  onChanged: (text) => _edit(
-                                    () => settings.gifMaximumWidth =
-                                        text.trim().isEmpty
-                                        ? null
-                                        : int.tryParse(text) ?? 0,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.recording) ...[
-                        NativeGlassGroup(
-                          title: '录制选项与点击特效',
-                          children: [
-                            NativeGlassSwitchTile(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.fiber_manual_record_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: '实时翻译时同时录制',
-                              value: settings.liveRecording,
-                              onChanged: (v) =>
-                                  _edit(() => settings.liveRecording = v),
-                            ),
-                            // 只作用于区域截图的冻结帧（#105）。
-                            NativeGlassSwitchTile(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.mouse_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: '截图包含鼠标指针',
-                              value: settings.screenshotIncludesCursor,
-                              onChanged: (v) => _edit(
-                                () => settings.screenshotIncludesCursor = v,
-                              ),
-                            ),
-                            // 区域与全屏录制在鼠标点击处绘制对应特效（#143）。
-                            NativeGlassDropdown<RecordingClickEffect>(
-                              label: '录制点击特效',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.touch_app_outlined,
-                                tint: Color(0xFFAF52DE),
-                              ),
-                              value: settings.recordingClickEffect,
-                              items: {
-                                for (final effect
-                                    in RecordingClickEffect.values)
-                                  effect: effect.label,
-                              },
-                              onChanged: (v) => _edit(
-                                () => settings.recordingClickEffect = v,
-                              ),
-                            ),
-                            // 关闭点击特效时右键与拖动区分开关不生效，随动禁用以保持清晰因果（U-24）。
-                            NativeGlassSwitchTile(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.gesture_outlined,
-                                tint: Color(0xFFFF9500),
-                              ),
-                              title: '区分右键与拖动轨迹',
-                              value: settings.recordingClickRightDistinct,
-                              onChanged:
-                                  settings.recordingClickEffect ==
-                                      RecordingClickEffect.off
-                                  ? null
-                                  : (v) => _edit(
-                                      () => settings
-                                          .recordingClickRightDistinct = v,
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.screenshotActions) ...[
-                        NativeGlassGroup(
-                          title: '截图触发快捷键',
-                          children: [
-                            ..._shortcutBlock(
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.crop_outlined,
-                                tint: Color(0xFF0A84FF),
-                              ),
-                              title: '区域截图快捷键',
-                              code: settings.screenshotShortcutModifiers,
-                              label: settings.screenshotShortcutLabel,
-                              apply: (target, keyCode, modifiers, label) =>
-                                  target
-                                    ..screenshotShortcutKeyCode = keyCode
-                                    ..screenshotShortcutModifiers = modifiers
-                                    ..screenshotShortcutLabel = label,
-                            ),
-                          ],
-                        ),
-                        // 回车或双击确认截图时执行的动作（#111）。
-                        NativeGlassGroup(
-                          title: '确认截图',
-                          children: [
-                            NativeGlassDropdown<ScreenshotConfirmAction>(
-                              label: '回车或双击确认时',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.check_circle_outline,
-                                tint: Color(0xFF34C759),
-                              ),
-                              value: settings.screenshotConfirmAction,
-                              items: const {
-                                ScreenshotConfirmAction.copy: '复制图片',
-                                ScreenshotConfirmAction.copyAndSave: '复制并保存',
-                              },
-                              onChanged: (action) => _edit(
-                                () => settings.screenshotConfirmAction = action,
-                              ),
-                            ),
-                          ],
-                        ),
-                        // 长截图默认手动滚动；自动时由 App 滚动来源窗口，用户在选区内滚动即接管（#112）。
-                        NativeGlassGroup(
-                          title: '长截图',
-                          children: [
-                            NativeGlassDropdown<ScrollCaptureMode>(
-                              label: '滚动方式',
-                              leading: const NativeGlassRowIcon(
-                                icon: Icons.swap_vert_outlined,
-                                tint: Color(0xFFAF52DE),
-                              ),
-                              value: settings.scrollCaptureMode,
-                              items: const {
-                                ScrollCaptureMode.manual: '手动滚动',
-                                ScrollCaptureMode.automatic: '自动滚动',
-                              },
-                              onChanged: (mode) => _edit(
-                                () => settings.scrollCaptureMode = mode,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ] else if (_page == SettingsPage.stickers) ...[
-                        // 我的贴纸：缩略图、悬停删除与添加图片（#103）。
-                        NativeGlassGroup(
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text(
-                                  '贴纸',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 8),
-                                if (settings.stickers.isEmpty)
-                                  Text(
-                                    '还没有贴纸',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  )
-                                else
-                                    Wrap(
-                                      spacing: StickerMetrics.thumbnailGap,
-                                      runSpacing: StickerMetrics.thumbnailGap,
+                                    child: Row(
                                       children: [
-                                        for (final sticker in settings.stickers)
-                                          _StickerThumbnail(
-                                            key: ValueKey(
-                                              'sticker-${sticker.id}',
+                                        const Expanded(
+                                          child: Text(
+                                            '翻译语言',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
                                             ),
-                                            path: _stickerDirectory == null
-                                                ? null
-                                                : '$_stickerDirectory/${sticker.id}.png',
-                                            onDelete: () =>
-                                                _confirmRemoveSticker(sticker),
                                           ),
+                                        ),
+                                        NativeGlassSegments<bool>(
+                                          value: _inputLanguages,
+                                          options: const {
+                                            false: '全局翻译',
+                                            true: '输入翻译',
+                                          },
+                                          onChanged: (value) => setState(
+                                            () => _inputLanguages = value,
+                                          ),
+                                        ),
                                       ],
                                     ),
-                                  const SizedBox(height: GlassMetrics.space8),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: NativeGlassSurface(
-                                      material: true,
-                                      child: TextButton(
-                                        onPressed: _addSticker,
-                                        child: const Text('添加图片…'),
+                                  ),
+                                  _language(
+                                    '主要语言',
+                                    _inputLanguages
+                                        ? settings.inputPrimaryLanguage
+                                        : settings.primaryLanguage,
+                                    (v) {
+                                      if (_inputLanguages) {
+                                        settings.inputPrimaryLanguage = v;
+                                      } else {
+                                        settings.primaryLanguage = v;
+                                      }
+                                    },
+                                  ),
+                                  _language(
+                                    '次要语言（可选）',
+                                    (_inputLanguages
+                                            ? settings.inputSecondaryLanguage
+                                            : settings.secondaryLanguage) ??
+                                        '',
+                                    (v) {
+                                      final secondary = v.isEmpty ? null : v;
+                                      if (_inputLanguages) {
+                                        settings.inputSecondaryLanguage =
+                                            secondary;
+                                      } else {
+                                        settings.secondaryLanguage = secondary;
+                                      }
+                                    },
+                                    optional: true,
+                                    caption: '当翻译文本识别为主要语言时，会自动翻译成次要语言',
+                                  ),
+                                ],
+                              ),
+                              NativeGlassGroup(
+                                title: '服务与提示词',
+                                children: [
+                                  NativeGlassDropdown<String>(
+                                    label: '默认翻译服务',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.hub_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    value: settings.defaultServiceId,
+                                    items: {
+                                      ServiceConfig.builtinId:
+                                          ServiceConfig.builtinName,
+                                      ServiceConfig.systemId:
+                                          ServiceConfig.systemName,
+                                      for (final service in settings.services)
+                                        service.id: service.displayName,
+                                    },
+                                    onChanged: (value) => _edit(
+                                      () => settings.defaultServiceId = value,
+                                    ),
+                                  ),
+
+                                  // 术语表（#104）与润色、纠错、解释的处理提示词（#100）同属模型服务设置，共用一行，不增加翻译页高度。
+                                  NativeGlassSettingRow(
+                                    title: '术语与提示词',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.auto_awesome_outlined,
+                                      tint: Color(0xFFAF52DE),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton(
+                                            onPressed: _manageGlossary,
+                                            child: Text(
+                                              '管理术语（${settings.glossary.length}）',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                          width: GlassMetrics.actionGap,
+                                        ),
+                                        NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton(
+                                            onPressed: _editPrompts,
+                                            child: const Text('编辑提示词…'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.services) ...[
+                              NativeGlassGroup(
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: GlassMetrics.rowHeight,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Expanded(
+                                          child: Text(
+                                            '翻译服务',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton.icon(
+                                            onPressed: () => _editService(),
+                                            icon: const Icon(
+                                              Icons.add,
+                                              size: 18,
+                                            ),
+                                            label: const Text('添加服务'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (settings.services.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: GlassMetrics.space8,
+                                      ),
+                                      child: Text(
+                                        '暂无自定义翻译服务；默认使用谷歌翻译或 Apple 系统翻译。',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ),
+                                  for (final service in settings.services)
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(service.displayName),
+                                      subtitle: Text(
+                                        '${ServiceConfig.kinds[service.kind]}${service.isModel ? ' · ${service.model}' : ''}',
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          NativeGlassSurface(
+                                            material: true,
+                                            child: IconButton(
+                                              tooltip:
+                                                  '编辑 ${service.displayName}',
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                              ),
+                                              onPressed: () =>
+                                                  _editService(service),
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                            width: GlassMetrics.actionGap,
+                                          ),
+                                          NativeGlassSurface(
+                                            material: true,
+                                            child: IconButton(
+                                              tooltip:
+                                                  '删除 ${service.displayName}',
+                                              onPressed: () =>
+                                                  _confirmDeleteService(
+                                                    service,
+                                                  ),
+                                              icon: const Icon(
+                                                Icons.delete_outline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.shortcuts) ...[
+                              NativeGlassGroup(
+                                title: '触发方式',
+                                children: [
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.bolt_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    title: '仅使用快捷键',
+                                    value: !settings.automatic,
+                                    onChanged: (v) =>
+                                        _edit(() => settings.automatic = !v),
+                                  ),
+                                ],
+                              ),
+                              NativeGlassGroup(
+                                title: '全局快捷键',
+                                children: [
+                                  ..._shortcutBlock(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.translate_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    title: '全局翻译快捷键',
+                                    code: settings.shortcutModifiers,
+                                    label: settings.shortcutLabel,
+                                    apply:
+                                        (target, keyCode, modifiers, label) =>
+                                            target
+                                              ..shortcutKeyCode = keyCode
+                                              ..shortcutModifiers = modifiers
+                                              ..shortcutLabel = label,
+                                  ),
+                                  // 输入翻译把来源输入框的原文替换为译文（#99）。
+                                  ..._shortcutBlock(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.edit_note_outlined,
+                                      tint: Color(0xFF34C759),
+                                    ),
+                                    title: '输入翻译快捷键',
+                                    code: settings.inputShortcutModifiers,
+                                    label: settings.inputShortcutLabel,
+                                    apply:
+                                        (target, keyCode, modifiers, label) =>
+                                            target
+                                              ..inputShortcutKeyCode = keyCode
+                                              ..inputShortcutModifiers =
+                                                  modifiers
+                                              ..inputShortcutLabel = label,
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.exclusions) ...[
+                              NativeGlassGroup(
+                                children: [
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: GlassMetrics.rowHeight,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Expanded(
+                                          child: Text(
+                                            '排除应用',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton.icon(
+                                            onPressed: _addExclusion,
+                                            icon: const Icon(
+                                              Icons.add,
+                                              size: 18,
+                                            ),
+                                            label: const Text('添加应用'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (settings.excludedApps.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: GlassMetrics.space8,
+                                      ),
+                                      child: Text(
+                                        '暂无排除应用；添加后在这些应用中不会自动触发选区翻译。',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ),
+                                  for (final app
+                                      in settings.excludedApps.entries)
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(app.value),
+                                      trailing: NativeGlassSurface(
+                                        material: true,
+                                        child: IconButton(
+                                          tooltip: '移除排除项',
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                          ),
+                                          onPressed: () => _edit(
+                                            () => settings.excludedApps.remove(
+                                              app.key,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ] else if (_page ==
+                                SettingsPage.screenshotSave) ...[
+                              NativeGlassGroup(
+                                title: '截图目录',
+                                children: [
+                                  ListTile(
+                                    key: const ValueKey('截图目录'),
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.folder_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    title: Text(
+                                      settings.screenshotSaveDirectory.isEmpty
+                                          ? '系统图片目录/截图'
+                                          : settings.screenshotSaveDirectory,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: const Text('默认截图存放路径'),
+                                    trailing: Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton(
+                                            onPressed:
+                                                _chooseScreenshotDirectory,
+                                            child: const Text('选择路径'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              NativeGlassGroup(
+                                title: 'GIF 导出',
+                                children: [
+                                  NativeGlassDropdown<int>(
+                                    label: '帧率',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.movie_outlined,
+                                      tint: Color(0xFFAF52DE),
+                                    ),
+                                    value: settings.gifFramesPerSecond,
+                                    items: {
+                                      for (var fps = 1; fps <= 30; fps++)
+                                        fps: '$fps fps',
+                                    },
+                                    onChanged: (fps) => _edit(
+                                      () => settings.gifFramesPerSecond = fps,
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: GlassMetrics.space12,
+                                    ),
+                                    child: NativeGlassField(
+                                      label: '最大宽度（像素）',
+                                      errorText: _gifWidthError,
+                                      child: TextField(
+                                        key: const Key('gif-maximum-width'),
+                                        controller: _gifMaximumWidth,
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          hintText: '不限制',
+                                        ),
+                                        // 留空保留原宽；非法非空值进入统一设置校验，不能当作无限制保存。
+                                        onChanged: (text) => _edit(
+                                          () => settings.gifMaximumWidth =
+                                              text.trim().isEmpty
+                                              ? null
+                                              : int.tryParse(text) ?? 0,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                        ] else if (_page == SettingsPage.toolbar) ...[
-                          NativeGlassGroup(
-                            children: [
-                              ScreenshotToolbarEditor(
-                                value: settings.screenshotToolbar,
-                                onChanged: (value) => _edit(
-                                  () => _settings!.screenshotToolbar = value,
-                                ),
-                                // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
-                                reserved: settings.globalShortcutSlots,
-                                systemSlots: _systemShortcutSlots,
-                              ),
-                            ],
-                          ),
-                        ] else if (_page == SettingsPage.mcp) ...[
-                          // McpSettingsPage 提供 MCP 开关、helper 路径、配置复制与接入平台列表；开关走同一自动保存。
-                          McpSettingsPage(
-                            enabled: settings.mcpEnabled,
-                            onChanged: (v) =>
-                                _edit(() => settings.mcpEnabled = v),
-                            controlEnabled: settings.mcpControlEnabled,
-                            onControlChanged: (v) =>
-                                _edit(() => settings.mcpControlEnabled = v),
-                            channel: _channel,
-                            createService: widget.createMcpService,
-                          ),
-                        ],
-                        // 只在有冲突、自动保存失败或一次性状态提示时渲染，正常无错误状态不占高度（#67）。
-                        if (_conflicted ||
-                            (_failed && _dirty) ||
-                            (_message != null && !_saving)) ...[
-                          const SizedBox(height: GlassMetrics.space16),
-                          NativeGlassBanner(
-                            message:
-                                _message ??
-                                (_conflicted
-                                    ? '设置已在其他位置更新，请重新加载。'
-                                    : '自动保存失败，请重试。'),
-                            isError: _failed || _conflicted,
-                            action: _conflicted
-                                ? NativeGlassSurface(
-                                    material: true,
-                                    child: TextButton(
-                                      onPressed: () {
-                                        _dirty = false;
-                                        _load();
-                                      },
-                                      child: const Text('重新加载设置'),
+                            ] else if (_page == SettingsPage.recording) ...[
+                              NativeGlassGroup(
+                                title: '录制选项与点击特效',
+                                children: [
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.fiber_manual_record_outlined,
+                                      tint: Color(0xFF0A84FF),
                                     ),
-                                  )
-                                : (_failed && _dirty)
-                                      ? NativeGlassSurface(
+                                    title: '实时翻译时同时录制',
+                                    value: settings.liveRecording,
+                                    onChanged: (v) =>
+                                        _edit(() => settings.liveRecording = v),
+                                  ),
+                                  // 只作用于区域截图的冻结帧（#105）。
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.mouse_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    title: '截图包含鼠标指针',
+                                    value: settings.screenshotIncludesCursor,
+                                    onChanged: (v) => _edit(
+                                      () =>
+                                          settings.screenshotIncludesCursor = v,
+                                    ),
+                                  ),
+                                  // 区域与全屏录制在鼠标点击处绘制对应特效（#143）。
+                                  NativeGlassDropdown<RecordingClickEffect>(
+                                    label: '录制点击特效',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.touch_app_outlined,
+                                      tint: Color(0xFFAF52DE),
+                                    ),
+                                    value: settings.recordingClickEffect,
+                                    items: {
+                                      for (final effect
+                                          in RecordingClickEffect.values)
+                                        effect: effect.label,
+                                    },
+                                    onChanged: (v) => _edit(
+                                      () => settings.recordingClickEffect = v,
+                                    ),
+                                  ),
+                                  // 关闭点击特效时右键与拖动区分开关不生效，随动禁用以保持清晰因果（U-24）。
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.gesture_outlined,
+                                      tint: Color(0xFFFF9500),
+                                    ),
+                                    title: '区分右键与拖动轨迹',
+                                    value: settings.recordingClickRightDistinct,
+                                    onChanged:
+                                        settings.recordingClickEffect ==
+                                            RecordingClickEffect.off
+                                        ? null
+                                        : (v) => _edit(
+                                            () =>
+                                                settings.recordingClickRightDistinct =
+                                                    v,
+                                          ),
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page ==
+                                SettingsPage.screenshotActions) ...[
+                              NativeGlassGroup(
+                                title: '截图触发快捷键',
+                                children: [
+                                  ..._shortcutBlock(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.crop_outlined,
+                                      tint: Color(0xFF0A84FF),
+                                    ),
+                                    title: '区域截图快捷键',
+                                    code: settings.screenshotShortcutModifiers,
+                                    label: settings.screenshotShortcutLabel,
+                                    apply:
+                                        (target, keyCode, modifiers, label) =>
+                                            target
+                                              ..screenshotShortcutKeyCode =
+                                                  keyCode
+                                              ..screenshotShortcutModifiers =
+                                                  modifiers
+                                              ..screenshotShortcutLabel = label,
+                                  ),
+                                ],
+                              ),
+                              // 回车或双击确认截图时执行的动作（#111）。
+                              NativeGlassGroup(
+                                title: '确认截图',
+                                children: [
+                                  NativeGlassDropdown<ScreenshotConfirmAction>(
+                                    label: '回车或双击确认时',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.check_circle_outline,
+                                      tint: Color(0xFF34C759),
+                                    ),
+                                    value: settings.screenshotConfirmAction,
+                                    items: const {
+                                      ScreenshotConfirmAction.copy: '复制图片',
+                                      ScreenshotConfirmAction.copyAndSave:
+                                          '复制并保存',
+                                    },
+                                    onChanged: (action) => _edit(
+                                      () => settings.screenshotConfirmAction =
+                                          action,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // 长截图默认手动滚动；自动时由 App 滚动来源窗口，用户在选区内滚动即接管（#112）。
+                              NativeGlassGroup(
+                                title: '长截图',
+                                children: [
+                                  NativeGlassDropdown<ScrollCaptureMode>(
+                                    label: '滚动方式',
+                                    leading: const NativeGlassRowIcon(
+                                      icon: Icons.swap_vert_outlined,
+                                      tint: Color(0xFFAF52DE),
+                                    ),
+                                    value: settings.scrollCaptureMode,
+                                    items: const {
+                                      ScrollCaptureMode.manual: '手动滚动',
+                                      ScrollCaptureMode.automatic: '自动滚动',
+                                    },
+                                    onChanged: (mode) => _edit(
+                                      () => settings.scrollCaptureMode = mode,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.stickers) ...[
+                              // 我的贴纸：缩略图、悬停删除与添加图片（#103）。
+                              NativeGlassGroup(
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      const Text(
+                                        '贴纸',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (settings.stickers.isEmpty)
+                                        Text(
+                                          '还没有贴纸',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        )
+                                      else
+                                        Wrap(
+                                          spacing: StickerMetrics.thumbnailGap,
+                                          runSpacing:
+                                              StickerMetrics.thumbnailGap,
+                                          children: [
+                                            for (final sticker
+                                                in settings.stickers)
+                                              _StickerThumbnail(
+                                                key: ValueKey(
+                                                  'sticker-${sticker.id}',
+                                                ),
+                                                path: _stickerDirectory == null
+                                                    ? null
+                                                    : '$_stickerDirectory/${sticker.id}.png',
+                                                onDelete: () =>
+                                                    _confirmRemoveSticker(
+                                                      sticker,
+                                                    ),
+                                              ),
+                                          ],
+                                        ),
+                                      const SizedBox(
+                                        height: GlassMetrics.space8,
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: NativeGlassSurface(
                                           material: true,
                                           child: TextButton(
-                                            onPressed: _save,
-                                            child: const Text('重试自动保存'),
+                                            onPressed: _addSticker,
+                                            child: const Text('添加图片…'),
                                           ),
-                                        )
-                                      : null,
-                                ),
-                              ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.toolbar) ...[
+                              NativeGlassGroup(
+                                children: [
+                                  ScreenshotToolbarEditor(
+                                    value: settings.screenshotToolbar,
+                                    onChanged: (value) => _edit(
+                                      () =>
+                                          _settings!.screenshotToolbar = value,
+                                    ),
+                                    // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
+                                    reserved: settings.globalShortcutSlots,
+                                    systemSlots: _systemShortcutSlots,
+                                  ),
+                                ],
+                              ),
+                            ] else if (_page == SettingsPage.mcp) ...[
+                              // McpSettingsPage 提供 MCP 开关、helper 路径、配置复制与接入平台列表；开关走同一自动保存。
+                              McpSettingsPage(
+                                enabled: settings.mcpEnabled,
+                                onChanged: (v) =>
+                                    _edit(() => settings.mcpEnabled = v),
+                                controlEnabled: settings.mcpControlEnabled,
+                                onControlChanged: (v) =>
+                                    _edit(() => settings.mcpControlEnabled = v),
+                                channel: _channel,
+                                createService: widget.createMcpService,
+                              ),
                             ],
-                          ),
+                            // 只在有冲突、自动保存失败或一次性状态提示时渲染，正常无错误状态不占高度（#67）。
+                            if (_conflicted ||
+                                (_failed && _dirty) ||
+                                (_message != null && !_saving)) ...[
+                              const SizedBox(height: GlassMetrics.space16),
+                              NativeGlassBanner(
+                                message:
+                                    _message ??
+                                    (_conflicted
+                                        ? '设置已在其他位置更新，请重新加载。'
+                                        : '自动保存失败，请重试。'),
+                                isError: _failed || _conflicted,
+                                action: _conflicted
+                                    ? NativeGlassSurface(
+                                        material: true,
+                                        child: TextButton(
+                                          onPressed: () {
+                                            _dirty = false;
+                                            _load();
+                                          },
+                                          child: const Text('重新加载设置'),
+                                        ),
+                                      )
+                                    : (_failed && _dirty)
+                                    ? NativeGlassSurface(
+                                        material: true,
+                                        child: TextButton(
+                                          onPressed: _save,
+                                          child: const Text('重试自动保存'),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1821,7 +1869,9 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
                   child: Center(
                     child: AnimatedScale(
                       scale: scale,
-                      duration: reduced ? Duration.zero : GlassMetrics.transition,
+                      duration: reduced
+                          ? Duration.zero
+                          : GlassMetrics.transition,
                       curve: Curves.easeOutCubic,
                       child: Container(
                         width: 26,
@@ -1940,9 +1990,9 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) =>
                             ColoredBox(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                               child: const Center(
                                 child: Icon(
                                   Icons.broken_image_outlined,

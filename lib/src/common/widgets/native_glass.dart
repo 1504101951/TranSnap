@@ -304,7 +304,9 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: outerTheme.outlinedButtonTheme.style?.copyWith(
             overlayColor: transparentOverlay,
-            side: WidgetStatePropertyAll(BorderSide(color: colors.outlineVariant)),
+            side: WidgetStatePropertyAll(
+              BorderSide(color: colors.outlineVariant),
+            ),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
@@ -335,9 +337,7 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
         return KeyEventResult.ignored;
       },
       child: MouseRegion(
-        cursor: widget.enabled
-            ? SystemMouseCursors.click
-            : MouseCursor.defer,
+        cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() {
           _hovered = false;
@@ -526,9 +526,8 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
                 Expanded(
                   child: Text(
                     widget.errorText!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: colors.error),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: colors.error),
                   ),
                 ),
               ],
@@ -712,7 +711,8 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
               children: [
                 Expanded(
                   child: Text(
-                    items[value] ?? (items.isNotEmpty ? items.values.first : ''),
+                    items[value] ??
+                        (items.isNotEmpty ? items.values.first : ''),
                     textAlign: TextAlign.left,
                     maxLines: widget.dense ? 1 : null,
                     overflow: widget.dense ? TextOverflow.ellipsis : null,
@@ -1411,6 +1411,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
         ),
       );
     }
+
     final onAccent = NativeGlassTheme.onAccentOf(context);
 
     return GestureDetector(
@@ -1645,6 +1646,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
         ),
       );
     }
+
     return NativeGlassSurface(
       material: true,
       radius: 0,
@@ -2041,9 +2043,8 @@ class NativeGlassDialog extends StatelessWidget {
               // 弹窗表单内隐藏系统自动挂载的滚动条，避免与右侧按钮（如「恢复默认」）及输入边框重叠，仍保留正常滚动。
               Flexible(
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
                   child: content,
                 ),
               ),
@@ -2112,9 +2113,8 @@ class NativeGlassBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: foreground),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: foreground),
               ),
             ),
             if (action != null) ...[
@@ -2284,7 +2284,8 @@ abstract final class NativeGlassTheme {
       return Colors.transparent;
     }),
     side: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.focused) ? focusedSide : restingSide,
+      (states) =>
+          states.contains(WidgetState.focused) ? focusedSide : restingSide,
     ),
   );
 
@@ -2539,7 +2540,8 @@ abstract final class NativeGlassTheme {
         ),
         checkColor: WidgetStatePropertyAll(accentPair.foreground),
         overlayColor: WidgetStateProperty.resolveWith(
-          (states) => (states.contains(WidgetState.focused) ||
+          (states) =>
+              (states.contains(WidgetState.focused) ||
                   states.contains(WidgetState.hovered))
               ? accent.withValues(alpha: 0.18)
               : Colors.transparent,

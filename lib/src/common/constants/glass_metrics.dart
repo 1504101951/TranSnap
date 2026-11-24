@@ -7,6 +7,7 @@ abstract final class GlassMetrics {
   static const menuItemRadius = 6.0;
   static const buttonHeight = 28.0;
   static const buttonMinWidth = 64.0;
+
   /// 设置页快捷键录制按钮统一最小宽度，对齐不同字符宽度的组合显示（#67）。
   static const shortcutButtonMinWidth = 128.0;
   static const primaryHeight = 32.0;
@@ -36,6 +37,7 @@ abstract final class GlassMetrics {
   static const switchWidth = 36.0;
   static const switchHeight = 20.0;
   static const switchThumb = 16.0;
+
   /// Apple 果冻开关按下态滑块横向拉伸宽度（#67、#144）。
   static const switchThumbPressedWidth = 21.0;
   static const sliderHeight = 32.0;

@@ -364,14 +364,10 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     for (final column in defaults.columns) {
       for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
         if (column.slots[slot] == null) continue;
-        final owner = widget.reserved[(
-          modifiers: column.modifiers,
-          digit: slot + 1,
-        )];
+        final owner =
+            widget.reserved[(modifiers: column.modifiers, digit: slot + 1)];
         if (owner != null) {
-          setState(
-            () => _error = '默认布局中的部分格位已被全局快捷键“$owner”占用，无法直接恢复默认。',
-          );
+          setState(() => _error = '默认布局中的部分格位已被全局快捷键“$owner”占用，无法直接恢复默认。');
           return;
         }
       }
@@ -424,9 +420,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       if (_value.columns[column].slots[slot] == null) continue;
       final owner = widget.reserved[(modifiers: modifiers, digit: slot + 1)];
       if (owner != null) {
-        setState(
-          () => _error = '切换到该修饰键会与全局快捷键“$owner”冲突，请先腾出对应格位。',
-        );
+        setState(() => _error = '切换到该修饰键会与全局快捷键“$owner”冲突，请先腾出对应格位。');
         return;
       }
     }
@@ -498,9 +492,9 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                                 style: TextStyle(
                                   fontSize: ScreenshotToolbarEditor.labelFont,
                                   fontWeight: FontWeight.w600,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ),
