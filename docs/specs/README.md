@@ -5,9 +5,9 @@ Source: 用户确认的 Issue 权威来源与本地规格保留规则。
 
 | 类别 | GitHub 权威规格 | 负责内容 |
 | --- | --- | --- |
-| 功能与交互 | [#1](https://github.com/1504101951/translateApp/issues/1) | 能力、用户操作、状态变化、数据保留与功能验收 |
-| 样式 | [#67](https://github.com/1504101951/translateApp/issues/67) | 组件尺寸、圆角、间距、颜色、字号、命中区、动效与数值边界 |
-| 架构设计约束 | [#68](https://github.com/1504101951/translateApp/issues/68) | 模块职责、数据契约、复用方式、依赖方向与技术验收 |
+| 功能与交互 | [#1](https://github.com/1504101951/TranSnap/issues/1) | 能力、用户操作、状态变化、数据保留与功能验收 |
+| 样式 | [#67](https://github.com/1504101951/TranSnap/issues/67) | 组件尺寸、圆角、间距、颜色、字号、命中区、动效与数值边界 |
+| 架构设计约束 | [#68](https://github.com/1504101951/TranSnap/issues/68) | 模块职责、数据契约、复用方式、依赖方向与技术验收 |
 
 ## Issue 与本地文档规则
 
@@ -24,8 +24,8 @@ Source: 用户确认的 Issue 权威来源与本地规格保留规则。
 
 用户指定保留的本地文档：[实时区域翻译澄清规格](live-region-translation.md)。记录 #24 的已确认结论与术语，同步 Issue 后仍按用户要求保留；推荐选项不视为批准。
 
-1. [区域实时文字翻译 #24](https://github.com/1504101951/translateApp/issues/24)：完整功能、采集与调度方案、窗口边界、待确认项及验收。
-2. [屏幕录制 #21](https://github.com/1504101951/translateApp/issues/21)：显示器、窗口或区域的无声 MP4 录制及本地预览保存。
-3. [GIF 导出 #23](https://github.com/1504101951/translateApp/issues/23)：录制视频的 GIF 导出范围与验收。
-4. [手动滚动长截图 #28](https://github.com/1504101951/translateApp/issues/28)：滚动拼接、固定区处理和结果操作，关联 #88、#89。
-5. [共享粗细 #72](https://github.com/1504101951/translateApp/issues/72)：线宽控件的范围、实现说明与验收记录。
+1. [区域实时文字翻译 #24](https://github.com/1504101951/TranSnap/issues/24)：完整功能、采集与调度方案、窗口边界、待确认项及验收。
+2. [屏幕录制 #21](https://github.com/1504101951/TranSnap/issues/21)：显示器、窗口或区域的无声 MP4 录制及本地预览保存。
+3. [GIF 导出 #23](https://github.com/1504101951/TranSnap/issues/23)：录制视频的 GIF 导出范围与验收。
+4. [手动滚动长截图 #28](https://github.com/1504101951/TranSnap/issues/28)：滚动拼接、固定区处理和结果操作，关联 #88、#89。
+5. [共享粗细 #72](https://github.com/1504101951/TranSnap/issues/72)：线宽控件的范围、实现说明与验收记录。

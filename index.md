@@ -10,12 +10,13 @@
 4. [scripts/](scripts/index.md)：macOS固定签名打包与安装脚本。
 5. [shaders/](shaders/index.md)：Flutter Impeller GPU 片段着色器资源。
 6. [test/](test/index.md)：Dart业务逻辑和Flutter界面行为回归测试。
-6. [.gitignore](.gitignore)：定义构建产物、缓存及本机配置的Git忽略范围。
-7. [.metadata](.metadata)：记录Flutter项目类型和工具维护元数据。
-8. [AGENTS.md](AGENTS.md)：规定智能体的文档阅读、规格同步、目录索引和交付权限。
-9. [README.md](README.md)：项目主页：功能一览、安装、快捷键、翻译服务与开发入口。
-10. [analysis_options.yaml](analysis_options.yaml)：配置Dart静态分析和代码检查规则。
-11. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
-12. [pubspec.lock](pubspec.lock)：锁定Dart与Flutter依赖的具体解析版本。
-13. [pubspec.yaml](pubspec.yaml)：声明Flutter应用版本、运行约束和依赖。
+7. [.gitignore](.gitignore)：定义构建产物、缓存及本机配置的Git忽略范围。
+8. [.metadata](.metadata)：记录Flutter项目类型和工具维护元数据。
+9. [AGENTS.md](AGENTS.md)：规定智能体的文档阅读、规格同步、目录索引和交付权限。
+10. [README.en.md](README.en.md)：英文版项目主页：功能一览、安装、快捷键、翻译服务与开发入口。
+11. [README.md](README.md)：项目主页：功能一览、安装、快捷键、翻译服务与开发入口。
+12. [analysis_options.yaml](analysis_options.yaml)：配置Dart静态分析和代码检查规则。
+13. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
+14. [pubspec.lock](pubspec.lock)：锁定Dart与Flutter依赖的具体解析版本。
+15. [pubspec.yaml](pubspec.yaml)：声明Flutter应用版本、运行约束和依赖。
 

@@ -1,7 +1,7 @@
 # 实时翻译澄清规格（#24）
 
 Codex-Thread: 01a0fa7e-90ee-7600-919f-2aba8d7000d4
-Source-Issue: https://github.com/1504101951/translateApp/issues/24
+Source-Issue: https://github.com/1504101951/TranSnap/issues/24
 
 状态：原位覆盖、盖层外观、暂停撤层、框内缩小、段落块、段落块缓存与批次调度已确认并接入代码；性能待实测。
 保留依据：用户明确要求澄清内容在本地持久化。

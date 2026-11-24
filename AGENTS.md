@@ -22,7 +22,7 @@
 
 ## 先更新规格，再开发
 
-开发依据分为三类：[功能与交互规格 #1](https://github.com/1504101951/translateApp/issues/1)、[样式规格 #67](https://github.com/1504101951/translateApp/issues/67)、[架构设计约束 #68](https://github.com/1504101951/translateApp/issues/68)。实施已批准需求前，先更新受影响的 GitHub Issue。本地规格副本与用户指定保留的澄清记录的保留或删除，统一按 [规格索引](docs/specs/README.md) 处理。界面数值必须明确，不得擅自偏离规格或将待确认参数视为已批准值。
+开发依据分为三类：[功能与交互规格 #1](https://github.com/1504101951/TranSnap/issues/1)、[样式规格 #67](https://github.com/1504101951/TranSnap/issues/67)、[架构设计约束 #68](https://github.com/1504101951/TranSnap/issues/68)。实施已批准需求前，先更新受影响的 GitHub Issue。本地规格副本与用户指定保留的澄清记录的保留或删除，统一按 [规格索引](docs/specs/README.md) 处理。界面数值必须明确，不得擅自偏离规格或将待确认参数视为已批准值。
 
 ## 目录索引
 

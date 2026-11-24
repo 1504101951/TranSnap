@@ -1,6 +1,6 @@
 # Flutter macOS 架构
 
-本文描述当前实现。规范性技术边界见[架构设计约束](https://github.com/1504101951/translateApp/issues/68)，产品行为与数值分别见[功能规格](https://github.com/1504101951/translateApp/issues/1)、[样式规格](https://github.com/1504101951/translateApp/issues/67)。
+本文描述当前实现。规范性技术边界见[架构设计约束](https://github.com/1504101951/TranSnap/issues/68)，产品行为与数值分别见[功能规格](https://github.com/1504101951/TranSnap/issues/1)、[样式规格](https://github.com/1504101951/TranSnap/issues/67)。
 
 当前只交付 macOS 26+。Flutter/Dart 是应用与业务主体，Swift 负责 macOS 启动壳、系统能力和原生 Liquid Glass 材料。
 

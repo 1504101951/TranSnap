@@ -1,8 +1,10 @@
-# TranslateApp
+# TranSnap
 
-<p align="center"><img src="docs/media/translateapp-intro.gif" alt="TranslateApp 像素对局介绍动画《翻译峡谷》：召唤师指挥 Grok、GPT、Claude，依次演示翻译服务、选区翻译与快捷翻译、贴图、截图标注与识别文字、滚动长截图、录屏与 GIF、工具栏自由拼接、实时翻译与同步录制、翻译历史" width="640"></p>
+简体中文 | [English](README.en.md)
 
-macOS 26+ 全局选区翻译 App，集成截图、录屏与实时翻译。Flutter/Dart 负责界面与翻译业务，Swift 负责系统能力和原生 Liquid Glass 材料。
+<p align="center"><img src="docs/media/transnap-intro.gif" alt="TranSnap 像素对局介绍动画《翻译峡谷》：召唤师指挥 Grok、GPT、Claude，依次演示翻译服务、选区翻译与快捷翻译、贴图、截图标注与识别文字、滚动长截图、录屏与 GIF、工具栏自由拼接、实时翻译与同步录制、翻译历史" width="640"></p>
+
+macOS 26+ Liquid Glass 全局选区与实时屏幕翻译工具，集成截图标注、滚动长截图、贴图与录屏。Flutter/Dart 负责界面与翻译业务，Swift 负责系统能力和原生 Liquid Glass 材料。
 
 ## 功能
 
