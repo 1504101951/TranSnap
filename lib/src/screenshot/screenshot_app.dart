@@ -148,6 +148,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   ShapeVariant get _styleShape => _styleSelection?.shape ?? _drawing.shape;
   String? _selectedShapeId;
   bool _shapeSelecting = false;
+
   /// 样式弹窗打开中：Esc 关闭弹窗、回车不导出、新截图先关闭弹窗。
   bool _dialogOpen = false;
 
@@ -408,9 +409,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final attributes = _attributeIds(actions);
     final inserted = <_ToolbarCells>[
       for (final (index, cells) in chunk(_visibleChildren).indexed)
-        (key: 'screenshot-children-group-$index', cells: <String?>[...cells], label: null),
+        (
+          key: 'screenshot-children-group-$index',
+          cells: <String?>[...cells],
+          label: null,
+        ),
       for (final (index, cells) in chunk(attributes).indexed)
-        (key: 'screenshot-attributes-group-$index', cells: <String?>[...cells], label: null),
+        (
+          key: 'screenshot-attributes-group-$index',
+          cells: <String?>[...cells],
+          label: null,
+        ),
     ];
     final anchor = _group ?? _activeId;
     final closing = _closing;
@@ -434,14 +443,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       final label = column.modifiers == 0
           ? '无'
           : ToolbarModifiers.label(column.modifiers);
-      groups.add((key: 'screenshot-grid-group-$index', cells: cells, label: label));
+      groups.add((
+        key: 'screenshot-grid-group-$index',
+        cells: cells,
+        label: label,
+      ));
     }
     // 等待中的功能按钮在工具栏可见时由它自己显示进度环；否则在末尾状态组显示同样的进度环格（#142）。
     final shown = {
       for (final group in [...groups, ...inserted]) ...group.cells,
     };
     final status = [
-      if (actions.containsKey(ScreenshotActions.reveal)) ScreenshotActions.reveal,
+      if (actions.containsKey(ScreenshotActions.reveal))
+        ScreenshotActions.reveal,
       if (_busy && !shown.contains(_busyId)) _busyCell,
     ];
     if (status.isNotEmpty) {
@@ -472,7 +486,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
     // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
-    final after = anchorGroup == null ? lines.length : anchorGroup ~/ perLine + 1;
+    final after = anchorGroup == null
+        ? lines.length
+        : anchorGroup ~/ perLine + 1;
     (extra[after] ??= []).addAll([
       ...pair(inserted),
       for (final key in _strips().keys)
@@ -494,7 +510,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           1 +
           ((BeautifyMetrics.paddingMenuWidth + 4) / 36).ceil() +
           ((BeautifyMetrics.radiusMenuWidth + 4) / 36).ceil(),
-    if (_expandedRow == _ExpandedRow.ratio) 'ratio-row': CropMetrics.ratios.length,
+    if (_expandedRow == _ExpandedRow.ratio)
+      'ratio-row': CropMetrics.ratios.length,
     // 录制目标行：三个目标、录制选项、开始与取消共 6 个按钮（#129）。
     if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
       'recording-targets-row': 6,
@@ -519,7 +536,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ? line.groups.fold(
                 0.0,
                 (sum, group) =>
-                    sum + ToolbarGrid.groupLabelWidth + 4 + run(group.cells.length),
+                    sum +
+                    ToolbarGrid.groupLabelWidth +
+                    4 +
+                    run(group.cells.length),
               ) +
               (line.groups.length - 1) * ToolbarGrid.groupGap
         : run(strips[line.strip]!);
@@ -1020,7 +1040,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         if (tool == ScreenshotTool.rect && _styleShape.filled) {
           _drawing = _drawing.copyWith(
             tool: ScreenshotTool.rect,
-            style: _drawing.styleFor(ScreenshotTool.rect).copyWith(fill: result),
+            style: _drawing
+                .styleFor(ScreenshotTool.rect)
+                .copyWith(fill: result),
           );
         } else {
           _nextStyle = _nextStyle.copyWith(fill: result);
@@ -1516,9 +1538,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final recognition = await _recognizeOcr();
     if (!mounted || _capture['id'] != id || recognition == null) return;
     if (recognition.text.trim().isEmpty && recognition.codes.isEmpty) {
-      setState(
-        () => _setFeedback('画面中没有可识别的文字、二维码或条码', isError: true),
-      );
+      setState(() => _setFeedback('画面中没有可识别的文字、二维码或条码', isError: true));
       return;
     }
     setState(() {
@@ -1576,7 +1596,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _setFeedback(null);
     });
     // 识别期间请主引擎预热翻译连接，握手与本地识别并行；不等待结果（#68）。
-    unawaited(widget.channel.invokeMethod<void>(MethodNames.prewarmTranslation));
+    unawaited(
+      widget.channel.invokeMethod<void>(MethodNames.prewarmTranslation),
+    );
     try {
       // 识别图只含裁剪区域；记下裁剪框左上角，快照坐标据此换算回源图像素。
       final origin = _document.cropRect.topLeft;
@@ -1668,7 +1690,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           _cropSelected = false;
           _stickerDrag = (
             handle: sticker.handle,
-            start: BoxFrame(sticker.annotation.bounds, sticker.annotation.rotation),
+            start: BoxFrame(
+              sticker.annotation.bounds,
+              sticker.annotation.rotation,
+            ),
           );
           _dragStart = imagePoint;
           _dragCurrent = imagePoint;
@@ -1814,10 +1839,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 _resizeHandle!,
                 from: _dragStart!,
                 to: imagePoint,
-                rules: BoxRules(
-                  area: _imageArea,
-                  minSide: CropMetrics.minSide,
-                ),
+                rules: BoxRules(area: _imageArea, minSide: CropMetrics.minSide),
               ).rect,
               moved: _resizeHandle == BoxHandle.move,
             ),
@@ -2232,10 +2254,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         _selectedTextId != null) {
       return false;
     }
-    final step = direction *
+    final step =
+        direction *
         (large ? CropMetrics.nudgeLargeStep : CropMetrics.nudgeStep);
     final crop = _document.cropRect;
-    final bounds = Size(_document.width.toDouble(), _document.height.toDouble());
+    final bounds = Size(
+      _document.width.toDouble(),
+      _document.height.toDouble(),
+    );
     final Rect next;
     if (!resize) {
       // 移动保持尺寸，停在截图边缘。
@@ -2396,7 +2422,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       preview.bounds.left,
       preview.bounds.top,
       preview.bounds.width,
-      textBoxHeight(text: text, fontSize: fontSize, width: preview.bounds.width),
+      textBoxHeight(
+        text: text,
+        fontSize: fontSize,
+        width: preview.bounds.width,
+      ),
     );
     if (editingId != null) {
       final current = _document.annotations
@@ -3111,9 +3141,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ScreenshotActions.beautify: _document.hasImage
           ? () {
               setState(() {
-                _expandedRow = _beautifyExpanded
-                    ? null
-                    : _ExpandedRow.beautify;
+                _expandedRow = _beautifyExpanded ? null : _ExpandedRow.beautify;
               });
               unawaited(_syncRecordingPreview());
               unawaited(_syncLivePreview());
@@ -3138,7 +3166,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ScreenshotActions.save: _document.hasImage ? () => _export('save') : null,
       ScreenshotActions.copy: _document.hasImage ? () => _export('copy') : null,
       ScreenshotActions.sticker: _document.hasImage ? _openStickerPanel : null,
-      ScreenshotActions.ocrCopy: _document.hasImage ? _showRecognizedText : null,
+      ScreenshotActions.ocrCopy: _document.hasImage
+          ? _showRecognizedText
+          : null,
       ScreenshotActions.ocrTranslate: _document.hasImage ? _translateOcr : null,
       ScreenshotActions.close: _close,
       if (textControls) ...{
@@ -3236,22 +3266,22 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     Widget groupOf(_ToolbarCells group) {
       final label = group.label;
       final lead = SizedBox(
-            width: axis == Axis.horizontal ? ToolbarGrid.groupLabelWidth : 32,
-            height: axis == Axis.horizontal ? 32 : ToolbarGrid.groupLabelHeight,
-            child: label == null
-                ? null
-                : Center(
-                    child: Text(
-                      label,
-                      key: Key('toolbar-group-label-${group.key}'),
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: ToolbarGrid.groupLabelFont,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+        width: axis == Axis.horizontal ? ToolbarGrid.groupLabelWidth : 32,
+        height: axis == Axis.horizontal ? 32 : ToolbarGrid.groupLabelHeight,
+        child: label == null
+            ? null
+            : Center(
+                child: Text(
+                  label,
+                  key: Key('toolbar-group-label-${group.key}'),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: ToolbarGrid.groupLabelFont,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
+                ),
+              ),
       );
       final cells = [
         for (final id in group.cells)
@@ -3368,61 +3398,61 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
     final beautifyControls = <Widget>[
       if (_beautifyExpanded) ...[
-          captureButton(
-            '背景',
-            beautify == null
-                ? const Icon(Icons.block, size: 16)
-                : Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: beautify.background.gradient == null
-                          ? beautify.background.color
-                          : null,
-                      gradient: switch (beautify.background.gradient) {
-                        final gradient? => LinearGradient(
-                          colors: [beautify.background.color, gradient.end],
-                        ),
-                        null => null,
-                      },
-                    ),
+        captureButton(
+          '背景',
+          beautify == null
+              ? const Icon(Icons.block, size: 16)
+              : Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: beautify.background.gradient == null
+                        ? beautify.background.color
+                        : null,
+                    gradient: switch (beautify.background.gradient) {
+                      final gradient? => LinearGradient(
+                        colors: [beautify.background.color, gradient.end],
+                      ),
+                      null => null,
+                    },
                   ),
-            _editBeautifyBackground,
-            selected: beautify != null,
+                ),
+          _editBeautifyBackground,
+          selected: beautify != null,
+        ),
+        SizedBox(
+          width: BeautifyMetrics.paddingMenuWidth,
+          height: 32,
+          child: NativeGlassMenuButton<double>(
+            value: beautify?.padding ?? BeautifyMetrics.defaultPadding,
+            items: {
+              for (final value in BeautifyMetrics.paddings)
+                value: '内边距 ${value.round()}',
+            },
+            onChanged: beautify == null
+                ? null
+                : (value) => setState(
+                    () => _beautify = beautify.copyWith(padding: value),
+                  ),
           ),
-          SizedBox(
-            width: BeautifyMetrics.paddingMenuWidth,
-            height: 32,
-            child: NativeGlassMenuButton<double>(
-              value: beautify?.padding ?? BeautifyMetrics.defaultPadding,
-              items: {
-                for (final value in BeautifyMetrics.paddings)
-                  value: '内边距 ${value.round()}',
-              },
-              onChanged: beautify == null
-                  ? null
-                  : (value) => setState(
-                      () => _beautify = beautify.copyWith(padding: value),
-                    ),
-            ),
+        ),
+        SizedBox(
+          width: BeautifyMetrics.radiusMenuWidth,
+          height: 32,
+          child: NativeGlassMenuButton<double>(
+            value: beautify?.cornerRadius ?? BeautifyMetrics.roundRadius,
+            items: {
+              BeautifyMetrics.squareRadius: '直角',
+              BeautifyMetrics.roundRadius: '圆角',
+            },
+            onChanged: beautify == null
+                ? null
+                : (value) => setState(
+                    () => _beautify = beautify.copyWith(cornerRadius: value),
+                  ),
           ),
-          SizedBox(
-            width: BeautifyMetrics.radiusMenuWidth,
-            height: 32,
-            child: NativeGlassMenuButton<double>(
-              value: beautify?.cornerRadius ?? BeautifyMetrics.roundRadius,
-              items: {
-                BeautifyMetrics.squareRadius: '直角',
-                BeautifyMetrics.roundRadius: '圆角',
-              },
-              onChanged: beautify == null
-                  ? null
-                  : (value) => setState(
-                      () => _beautify = beautify.copyWith(cornerRadius: value),
-                    ),
-            ),
-          ),
+        ),
       ],
     ];
     // 附加行按键取用，键与条件和 _strips 一致，位置由 _toolbarLines 决定。
@@ -3435,24 +3465,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
       // 比例行：自由与固定宽高比，锁定后框选与调整保持比例（#106）。
       if (_expandedRow == _ExpandedRow.ratio)
-        'ratio-row': captureRow(
-          'ratio-row',
-          [
-            for (final preset in CropMetrics.ratios)
-              captureButton(
-                preset.label == '自由' ? '自由比例' : '比例 ${preset.label}',
-                Text(
-                  preset.label,
-                  style: const TextStyle(fontSize: CropMetrics.ratioFontSize),
-                ),
-                () => _chooseRatio(preset.ratio),
-                selected: _cropRatio == preset.ratio,
+        'ratio-row': captureRow('ratio-row', [
+          for (final preset in CropMetrics.ratios)
+            captureButton(
+              preset.label == '自由' ? '自由比例' : '比例 ${preset.label}',
+              Text(
+                preset.label,
+                style: const TextStyle(fontSize: CropMetrics.ratioFontSize),
               ),
-          ],
-          anchorId: ScreenshotActions.ratio,
-        ),
-      if ((_recordingExpanded || _liveExpanded) &&
-          _tool == ScreenshotTool.crop)
+              () => _chooseRatio(preset.ratio),
+              selected: _cropRatio == preset.ratio,
+            ),
+        ], anchorId: ScreenshotActions.ratio),
+      if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
         'recording-targets-row': captureRow(
           'recording-targets-row',
           [
@@ -3515,9 +3540,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   ),
                 ],
                 builder: (context, controller, _) => captureButton(
-                  _recordingDelay == 0
-                      ? '录制选项'
-                      : '录制选项：延时 $_recordingDelay 秒',
+                  _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
                   const Icon(Icons.tune, size: 16),
                   () => controller.isOpen
                       ? controller.close()
@@ -3534,10 +3557,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       (_recordingTarget == CaptureTarget.application &&
                           _recordingApplication == null)
                   ? null
-                  : () => _prepareCapture(
-                      _recordingTarget,
-                      live: _liveExpanded,
-                    ),
+                  : () =>
+                        _prepareCapture(_recordingTarget, live: _liveExpanded),
             ),
             captureButton(
               _liveExpanded ? '取消实时翻译' : '取消录制',
@@ -3557,38 +3578,34 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if ((_recordingExpanded || _liveExpanded) &&
           _tool == ScreenshotTool.crop &&
           _recordingTarget == CaptureTarget.application)
-        'recording-applications-row': captureRow(
-          'recording-applications-row',
-          [
-            if (_loadingApplications)
-              const SizedBox(
-                width: 32,
-                height: 32,
-                child: Icon(Icons.hourglass_top, size: 16),
-              ),
-            for (final app in _recordingApplications)
-              captureButton(
-                app['name'] as String,
-                app['icon'] is Uint8List
-                    ? Image.memory(
-                        app['icon'] as Uint8List,
-                        width: 16,
-                        height: 16,
-                      )
-                    : const Icon(Icons.apps, semanticLabel: '应用图标不可用'),
-                _loadingApplications
-                    ? null
-                    : () {
-                        setState(() => _recordingApplication = app);
-                        unawaited(_syncRecordingPreview());
-                      },
-                selected:
-                    _recordingApplication?['applicationID'] ==
-                    app['applicationID'],
-              ),
-          ],
-          anchorId: 'recording-target-application',
-        ),
+        'recording-applications-row': captureRow('recording-applications-row', [
+          if (_loadingApplications)
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: Icon(Icons.hourglass_top, size: 16),
+            ),
+          for (final app in _recordingApplications)
+            captureButton(
+              app['name'] as String,
+              app['icon'] is Uint8List
+                  ? Image.memory(
+                      app['icon'] as Uint8List,
+                      width: 16,
+                      height: 16,
+                    )
+                  : const Icon(Icons.apps, semanticLabel: '应用图标不可用'),
+              _loadingApplications
+                  ? null
+                  : () {
+                      setState(() => _recordingApplication = app);
+                      unawaited(_syncRecordingPreview());
+                    },
+              selected:
+                  _recordingApplication?['applicationID'] ==
+                  app['applicationID'],
+            ),
+        ], anchorId: 'recording-target-application'),
     };
     // 各行沿交叉方向依次排列；主配置组行（带修饰标签）同行两组时两端对齐（#141），次级插入行与状态组紧邻起点排列。
     final groups = Flex(
@@ -3675,6 +3692,7 @@ class _EditorSurface extends StatefulWidget {
   final double? imageScale;
   final Rect? toolbarSafeArea;
   final Size? displaySize;
+
   /// perLine 为每行并排的组数；返回工具栏各行（竖放为各列）沿主轴的长度（pt，含插入的子级、属性、状态组与附加行，
   /// 空表示没有可见按钮）与最长组行的长度，用于决定工具栏尺寸与是否改为每行一组（#141）。
   final ({List<double> lengths, double grouped}) Function(int perLine) lines;
@@ -3772,33 +3790,32 @@ class _EditorSurfaceState extends State<_EditorSurface> {
           // 只按已提交选区定位；拖动过程中保持同一个图片坐标系。
           // 工具栏长度取最长一行加两侧 8pt 内边距，至少容纳一个按钮；厚度为行数（#141）。
           // placeFor 按各行长度与行数计算图片与工具栏位置。
-          ScreenshotEditorLayout placeFor(
-            List<double> lengths,
-          ) => ScreenshotEditorLayout.place(
-            viewport: constraints.biggest,
-            imageRect: resultRect,
-            available:
-                widget.toolbarSafeArea == null || widget.displaySize == null
-                ? null
-                : Rect.fromLTRB(
-                    widget.toolbarSafeArea!.left *
-                        constraints.maxWidth /
-                        widget.displaySize!.width,
-                    widget.toolbarSafeArea!.top *
-                        constraints.maxHeight /
-                        widget.displaySize!.height,
-                    widget.toolbarSafeArea!.right *
-                        constraints.maxWidth /
-                        widget.displaySize!.width,
-                    widget.toolbarSafeArea!.bottom *
-                        constraints.maxHeight /
-                        widget.displaySize!.height,
-                  ),
-            image: imageSize,
-            crop: widget.document.cropRect,
-            toolbarLength: 16 + [...lengths, 32.0].reduce(math.max),
-            rowCount: math.max(1, lengths.length),
-          );
+          ScreenshotEditorLayout placeFor(List<double> lengths) =>
+              ScreenshotEditorLayout.place(
+                viewport: constraints.biggest,
+                imageRect: resultRect,
+                available:
+                    widget.toolbarSafeArea == null || widget.displaySize == null
+                    ? null
+                    : Rect.fromLTRB(
+                        widget.toolbarSafeArea!.left *
+                            constraints.maxWidth /
+                            widget.displaySize!.width,
+                        widget.toolbarSafeArea!.top *
+                            constraints.maxHeight /
+                            widget.displaySize!.height,
+                        widget.toolbarSafeArea!.right *
+                            constraints.maxWidth /
+                            widget.displaySize!.width,
+                        widget.toolbarSafeArea!.bottom *
+                            constraints.maxHeight /
+                            widget.displaySize!.height,
+                      ),
+                image: imageSize,
+                crop: widget.document.cropRect,
+                toolbarLength: 16 + [...lengths, 32.0].reduce(math.max),
+                rowCount: math.max(1, lengths.length),
+              );
           var perLine = ToolbarGrid.groupsPerLine;
           var lines = widget.lines(perLine);
           var layout = placeFor(lines.lengths);
@@ -3865,7 +3882,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               // 裁剪起点就是按下点，不能被手势识别阈值移动。
               dragStartBehavior: DragStartBehavior.down,
               behavior: HitTestBehavior.opaque,
-              onDoubleTapDown: widget.textInputOpen || widget.busy || singleTapTool
+              onDoubleTapDown:
+                  widget.textInputOpen || widget.busy || singleTapTool
                   ? null
                   : (details) =>
                         widget.onDoubleTapDown(toImage(details.localPosition)),
@@ -3914,17 +3932,17 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   // 标注绘制层单独成层，页面其他部分重绘时不连带重画标注（#68）。
                   RepaintBoundary(
                     child: CustomPaint(
-                    painter: _OverlayPainter(
-                      sourceImage: widget.sourceImage,
-                      stickers: widget.document.stickerImages,
-                      pixelRatio: widget.pixelRatio,
-                      selectedShape: widget.selectedShape,
-                      annotations: widget.document.annotations,
-                      previewAnnotation: widget.previewAnnotation,
-                      imageSize: imageSize,
-                      accent: NativeGlassTheme.accentOf(context),
+                      painter: _OverlayPainter(
+                        sourceImage: widget.sourceImage,
+                        stickers: widget.document.stickerImages,
+                        pixelRatio: widget.pixelRatio,
+                        selectedShape: widget.selectedShape,
+                        annotations: widget.document.annotations,
+                        previewAnnotation: widget.previewAnnotation,
+                        imageSize: imageSize,
+                        accent: NativeGlassTheme.accentOf(context),
+                      ),
                     ),
-                  ),
                   ),
                   // 测量线与取色标签在标注之上，不进入导出（#111）；取色悬停只重建本层（#68）。
                   ValueListenableBuilder<Offset?>(
@@ -4044,7 +4062,9 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                     ? SystemMouseCursors.precise
                     : SystemMouseCursors.basic;
               }
-              if (widget.tool == ScreenshotTool.brush) return widget.brushCursor;
+              if (widget.tool == ScreenshotTool.brush) {
+                return widget.brushCursor;
+              }
               // 取色与标尺需要对准像素（#111）。
               if (widget.tool == ScreenshotTool.eyedropper ||
                   widget.tool == ScreenshotTool.ruler) {
@@ -4116,14 +4136,16 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                     widget.recordingWindows == null &&
                     !widget.textInputOpen)
                   Positioned(
-                    left: cropDisplay.left +
+                    left:
+                        cropDisplay.left +
                         (cropDisplay.top -
                                     CropMetrics.labelGap -
                                     CropMetrics.labelHeight <
                                 fitted.top
                             ? CropMetrics.labelGap
                             : 0),
-                    top: cropDisplay.top -
+                    top:
+                        cropDisplay.top -
                                 CropMetrics.labelGap -
                                 CropMetrics.labelHeight <
                             fitted.top
@@ -4179,9 +4201,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                           material: true,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surface.withValues(alpha: 0.72),
+                              color: Theme.of(context).colorScheme.surface
+                                  .withValues(alpha: 0.72),
                               borderRadius: BorderRadius.circular(
                                 GlassMetrics.space4,
                               ),
@@ -4213,9 +4234,9 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                               decoration: InputDecoration.collapsed(
                                 hintText: '输入文字',
                                 hintStyle: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -4234,7 +4255,11 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       visible: widget.dragStart == null || widget.textInputOpen,
                       maintainState: true,
                       maintainAnimation: true,
-                      child: widget.toolbarBuilder(context, layout.axis, perLine),
+                      child: widget.toolbarBuilder(
+                        context,
+                        layout.axis,
+                        perLine,
+                      ),
                     ),
                   ),
                 if (widget.selectedText != null ||
@@ -4401,8 +4426,7 @@ class _DimPainter extends CustomPainter {
     canvas.drawRect(cropDisplay, border);
     if (!showHandles) return;
     const handle = GlassMetrics.cropHandle;
-    final fill = Paint()
-      ..color = recordingPreview ? accent : Colors.white;
+    final fill = Paint()..color = recordingPreview ? accent : Colors.white;
     for (final point in <Offset>[
       cropDisplay.topLeft,
       cropDisplay.topCenter,
@@ -4545,7 +4569,11 @@ class _OverlayPainter extends CustomPainter {
       rect.bottomLeft,
       rect.centerLeft,
     ]) {
-      final square = Rect.fromCenter(center: point, width: handle, height: handle);
+      final square = Rect.fromCenter(
+        center: point,
+        width: handle,
+        height: handle,
+      );
       canvas.drawRect(square, fill);
       canvas.drawRect(square, stroke);
     }
@@ -4619,7 +4647,10 @@ double fitOverlayFontSize({
   while (high - low > 0.5) {
     final size = (low + high) / 2;
     painter
-      ..text = TextSpan(text: text, style: style.copyWith(fontSize: size))
+      ..text = TextSpan(
+        text: text,
+        style: style.copyWith(fontSize: size),
+      )
       ..layout(maxWidth: box.width);
     // 超长单词按字符折行，宽度不会超出矩形，只需比较高度。
     if (painter.height <= box.height + 0.5) {

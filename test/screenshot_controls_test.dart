@@ -1911,9 +1911,7 @@ void main() {
     }
   });
 
-  testWidgets('ColorPicker 非法 HEX 后点击渐变预设清除错误并恢复应用按钮（#144）', (
-    tester,
-  ) async {
+  testWidgets('ColorPicker 非法 HEX 后点击渐变预设清除错误并恢复应用按钮（#144）', (tester) async {
     // 作用：验证调色盘渐变预设重选能重置输入校错标志并重新启用主操作。
     // 边界：输入非法字符禁用 apply-color；点击 gradient-preset-1 后错误提示消失且重新可用。
     final results = <Object>[];
@@ -1934,7 +1932,9 @@ void main() {
     await tester.pump();
     expect(find.text('请输入6位十六进制颜色'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byKey(const Key('apply-color'))).onPressed,
+      tester
+          .widget<FilledButton>(find.byKey(const Key('apply-color')))
+          .onPressed,
       isNull,
     );
 
@@ -1942,7 +1942,9 @@ void main() {
     await tester.pump();
     expect(find.text('请输入6位十六进制颜色'), findsNothing);
     expect(
-      tester.widget<FilledButton>(find.byKey(const Key('apply-color'))).onPressed,
+      tester
+          .widget<FilledButton>(find.byKey(const Key('apply-color')))
+          .onPressed,
       isNotNull,
     );
     await tester.tap(find.byKey(const Key('apply-color')));
@@ -2028,9 +2030,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('识别结果弹窗隔离 Enter/Esc 快捷键、夹紧窄视口并在顶层显示反馈（#144）', (
-    tester,
-  ) async {
+  testWidgets('识别结果弹窗隔离 Enter/Esc 快捷键、夹紧窄视口并在顶层显示反馈（#144）', (tester) async {
     // 作用：验证识别弹窗打开时不误触截图确认导出、窄视口下完整容纳弹窗，以及反馈气泡位于弹窗之上。
     // 边界：520×420 窄视口下弹窗宽度 <= 504pt；Enter 不触发复制关闭，Esc 仅关闭识别弹窗。
     tester.view.physicalSize = const Size(520, 420);
@@ -2063,7 +2063,9 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.ocrCopy)));
+    await tester.ensureVisible(
+      find.byKey(const Key(ScreenshotActions.ocrCopy)),
+    );
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key(ScreenshotActions.ocrCopy)));
       await Future<void>.delayed(const Duration(milliseconds: 100));
