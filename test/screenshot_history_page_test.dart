@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:translate_app/src/history/history_empty_state.dart';
 import 'package:translate_app/src/history/screenshot_compose_dialogs.dart';
 import 'package:translate_app/src/history/screenshot_history.dart';
 import 'package:translate_app/src/history/screenshot_history_page.dart';
@@ -106,7 +107,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '清空'));
     await tester.pumpAndSettle();
-    expect(find.text('暂无截图历史'), findsOneWidget);
+    expect(find.byType(HistoryEmptyState), findsOneWidget);
+    expect(find.text('还没有截图记录'), findsOneWidget);
+    expect(find.byType(NativeGlassKeycaps), findsOneWidget);
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, '清空截图历史'))
@@ -116,7 +119,11 @@ void main() {
 
     await tester.tap(find.byType(NativeGlassSwitch));
     await tester.pumpAndSettle();
-    expect(find.text('未开启记录截图历史；开启后复制、保存或贴图的截图会出现在这里。'), findsOneWidget);
+    expect(
+      tester.widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch)).value,
+      isFalse,
+    );
+    expect(find.text('还没有截图记录'), findsOneWidget);
   });
 
   testWidgets('勾选决定拼接、拆分与比较是否可用；结果加入历史后清空勾选，比较显示差异摘要', (tester) async {
@@ -224,7 +231,7 @@ void main() {
       '${directory.path}/2.png',
       '${directory.path}/3.png',
     ]);
-    expect(find.text('已生成拼接图'), findsOneWidget);
+    expect(find.byType(NativeGlassBanner), findsNothing);
     expect(find.text('已选 0 张'), findsOneWidget);
     expect(find.byType(Checkbox), findsNWidgets(5));
 
@@ -438,9 +445,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('截图历史首次加载失败可重试恢复，复制图片展示成功横幅与对勾反馈', (tester) async {
-    // 作用：验证首次读取抛异常时呈现重试页而非永久转圈，恢复并复制图片后出现成功横幅和图标确认。
-    // 边界：screenshotHistoryList 首次抛 PlatformException 展示「重试加载」，恢复后复制触发 trigger=1。
+  testWidgets('截图历史首次加载失败可重试恢复，复制图片仅显示对勾确认不弹非错误横幅', (tester) async {
+    // 作用：验证首次读取抛异常时呈现重试页而非永久转圈，恢复并复制图片后仅触发图标确认而不显示成功横幅。
+    // 边界：screenshotHistoryList 首次抛 PlatformException 展示「重试加载」，恢复后复制触发 trigger=1 且无 NativeGlassBanner。
     final directory = Directory.systemTemp.createTempSync(
       'screenshot-retry-copy-',
     );
@@ -497,7 +504,7 @@ void main() {
     expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 0);
     await tester.tap(find.byTooltip('复制图片'));
     await tester.pump();
-    expect(find.text('已复制图片'), findsOneWidget);
+    expect(find.byType(NativeGlassBanner), findsNothing);
     expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 1);
     expect(tester.takeException(), isNull);
   });

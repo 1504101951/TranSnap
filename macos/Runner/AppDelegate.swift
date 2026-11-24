@@ -8,7 +8,7 @@ class AppDelegate: FlutterAppDelegate {
     private let permissionWizard = AuxiliaryWindowController(
         engineName: AppConstants.permissionWizardEngineName,
         entrypoint: AppConstants.permissionWizardEntrypoint,
-        title: "TranslateApp 权限",
+        title: "授权",
         size: NSSize(width: 480, height: 360),
         minSize: AppConstants.permissionWizardMinSize,
         refreshMethod: AppConstants.permissionStatusChangedMethod,

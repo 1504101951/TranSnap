@@ -8,6 +8,7 @@ import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
+import 'history_empty_state.dart';
 import 'screenshot_compose_dialogs.dart';
 import 'screenshot_history.dart';
 
@@ -16,14 +17,17 @@ const _operationFailed = '操作失败，请重试。';
 
 /// 历史窗口的截图分段；数据以主引擎为准，文件操作交给原生（#29）。
 class ScreenshotHistoryPage extends StatefulWidget {
-  /// channel 为历史窗口通道，version 递增时重新读取（主引擎通知变更后由窗口传入）。
+  /// channel 为历史窗口通道，version 递增时重新读取（主引擎通知变更后由窗口传入），
+  /// screenshotShortcutTokens 为当前区域截图快捷键键帽序列。
   const ScreenshotHistoryPage({
     super.key,
     required this.channel,
     required this.version,
+    this.screenshotShortcutTokens = const ['⌥', '⌃', 'S'],
   });
   final MethodChannel channel;
   final int version;
+  final List<String> screenshotShortcutTokens;
 
   /// 缩略图宽度与最高高度，单位为点，对应样式Spec #67。
   static const thumbnailWidth = 240.0;
@@ -39,8 +43,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   List<ScreenshotRecord>? _records;
   bool? _recording;
   String? _loadError;
-  String? _message;
-  bool _messageIsError = false;
+  String? _errorMessage;
   bool _loading = true;
   String? _busyAction;
 
@@ -109,43 +112,33 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         if (_records == null) {
           _loadError = reason;
         } else {
-          _message = reason;
-          _messageIsError = true;
+          _errorMessage = reason;
         }
       });
     }
   }
 
-  /// method/arguments 为原生调用参数，reload 控制完成后是否重读列表，successMessage 为成功反馈，busyKey 为忙碌锁键；返回是否执行成功。
+  /// method/arguments 为原生调用参数，reload 控制完成后是否重读列表，busyKey 为忙碌锁键；返回是否执行成功。
   Future<bool> _run(
     String method, [
     Map<String, Object>? arguments,
     bool reload = false,
-    String? successMessage,
     String? busyKey,
   ]) async {
     if (_busyAction != null) return false;
     setState(() {
-      _message = null;
-      _messageIsError = false;
+      _errorMessage = null;
       if (busyKey != null) _busyAction = busyKey;
     });
     try {
       await widget.channel.invokeMethod<Object?>(method, arguments);
       if (!mounted) return false;
-      if (successMessage != null) {
-        setState(() {
-          _message = successMessage;
-          _messageIsError = false;
-        });
-      }
       if (reload) await _load();
       return true;
     } on PlatformException catch (error) {
       if (!mounted) return false;
       setState(() {
-        _message = error.message ?? _operationFailed;
-        _messageIsError = true;
+        _errorMessage = error.message ?? _operationFailed;
       });
       return false;
     } finally {
@@ -164,7 +157,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       destructive: true,
     );
     if (!confirmed || !mounted) return;
-    await _run(MethodNames.clearScreenshotHistory, null, true, null, 'clear');
+    await _run(MethodNames.clearScreenshotHistory, null, true, 'clear');
   }
 
   /// record 为待删截图记录；经确认弹窗后删除记录与文件，防止误删。
@@ -185,37 +178,29 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       MethodNames.deleteScreenshotHistory,
       {'id': record.id},
       true,
-      null,
       'delete-${record.id}',
     );
   }
 
-  /// record 为目标截图记录；复制图片到剪贴板并触发图标确认动效与横幅反馈。
+  /// record 为目标截图记录；复制图片到剪贴板并触发图标确认动效。
   Future<void> _copyImage(ScreenshotRecord record) async {
-    final copied = await _run(
-      MethodNames.copyImageFile,
-      {'path': record.path},
-      false,
-      '已复制图片',
-    );
+    final copied = await _run(MethodNames.copyImageFile, {'path': record.path});
     if (!copied || !mounted) return;
     setState(() {
       _copyTriggers[record.id] = (_copyTriggers[record.id] ?? 0) + 1;
     });
   }
 
-  /// action 为操作标识（'stitch' / 'split'），produce 调用原生生成结果图片，done 为完成提示；
-  /// 把结果加入截图历史、清空勾选并重新读取，失败显示原因（#109）。
+  /// action 为操作标识（'stitch' / 'split'），produce 调用原生生成结果图片；
+  /// 把结果加入截图历史、清空勾选并重新读取，失败显示错误横幅（#109）。
   Future<void> _compose(
     String action,
     Future<List<Uint8List>> Function() produce,
-    String Function(int count) done,
   ) async {
     if (_busyAction != null) return;
     setState(() {
       _busyAction = action;
-      _message = null;
-      _messageIsError = false;
+      _errorMessage = null;
     });
     try {
       final images = await produce();
@@ -224,17 +209,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         {'images': images},
       );
       if (!mounted) return;
-      setState(() {
-        _selected = {};
-        _message = done(images.length);
-        _messageIsError = false;
-      });
+      setState(() => _selected = {});
       await _load();
     } on PlatformException catch (error) {
       if (!mounted) return;
       setState(() {
-        _message = error.message ?? _operationFailed;
-        _messageIsError = true;
+        _errorMessage = error.message ?? _operationFailed;
       });
     } finally {
       if (mounted) setState(() => _busyAction = null);
@@ -251,26 +231,22 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       builder: (_) => StitchDialog(count: chosen.length),
     );
     if (vertical == null || !mounted) return;
-    await _compose(
-      'stitch',
-      () async {
-        final result = await widget.channel.invokeMethod<Uint8List>(
-          MethodNames.stitchScreenshots,
-          {
-            'paths': [for (final record in chosen) record.path],
-            'vertical': vertical,
-          },
+    await _compose('stitch', () async {
+      final result = await widget.channel.invokeMethod<Uint8List>(
+        MethodNames.stitchScreenshots,
+        {
+          'paths': [for (final record in chosen) record.path],
+          'vertical': vertical,
+        },
+      );
+      if (result == null) {
+        throw PlatformException(
+          code: 'INVALID_RESULT',
+          message: _operationFailed,
         );
-        if (result == null) {
-          throw PlatformException(
-            code: 'INVALID_RESULT',
-            message: _operationFailed,
-          );
-        }
-        return [result];
-      },
-      (_) => '已生成拼接图',
-    );
+      }
+      return [result];
+    });
   }
 
   /// 无参数；选择段数后按高度等分勾选的截图，返回结束的 Future。
@@ -285,23 +261,19 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       builder: (_) => SplitDialog(height: record.height),
     );
     if (parts == null || !mounted) return;
-    await _compose(
-      'split',
-      () async {
-        final result = await widget.channel.invokeListMethod<Uint8List>(
-          MethodNames.splitScreenshot,
-          {'path': record.path, 'parts': parts},
+    await _compose('split', () async {
+      final result = await widget.channel.invokeListMethod<Uint8List>(
+        MethodNames.splitScreenshot,
+        {'path': record.path, 'parts': parts},
+      );
+      if (result == null) {
+        throw PlatformException(
+          code: 'INVALID_RESULT',
+          message: _operationFailed,
         );
-        if (result == null) {
-          throw PlatformException(
-            code: 'INVALID_RESULT',
-            message: _operationFailed,
-          );
-        }
-        return result;
-      },
-      (count) => '已拆分为 $count 张',
-    );
+      }
+      return result;
+    });
   }
 
   /// 无参数；原生逐像素比较勾选的两张截图后打开并排比较弹窗，失败显示原因，返回结束的 Future。
@@ -310,8 +282,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     if (_busyAction != null || chosen.length != 2) return;
     setState(() {
       _busyAction = 'compare';
-      _message = null;
-      _messageIsError = false;
+      _errorMessage = null;
     });
     Map<String, Object?>? result;
     try {
@@ -322,8 +293,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     } on PlatformException catch (error) {
       if (mounted) {
         setState(() {
-          _message = error.message ?? _operationFailed;
-          _messageIsError = true;
+          _errorMessage = error.message ?? _operationFailed;
         });
       }
     } finally {
@@ -469,7 +439,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
             ),
           ),
         const Divider(height: 1, thickness: GlassMetrics.groupDividerThickness),
-        if (_message != null)
+        if (_errorMessage != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               GlassMetrics.pagePadding,
@@ -477,10 +447,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
               GlassMetrics.pagePadding,
               0,
             ),
-            child: NativeGlassBanner(
-              message: _message!,
-              isError: _messageIsError,
-            ),
+            child: NativeGlassBanner(message: _errorMessage!, isError: true),
           ),
         Expanded(
           child: records == null && _loadError != null
@@ -512,12 +479,12 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
               : records == null
               ? const Center(child: CircularProgressIndicator())
               : records.isEmpty
-              ? Center(
-                  child: Text(
-                    _recording == true
-                        ? '暂无截图历史'
-                        : '未开启记录截图历史；开启后复制、保存或贴图的截图会出现在这里。',
-                  ),
+              ? HistoryEmptyState(
+                  icon: Icons.crop_free,
+                  title: '还没有截图记录',
+                  prefix: '按',
+                  shortcutTokens: widget.screenshotShortcutTokens,
+                  suffix: '截图后自动记录',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(GlassMetrics.pagePadding),

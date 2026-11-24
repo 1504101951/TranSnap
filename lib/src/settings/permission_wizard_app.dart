@@ -132,7 +132,7 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
-      title: 'TranslateApp 权限向导',
+      title: '授权',
       home: NativeGlassWindowPage(
         child: Scaffold(
           body: Padding(

@@ -28,8 +28,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 switch call.method {
                 case AppConstants.recordShortcutMethod:
                     self?.recordShortcut(result: result)
+                case AppConstants.setWindowTitleMethod:
+                    guard let arguments = call.arguments as? [String: Any],
+                          let title = arguments["title"] as? String else {
+                        result(FlutterError(code: AppConstants.badArgsError, message: "缺少窗口标题", details: nil))
+                        return
+                    }
+                    // 切换设置子页时同步更新原生窗口标题，不重复 App 名（#1、#144）。
+                    self?.window?.title = title
+                    result(nil)
                 default:
-                    // routeWindowRequest统一区分主引擎业务和系统操作，窗口仅保留快捷键录制。
+                    // routeWindowRequest统一区分主引擎业务和系统操作，窗口仅保留快捷键录制与标题同步。
                     bridge.routeWindowRequest(call, result: result)
                 }
             }, completion: { [weak self] started in
@@ -44,7 +53,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 self.channel = started.channel
                 // makeWindow 建出普通窗口；设置窗关闭后保留引擎以便快速重开，并持久化窗口几何尺寸（#144）。
                 let window = WindowEngine.makeWindow(
-                    flutter: started.flutter, title: "TranslateApp 设置", size: NSSize(width: 760, height: 640),
+                    flutter: started.flutter, title: "权限与启动", size: NSSize(width: 760, height: 640),
                     minSize: NSSize(width: 680, height: 480), delegate: self,
                     autosaveName: AppConstants.settingsWindowAutosaveName)
                 self.window = window

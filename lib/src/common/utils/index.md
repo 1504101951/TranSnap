@@ -7,3 +7,4 @@
 3. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 4. [permission_utils.dart](permission_utils.dart)：判断两项权限齐备时是否允许进入应用。
 5. [screenshot_filename.dart](screenshot_filename.dart)：生成截图导出使用的文件名称。
+6. [shortcut_tokens.dart](shortcut_tokens.dart)：将 Carbon 修饰键掩码与主键拆分为键帽展示序列。

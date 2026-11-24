@@ -1,19 +1,42 @@
 import 'dart:async';
+import 'dart:ui';
 
-import 'package:translate_app/src/common/constants/appearance_modes.dart';
-import 'package:translate_app/src/common/widgets/native_glass.dart';
-import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:translate_app/src/common/constants/appearance_modes.dart';
+import 'package:translate_app/src/common/constants/method_names.dart';
+import 'package:translate_app/src/common/constants/preference_keys.dart';
+import 'package:translate_app/src/common/constants/shortcut_keys.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/history/history_app.dart';
+import 'package:translate_app/src/history/history_empty_state.dart';
+import 'package:translate_app/src/history/history_list_card.dart';
 import 'package:translate_app/src/history/history_requests.dart';
 import 'package:translate_app/src/history/translation_history.dart';
 import 'package:translate_app/src/history/vocabulary_page.dart';
 
-/// 无参数；用真实 SQLite 驱动窗口，验证卡片顺序、跨页浏览与保存失败反馈。
+/// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
+Future<TestGesture> _startMouse(WidgetTester tester) async {
+  final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await gesture.addPointer(location: Offset.zero);
+  addTearDown(gesture.removePointer);
+  return gesture;
+}
+
+/// tester 为测试驱动，mouse 为已登记鼠标，finder 为目标条目；移动鼠标到条目中心以显示悬停按钮。
+Future<void> _hoverRow(
+  WidgetTester tester,
+  TestGesture mouse,
+  Finder finder,
+) async {
+  await mouse.moveTo(tester.getCenter(finder));
+  await tester.pumpAndSettle();
+}
+
+/// 无参数；用真实 SQLite 驱动窗口，验证分组卡片、筛选标签、标题同步、空状态及保存失败反馈。
 void main() {
   const channel = MethodChannel('test/history-window');
   late Database database;
@@ -57,40 +80,47 @@ void main() {
     database.close();
   });
 
-  testWidgets('历史随外观切换保持来源和正文可读，收到新增事件自动刷新', (tester) async {
-    // 真实SQLite插入后由通知刷新，不重建窗口；两种主题检查实际卡片文本颜色。
+  testWidgets('历史随外观切换保持来源和正文可读，标题栏居中分段且收到新增事件自动刷新', (tester) async {
+    // 作用：验证明暗外观下卡片正文可读性、标题栏居中分段与右侧记录开关位置，以及 historyChanged 自动刷新。
+    // 边界：切换亮暗外观时译文使用高对比主色，来源 · 时间使用次要色；新插入记录即时出现。
+    final completedAt = DateTime(2026, 9, 19, 9, 30).millisecondsSinceEpoch;
     store.insert(
       sourceText: 'old source',
       translatedText: 'old translation',
       detectedLanguage: 'en',
       targetLanguage: 'zh',
       providerId: 'test',
-      completedAt: 1,
+      completedAt: completedAt,
       sourceLabel: 'Safari',
     );
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-    // Header三个控件分别保留12pt和8pt间距，不依赖文字本身留白。
-    final refresh = tester.getRect(find.byIcon(Icons.refresh));
-    final recording = tester.getRect(find.text('记录历史'));
-    final toggle = tester.getRect(find.byType(NativeGlassSwitch));
-    expect(recording.left - refresh.right, greaterThanOrEqualTo(12));
-    expect(toggle.left - recording.right, 8);
+    // 标题栏居中放分段、右侧放「记录」开关，不另外显示标题文字。
+    expect(
+      find.byWidgetPredicate((widget) => widget is NativeGlassSegments),
+      findsOneWidget,
+    );
+    expect(find.text('翻译历史'), findsOneWidget);
+    expect(find.text('记录'), findsOneWidget);
+    expect(find.byType(NativeGlassSwitch), findsOneWidget);
 
     for (final mode in [AppearanceModes.dark, AppearanceModes.light]) {
       GlassAppearance.current.value = GlassAppearance(mode: mode);
       await tester.pumpAndSettle();
       expect(
-        Theme.of(tester.element(find.text('Safari'))).brightness,
+        Theme.of(tester.element(find.text('Safari · 09:30'))).brightness,
         mode == AppearanceModes.light ? Brightness.light : Brightness.dark,
       );
-      final title = tester.widget<Text>(find.text('Safari'));
       final expected = mode == AppearanceModes.light
           ? Colors.black
           : Colors.white;
-      expect(title.style!.color, expected);
-      final content = tester.element(find.text('old translation'));
-      expect(DefaultTextStyle.of(content).style.color, expected);
+      final translation = tester.widget<SelectableText>(
+        find.ancestor(
+          of: find.text('old translation'),
+          matching: find.byType(SelectableText),
+        ),
+      );
+      expect(translation.style!.color, expected);
     }
     store.insert(
       sourceText: 'new source',
@@ -98,18 +128,19 @@ void main() {
       detectedLanguage: 'en',
       targetLanguage: 'zh',
       providerId: 'test',
-      completedAt: 2,
+      completedAt: completedAt + 60000,
       sourceLabel: 'Notes',
     );
     await tester.pumpAndSettle();
-    expect(find.text('Notes'), findsOneWidget);
+    expect(find.text('Notes · 09:31'), findsOneWidget);
     expect(find.text('new translation'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     GlassAppearance.current.value = const GlassAppearance();
   });
 
-  testWidgets('来源与本地日期组成标题，译文在原文上方，滚动可读第三页', (tester) async {
-    // 23 条跨越两次 10 条边界；520×640 与实际历史窗口一致。
+  testWidgets('按日期分组共用一张卡片，译文在原文上方，滚动可读第三页', (tester) async {
+    // 作用：验证按日期分组、同组共用 HistoryGroupCard、「来源 · HH:mm」在右上、译文 14/20 在上及触底分页。
+    // 边界：23 条跨越两次 10 条边界；520×640 与实际历史窗口一致，滚动后可见第 3 页记录及末尾提示。
     tester.view.physicalSize = const Size(520, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -127,8 +158,12 @@ void main() {
     }
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-    expect(find.text('截图'), findsOneWidget);
-    expect(find.text('2026-09-19 09:30'), findsWidgets);
+    expect(find.text('2026-09-19'), findsOneWidget);
+    expect(find.byType(HistoryGroupCard), findsOneWidget);
+    expect(find.text('截图 · 09:30'), findsOneWidget);
+    expect(find.text('Safari · 09:30'), findsWidgets);
+    expect(find.text('译文'), findsNothing);
+    expect(find.text('原文'), findsNothing);
     expect(
       tester.getTopLeft(find.text('译文-22')).dy,
       lessThan(tester.getTopLeft(find.text('source-22')).dy),
@@ -138,7 +173,7 @@ void main() {
       400,
       scrollable: find
           .descendant(
-            of: find.byType(ListView),
+            of: find.byType(CustomScrollView),
             matching: find.byType(Scrollable),
           )
           .first,
@@ -147,14 +182,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('source-0'), findsOneWidget);
     expect(find.text('译文-0'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
     await tester.pumpAndSettle();
     expect(find.text('已显示全部历史'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('长文及窄窗口可阅读，关闭记录保留卡片，存储失败不伪装保存成功', (tester) async {
-    // 320pt 约束验证标题换行；只读 SQLite 真实触发保存失败，不能乐观切换开关。
+  testWidgets('长文及窄窗口可阅读，关闭记录将文字改为「记录 · 已暂停」且不显示非错误横幅', (tester) async {
+    // 作用：验证 320pt 窄窗口无溢出、只读数据库触发保存失败不改开关状态，关闭记录后文案合并进开关旁且不弹非错误横幅。
+    // 边界：320×640 触发窄窗口标题栏换行；只读 SQLite 真实触发错误横幅；成功后「记录 · 已暂停」出现且无非错误横幅。
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -169,7 +205,7 @@ void main() {
     );
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-    expect(find.text('未记录来源'), findsOneWidget);
+    expect(find.textContaining('未记录来源 · '), findsOneWidget);
     database.execute('PRAGMA query_only = ON');
     await tester.tap(find.byType(NativeGlassSwitch));
     await tester.pumpAndSettle();
@@ -182,14 +218,16 @@ void main() {
     await tester.tap(find.byType(NativeGlassSwitch));
     await tester.pumpAndSettle();
     expect(store.recordingEnabled, isFalse);
-    expect(find.text('已暂停记录；已有历史仍保留。'), findsOneWidget);
+    expect(find.text('记录 · 已暂停'), findsOneWidget);
+    expect(find.text('已暂停记录；已有历史仍保留。'), findsNothing);
     expect(find.text('完整译文\n保留换行'), findsOneWidget);
     expect(store.page(), hasLength(1));
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('刷新失败保留可见记录，恢复后重试首批替换而不重复追加', (tester) async {
-    // 首批不足10条时已到末页；重命名真实表令刷新失败，重试仍需绕过末页状态。
+    // 作用：验证经「⋯」菜单触发刷新失败时保留既有列表并提示错误横幅，恢复后可重试替换。
+    // 边界：首批不足10条时已到末页；重命名真实表令刷新失败，重试仍需绕过末页状态。
     store.insert(
       sourceText: 'source',
       translatedText: '译文',
@@ -203,7 +241,9 @@ void main() {
     database.execute(
       'ALTER TABLE translation_history RENAME TO unavailable_history',
     );
-    await tester.tap(find.byTooltip('刷新历史'));
+    await tester.tap(find.byKey(const ValueKey('history-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刷新'));
     await tester.pumpAndSettle();
     expect(find.text('译文'), findsWidgets);
     expect(find.text('source'), findsOneWidget);
@@ -219,8 +259,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('组合筛选回到首批，删除与全量清空取消不修改数据', (tester) async {
-    // 11条跨页记录加一个其他来源；筛选只显示1条，清空仍必须覆盖全部12条。
+  testWidgets('悬停出现复制删除，筛选标签可单独移除，清空全部经「⋯」菜单确认覆盖全部记录', (tester) async {
+    // 作用：验证静息隐藏操作按钮、悬停显示复制删除、筛选生成可移除标签及「⋯」清空全部确认。
+    // 边界：11条跨页记录加1个其他来源；逐个移除标签恢复全量，清空全部仍覆盖全部11条。
     for (var index = 0; index < 11; index++) {
       store.insert(
         sourceText: 'source-$index',
@@ -243,14 +284,19 @@ void main() {
     );
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('history-search')),
-      '目标译文',
-    );
-    await tester.pump(const Duration(milliseconds: 220));
+
+    // 按来源筛选并在管理行下方显示可移除标签。
+    await tester.tap(find.byKey(const ValueKey('history-filter-button')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Notes'));
+    await tester.pumpAndSettle();
+    expect(find.text('来源：Notes'), findsOneWidget);
     expect(find.text('unique'), findsOneWidget);
     expect(find.text('source-10'), findsNothing);
+
+    // 悬停条目后才可点击删除，取消不修改数据，确认后删除。
+    final mouse = await _startMouse(tester);
+    await _hoverRow(tester, mouse, find.text('unique'));
     await tester.tap(find.byTooltip('删除翻译记录'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('取消'));
@@ -261,6 +307,13 @@ void main() {
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(store.page(limit: 20), hasLength(11));
+
+    // 点选标签上的关闭图标移除来源筛选，列表恢复 Safari 记录。
+    await tester.tap(find.byTooltip('移除来源：Notes筛选'));
+    await tester.pumpAndSettle();
+    expect(find.text('来源：Notes'), findsNothing);
+    expect(find.text('source-10'), findsOneWidget);
+
     await tester.enterText(
       find.byKey(const ValueKey('history-search')),
       '译文-10',
@@ -268,22 +321,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
     expect(find.text('source-10'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('history-more-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('清空全部'));
     await tester.pumpAndSettle();
     expect(find.textContaining('不受当前筛选范围限制'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(store.page(limit: 20), hasLength(11));
+
+    await tester.tap(find.byKey(const ValueKey('history-more-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('清空全部'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(store.page(), isEmpty);
-    expect(find.text('暂无翻译历史'), findsOneWidget);
+    expect(find.byType(HistoryEmptyState), findsOneWidget);
+    expect(find.text('还没有翻译记录'), findsOneWidget);
   });
 
   testWidgets('分页失败后重试原游标，保留已加载记录并追加剩余记录', (tester) async {
-    // 11条记录形成10+1两批；SQLite真实缺表期间读取失败，恢复后不能重取首批。
+    // 作用：验证 11 条记录跨 10 条分页失败后保留前 10 条，恢复数据库表后点击「重试加载」追加第 11 条。
+    // 边界：SQLite 真实缺表触发分页异常，恢复后不重新覆盖已加载的前 10 条。
     for (var index = 0; index < 11; index++) {
       store.insert(
         sourceText: 'source-$index',
@@ -299,7 +360,7 @@ void main() {
     database.execute(
       'ALTER TABLE translation_history RENAME TO unavailable_history',
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -5000));
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -5000));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('重试加载'));
     database.execute(
@@ -307,17 +368,18 @@ void main() {
     );
     await tester.tap(find.text('重试加载'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -1000));
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -1000));
     await tester.pumpAndSettle();
     expect(find.text('source-0'), findsOneWidget);
     expect(find.text('已显示全部历史'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, 5000));
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 5000));
     await tester.pumpAndSettle();
     expect(find.text('source-10'), findsOneWidget);
   });
 
-  testWidgets('首次默认期限显示计数，取消不删，选择永久保留后持久生效', (tester) async {
-    // 过期1条且偏好尚未确认；首次提示和90天预览均可取消，永久不清理。
+  testWidgets('首次默认期限显示计数，未确认状态在「⋯」菜单标注，选择永久保留后持久生效', (tester) async {
+    // 作用：验证未确认保留期限时不再显示非错误横幅，而是在「⋯」菜单明确标注，且可在菜单内修改。
+    // 边界：过期 1 条且偏好未确认；首次弹窗取消不删，菜单可见「保留期限（未确认）」，改为永久保留后标注消失。
     store.insert(
       sourceText: 'old',
       translatedText: '旧记录',
@@ -335,15 +397,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.retentionConfirmed, isFalse);
     expect(store.page(), hasLength(1));
-    await tester.tap(find.text('30 天'));
+    expect(find.text('保留期限尚未确认，现有记录不会自动清理。'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('history-more-button')));
     await tester.pumpAndSettle();
+    expect(find.text('保留期限（未确认）'), findsOneWidget);
+    expect(find.text('30 天（未确认）'), findsOneWidget);
     await tester.tap(find.text('90 天'));
     await tester.pumpAndSettle();
     expect(find.textContaining('最近 90 天'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(store.retentionDays, 30);
-    await tester.tap(find.text('30 天'));
+
+    await tester.tap(find.byKey(const ValueKey('history-more-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('永久保留'));
     await tester.pumpAndSettle();
@@ -383,9 +450,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('搜索防抖生效，支持输入框内清除并区分无匹配与空列表，空闲时清除筛选禁用', (tester) async {
-    // 作用：验证 200ms 搜索防抖、清除按钮显隐及无筛选结果文案区分。
-    // 边界：未满 200ms 不触发远端查询；筛选清空后列表恢复且「清除筛选」回退为禁用。
+  testWidgets('搜索防抖生效，支持输入框内清除并区分无匹配与空列表', (tester) async {
+    // 作用：验证 200ms 搜索防抖、清除按钮显隐及无筛选结果与空列表文案区分。
+    // 边界：未满 200ms 不触发远端查询；筛选无结果时显示「没有匹配的翻译历史」而非空状态。
     store.insert(
       sourceText: 'hello world',
       translatedText: '你好世界',
@@ -397,13 +464,6 @@ void main() {
     );
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
-          .onPressed,
-      isNull,
-    );
     expect(find.byKey(const ValueKey('history-search-clear')), findsNothing);
 
     await tester.enterText(
@@ -417,31 +477,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 150));
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的翻译历史'), findsOneWidget);
-    expect(find.text('暂无翻译历史'), findsNothing);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
-          .onPressed,
-      isNotNull,
-    );
+    expect(find.text('还没有翻译记录'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('history-search-clear')));
     await tester.pumpAndSettle();
     expect(find.text('hello world'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, '清除筛选'))
-          .onPressed,
-      isNull,
-    );
   });
 
-  testWidgets('分段切换延迟加载并保持翻译历史浏览状态，支持卡片快捷复制与中文日期选择', (tester) async {
-    // 作用：验证 IndexedStack 延迟挂载子分段、往返保留搜索筛选、卡片复制确认及日期选择器可打开。
-    // 边界：停留在翻译历史时不挂载 VocabularyPage；切去生词本再切回仍保留搜索框文本。
+  testWidgets('分段切换同步窗口标题、延迟加载并保持搜索状态，支持悬停复制、键帽空状态与日期选择器', (tester) async {
+    // 作用：验证标题栏分段切换发送 setWindowTitle、空状态展示当前设置键帽快捷键、悬停后复制及筛选菜单打开系统日期选择。
+    // 边界：停留在翻译历史时不挂载 VocabularyPage；切换分段后依次发送对应标题且不带 App 名。
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final clipboard = <String>[];
+    final windowTitles = <String>[];
     messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
       if (call.method == 'Clipboard.setData') {
         clipboard.add((call.arguments as Map)['text'] as String);
@@ -452,6 +501,20 @@ void main() {
       () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
     );
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.setWindowTitle) {
+        windowTitles.add((call.arguments as Map)['title'] as String);
+        return null;
+      }
+      if (call.method == MethodNames.getSettings) {
+        return {
+          PreferenceKeys.shortcutModifiers:
+              ShortcutKeys.command | ShortcutKeys.shift,
+          PreferenceKeys.shortcutLabel: 'T',
+          PreferenceKeys.screenshotShortcutModifiers:
+              ShortcutKeys.command | ShortcutKeys.option,
+          PreferenceKeys.screenshotShortcutLabel: 'X',
+        };
+      }
       if (call.method == MethodNames.vocabularyList ||
           call.method == MethodNames.screenshotHistoryList) {
         return const <Map<String, Object>>[];
@@ -477,6 +540,7 @@ void main() {
       completedAt: 2000,
       sourceLabel: 'Safari',
     );
+    final itemId = store.page(limit: 1).single.id;
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
     expect(find.byType(VocabularyPage), findsNothing);
@@ -488,12 +552,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
 
+    // 切去生词本时隐藏记录开关并同步窗口标题为「生词本」。
     await tester.tap(find.text('生词本').first);
     await tester.pumpAndSettle();
     expect(find.byType(VocabularyPage), findsOneWidget);
+    expect(find.text('记录'), findsNothing);
+    expect(find.text('还没有生词'), findsOneWidget);
+
+    // 切去截图历史时传入当前区域截图快捷键键帽并同步窗口标题为「截图历史」。
+    await tester.tap(find.text('截图历史').first);
+    await tester.pumpAndSettle();
+    expect(find.text('还没有截图记录'), findsOneWidget);
+    final keycaps = tester.widget<NativeGlassKeycaps>(
+      find.byType(NativeGlassKeycaps),
+    );
+    expect(keycaps.tokens, ['⌥', '⌘', 'X']);
 
     await tester.tap(find.text('翻译历史').first);
     await tester.pumpAndSettle();
+    expect(windowTitles, ['生词本', '截图历史', '翻译历史']);
     expect(
       tester
           .widget<TextField>(find.byKey(const ValueKey('history-search')))
@@ -501,6 +578,17 @@ void main() {
           .text,
       'keep-filter',
     );
+
+    // 静息时复制按钮不可见（透明度 0），悬停后点击复制译文触发确认动效。
+    final mouse = await _startMouse(tester);
+    final rowFinder = find.byKey(ValueKey('history-$itemId'));
+    final rowOpacity = find.descendant(
+      of: rowFinder,
+      matching: find.byType(AnimatedOpacity),
+    );
+    expect(tester.widget<AnimatedOpacity>(rowOpacity).opacity, 0);
+    await _hoverRow(tester, mouse, rowFinder);
+    expect(tester.widget<AnimatedOpacity>(rowOpacity).opacity, 1);
 
     expect(
       tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon).first).trigger,
@@ -514,11 +602,13 @@ void main() {
       1,
     );
 
-    await tester.tap(find.text('起始日期'));
+    // 从「筛选」菜单打开起始日期系统选择器，选择后不崩且关闭弹窗。
+    await tester.tap(find.byKey(const ValueKey('history-filter-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('起始日期…'));
     await tester.pumpAndSettle();
     expect(find.byType(DatePickerDialog), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
   });
 }

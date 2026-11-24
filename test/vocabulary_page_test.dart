@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,13 +7,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
+import 'package:translate_app/src/history/history_empty_state.dart';
+import 'package:translate_app/src/history/history_list_card.dart';
 import 'package:translate_app/src/history/vocabulary_page.dart';
 
-/// 无参数；用假历史通道验证生词本分段的展示、删除确认、失败重试与导出状态。
+/// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
+Future<TestGesture> _startMouse(WidgetTester tester) async {
+  final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await gesture.addPointer(location: Offset.zero);
+  addTearDown(gesture.removePointer);
+  return gesture;
+}
+
+/// tester 为测试驱动，mouse 为已登记鼠标，finder 为目标条目；移动鼠标到条目中心以显示悬停按钮。
+Future<void> _hoverRow(
+  WidgetTester tester,
+  TestGesture mouse,
+  Finder finder,
+) async {
+  await mouse.moveTo(tester.getCenter(finder));
+  await tester.pumpAndSettle();
+}
+
+/// 无参数；用假历史通道验证生词本分段的展示、悬停操作、删除确认、失败重试与导出状态。
 void main() {
-  testWidgets('生词条目显示单词、译文与释义，删除需确认后消失，导出成功显示保存路径', (tester) async {
-    // 作用：验证生词本读取、删除确认防误触、CSV 导出与删空禁用状态。
-    // 边界：取消删除保留原词，确认后删除；列表为空后禁用「导出 CSV」。
+  testWidgets('生词条目共用分组卡片且悬停显示复制删除，删除需确认后消失，导出成功不弹非错误横幅', (tester) async {
+    // 作用：验证生词本样式对齐历史列表、悬停按钮显隐、删除确认防误触、CSV 导出静默完成与删空状态。
+    // 边界：静息时按钮不可点击（透明度 0）；悬停后出现；取消删除保留原词，删空后显示统一空状态并禁用导出。
     const channel = MethodChannel('test/vocabulary-page');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -54,9 +75,31 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(HistoryGroupCard), findsOneWidget);
     expect(find.text('serendipity'), findsOneWidget);
     expect(find.text('机缘凑巧'), findsOneWidget);
     expect(find.text('noun 梨'), findsOneWidget);
+    // 静息状态下悬停操作区透明度为 0 且不逐行挂载 NativeGlassSurface。
+    final firstActions = find.descendant(
+      of: find.byKey(const ValueKey('vocabulary-serendipity')),
+      matching: find.byType(AnimatedOpacity),
+    );
+    expect(tester.widget<AnimatedOpacity>(firstActions).opacity, 0);
+    expect(
+      find.descendant(
+        of: find.byType(HistoryGroupCard),
+        matching: find.byType(NativeGlassSurface),
+      ),
+      findsNothing,
+    );
+
+    final mouse = await _startMouse(tester);
+    await _hoverRow(
+      tester,
+      mouse,
+      find.byKey(const ValueKey('vocabulary-serendipity')),
+    );
+    expect(tester.widget<AnimatedOpacity>(firstActions).opacity, 1);
 
     await tester.tap(find.byTooltip('删除生词').first);
     await tester.pumpAndSettle();
@@ -73,14 +116,17 @@ void main() {
 
     await tester.tap(find.text('导出 CSV'));
     await tester.pumpAndSettle();
-    expect(find.text('已导出到 /Users/test/TranslateApp 生词本.csv'), findsOneWidget);
+    expect(find.byType(NativeGlassBanner), findsNothing);
 
-    // 边界：删到为空后显示空状态，导出按钮禁用。
+    // 边界：删到为空后显示统一空状态，导出按钮禁用。
+    await _hoverRow(tester, mouse, find.byKey(const ValueKey('vocabulary-pear')));
     await tester.tap(find.byTooltip('删除生词'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
-    expect(find.text('生词本为空'), findsOneWidget);
+    expect(find.byType(HistoryEmptyState), findsOneWidget);
+    expect(find.text('还没有生词'), findsOneWidget);
+    expect(find.text('查词后在译文卡片点「加入生词本」'), findsOneWidget);
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, '导出 CSV'))
@@ -181,7 +227,7 @@ void main() {
   });
 
   testWidgets('生词本结构化释义渲染、快捷复制按钮与删除失败提示正常', (tester) async {
-    // 作用：验证词典分节释义渲染、快捷复制触发图标确认以及删除异常横幅反馈。
+    // 作用：验证词典分节释义渲染、悬停后快捷复制触发图标确认以及删除异常错误横幅反馈。
     // 边界：删除失败保留条目并通过 NativeGlassBanner 展示错误文案。
     const channel = MethodChannel('test/vocabulary-copy-delete-err');
     final messenger =
@@ -223,6 +269,8 @@ void main() {
     expect(find.text('① 梨子'), findsOneWidget);
     expect(find.text('sweet pear'), findsOneWidget);
 
+    final mouse = await _startMouse(tester);
+    await _hoverRow(tester, mouse, find.byKey(const ValueKey('vocabulary-pear')));
     expect(tester.widget<CopyConfirmIcon>(find.byType(CopyConfirmIcon)).trigger, 0);
     await tester.tap(find.byTooltip('复制生词'));
     await tester.pumpAndSettle();

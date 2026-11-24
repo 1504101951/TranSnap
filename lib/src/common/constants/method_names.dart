@@ -202,6 +202,9 @@ abstract final class MethodNames {
 
   static const setOverlaySize = 'setOverlaySize';
 
+  /// 设置当前附属窗口的原生窗口标题；参数 {'title': String}，由窗口所在引擎发给所属原生窗口控制器（#144）。
+  static const setWindowTitle = 'setWindowTitle';
+
   static const showOverlay = 'showOverlay';
 
   static const systemStatus = 'systemStatus';

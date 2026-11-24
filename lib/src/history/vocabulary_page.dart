@@ -7,6 +7,8 @@ import '../common/utils/date_text.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import '../overlay/dictionary_definition.dart';
+import 'history_empty_state.dart';
+import 'history_list_card.dart';
 import 'vocabulary.dart';
 
 /// 历史窗口的生词本分段；只展示主引擎生词本，删除与导出都经通道交给主引擎和系统保存面板（#102）。
@@ -25,12 +27,11 @@ class VocabularyPage extends StatefulWidget {
   State<VocabularyPage> createState() => _VocabularyPageState();
 }
 
-/// 持有最近一次读取的生词与操作反馈；数据以主引擎为准，不在窗口内另存。
+/// 持有最近一次读取的生词与错误状态；数据以主引擎为准，不在窗口内另存。
 class _VocabularyPageState extends State<VocabularyPage> {
   List<VocabularyEntry>? _entries;
   String? _loadError;
-  String? _message;
-  bool _messageIsError = false;
+  String? _errorMessage;
   bool _loading = true;
   bool _exporting = false;
   final Set<String> _deletingWords = {};
@@ -50,7 +51,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
     if (old.version != widget.version) _load();
   }
 
-  /// 无参数；读取全部生词，首次加载失败时展示可重试错误，刷新失败时以横幅保留原列表。
+  /// 无参数；读取全部生词，首次加载失败时展示可重试错误，刷新失败时以错误横幅保留原列表。
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -74,8 +75,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
         if (_entries == null) {
           _loadError = reason;
         } else {
-          _message = reason;
-          _messageIsError = true;
+          _errorMessage = reason;
         }
       });
     }
@@ -94,8 +94,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
     if (!confirmed || !mounted) return;
     setState(() {
       _deletingWords.add(word);
-      _message = null;
-      _messageIsError = false;
+      _errorMessage = null;
     });
     try {
       await widget.channel.invokeMethod<void>(MethodNames.deleteVocabulary, {
@@ -106,8 +105,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
     } on PlatformException catch (error) {
       if (!mounted) return;
       setState(() {
-        _message = error.message ?? '删除生词失败，请重试。';
-        _messageIsError = true;
+        _errorMessage = error.message ?? '删除生词失败，请重试。';
       });
     } finally {
       if (mounted) setState(() => _deletingWords.remove(word));
@@ -128,13 +126,12 @@ class _VocabularyPageState extends State<VocabularyPage> {
     });
   }
 
-  /// 无参数；取得 CSV 后经系统保存面板保存，取消不提示，返回结束的 Future。
+  /// 无参数；取得 CSV 后经系统保存面板保存，仅在失败时显示错误横幅，返回结束的 Future。
   Future<void> _export() async {
     if (_exporting) return;
     setState(() {
       _exporting = true;
-      _message = null;
-      _messageIsError = false;
+      _errorMessage = null;
     });
     try {
       final csv = await widget.channel.invokeMethod<String>(
@@ -142,34 +139,130 @@ class _VocabularyPageState extends State<VocabularyPage> {
       );
       if (csv == null) {
         if (!mounted) return;
-        setState(() {
-          _message = '未获取到生词本导出内容。';
-          _messageIsError = true;
-        });
+        setState(() => _errorMessage = '未获取到生词本导出内容。');
         return;
       }
       final date = dateText(DateTime.now());
-      final path = await widget.channel.invokeMethod<String>(
-        MethodNames.saveTextFile,
-        {'text': csv, 'suggestedName': 'TranslateApp 生词本 $date.csv'},
-      );
-      if (!mounted || path == null) return;
-      setState(() {
-        _message = '已导出到 $path';
-        _messageIsError = false;
+      await widget.channel.invokeMethod<String>(MethodNames.saveTextFile, {
+        'text': csv,
+        'suggestedName': 'TranslateApp 生词本 $date.csv',
       });
     } on PlatformException catch (error) {
       if (!mounted) return;
-      setState(() {
-        _message = error.message ?? '导出失败，请重试。';
-        _messageIsError = true;
-      });
+      setState(() => _errorMessage = error.message ?? '导出失败，请重试。');
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
   }
 
-  /// context 提供主题；返回统一顶栏操作、状态横幅与生词卡片列表。
+  /// context 为当前上下文，entry 为单条生词记录；返回沿用历史列表样式的悬停感知行。
+  Widget _buildEntryRow(BuildContext context, VocabularyEntry entry) {
+    final colors = Theme.of(context).colorScheme;
+    final date = DateTime.fromMillisecondsSinceEpoch(entry.addedAt);
+    final deleting = _deletingWords.contains(entry.word);
+    return HistoryHoverRow(
+      key: ValueKey('vocabulary-${entry.word}'),
+      builder: (context, showActions) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  entry.word,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 20 / 14,
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: GlassMetrics.space12),
+              Text(
+                dateText(date),
+                style: TextStyle(
+                  fontSize: GlassMetrics.statusFont,
+                  height: 16 / GlassMetrics.statusFont,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: GlassMetrics.space4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (entry.translation.trim().isNotEmpty)
+                      SelectableText(
+                        entry.translation,
+                        style: TextStyle(
+                          fontSize: GlassMetrics.captionFont,
+                          height:
+                              GlassMetrics.captionLine /
+                              GlassMetrics.captionFont,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    if (entry.definition.trim().isNotEmpty) ...[
+                      if (entry.translation.trim().isNotEmpty)
+                        const SizedBox(height: GlassMetrics.space4),
+                      DefaultTextStyle(
+                        style: TextStyle(
+                          fontSize: GlassMetrics.captionFont,
+                          height:
+                              GlassMetrics.captionLine /
+                              GlassMetrics.captionFont,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        child: DictionaryDefinitionView(
+                          definition: entry.definition,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: GlassMetrics.space8),
+              HistoryHoverActions(
+                visible: showActions,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HistoryHoverIconButton(
+                      tooltip: '复制生词',
+                      semanticsLabel: '复制生词 ${entry.word}',
+                      onPressed: () => _copyEntry(entry),
+                      icon: CopyConfirmIcon(
+                        trigger: _copyTriggers[entry.word] ?? 0,
+                        size: GlassMetrics.icon,
+                      ),
+                    ),
+                    HistoryHoverIconButton(
+                      tooltip: '删除生词',
+                      semanticsLabel: '删除生词 ${entry.word}',
+                      busy: deleting,
+                      onPressed: deleting ? null : () => _delete(entry.word),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: GlassMetrics.icon,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// context 提供主题；返回顶栏操作、错误横幅、空状态及共享卡片生词列表。
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -179,7 +272,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(
             GlassMetrics.pagePadding,
-            GlassMetrics.space12,
+            GlassMetrics.space8,
             GlassMetrics.pagePadding,
             GlassMetrics.space8,
           ),
@@ -217,19 +310,15 @@ class _VocabularyPageState extends State<VocabularyPage> {
             ],
           ),
         ),
-        const Divider(height: 1, thickness: GlassMetrics.groupDividerThickness),
-        if (_message != null)
+        if (_errorMessage != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               GlassMetrics.pagePadding,
-              GlassMetrics.space12,
-              GlassMetrics.pagePadding,
               0,
+              GlassMetrics.pagePadding,
+              GlassMetrics.space8,
             ),
-            child: NativeGlassBanner(
-              message: _message!,
-              isError: _messageIsError,
-            ),
+            child: NativeGlassBanner(message: _errorMessage!, isError: true),
           ),
         Expanded(
           child: entries == null && _loadError != null
@@ -261,106 +350,21 @@ class _VocabularyPageState extends State<VocabularyPage> {
               : entries == null
               ? const Center(child: CircularProgressIndicator())
               : entries.isEmpty
-              ? const Center(child: Text('生词本为空'))
-              : ListView.builder(
+              ? const HistoryEmptyState(
+                  icon: Icons.bookmark_border,
+                  title: '还没有生词',
+                  prefix: '查词后在译文卡片点「加入生词本」',
+                )
+              : ListView(
                   padding: const EdgeInsets.all(GlassMetrics.pagePadding),
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final date = DateTime.fromMillisecondsSinceEpoch(
-                      entry.addedAt,
-                    );
-                    final deleting = _deletingWords.contains(entry.word);
-                    return Card(
-                      key: ValueKey('vocabulary-${entry.word}'),
-                      margin: const EdgeInsets.only(
-                        bottom: GlassMetrics.groupGap,
-                      ),
-                      elevation: 0,
-                      child: Padding(
-                        padding: const EdgeInsets.all(
-                          GlassMetrics.panelPadding,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    entry.word,
-                                    style: theme.textTheme.titleMedium,
-                                  ),
-                                ),
-                                Text(
-                                  dateText(date),
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                                const SizedBox(width: GlassMetrics.actionGap),
-                                Semantics(
-                                  label: '复制生词 ${entry.word}',
-                                  button: true,
-                                  child: NativeGlassSurface(
-                                    material: true,
-                                    child: IconButton(
-                                      tooltip: '复制生词',
-                                      onPressed: () => _copyEntry(entry),
-                                      icon: CopyConfirmIcon(
-                                        trigger:
-                                            _copyTriggers[entry.word] ?? 0,
-                                        size: GlassMetrics.icon,
-                                      ),
-                                      visualDensity: VisualDensity.standard,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: GlassMetrics.actionGap),
-                                Semantics(
-                                  label: '删除生词 ${entry.word}',
-                                  button: true,
-                                  child: NativeGlassSurface(
-                                    material: true,
-                                    busy: deleting,
-                                    child: IconButton(
-                                      tooltip: '删除生词',
-                                      onPressed: deleting
-                                          ? null
-                                          : () => _delete(entry.word),
-                                      icon: const Icon(
-                                        Icons.delete_outline,
-                                        size: GlassMetrics.icon,
-                                      ),
-                                      visualDensity: VisualDensity.standard,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(
-                              height: GlassMetrics.space16,
-                              thickness: GlassMetrics.groupDividerThickness,
-                            ),
-                            Text('译文', style: theme.textTheme.labelLarge),
-                            const SizedBox(height: GlassMetrics.space8),
-                            SelectableText(
-                              entry.translation,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                            const Divider(
-                              height: GlassMetrics.space16,
-                              thickness: GlassMetrics.groupDividerThickness,
-                            ),
-                            Text('释义', style: theme.textTheme.labelLarge),
-                            const SizedBox(height: GlassMetrics.space8),
-                            // 复用词典结构化分行排版组件，保持与查词弹窗一致的词性、义项与例句层级。
-                            DictionaryDefinitionView(
-                              definition: entry.definition,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                  children: [
+                    HistoryGroupCard(
+                      children: [
+                        for (final entry in entries)
+                          _buildEntryRow(context, entry),
+                      ],
+                    ),
+                  ],
                 ),
         ),
       ],

@@ -46,7 +46,18 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
         // WindowEngine 等待 Dart 就绪；重复打开复用本次启动。
         pendingStartup = WindowEngine.start(
             name: engineName, entrypoint: entrypoint, channel: AppConstants.settingsChannel,
-            handler: { call, result in
+            handler: { [weak self] call, result in
+                if call.method == AppConstants.setWindowTitleMethod {
+                    guard let arguments = call.arguments as? [String: Any],
+                          let title = arguments["title"] as? String else {
+                        result(FlutterError(code: AppConstants.badArgsError, message: "缺少窗口标题", details: nil))
+                        return
+                    }
+                    // 历史窗口切换分段时同步更新原生窗口标题，不重复 App 名（#1、#144）。
+                    self?.window?.title = title
+                    result(nil)
+                    return
+                }
                 let bridge = MacPlatformBridge.Shared.instance!
                 // routeWindowRequest负责跨引擎分发，辅助窗口不保存业务方法表。
                 bridge.routeWindowRequest(call, result: result)

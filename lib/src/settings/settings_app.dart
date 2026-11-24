@@ -10,8 +10,8 @@ import '../common/constants/toolbar_grid.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/error_codes.dart';
 import '../common/constants/screenshot_enums.dart';
-import '../common/constants/shortcut_keys.dart';
 import '../common/constants/text_mode.dart';
+import '../common/utils/shortcut_tokens.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -63,7 +63,7 @@ class SettingsApp extends StatelessWidget {
   /// context 为设置引擎的构建上下文；返回完整设置应用。
   @override
   Widget build(BuildContext context) => NativeGlassApp(
-    title: 'TranslateApp 设置',
+    title: '权限与启动',
     home: NativeGlassWindowPage(
       child: _SettingsPage(createMcpService: createMcpService),
     ),
@@ -159,7 +159,7 @@ class _SettingsPageState extends State<_SettingsPage>
     throw StateError('侧边栏缺少子页 $page');
   }
 
-  /// page 为点选的子页；切换展示并中止未完成的热键录制、清理已提交页的非持久化提示，无返回值。
+  /// page 为点选的子页；切换展示并同步原生窗口标题、中止未完成的热键录制、清理已提交页的非持久化提示，无返回值。
   void _openPage(SettingsPage page) {
     setState(() {
       _page = page;
@@ -170,10 +170,25 @@ class _SettingsPageState extends State<_SettingsPage>
         _failed = false;
       }
     });
+    // 窗口标题只写当前子页名，测试未注册该通道时静默忽略。
+    unawaited(_syncWindowTitle(_pageTitle(page)));
     // _checkLanguagePacks 按已提交的主次语言查询，语言设置改动后回到通用页即可看到新状态。
     if (page == SettingsPage.general) _checkLanguagePacks();
     // _loadSystemShortcuts 每次进入工具栏页重新读取，系统设置中的修改随即生效（#141）。
     if (page == SettingsPage.toolbar) _loadSystemShortcuts();
+  }
+
+  /// title 为当前子页标题；同步到原生设置窗口标题，忽略未实现的通道调用。
+  Future<void> _syncWindowTitle(String title) async {
+    try {
+      await _channel.invokeMethod<void>(MethodNames.setWindowTitle, {
+        'title': title,
+      });
+    } on MissingPluginException {
+      // 无原生窗口或测试夹具未处理标题同步时保持静默。
+    } on PlatformException {
+      // 标题同步不影响子页浏览。
+    }
   }
 
   /// 已启用的系统快捷键落在截图工具栏网格上的格位；工具栏页打开时读取。
@@ -732,13 +747,7 @@ class _SettingsPageState extends State<_SettingsPage>
     Widget? leading,
   }) {
     final isThisRecording = _recordingTarget == title;
-    final tokens = [
-      if (code & ShortcutKeys.control != 0) '⌃',
-      if (code & ShortcutKeys.option != 0) '⌥',
-      if (code & ShortcutKeys.shift != 0) '⇧',
-      if (code & ShortcutKeys.command != 0) '⌘',
-      label,
-    ];
+    final tokens = shortcutTokens(code, label);
     return [
       // 同一行保留图标、标题和录制命中区，不通过常驻说明增加页面高度。
       ConstrainedBox(
