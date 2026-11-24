@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
@@ -252,10 +253,10 @@ void main() {
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '服务列表');
     final edit = tester.getRect(
-      find.widgetWithIcon(IconButton, Icons.edit_outlined),
+      find.widgetWithIcon(IconButton, LucideIcons.pencil),
     );
     final delete = tester.getRect(
-      find.widgetWithIcon(IconButton, Icons.delete_outline),
+      find.widgetWithIcon(IconButton, LucideIcons.trash2),
     );
     expect(edit.size, const Size(32, 32));
     expect(delete.left - edit.right, 8);
@@ -395,7 +396,7 @@ void main() {
             children: const [
               NativeGlassSettingRow(
                 title: '快捷键示例',
-                leading: NativeGlassRowIcon(icon: Icons.keyboard_outlined),
+                leading: NativeGlassRowIcon(icon: LucideIcons.keyboard),
                 child: NativeGlassKeycaps(tokens: ['⇧', '⌘', '@']),
               ),
             ],

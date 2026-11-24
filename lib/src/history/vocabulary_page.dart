@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
@@ -248,7 +249,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
                       busy: deleting,
                       onPressed: deleting ? null : () => _delete(entry.word),
                       icon: const Icon(
-                        Icons.delete_outline,
+                        LucideIcons.trash2,
                         size: GlassMetrics.icon,
                       ),
                     ),
@@ -292,7 +293,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: IconButton(
                   tooltip: '刷新生词本',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh, size: GlassMetrics.icon),
+                  icon: const Icon(LucideIcons.refreshCw, size: GlassMetrics.icon),
                   visualDensity: VisualDensity.standard,
                 ),
               ),
@@ -351,7 +352,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
               ? const Center(child: CircularProgressIndicator())
               : entries.isEmpty
               ? const HistoryEmptyState(
-                  icon: Icons.bookmark_border,
+                  icon: LucideIcons.bookmark,
                   title: '还没有生词',
                   prefix: '查词后在译文卡片点「加入生词本」',
                 )

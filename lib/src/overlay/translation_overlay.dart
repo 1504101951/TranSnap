@@ -4,6 +4,7 @@ import '../common/constants/text_mode.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
@@ -258,7 +259,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(Icons.translate_rounded, size: 16),
+                    Icon(LucideIcons.languages, size: 16),
                     SizedBox(width: 6),
                     Text('翻译', textAlign: TextAlign.center),
                   ],
@@ -309,7 +310,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             action: widget.session.canRetry
                 ? FilledButton.tonalIcon(
                     onPressed: widget.onActivate,
-                    icon: const Icon(Icons.refresh, size: 16),
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
                     label: const Text('重试'),
                   )
                 : null,
@@ -571,7 +572,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                         if (widget.session.canRetry && !statusInBanner)
                           TextButton.icon(
                             onPressed: widget.onActivate,
-                            icon: const Icon(Icons.refresh, size: 14),
+                            icon: const Icon(LucideIcons.refreshCw, size: 14),
                             label: const Text('重试'),
                           ),
                         // 服务菜单为次级文字菜单；润色、纠错、解释只列模型服务与当前服务，处理中禁用（#100）。
@@ -590,7 +591,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                         const SizedBox(width: GlassMetrics.space4),
                         _CardButton(
                           tooltip: '关闭',
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(LucideIcons.x),
                           onPressed: widget.onDismiss,
                           visual: 28,
                           radius: GlassMetrics.controlRadius,

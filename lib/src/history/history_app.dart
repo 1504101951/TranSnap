@@ -11,6 +11,7 @@ import '../common/widgets/native_glass.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'history_empty_state.dart';
 import 'history_list_card.dart';
@@ -603,7 +604,7 @@ class _HistoryAppState extends State<HistoryApp> {
             key: const ValueKey('history-filter-button'),
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
-            icon: const Icon(Icons.filter_list, size: GlassMetrics.icon),
+            icon: const Icon(LucideIcons.listFilter, size: GlassMetrics.icon),
             label: const Text('筛选'),
           ),
         ),
@@ -676,7 +677,7 @@ class _HistoryAppState extends State<HistoryApp> {
             padding: EdgeInsets.zero,
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
-            icon: const Icon(Icons.more_horiz, size: GlassMetrics.icon),
+            icon: const Icon(LucideIcons.ellipsis, size: GlassMetrics.icon),
           ),
         ),
       ),
@@ -725,7 +726,7 @@ class _HistoryAppState extends State<HistoryApp> {
                 child: Padding(
                   padding: const EdgeInsets.all(2),
                   child: Icon(
-                    Icons.close,
+                    LucideIcons.x,
                     size: 14,
                     color: colors.onSurfaceVariant,
                   ),
@@ -768,7 +769,7 @@ class _HistoryAppState extends State<HistoryApp> {
                           minHeight: GlassMetrics.hitSize,
                         ),
                         prefixIcon: const Icon(
-                          Icons.search,
+                          LucideIcons.search,
                           size: GlassMetrics.icon,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
@@ -790,7 +791,7 @@ class _HistoryAppState extends State<HistoryApp> {
                                 ),
                                 padding: EdgeInsets.zero,
                                 icon: const Icon(
-                                  Icons.close,
+                                  LucideIcons.x,
                                   size: GlassMetrics.icon,
                                 ),
                                 onPressed: () {
@@ -963,7 +964,7 @@ class _HistoryAppState extends State<HistoryApp> {
                           ? null
                           : () => _deleteHistory(context, id: item.id),
                       icon: const Icon(
-                        Icons.delete_outline,
+                        LucideIcons.trash2,
                         size: GlassMetrics.icon,
                       ),
                     ),
@@ -1059,7 +1060,7 @@ class _HistoryAppState extends State<HistoryApp> {
         );
       }
       return HistoryEmptyState(
-        icon: Icons.translate,
+        icon: LucideIcons.languages,
         title: '还没有翻译记录',
         prefix: '在任意 App 里选中文字，按',
         shortcutTokens: _globalShortcutTokens,

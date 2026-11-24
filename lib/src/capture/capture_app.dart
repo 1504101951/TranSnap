@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/capture_phase.dart';
 import '../common/constants/channel_names.dart';
@@ -343,7 +344,7 @@ class _CaptureAppState extends State<CaptureApp> {
         action(
           1,
           paused ? '开始' : '暂停',
-          paused ? Icons.play_arrow : Icons.pause,
+          paused ? LucideIcons.play : LucideIcons.pause,
           editable
               ? () => _invoke(MethodNames.setCapturePaused, {'paused': !paused})
               : null,
@@ -353,7 +354,7 @@ class _CaptureAppState extends State<CaptureApp> {
         action(
           2,
           '结束',
-          Icons.stop,
+          LucideIcons.squareStop,
           editable ? () => _invoke(MethodNames.stopCapture) : null,
           busy: _pending && _pendingMethod == MethodNames.stopCapture,
         ),
@@ -361,7 +362,7 @@ class _CaptureAppState extends State<CaptureApp> {
         action(
           3,
           '放弃',
-          Icons.close,
+          LucideIcons.x,
           _pending ? null : _discard,
           busy: _pending && _pendingMethod == MethodNames.cancelCapture,
         ),
@@ -490,7 +491,7 @@ class _CaptureAppState extends State<CaptureApp> {
                     const ResultBarDivider(),
                     ResultIconButton(
                       buttonKey: const Key('result-play-toggle'),
-                      icon: playing ? Icons.pause : Icons.play_arrow,
+                      icon: playing ? LucideIcons.pause : LucideIcons.play,
                       tooltip: playing ? '暂停视频' : '播放视频',
                       onPressed: enabled
                           ? () => _invoke(MethodNames.toggleRecordingPlayback)
@@ -528,7 +529,7 @@ class _CaptureAppState extends State<CaptureApp> {
                     ResultTextButton(
                       buttonKey: const Key('result-trim'),
                       label: '裁剪',
-                      icon: Icons.content_cut,
+                      icon: LucideIcons.scissors,
                       onPressed: enabled
                           ? () => _invoke(MethodNames.trimRecording)
                           : null,
@@ -541,7 +542,7 @@ class _CaptureAppState extends State<CaptureApp> {
                     ResultTextButton(
                       buttonKey: const Key('result-copy'),
                       label: '复制',
-                      icon: Icons.content_copy,
+                      icon: LucideIcons.copy,
                       tooltip: '复制视频',
                       onPressed: enabled ? _copyVideo : null,
                       busy:
@@ -554,7 +555,7 @@ class _CaptureAppState extends State<CaptureApp> {
                       ResultTextButton(
                         buttonKey: const Key('result-cancel-export'),
                         label: '取消转换',
-                        icon: Icons.close,
+                        icon: LucideIcons.x,
                         busy: true,
                         onPressed: _pending
                             ? null
@@ -595,7 +596,7 @@ class _CaptureAppState extends State<CaptureApp> {
                         builder: (context, controller, _) => ResultTextButton(
                           buttonKey: const Key('result-export-menu'),
                           label: '导出',
-                          trailing: Icons.keyboard_arrow_down,
+                          trailing: LucideIcons.chevronDown,
                           onPressed: enabled
                               ? () => controller.isOpen
                                     ? controller.close()
@@ -607,7 +608,7 @@ class _CaptureAppState extends State<CaptureApp> {
                       ResultTextButton(
                         buttonKey: const Key('result-cancel-save'),
                         label: '取消保存',
-                        icon: Icons.close,
+                        icon: LucideIcons.x,
                         primary: true,
                         busy: true,
                         onPressed: _pending
@@ -618,7 +619,7 @@ class _CaptureAppState extends State<CaptureApp> {
                       ResultTextButton(
                         buttonKey: const Key('result-save'),
                         label: '保存',
-                        icon: Icons.save_outlined,
+                        icon: LucideIcons.save,
                         primary: true,
                         tooltip: '保存 MP4',
                         onPressed: enabled
@@ -800,7 +801,7 @@ class _CaptureAppState extends State<CaptureApp> {
                       builder: (context, controller, _) => ResultTextButton(
                         buttonKey: const Key('result-zoom-menu'),
                         label: _fitWidth ? '适合宽度' : '实际大小',
-                        trailing: Icons.keyboard_arrow_down,
+                        trailing: LucideIcons.chevronDown,
                         onPressed: enabled
                             ? () => controller.isOpen
                                   ? controller.close()
@@ -813,7 +814,7 @@ class _CaptureAppState extends State<CaptureApp> {
                     ResultTextButton(
                       buttonKey: const Key('result-copy'),
                       label: '复制',
-                      icon: Icons.copy_outlined,
+                      icon: LucideIcons.copy,
                       onPressed: enabled ? _copyImage : null,
                       busy:
                           _pending &&
@@ -822,7 +823,7 @@ class _CaptureAppState extends State<CaptureApp> {
                     ResultTextButton(
                       buttonKey: const Key('result-save'),
                       label: '保存',
-                      icon: Icons.save_outlined,
+                      icon: LucideIcons.save,
                       primary: true,
                       onPressed: enabled
                           ? () => _invoke(MethodNames.saveScreenshot, {

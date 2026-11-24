@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_actions.dart';
@@ -609,7 +610,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       height: GlassMetrics.hitSize,
       child: Builder(
         builder: (context) => Icon(
-          Icons.drag_indicator,
+          LucideIcons.gripVertical,
           size: GlassMetrics.icon,
           color: Focus.of(context).hasFocus
               ? Theme.of(context).colorScheme.primary
@@ -719,8 +720,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   padding: EdgeInsets.zero,
                   icon: Icon(
                     _columnHidden(column)
-                        ? Icons.visibility_off
-                        : Icons.visibility,
+                        ? LucideIcons.eyeOff
+                        : LucideIcons.eye,
                     size: GlassMetrics.icon,
                   ),
                   onPressed: () => _toggleColumnVisible(column),
@@ -734,7 +735,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                     height: GlassMetrics.hitSize,
                   ),
                   padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.close, size: GlassMetrics.icon),
+                  icon: const Icon(LucideIcons.x, size: GlassMetrics.icon),
                   onPressed: () => _removeColumn(index),
                 ),
             ],
@@ -1060,7 +1061,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
               child: IconButton(
                 key: ValueKey('promote-child-$id'),
                 tooltip: '移出到一级工具栏',
-                icon: const Icon(Icons.arrow_upward, size: GlassMetrics.icon),
+                icon: const Icon(LucideIcons.arrowUp, size: GlassMetrics.icon),
                 visualDensity: VisualDensity.standard,
                 onPressed: () => _promoteChild(id),
               ),
@@ -1101,7 +1102,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             ),
           ),
           child:
-              child ?? const Icon(Icons.drag_handle, size: GlassMetrics.icon),
+              child ?? const Icon(LucideIcons.gripHorizontal, size: GlassMetrics.icon),
         );
       },
     );
@@ -1171,7 +1172,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             ? NativeGlassTheme.accentOf(context)
             : const Color(0xFF929292),
       ),
-      icon: Icon(visible ? Icons.visibility : Icons.visibility_off, size: size),
+      icon: Icon(visible ? LucideIcons.eye : LucideIcons.eyeOff, size: size),
       onPressed: () => _toggleVisible(id),
     ),
   );

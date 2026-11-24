@@ -11,6 +11,7 @@ import 'package:translate_app/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:translate_app/src/common/constants/toolbar_grid.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:translate_app/src/common/utils/geometry.dart';
 import 'package:translate_app/src/common/constants/screenshot_enums.dart';
 import 'package:translate_app/src/screenshot/drawing_controls.dart';
@@ -893,7 +894,7 @@ void main() {
             find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
           )
           .icon,
-      Icons.keyboard_outlined,
+      LucideIcons.keyboard,
     );
     expect(group2.top, greaterThan(group0.top));
     expect(group2.left, group0.left);

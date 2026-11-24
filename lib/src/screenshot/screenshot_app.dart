@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/channel_names.dart';
 import '../common/constants/drawing_metrics.dart';
@@ -3164,7 +3165,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       key: const Key(ScreenshotActions.close),
                       tooltip: '关闭',
                       onPressed: _busy ? null : _close,
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(LucideIcons.x),
                     ),
                   ),
                 ),
@@ -3475,35 +3476,35 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       leading: [
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.cursor),
-          icon: Icons.near_me_outlined,
+          icon: LucideIcons.mousePointer,
           tooltip: '光标',
           selected: _tool == ScreenshotTool.cursor,
           onPressed: actions[ScreenshotActions.cursor],
         ),
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.rect),
-          icon: Icons.crop_square,
+          icon: LucideIcons.square,
           tooltip: '图形',
           selected: _tool == ScreenshotTool.rect,
           onPressed: actions[ScreenshotActions.rect],
         ),
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.arrow),
-          icon: Icons.north_east,
+          icon: LucideIcons.arrowUpRight,
           tooltip: '箭头',
           selected: _tool == ScreenshotTool.arrow,
           onPressed: actions[ScreenshotActions.arrow],
         ),
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.text),
-          icon: Icons.text_fields,
+          icon: LucideIcons.type,
           tooltip: '文字',
           selected: _tool == ScreenshotTool.text,
           onPressed: actions[ScreenshotActions.text],
         ),
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.brush),
-          icon: Icons.brush,
+          icon: LucideIcons.brush,
           tooltip: '画笔',
           selected: _tool == ScreenshotTool.brush && !isMosaic,
           onPressed: _busy
@@ -3521,7 +3522,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
         ResultIconButton(
           buttonKey: const Key('${ScreenshotActions.brushPrefix}mosaic-tool'),
-          icon: Icons.grid_on,
+          icon: LucideIcons.grid,
           tooltip: '马赛克',
           selected: isMosaic,
           onPressed: _busy
@@ -3540,13 +3541,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         const ResultBarDivider(),
         ResultIconButton(
           buttonKey: const Key('screenshot-undo'),
-          icon: Icons.undo,
+          icon: LucideIcons.undo2,
           tooltip: '撤销',
           onPressed: !_busy && _document.canUndo ? _document.undo : null,
         ),
         ResultIconButton(
           buttonKey: const Key('screenshot-redo'),
-          icon: Icons.redo,
+          icon: LucideIcons.redo2,
           tooltip: '重做',
           onPressed: !_busy && _document.canRedo ? _document.redo : null,
         ),
@@ -3555,21 +3556,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ResultTextButton(
           buttonKey: const Key(ScreenshotActions.ocrCopy),
           label: '识别文字',
-          icon: Icons.text_snippet_outlined,
+          icon: LucideIcons.scanText,
           onPressed: actions[ScreenshotActions.ocrCopy],
           busy: _busy && _busyId == ScreenshotActions.ocrCopy,
         ),
         ResultTextButton(
           buttonKey: const Key(ScreenshotActions.ocrTranslate),
           label: '翻译',
-          icon: Icons.translate,
+          icon: LucideIcons.languages,
           onPressed: actions[ScreenshotActions.ocrTranslate],
           busy: _busy && _busyId == ScreenshotActions.ocrTranslate,
         ),
         ResultTextButton(
           buttonKey: const Key(ScreenshotActions.pin),
           label: '贴图',
-          icon: Icons.push_pin_outlined,
+          icon: LucideIcons.pin,
           onPressed: actions[ScreenshotActions.pin],
           busy: _busy && _busyId == ScreenshotActions.pin,
         ),
@@ -3577,14 +3578,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ResultTextButton(
           buttonKey: const Key(ScreenshotActions.copy),
           label: '复制',
-          icon: Icons.copy_outlined,
+          icon: LucideIcons.copy,
           onPressed: actions[ScreenshotActions.copy],
           busy: _busy && _busyId == ScreenshotActions.copy,
         ),
         ResultTextButton(
           buttonKey: const Key(ScreenshotActions.save),
           label: '保存',
-          icon: Icons.save_outlined,
+          icon: LucideIcons.save,
           primary: true,
           onPressed: actions[ScreenshotActions.save],
           busy: _busy && _busyId == ScreenshotActions.save,
@@ -3639,61 +3640,61 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         anchorIndex = 1;
         addItem(
           '${ScreenshotActions.shapePrefix}rectangle',
-          Icons.crop_square,
+          LucideIcons.square,
           selected: _styleShape == ShapeVariant.rectangle,
         );
         addItem(
           '${ScreenshotActions.shapePrefix}circle',
-          Icons.circle_outlined,
+          LucideIcons.circle,
           selected: _styleShape == ShapeVariant.circle,
         );
         addItem(
           '${ScreenshotActions.shapePrefix}filledRectangle',
-          Icons.square,
+          LucideIcons.squareDot,
           selected: _styleShape == ShapeVariant.filledRectangle,
         );
         addItem(
           '${ScreenshotActions.shapePrefix}filledCircle',
-          Icons.circle,
+          LucideIcons.circleDot,
           selected: _styleShape == ShapeVariant.filledCircle,
         );
         addDivider();
-        addItem(ScreenshotActions.palette, Icons.palette_outlined);
+        addItem(ScreenshotActions.palette, LucideIcons.palette);
         if (!_styleShape.filled) {
-          addItem(ScreenshotActions.width, Icons.line_weight);
+          addItem(ScreenshotActions.width, LucideIcons.slidersHorizontal);
         }
       case ScreenshotTool.arrow:
         anchorIndex = 2;
-        addItem(ScreenshotActions.palette, Icons.palette_outlined);
-        addItem(ScreenshotActions.width, Icons.line_weight);
+        addItem(ScreenshotActions.palette, LucideIcons.palette);
+        addItem(ScreenshotActions.width, LucideIcons.slidersHorizontal);
       case ScreenshotTool.text:
         anchorIndex = 3;
-        addItem(ScreenshotActions.palette, Icons.palette_outlined);
+        addItem(ScreenshotActions.palette, LucideIcons.palette);
         if (actions.containsKey(ScreenshotActions.sizeDown)) {
-          addItem(ScreenshotActions.sizeDown, Icons.text_decrease);
+          addItem(ScreenshotActions.sizeDown, LucideIcons.aArrowDown);
         }
         if (actions.containsKey(ScreenshotActions.sizeUp)) {
-          addItem(ScreenshotActions.sizeUp, Icons.text_increase);
+          addItem(ScreenshotActions.sizeUp, LucideIcons.aArrowUp);
         }
       case ScreenshotTool.brush:
         if (brushMode == ShapeMode.mosaic) {
           anchorIndex = 5;
-          addItem(ScreenshotActions.width, Icons.line_weight);
+          addItem(ScreenshotActions.width, LucideIcons.slidersHorizontal);
         } else {
           anchorIndex = 4;
           addItem(
             '${ScreenshotActions.brushPrefix}solid',
-            Icons.brush,
+            LucideIcons.brush,
             selected: brushMode == ShapeMode.solid,
           );
           addItem(
             '${ScreenshotActions.brushPrefix}highlighter',
-            Icons.border_color,
+            LucideIcons.highlighter,
             selected: brushMode == ShapeMode.highlighter,
           );
           addDivider();
-          addItem(ScreenshotActions.palette, Icons.palette_outlined);
-          addItem(ScreenshotActions.width, Icons.line_weight);
+          addItem(ScreenshotActions.palette, LucideIcons.palette);
+          addItem(ScreenshotActions.width, LucideIcons.slidersHorizontal);
         }
       default:
         return const [];
@@ -3723,18 +3724,18 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final colors = Theme.of(context).colorScheme;
     final icons = <String, IconData>{
       ...ScreenshotActions.icons,
-      ScreenshotActions.palette: Icons.palette_outlined,
-      ScreenshotActions.width: Icons.line_weight,
-      ScreenshotActions.sizeDown: Icons.text_decrease,
-      ScreenshotActions.sizeUp: Icons.text_increase,
-      ScreenshotActions.reveal: Icons.folder_open,
-      '${ScreenshotActions.shapePrefix}rectangle': Icons.crop_square,
-      '${ScreenshotActions.shapePrefix}circle': Icons.circle_outlined,
-      '${ScreenshotActions.shapePrefix}filledRectangle': Icons.square,
-      '${ScreenshotActions.shapePrefix}filledCircle': Icons.circle,
-      '${ScreenshotActions.brushPrefix}solid': Icons.brush,
-      '${ScreenshotActions.brushPrefix}mosaic': Icons.grid_on,
-      '${ScreenshotActions.brushPrefix}highlighter': Icons.border_color,
+      ScreenshotActions.palette: LucideIcons.palette,
+      ScreenshotActions.width: LucideIcons.slidersHorizontal,
+      ScreenshotActions.sizeDown: LucideIcons.aArrowDown,
+      ScreenshotActions.sizeUp: LucideIcons.aArrowUp,
+      ScreenshotActions.reveal: LucideIcons.folderOpen,
+      '${ScreenshotActions.shapePrefix}rectangle': LucideIcons.square,
+      '${ScreenshotActions.shapePrefix}circle': LucideIcons.circle,
+      '${ScreenshotActions.shapePrefix}filledRectangle': LucideIcons.squareDot,
+      '${ScreenshotActions.shapePrefix}filledCircle': LucideIcons.circleDot,
+      '${ScreenshotActions.brushPrefix}solid': LucideIcons.brush,
+      '${ScreenshotActions.brushPrefix}mosaic': LucideIcons.grid,
+      '${ScreenshotActions.brushPrefix}highlighter': LucideIcons.highlighter,
     };
     final dark = Theme.of(context).brightness == Brightness.dark;
     final reduced = AppMotion.reduced(context);
@@ -3782,7 +3783,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               ),
             ),
-            icon: Icon(icons[id] ?? Icons.circle, size: compact ? 14 : 16),
+            icon: Icon(icons[id] ?? LucideIcons.circleDot, size: compact ? 14 : 16),
           ),
         ),
       );
@@ -3981,7 +3982,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         child: label.isEmpty
             ? Center(
                 child: Icon(
-                  Icons.keyboard_outlined,
+                  LucideIcons.keyboard,
                   key: Key('toolbar-hint-${group.key}'),
                   size: 14,
                   color: colors.onSurfaceVariant,
@@ -4102,7 +4103,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         captureButton(
           '背景',
           beautify == null
-              ? const Icon(Icons.block, size: 14)
+              ? const Icon(LucideIcons.ban, size: 14)
               : Container(
                   width: 14,
                   height: 14,
@@ -4184,9 +4185,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
         'recording-targets-row': captureRow('recording-targets-row', [
           for (final target in const {
-            CaptureTarget.region: ('当前选区', Icons.crop),
-            CaptureTarget.application: ('窗口', Icons.apps),
-            CaptureTarget.display: ('全屏', Icons.desktop_mac),
+            CaptureTarget.region: ('当前选区', LucideIcons.crop),
+            CaptureTarget.application: ('窗口', LucideIcons.layoutGrid),
+            CaptureTarget.display: ('全屏', LucideIcons.monitor),
           }.entries)
             (() {
               final button = captureButton(
@@ -4242,7 +4243,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               ],
               builder: (context, controller, _) => captureButton(
                 _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
-                const Icon(Icons.tune, size: 14),
+                const Icon(LucideIcons.sliders, size: 14),
                 () =>
                     controller.isOpen ? controller.close() : controller.open(),
                 selected:
@@ -4252,7 +4253,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             ),
           captureButton(
             _liveExpanded ? '开始实时翻译' : '开始录制',
-            const Icon(Icons.fiber_manual_record, size: 14),
+            const Icon(LucideIcons.circleDot, size: 14),
             _loadingApplications ||
                     (_recordingTarget == CaptureTarget.application &&
                         _recordingApplication == null)
@@ -4261,7 +4262,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ),
           captureButton(
             _liveExpanded ? '取消实时翻译' : '取消录制',
-            const Icon(Icons.close, size: 14),
+            const Icon(LucideIcons.x, size: 14),
             () => setState(() {
               _expandedRow = null;
               unawaited(_syncRecordingPreview());
@@ -4278,7 +4279,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             const SizedBox(
               width: ToolbarGrid.trayButton,
               height: ToolbarGrid.trayButton,
-              child: Icon(Icons.hourglass_top, size: 14),
+              child: Icon(LucideIcons.hourglass, size: 14),
             ),
           for (final app in _recordingApplications)
             captureButton(
@@ -4290,7 +4291,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       height: 14,
                     )
                   : const Icon(
-                      Icons.apps,
+                      LucideIcons.layoutGrid,
                       size: 14,
                       semanticLabel: '应用图标不可用',
                     ),

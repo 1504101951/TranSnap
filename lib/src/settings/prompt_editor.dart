@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/text_mode.dart';
@@ -115,10 +116,10 @@ class _PromptEditorState extends State<PromptEditor> {
     final error = controller.text.trim().isEmpty ? '提示词不能为空。' : null;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final (icon, tint) = switch (mode) {
-      TextMode.translate => (Icons.translate_outlined, const Color(0xFF0A84FF)),
-      TextMode.polish => (Icons.auto_fix_high_outlined, const Color(0xFFAF52DE)),
-      TextMode.correct => (Icons.spellcheck_outlined, const Color(0xFF34C759)),
-      TextMode.explain => (Icons.lightbulb_outline, const Color(0xFFFF9500)),
+      TextMode.translate => (LucideIcons.languages, const Color(0xFF0A84FF)),
+      TextMode.polish => (LucideIcons.wandSparkles, const Color(0xFFAF52DE)),
+      TextMode.correct => (LucideIcons.spellCheck, const Color(0xFF34C759)),
+      TextMode.explain => (LucideIcons.lightbulb, const Color(0xFFFF9500)),
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: GlassMetrics.space12),

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/emoji_catalog.dart';
@@ -129,7 +130,7 @@ class _StickerPanelState extends State<StickerPanel> {
               File('${widget.directory}/${sticker.id}.png'),
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) => Icon(
-                Icons.broken_image_outlined,
+                LucideIcons.imageOff,
                 size: GlassMetrics.icon,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                 semanticLabel: '贴纸加载失败',

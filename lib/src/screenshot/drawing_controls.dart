@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/glass_metrics.dart';
@@ -366,10 +367,10 @@ class _ColorPickerState extends State<ColorPicker> {
               Row(
                 children: [
                   for (final (direction, icon, label) in const [
-                    (GradientDirection.right, Icons.arrow_forward, '向右'),
-                    (GradientDirection.down, Icons.arrow_downward, '向下'),
-                    (GradientDirection.downRight, Icons.south_east, '向右下'),
-                    (GradientDirection.upRight, Icons.north_east, '向右上'),
+                    (GradientDirection.right, LucideIcons.arrowRight, '向右'),
+                    (GradientDirection.down, LucideIcons.arrowDown, '向下'),
+                    (GradientDirection.downRight, LucideIcons.arrowDownRight, '向右下'),
+                    (GradientDirection.upRight, LucideIcons.arrowUpRight, '向右上'),
                   ]) ...[
                     SizedBox.square(
                       dimension: DrawingMetrics.directionButton,
@@ -456,7 +457,7 @@ class _ColorPickerState extends State<ColorPicker> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.error_outline,
+                      LucideIcons.circleAlert,
                       size: 13,
                       color: Theme.of(context).colorScheme.error,
                     ),

@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 
 import 'app_motion.dart';
@@ -517,7 +518,7 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Icon(
-                    Icons.error_outline,
+                    LucideIcons.circleAlert,
                     size: 13,
                     color: colors.error,
                   ),
@@ -724,7 +725,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(Icons.unfold_more, size: 12),
+                      const Icon(LucideIcons.unfoldVertical, size: 12),
                     ],
                   ),
                 ),
@@ -773,7 +774,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
                 ),
               ),
               const SizedBox(width: GlassMetrics.space4),
-              const Icon(Icons.expand_more, size: 12),
+              const Icon(LucideIcons.chevronDown, size: 12),
             ],
           ),
         ),
@@ -867,7 +868,7 @@ class NativeGlassMenuItem extends StatelessWidget {
           : SizedBox.square(
               dimension: GlassMetrics.icon,
               child: checked!
-                  ? const Icon(Icons.check, size: GlassMetrics.icon)
+                  ? const Icon(LucideIcons.check, size: GlassMetrics.icon)
                   : null,
             ),
       style: ButtonStyle(
@@ -1095,7 +1096,7 @@ class NativeGlassStatus extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              granted ? Icons.check : Icons.warning_amber_rounded,
+              granted ? LucideIcons.check : LucideIcons.triangleAlert,
               size: GlassMetrics.statusIcon,
               color: color,
             ),
@@ -2096,7 +2097,7 @@ class NativeGlassBanner extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              isError ? Icons.error_outline : Icons.info_outline,
+              isError ? LucideIcons.circleAlert : LucideIcons.info,
               size: GlassMetrics.icon,
               color: foreground,
             ),

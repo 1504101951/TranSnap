@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 import 'package:translate_app/src/common/constants/motion_metrics.dart';
 import 'package:translate_app/src/common/constants/translation_phase.dart';
@@ -81,7 +82,7 @@ void main() {
   testWidgets('五组纯 Dart 矢量状态机：状态切换正确，图标交叉过渡后旧图标移除，复制确认 1 秒复原且无残留计时器', (
     tester,
   ) async {
-    // 边界：朗读空闲保留 Icons.volume_up_rounded；复制触发后先变为对勾绘制，1000ms 结束复原为 Icons.copy_rounded；
+    // 边界：朗读空闲保留 LucideIcons.volume2；复制触发后先变为对勾绘制，1000ms 结束复原为 LucideIcons.copy；
     // 图标之间 160ms 交叉过渡，过渡期间新旧图标并存，过渡结束（等待 200ms）后旧图标移除。
     var phase = TranslationPhase.translating;
     var speaking = false;
@@ -116,9 +117,9 @@ void main() {
         ),
       ),
     );
-    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.bookmark_add_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    expect(find.byIcon(LucideIcons.volume2), findsOneWidget);
+    expect(find.byIcon(LucideIcons.bookmarkPlus), findsOneWidget);
+    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
 
     update(() {
@@ -131,17 +132,17 @@ void main() {
       elapsed = 1;
     });
     await tester.pump();
-    expect(find.byIcon(Icons.bookmark_added), findsOneWidget);
+    expect(find.byIcon(LucideIcons.bookmarkCheck), findsOneWidget);
     // 交叉过渡进行中旧图标仍在淡出；200ms 后过渡结束，旧图标移除。
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byIcon(Icons.volume_up_rounded), findsNothing);
-    expect(find.byIcon(Icons.bookmark_add_outlined), findsNothing);
-    expect(find.byIcon(Icons.copy_rounded), findsNothing);
+    expect(find.byIcon(LucideIcons.volume2), findsNothing);
+    expect(find.byIcon(LucideIcons.bookmarkPlus), findsNothing);
+    expect(find.byIcon(LucideIcons.copy), findsNothing);
 
     // 等满复制确认停留时长后复原，再等交叉过渡结束。
     await tester.pump(MotionMetrics.copyConfirmDuration);
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
 
     update(() {
       phase = TranslationPhase.failed;
@@ -149,7 +150,7 @@ void main() {
       elapsed = 2;
     });
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
+    expect(find.byIcon(LucideIcons.volume2), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -172,10 +173,10 @@ void main() {
     // 边界：从一级分组「通用」切到二级子页「录制」后，语义选中状态迁移到「录制」，滑块高度从 32pt 过渡到 28pt。
     var current = 'general';
     const sections = <NativeGlassSidebarSection<String>>[
-      (title: '通用', icon: Icons.tune, value: 'general', children: {}),
+      (title: '通用', icon: LucideIcons.sliders, value: 'general', children: {}),
       (
         title: '截图',
-        icon: Icons.screenshot,
+        icon: LucideIcons.scan,
         value: null,
         children: {'save': '保存与导出', 'recording': '录制'},
       ),
@@ -389,7 +390,7 @@ void main() {
     tester,
   ) async {
     // 作用：验证开启系统「减少动态效果」时复制操作依然给出静态视觉确认且计时结束后正常还原、卸载不漏 Timer。
-    // 边界：trigger 从 0 -> 1 后立即呈现绿色 CustomPaint 对勾（无 Copy 图标）；满 copyConfirmDuration 后切回 Icons.copy_rounded。
+    // 边界：trigger 从 0 -> 1 后立即呈现绿色 CustomPaint 对勾（无 Copy 图标）；满 copyConfirmDuration 后切回 LucideIcons.copy。
     var trigger = 0;
     late StateSetter setHostState;
     await tester.pumpWidget(
@@ -408,16 +409,16 @@ void main() {
         ),
       ),
     );
-    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
 
     setHostState(() => trigger = 1);
     await tester.pump();
-    expect(find.byIcon(Icons.copy_rounded), findsNothing);
+    expect(find.byIcon(LucideIcons.copy), findsNothing);
     expect(find.bySemanticsLabel('已复制'), findsOneWidget);
 
     await tester.pump(MotionMetrics.copyConfirmDuration);
     await tester.pump();
-    expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
 
     // 边界：再次触发后未到期前直接卸载组件，FakeAsync 中不得残留待处理 Timer。
     setHostState(() => trigger = 2);

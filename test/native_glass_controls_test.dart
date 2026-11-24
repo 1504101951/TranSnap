@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 import 'package:translate_app/src/common/constants/appearance_modes.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
@@ -498,7 +499,7 @@ void main() {
                     dimension: 32,
                     child: IconButton(
                       onPressed: () {},
-                      icon: const Icon(Icons.crop_square),
+                      icon: const Icon(LucideIcons.square),
                     ),
                   ),
                 ),

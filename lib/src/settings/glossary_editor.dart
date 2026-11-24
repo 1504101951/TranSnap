@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
@@ -241,7 +242,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
                           child: IconButton(
                             tooltip: '编辑 ${entry.term}',
                             icon: const Icon(
-                              Icons.edit_outlined,
+                              LucideIcons.pencil,
                               size: GlassMetrics.icon,
                             ),
                             visualDensity: VisualDensity.standard,
@@ -254,7 +255,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
                           child: IconButton(
                             tooltip: '删除 ${entry.term}',
                             icon: const Icon(
-                              Icons.delete_outline,
+                              LucideIcons.trash2,
                               size: GlassMetrics.icon,
                             ),
                             visualDensity: VisualDensity.standard,
@@ -292,7 +293,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
         material: true,
         child: TextButton.icon(
           onPressed: _working ? null : () => _edit(),
-          icon: const Icon(Icons.add, size: 18),
+          icon: const Icon(LucideIcons.plus, size: 18),
           label: const Text('添加术语'),
         ),
       ),

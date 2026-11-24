@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:translate_app/src/capture/capture_app.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
@@ -121,13 +122,13 @@ void main() {
       expect(find.text('正在完成采集…'), findsOneWidget);
       expect(
         tester
-            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.stop))
+            .widget<IconButton>(find.widgetWithIcon(IconButton, LucideIcons.squareStop))
             .onPressed,
         isNull,
       );
       expect(
         tester
-            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.pause))
+            .widget<IconButton>(find.widgetWithIcon(IconButton, LucideIcons.pause))
             .onPressed,
         isNull,
       );
@@ -765,7 +766,7 @@ void main() {
     expect(find.byTooltip('当前应用').hitTestable(), findsOneWidget);
     expect(find.byTooltip('应用1'), findsOneWidget);
     expect(
-      find.descendant(of: apps, matching: find.byIcon(Icons.apps)),
+      find.descendant(of: apps, matching: find.byIcon(LucideIcons.layoutGrid)),
       findsOneWidget,
     );
 

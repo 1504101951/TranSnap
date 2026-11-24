@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/widgets/toolbar_feedback.dart';
@@ -35,7 +36,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    expect(find.byIcon(LucideIcons.circleAlert), findsOneWidget);
     expect(find.byKey(const Key('toolbar-feedback-dismiss')), findsOneWidget);
     expect(GlassMetrics.errorFeedbackDuration, const Duration(milliseconds: 2000));
 

@@ -4,6 +4,7 @@ import '../common/constants/method_names.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/widgets/native_glass.dart';
 
@@ -151,7 +152,7 @@ class _ServiceEditorState extends State<ServiceEditor> {
       padding: EdgeInsets.zero,
       iconSize: GlassMetrics.icon,
       icon: Icon(
-        obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+        obscure ? LucideIcons.eye : LucideIcons.eyeOff,
       ),
       onPressed: _testing ? null : onToggle,
     ),

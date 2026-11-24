@@ -15,6 +15,7 @@ import '../common/utils/shortcut_tokens.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
 
@@ -111,7 +112,7 @@ class _SettingsPageState extends State<_SettingsPage>
         // 「通用」为分组标签：权限与启动、个性化（外观、强调色、窗口透明度）两个子页（#1、#67）。
         (
           title: '通用',
-          icon: Icons.tune,
+          icon: LucideIcons.sliders,
           value: null,
           children: {
             SettingsPage.general: '权限与启动',
@@ -120,7 +121,7 @@ class _SettingsPageState extends State<_SettingsPage>
         ),
         (
           title: '翻译',
-          icon: Icons.translate,
+          icon: LucideIcons.languages,
           value: null,
           children: {
             SettingsPage.languages: '语言与服务',
@@ -131,7 +132,7 @@ class _SettingsPageState extends State<_SettingsPage>
         ),
         (
           title: '截图',
-          icon: Icons.crop_free,
+          icon: LucideIcons.scan,
           value: null,
           children: {
             SettingsPage.screenshotSave: '保存与导出',
@@ -143,7 +144,7 @@ class _SettingsPageState extends State<_SettingsPage>
         ),
         (
           title: 'MCP',
-          icon: Icons.hub_outlined,
+          icon: LucideIcons.network,
           value: SettingsPage.mcp,
           children: {},
         ),
@@ -780,7 +781,7 @@ class _SettingsPageState extends State<_SettingsPage>
                 onPressed: _recordingTarget != null
                     ? null
                     : () => _recordShortcut(title, apply),
-                icon: const Icon(Icons.keyboard_outlined),
+                icon: const Icon(LucideIcons.keyboard),
                 label: isThisRecording
                     ? const Text('请按下组合键，Esc 取消…')
                     : NativeGlassKeycaps(tokens: tokens),
@@ -886,7 +887,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                     title: '辅助功能',
                                     caption: '用于读取选中文字',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.verified_user_outlined,
+                                      icon: LucideIcons.shieldCheck,
                                     ),
                                     child: _permissionState(
                                       granted: _status['accessibility'] == true,
@@ -901,7 +902,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                     title: '屏幕录制',
                                     caption: '截图、录屏与实时翻译需要',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.desktop_mac_outlined,
+                                      icon: LucideIcons.monitor,
                                     ),
                                     child: _permissionState(
                                       granted: _status['screenAccess'] == true,
@@ -915,7 +916,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                     // 打开通用页时查询的语言包状态；查询完成前显示检查中。
                                     caption: _languagePackStatus ?? '正在检查语言包…',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.language_outlined,
+                                      icon: LucideIcons.languages,
                                     ),
                                     child: NativeGlassSurface(
                                       material: true,
@@ -935,7 +936,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                 children: [
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.bolt_outlined,
+                                      icon: LucideIcons.zap,
                                     ),
                                     title: '登录时启动',
                                     value: settings.launchAtLogin,
@@ -946,7 +947,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                     NativeGlassSettingRow(
                                       title: '登录项需要在系统设置中允许',
                                       leading: const NativeGlassRowIcon(
-                                        icon: Icons.warning_amber_rounded,
+                                        icon: LucideIcons.triangleAlert,
                                       ),
                                       child: _grantButton(
                                         label: '允许…',
@@ -966,7 +967,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassSettingRow(
                                     title: '外观',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.contrast_outlined,
+                                      icon: LucideIcons.contrast,
                                     ),
                                     child: NativeGlassSegments<String>(
                                       value: settings.glassAppearance,
@@ -979,7 +980,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassSettingRow(
                                     title: '强调色',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.palette_outlined,
+                                      icon: LucideIcons.palette,
                                     ),
                                     child: _SwatchPicker(
                                       keyPrefix: 'accent-color',
@@ -1022,7 +1023,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                         _foregroundWarning(context, settings) !=
                                         null,
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.format_color_text_outlined,
+                                      icon: LucideIcons.type,
                                     ),
                                     child: _SwatchPicker(
                                       keyPrefix: 'accent-foreground',
@@ -1033,7 +1034,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                               .labels[AccentForegrounds.auto]!,
                                           colors: null,
                                           sweep: null,
-                                          icon: Icons.contrast,
+                                          icon: LucideIcons.contrast,
                                         ),
                                         for (final id in [
                                           AccentForegrounds.white,
@@ -1080,7 +1081,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassSettingRow(
                                     title: '窗口透明度',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.blur_on_outlined,
+                                      icon: LucideIcons.droplet,
                                     ),
                                     caption: '系统开启“减少透明度”时此项不生效',
                                     // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳；数值用等宽数字放在滑块右侧。
@@ -1212,7 +1213,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassDropdown<String>(
                                     label: '默认翻译服务',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.hub_outlined,
+                                      icon: LucideIcons.network,
                                     ),
                                     value: settings.defaultServiceId,
                                     items: {
@@ -1232,7 +1233,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassSettingRow(
                                     title: '术语与提示词',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.auto_awesome_outlined,
+                                      icon: LucideIcons.sparkles,
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -1284,7 +1285,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           child: TextButton.icon(
                                             onPressed: () => _editService(),
                                             icon: const Icon(
-                                              Icons.add,
+                                              LucideIcons.plus,
                                               size: 18,
                                             ),
                                             label: const Text('添加服务'),
@@ -1321,7 +1322,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                               tooltip:
                                                   '编辑 ${service.displayName}',
                                               icon: const Icon(
-                                                Icons.edit_outlined,
+                                                LucideIcons.pencil,
                                               ),
                                               onPressed: () =>
                                                   _editService(service),
@@ -1340,7 +1341,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                                     service,
                                                   ),
                                               icon: const Icon(
-                                                Icons.delete_outline,
+                                                LucideIcons.trash2,
                                               ),
                                             ),
                                           ),
@@ -1355,7 +1356,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                 children: [
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.bolt_outlined,
+                                      icon: LucideIcons.zap,
                                     ),
                                     title: '仅使用快捷键',
                                     value: !settings.automatic,
@@ -1369,7 +1370,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                 children: [
                                   ..._shortcutBlock(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.translate_outlined,
+                                      icon: LucideIcons.languages,
                                     ),
                                     title: '全局翻译快捷键',
                                     code: settings.shortcutModifiers,
@@ -1384,7 +1385,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   // 输入翻译把来源输入框的原文替换为译文（#99）。
                                   ..._shortcutBlock(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.edit_note_outlined,
+                                      icon: LucideIcons.notebookPen,
                                     ),
                                     title: '输入翻译快捷键',
                                     code: settings.inputShortcutModifiers,
@@ -1422,7 +1423,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           child: TextButton.icon(
                                             onPressed: _addExclusion,
                                             icon: const Icon(
-                                              Icons.add,
+                                              LucideIcons.plus,
                                               size: 18,
                                             ),
                                             label: const Text('添加应用'),
@@ -1453,7 +1454,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                         child: IconButton(
                                           tooltip: '移除排除项',
                                           icon: const Icon(
-                                            Icons.remove_circle_outline,
+                                            LucideIcons.circleMinus,
                                           ),
                                           onPressed: () => _edit(
                                             () => settings.excludedApps.remove(
@@ -1474,7 +1475,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                     key: const ValueKey('截图目录'),
                                     contentPadding: EdgeInsets.zero,
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.folder_outlined,
+                                      icon: LucideIcons.folder,
                                     ),
                                     // 去掉眉标后由标题说明这是什么，当前路径放在说明行（#67）。
                                     title: const Text('截图目录'),
@@ -1510,7 +1511,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassDropdown<int>(
                                     label: '帧率',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.movie_outlined,
+                                      icon: LucideIcons.film,
                                     ),
                                     value: settings.gifFramesPerSecond,
                                     items: {
@@ -1553,7 +1554,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                 children: [
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.fiber_manual_record_outlined,
+                                      icon: LucideIcons.circleDot,
                                     ),
                                     title: '实时翻译时同时录制',
                                     value: settings.liveRecording,
@@ -1563,7 +1564,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   // 只作用于区域截图的冻结帧（#105）。
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.mouse_outlined,
+                                      icon: LucideIcons.mouse,
                                     ),
                                     title: '截图包含鼠标指针',
                                     value: settings.screenshotIncludesCursor,
@@ -1576,7 +1577,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassDropdown<RecordingClickEffect>(
                                     label: '录制点击特效',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.touch_app_outlined,
+                                      icon: LucideIcons.hand,
                                     ),
                                     value: settings.recordingClickEffect,
                                     items: {
@@ -1591,7 +1592,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   // 关闭点击特效时右键与拖动区分开关不生效，随动禁用以保持清晰因果（U-24）。
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.gesture_outlined,
+                                      icon: LucideIcons.penTool,
                                     ),
                                     title: '区分右键与拖动轨迹',
                                     value: settings.recordingClickRightDistinct,
@@ -1614,7 +1615,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                 children: [
                                   ..._shortcutBlock(
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.crop_outlined,
+                                      icon: LucideIcons.crop,
                                     ),
                                     title: '区域截图快捷键',
                                     code: settings.screenshotShortcutModifiers,
@@ -1632,7 +1633,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassDropdown<ScreenshotConfirmAction>(
                                     label: '回车或双击确认时',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.check_circle_outline,
+                                      icon: LucideIcons.circleCheck,
                                     ),
                                     value: settings.screenshotConfirmAction,
                                     items: const {
@@ -1649,7 +1650,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                   NativeGlassDropdown<ScrollCaptureMode>(
                                     label: '滚动方式',
                                     leading: const NativeGlassRowIcon(
-                                      icon: Icons.swap_vert_outlined,
+                                      icon: LucideIcons.arrowUpDown,
                                     ),
                                     value: settings.scrollCaptureMode,
                                     items: const {
@@ -1915,7 +1916,7 @@ class _SwatchPickerState extends State<_SwatchPicker> {
               swatchColor: customColors == null
                   ? null
                   : (dark ? customColors.dark : customColors.light),
-              icon: custom ? null : Icons.colorize_outlined,
+              icon: custom ? null : LucideIcons.pipette,
               onSelected: () => setState(() => _editing = !_editing),
             ),
           ],
@@ -2198,7 +2199,7 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
                                   .surfaceContainerHighest,
                               child: const Center(
                                 child: Icon(
-                                  Icons.broken_image_outlined,
+                                  LucideIcons.imageOff,
                                   size: GlassMetrics.icon,
                                 ),
                               ),
@@ -2231,7 +2232,7 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
                             child: SizedBox.square(
                               dimension: 16,
                               child: Icon(
-                                Icons.close,
+                                LucideIcons.x,
                                 size: 12,
                                 color: Colors.white,
                               ),

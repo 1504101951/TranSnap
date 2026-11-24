@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'screenshot_enums.dart';
 
@@ -42,32 +43,32 @@ abstract final class ScreenshotActions {
   /// 点击即执行或展开自己目标选择的“动作”为 false，只能作为一级或子级。
   /// 工具属性（颜色、粗细、字号、形状、画笔模式）不在此表，始终跟随所属工具显示。
   static const composable = <String, ({IconData icon, bool hostsChildren})>{
-    cursor: (icon: Icons.near_me_outlined, hostsChildren: true),
-    crop: (icon: Icons.crop, hostsChildren: true),
-    record: (icon: Icons.videocam_outlined, hostsChildren: false),
-    scrolling: (icon: Icons.unfold_more, hostsChildren: false),
-    rect: (icon: Icons.crop_square, hostsChildren: true),
-    arrow: (icon: Icons.north_east, hostsChildren: true),
+    cursor: (icon: LucideIcons.mousePointer, hostsChildren: true),
+    crop: (icon: LucideIcons.crop, hostsChildren: true),
+    record: (icon: LucideIcons.video, hostsChildren: false),
+    scrolling: (icon: LucideIcons.unfoldVertical, hostsChildren: false),
+    rect: (icon: LucideIcons.square, hostsChildren: true),
+    arrow: (icon: LucideIcons.arrowUpRight, hostsChildren: true),
     // 编号点击放置自动递增的数字标记（#107）。
-    step: (icon: Icons.looks_one_outlined, hostsChildren: true),
-    text: (icon: Icons.text_fields, hostsChildren: true),
-    brush: (icon: Icons.brush, hostsChildren: true),
+    step: (icon: LucideIcons.listOrdered, hostsChildren: true),
+    text: (icon: LucideIcons.type, hostsChildren: true),
+    brush: (icon: LucideIcons.brush, hostsChildren: true),
     // 取色复制指针处源像素色值，标尺测量两点像素距离；均不产生标注（#111）。
-    eyedropper: (icon: Icons.colorize, hostsChildren: true),
-    ruler: (icon: Icons.straighten, hostsChildren: true),
+    eyedropper: (icon: LucideIcons.pipette, hostsChildren: true),
+    ruler: (icon: LucideIcons.ruler, hostsChildren: true),
     // 美化展开自己的设置行，并承载子级，「贴纸」默认是其子级（#103）。
-    beautify: (icon: Icons.auto_awesome_outlined, hostsChildren: true),
+    beautify: (icon: LucideIcons.sparkles, hostsChildren: true),
     // 贴纸打开贴纸面板，把我的贴纸或 Emoji 放到截图上（#103）。
-    sticker: (icon: Icons.emoji_emotions_outlined, hostsChildren: false),
+    sticker: (icon: LucideIcons.smile, hostsChildren: false),
     // 比例展开比例行，锁定后续框选与调整的宽高比（#106）。
-    ratio: (icon: Icons.aspect_ratio, hostsChildren: false),
-    pin: (icon: Icons.push_pin_outlined, hostsChildren: false),
-    save: (icon: Icons.save_outlined, hostsChildren: false),
-    copy: (icon: Icons.copy_outlined, hostsChildren: false),
-    ocrCopy: (icon: Icons.text_snippet_outlined, hostsChildren: false),
-    ocrTranslate: (icon: Icons.translate, hostsChildren: false),
-    live: (icon: Icons.subtitles_outlined, hostsChildren: false),
-    close: (icon: Icons.close, hostsChildren: false),
+    ratio: (icon: LucideIcons.ratio, hostsChildren: false),
+    pin: (icon: LucideIcons.pin, hostsChildren: false),
+    save: (icon: LucideIcons.save, hostsChildren: false),
+    copy: (icon: LucideIcons.copy, hostsChildren: false),
+    ocrCopy: (icon: LucideIcons.scanText, hostsChildren: false),
+    ocrTranslate: (icon: LucideIcons.languages, hostsChildren: false),
+    live: (icon: LucideIcons.captions, hostsChildren: false),
+    close: (icon: LucideIcons.x, hostsChildren: false),
   };
 
   /// 默认的父子结构：键为父级，值为按顺序排列的子级；未列出的功能默认是一级。

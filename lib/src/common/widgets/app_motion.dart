@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 
 import '../constants/glass_metrics.dart';
@@ -818,7 +819,7 @@ class _TranslationStatusPainter extends CustomPainter {
       old.muted != muted;
 }
 
-/// 2. 朗读声波矢量微交互图标（#142）：未朗读保留 Icons.volume_up_rounded，朗读中切换为 5 柱光学声波。
+/// 2. 朗读声波矢量微交互图标（#142）：未朗读保留 LucideIcons.volume2，朗读中切换为 5 柱光学声波。
 class SpeechWaveIcon extends StatefulWidget {
   /// speaking 为当前是否在朗读，size 为图标逻辑点尺寸。
   const SpeechWaveIcon({super.key, required this.speaking, this.size = 14});
@@ -877,7 +878,7 @@ class _SpeechWaveIconState extends State<SpeechWaveIcon>
       return AppMotion.iconSwitcher(
         context,
         Icon(
-          Icons.volume_up_rounded,
+          LucideIcons.volume2,
           key: const ValueKey('speech-idle'),
           size: widget.size,
         ),
@@ -986,7 +987,7 @@ class _VocabularyBookmarkIconState extends State<VocabularyBookmarkIcon>
   Widget build(BuildContext context) {
     final reduced = AppMotion.reduced(context);
     final icon = Icon(
-      widget.saved ? Icons.bookmark_added : Icons.bookmark_add_outlined,
+      widget.saved ? LucideIcons.bookmarkCheck : LucideIcons.bookmarkPlus,
       size: widget.size,
       color: widget.saved ? Theme.of(context).colorScheme.primary : null,
     );
@@ -1052,7 +1053,7 @@ class _SparkBurstPainter extends CustomPainter {
       old.progress != progress || old.color != color;
 }
 
-/// 4. 复制确认矢量微交互图标（#142）：未复制保留 Icons.copy_rounded，触发或确认态描边打勾并在 1.3s 后自动回弹。
+/// 4. 复制确认矢量微交互图标（#142）：未复制保留 LucideIcons.copy，触发或确认态描边打勾并在 1.3s 后自动回弹。
 class CopyConfirmIcon extends StatefulWidget {
   /// copied 为外部显式确认态，trigger 递增时自驱动一次 1.3s 确认动效并自动回弹，size 为图标逻辑点尺寸。
   const CopyConfirmIcon({
@@ -1138,7 +1139,7 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
       return AppMotion.iconSwitcher(
         context,
         Icon(
-          Icons.copy_rounded,
+          LucideIcons.copy,
           key: const ValueKey('copy-idle'),
           size: widget.size,
         ),

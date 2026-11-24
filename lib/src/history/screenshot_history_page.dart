@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
@@ -366,7 +367,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                         tooltip: '刷新截图历史',
                         onPressed: _loading ? null : _load,
                         icon: const Icon(
-                          Icons.refresh,
+                          LucideIcons.refreshCw,
                           size: GlassMetrics.icon,
                         ),
                         visualDensity: VisualDensity.standard,
@@ -480,7 +481,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
               ? const Center(child: CircularProgressIndicator())
               : records.isEmpty
               ? HistoryEmptyState(
-                  icon: Icons.crop_free,
+                  icon: LucideIcons.scan,
                   title: '还没有截图记录',
                   prefix: '按',
                   shortcutTokens: widget.screenshotShortcutTokens,
@@ -596,7 +597,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       if (record.exists) ...[
                         action(
                           '打开',
-                          const Icon(Icons.open_in_new, size: GlassMetrics.icon),
+                          const Icon(LucideIcons.externalLink, size: GlassMetrics.icon),
                           _busyAction == null
                               ? () => _run(MethodNames.openFile, path)
                               : null,
@@ -612,7 +613,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                         action(
                           '在 Finder 中显示',
                           const Icon(
-                            Icons.folder_open,
+                            LucideIcons.folderOpen,
                             size: GlassMetrics.icon,
                           ),
                           _busyAction == null
@@ -623,7 +624,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       action(
                         '删除截图',
                         const Icon(
-                          Icons.delete_outline,
+                          LucideIcons.trash2,
                           size: GlassMetrics.icon,
                         ),
                         _busyAction == null
