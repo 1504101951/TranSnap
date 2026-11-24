@@ -1,196 +1,99 @@
-# Flutter macOS 架构
-
-本文描述当前实现。规范性技术边界见[架构设计约束](https://github.com/1504101951/TranSnap/issues/68)，产品行为与数值分别见[功能规格](https://github.com/1504101951/TranSnap/issues/1)、[样式规格](https://github.com/1504101951/TranSnap/issues/67)。
-
-当前只交付 macOS 26+。Flutter/Dart 是应用与业务主体，Swift 负责 macOS 启动壳、系统能力和原生 Liquid Glass 材料。
-
-## 常量与工具
-
-通道名、方法名、UserDefaults 键、引擎入口名、错误码和状态机枚举只定义在 `lib/src/common/constants/` 与 `macos/Runner/Common/Constants.swift`。调用处引用常量。被两处及以上使用的无模块私有职责的方法放在 `lib/src/common/utils/` 与 `macos/Runner/Common/Utils.swift`。细则见 `docs/agents/coding-conventions.md`。
-
-## 职责
-
-| Flutter/Dart | Swift |
-|---|---|
-| 选区会话、翻译请求与取消、语言方向、翻译浮层内容、设置状态与表单 | Accessibility、鼠标与键盘监听、Carbon 热键、窗口、设备语言识别、UserDefaults、Keychain 存取、登录项 |
-
-主 Flutter 引擎持有唯一偏好与翻译会话。设置窗口按需使用第二引擎的 `settingsMain` 入口，表单通过 `translateapp/settings` 转发到主引擎。保存请求串行处理；修订号阻止旧表单覆盖菜单更新。
-
-`main.dart`装配主引擎模块和跨窗口请求入口，是平台端口的组合根：`platform/platform_ports.dart` 按能力定义端口（`SelectionPort`、`OverlayHost`、`SpeechPort`、`TextServices`、`PerformanceMarks`、`AppHost`，以及设置与凭据的 `SettingsPlatform`），`ChannelPlatformBridge` 经 `translateapp/platform` 通道实现全部端口，macOS 与 Windows 原生实现同一协议，业务模块只依赖所需端口。`SettingsController`持有唯一设置快照、修订号与提交队列，通过`SettingsPlatform`提交系统偏好和凭据；`providerForSettings`选择翻译服务。`selection_translation_app.dart`处理选区事件、浮层交互和成功翻译的历史写入。`handleHistoryRequest`直接查询同一个SQLite存储，历史分页与记录开关不等待设置提交或服务测试。
-
-设置模块接收初始配置、公开当前配置和发送提交通知时使用独立副本；协议快照复制可变排除项字典，外部草稿修改不能绕过提交队列。连接测试由设置模块内的独立流程处理，队列只等待其结果。采集启动、暂停、停止、取消和失败清理在异步等待后核对会话或分段资源身份；旧请求不清理新会话或恢复后的新流。
-
-Swift附属窗口由 `WindowEngine.start` 统一装配引擎（建引擎与通道、运行入口、注册插件与原生玻璃），设置、权限向导与历史窗口经 `WindowEngine.makeWindow` 建窗口，启动失败统一提示；历史窗口在新记录写入和重开时经 `refreshMethod` 刷新，通过`MacPlatformBridge.routeWindowRequest`统一路由：先交本进程的系统能力处理，本地未实现的方法再转主引擎，跨引擎业务方法表只在 `lib/main.dart` 维护一份；设置窗口只额外处理快捷键录制。截图窗口先验证捕获身份，再把截图翻译的段落块转发给主引擎；绘图偏好与录制选项使用相同的主引擎设置队列。窗口不另建业务状态或复制通用转发表。`DockPresence` 是激活策略的唯一写入方：设置、翻译历史、权限向导在 `WindowEngine.present` 登记、`windowWillClose` 撤销，采集结果窗口以采集控制器登记，屏幕录制授权与采集失败提示临时登记；有登记时 App 出现在 Dock 与 ⌘Tab，全部撤销后回到仅菜单栏图标。主引擎 `main` 的初始化（读取设置、打开数据库、组装会话与请求入口）失败时，经 `appStartFailed` 把错误文本交给 `MacPlatformBridge` 弹出「TranslateApp 无法启动」并退出，再原样抛出异常，窗口不会因主通道没有处理器而无限等待。
-
-附属窗口由 `WindowEngine.start` 返回可取消的启动句柄，调用方必须持有至完成，忽略返回值会产生编译警告。原生先注册 `windowStartup` 通道，Dart 五个入口在初始化绑定并提交根组件后发送 `windowReady`；收到确认后才交付引擎与控制器，不等待首帧或业务加载。五秒内未确认或运行失败时解除处理器并停止引擎；预算的测量条件和适用范围见 #120。各窗口合并重复打开，关闭或退出取消待启动任务，迟到确认不能打开旧窗口；采集界面启动失败同时释放采集资源。截图窗口启动失败先清空草稿与采集身份，再显示失败提示。
-
-## 当前翻译流程
-
-```mermaid
-flowchart TD
-    A[鼠标或键盘选区] --> B{自动按钮开启?}
-    B -- 是 --> C{应用允许且 AX 有文本或有效键盘候选?}
-    C -- 是 --> D[单一翻译按钮]
-    D -- 点击 --> M[补读当前选区并保留段落]
-    M --> F[长度校验与设备语言识别]
-    E[全局翻译快捷键] --> G{可读文本且应用未被排除?}
-    G -- 是 --> F
-    F --> H[Dart 决定目标语言]
-    H --> I[默认翻译服务]
-    I --> J[双语译文卡片]
-    K[切应用 / 选区失效 / 外部点击] --> N{仍为自动小按钮?}
-    N -- 是 --> L[隐藏浮层并取消会话]
-    O[Escape / 关闭按钮] --> L
-```
-
-## 窗口与会话
-
-- 翻译窗口使用高于 floating、status-bar 与 pop-up 的 screenSaver 层级（Warp 等来源置顶窗口不能覆盖），是不能成为 key/main 的非激活 NSPanel；触发态的按钮尺寸与命中窗口见样式Spec，呈现为单按钮，结果态为 720×420pt 左右双栏卡片，左译文、右原文，悬停译段时高亮对应原段。
-- Flutter 区分点击和拖动；译文顶部 56pt 标题区支持拖动，关闭按钮和正文在拖动命中区之外。Swift 保存本窗口原始 mouseDown 事件，Flutter 确认 pan 后将原事件交给 AppKit performDrag。同一会话保留位置，显式新翻译重新锚定。
-- Swift 保存来源 PID、sessionId 及结果保留标记。Dart 激活时先发送 `retainOverlay`，再补读文字并进入翻译；保留后忽略被动失效和自动新选区，只允许 Escape/× 关闭或全局热键明确替换。旧 sessionId 的指令不能影响新会话。
-- 选区、失效事件和窗口命令携带 sessionId。系统设置命令不属于选区会话，使用独立方法和设置修订号。
-- 「仅使用快捷键」开启表示 automatic=false；菜单与表单均反向显示底层自动捕获状态。自动捕获关闭时保留 Escape、外部点击和前台变化监听，使快捷键产生的会话仍能正常关闭。此时鼠标拖动、鼠标抬起与非 Escape 的按键按下在监听回调中直接丢弃，不切到主线程。本应用合成的键鼠事件（复制、全选、粘贴、自动滚动与 MCP 操控）经 `SyntheticEvent.mark` 写入 `eventSourceUserData` 标记，三个监听先以 `SyntheticEvent.isMarked` 丢弃带标记事件，不把自身注入识别为选区手势。`SelectionMonitor.start` 把系统级辅助功能消息超时设为 `AppConstants.axMessagingTimeout`（1 秒），来源应用无响应时单次辅助功能调用最多等待 1 秒；输入翻译查找粘贴目标另有 `inputTargetSearchTimeout`（1 秒）总时长上限。
-- 全局热键使用 RegisterEventHotKey；翻译、输入翻译与截图三个用途按 `GlobalHotKey` 表在同一事务注册，同一组合不重复注册，新组合注册成功后才释放旧组合。
-- 输入翻译快捷键以 `inputHotkey` 手势进入与全局翻译快捷键相同的会话，但不显示浮层，且 `begin(input: true)` 使会话按 `inputLanguage`（`AppSettings.inputDirection`，偏好 `inputPrimaryLanguage`、`inputSecondaryLanguage`，未设置时复制全局语言）冻结语言方向：读不到选区时在非安全文本输入框内先发送 ⌘A；读取完成时 `AccessibilitySelection.inputAnchor` 按持有选区的节点（读取原文时返回的 `selection.element`，走复制兜底而未知时取焦点元素）依次取文本标记范围矩形（`AXSelectedTextMarkerRange`→`AXBoundsForTextMarkerRange`）、字符范围矩形（`AXSelectedTextRange`→`AXBoundsForRange`）、节点自身矩形，再退到焦点元素矩形或鼠标位置作为锚点，并取来源应用 `AXFocusedWindow` 的矩形，二者组成 `InputAnchor` 保存在 `MacPlatformBridge` 当前会话。完整成功后 Dart 调用 `replaceSelection`，Swift 核对会话、来源前台与安全输入，再由 `AccessibilitySelection.focusWritableInput` 确定粘贴目标（来源不提供焦点、焦点为非安全文本输入控件，或读取原文时持有选区的节点（`inputSelection`）就是焦点控件时直接使用；否则在来源 `AXFocusedWindow` 内广度优先查找，最多 `inputTargetSearchMaxNodes` 个节点、深度 `inputTargetSearchMaxDepth`，恰好一个时设 `AXFocused` 并等待 `inputTargetFocusDelay`，0 个或多个返回「没有可写入的输入框」），之后经剪贴板粘贴，`AppConstants.pasteRestoreDelay` 后在剪贴板未被改写时还原；返回 null 为已替换，字符串为未替换原因。翻译失败或未替换时 Dart 调用 `showInputFailure`，由 `InputStatusBubble` 在锚点下方 8pt（放不下放上方，上下都放不下贴可用区域底部，左边与锚点对齐）显示 2.5 秒，可用区域为锚点所在屏可见区与来源窗口矩形的交集（无窗口或交集为空时为可见区）。`InputStatusBubble` 同时承载「翻译中…」进行中浮标：读取原文发出选区事件后 300ms 仍未结束才显示，使用同一个非激活面板与位置规则并忽略鼠标事件；`replaceSelection` 通过校验后、失败气泡出现时、会话失效或结束（`hideOverlay`）以及新的输入翻译开始时收起，会话结束不会关闭已显示的失败气泡。
-
-## 服务与凭据
-
-自动采集只读取 AX，不向来源应用注入按键。鼠标采集需要 AX 文本；Command-A 和 Shift 键盘选区可创建待确认按钮。点击翻译后携带 sessionId 补读文字；补读为空则保留失败卡片，不发送请求。全局翻译快捷键直接翻译并允许复制；网页文本通过一次性复制保留段落，随后恢复剪贴板。显式关闭或替换后的迟到结果不能提交请求。
-
-AX 读取优先使用文本标记范围获取跨节点选区，再读取普通选中文字和字符范围；接口返回文字与实际文字节点，浮层在读取完成时的鼠标位置旁显示。焦点窗口作为受限树查询的候选根，非文本或安全焦点控件不进入窗口搜索。
-
-自动按钮跟踪实际提供选中文字的 AX 节点；通知合并后区分暂不可读和已确认清空。没有可读节点时不能确认键盘清空，按钮仍可通过外部点击、Escape 或切 App 结束。结果态不受这些被动验证影响，采集任务在读取前后均检查结果保留标记。
-
-选区文本与截图 OCR 文本都使用现有 `TranslationRequest` 进入翻译层，由各入口管理采集与启停；翻译层不接收图片或录屏文件。
-
-- 主 Dart 引擎串行处理设置保存、菜单修改和示例连接测试；修订号阻止过期表单覆盖。删除展开卡片正在使用的服务时，主引擎通过 `SelectionSession.dismissIfServiceRemoved` 结束会话、取消请求并关闭原生卡片；其他设置保存保留卡片。保留的请求固定使用激活时的 Provider 和语言方向，新翻译使用提交后的默认服务。
-- `ServiceConfig` 保存服务类型、名称、Base URL、模型、独立提示词及语义对照选项；凭据独立传给 Swift，按配置 ID 存入用户 Keychain。
-- 打开设置仅查询 Keychain 凭据存在状态，禁止查询触发授权 UI。保存普通配置不读取密钥；有凭据变更时 Swift 才读取对应账户的回滚快照。凭据、登录项与快捷键配置成功后才保存普通偏好；同一服务 ID 不可更换协议。
-- 默认服务支持非官方 Google、Google Cloud v2、百度通用翻译、OpenAI-compatible Chat Completions、DeepSeek、Anthropic Messages 与 Apple 系统翻译。协议、百度签名、SSE 解析均由 Dart 实现。各模式的提示词与思考开关在 `AppSettings.prompts`、`AppSettings.thinking`（偏好 `PreferenceKeys.prompts`、`PreferenceKeys.thinking`），全部模型服务共用，缺省提示词为 `defaultPrompts`、思考缺省关闭；`ApiTranslationProvider` 由构造参数接收本模式的 `prompt` 与 `thinking`。DeepSeek 类型及官方域名按开关发送 `thinking.type=enabled/disabled`，Anthropic 开启时发送 `thinking`（`budget_tokens` 为 `NetworkLimits.anthropicThinkingBudget`，最大输出不大于预算时连接前报错），OpenAI 官方与其他兼容端点不发送思考参数；段落模式另向 DeepSeek 发送 `response_format.type=json_object`。
-- Apple 系统翻译为内置服务（`ServiceConfig.systemId`），无端点、无凭据，不进入服务列表。`AppleTranslationProvider` 把每个分片的非空段落一次交给 `SystemTranslationService`，以下标对应原段并由 `pairParagraph` 套回原文分隔；Swift 按语言对创建只用已安装语言包的无界面 `TranslationSession`，单篇翻译传高保真策略、实时翻译传低延迟策略（macOS 26.4 以下不传）。取消按请求 ID 停止原生会话；语言包未安装、语言对不支持与原文语言未知都是单段失败：实时与截图翻译只放弃被识别为该语言的段落，其他段落照常发送。设置窗口打开通用页时经 `checkSystemTranslation` 查询主次语言双向的安装状态。
-- 翻译请求共用应用级 `translationHttpClient`（`lib/src/translation/translation_http.dart`，连接超时 `NetworkLimits.connectionTimeout`、空闲保持 `NetworkLimits.idleTimeout`），同一服务的连续请求复用连接，实时翻译与截图翻译会话也使用它；取消只中止本次请求并停止读取响应，不关闭该客户端。截图「翻译文字」开始识别时与实时翻译开始时，主引擎按 `translationOrigin` 对默认服务发送不含原文的 HEAD（`prewarmTranslationConnection`），握手与本地识别并行，Apple 系统翻译不预热；请求不跟随重定向，失败信息不回显响应正文或密钥，也不自动切换服务。
-- 模型段落对照一次接收全文上下文：本地按非空行分段并给出连续编号，模型仅返回各编号与完整译文。编号数量、顺序、整数类型和非空译文均需通过校验，再与本地原文配对；不使用模型回传的原文，不接受整篇高亮兜底。损坏 JSON、流中断和长度截断不算成功。
-- 卡片按 `SelectionSession.definition` 与 `sourceIsTarget`（翻译模式下识别语言等于输出语言）在词典、同语言单栏与普通双栏三种布局间选择；正文区填充主题 `cardTheme.color` 阅读底色，不随玻璃透明度变化。
-- 卡片各栏的朗读按钮经 `toggleSpeech` 交给 Swift `SpeechService`（`AVSpeechSynthesizer`）：原文按识别语言、结果栏按 `SelectionSession.outputLanguage` 朗读，语言码先补全默认地区再选系统声音；同一段再次请求即停止，关闭卡片、新选区与切换模式时 Dart 发送 `stopSpeech`；`AVSpeechSynthesizer` 在第一次朗读时创建，停止朗读不创建。
-- 卡片模式菜单与服务菜单通过 `SelectionSession.switchMode`、`switchService` 共用的重新处理流程对同一原文重跑：未选择服务时翻译模式使用会话服务，润色、纠错、解释由 `assistProviderForSettings` 构造；服务菜单选择保存在 `serviceOverride`（新选区清空），经 `providerForService`、`assistProviderForService` 按服务 id 构造。润色、纠错、解释的 `ApiTranslationProvider` 使用本模式的提示词与思考开关、整段请求并关闭段落对照；服务不是模型服务时返回 null，卡片显示失败说明。只有翻译模式的完整成功写入历史，输入翻译也只在翻译模式下替换原文。输入翻译只需要替换文本，其服务由 `providerForInput` 构造（`SelectionSession.inputProvider`，设置保存后随 `inputLanguage` 一同更新），`ApiTranslationProvider.semanticPairs` 固定为 false，即使默认服务开启双语段落对照也走普通分段协议（`translateParagraphBatches`）；默认翻译与卡片服务菜单的 `semanticPairs` 取服务配置。
-- 术语表 `GlossaryEntry` 列表随 `AppSettings` 保存在偏好字典（键 `glossary`），Swift 不读取。`providerForSettings` 把发起时快照中的术语表交给 `ApiTranslationProvider`；模型协议的单篇与批量请求经 `glossaryHits` 只取目标语言一致且原文出现的术语（拉丁字母或数字的一侧按整词、不区分大小写匹配），写入用户消息的 `glossary` 数组并在系统提示词追加说明；没有命中时请求与无术语表时一致。谷歌、百度、Apple 系统翻译与润色、纠错、解释不使用术语表。
-- 普通模型模式产生增量 Translation Update；语义模式在校验完成后一次发布译文和配对，避免向用户展示协议 JSON。
-- 语义模型与 Apple 系统翻译使用共享的 `translateParagraphs` 整片发送并建立双语配对，当前请求通过 `StreamIterator` 传播取消。非官方 Google、谷歌翻译、百度与未开双语对照的模型使用 `translateParagraphBatches`：按原文行切段（分隔符保留），按各服务上限装批（谷歌翻译 128 条/5000 字符，百度 2000 字符，其余 20 段/2000 字符）逐批调用批量接口，一次翻译使用共享 HTTP 客户端，取消即中止当前批量请求；任一批失败或段落数对不上时整片失败，不处理后续批次。
-- 次要语言为空时，方向仍解析为有效的主要语言；检测语言等于目标语言时，翻译层直接返回原文及段落配对。
-
-## 原生玻璃材料
-
-`NativeGlassFactory` 在主引擎、设置引擎、截图引擎及辅助窗口引擎分别注册平台视图，创建 macOS 26+ 的 `NSGlassEffectView`。`NativeGlassSurface` 只把系统材料放在 Flutter 前景控件下面；材料不接受键盘焦点或拦截点击，复制/保存仍由独立文档渲染输出。各控制器明确使用透明 Flutter 背景，窗口层级和激活规则保持各自职责。
-
-五类界面共用 `NativeGlassTheme`，跟随系统明暗和高对比度模式。弹窗成为活动材料层时，下层页面保留同一控件树和表单草稿，使用普通内容底色避免重复折射。正文和密集历史条目使用非折射内容区域。玻璃接入直接使用现有 Swift 系统桥，不增加第三方运行时依赖。
-
-冻结截图的 Return 与小键盘 Enter 由本地路由及可消费的会话级事件拦截统一转发 `confirmScreenshot`，绑定当前 captureId；处理后的按键不再交给来源应用，避免同时提交来源表单或消息。文字输入与组词由 Dart 和原生输入法按状态处理，重复按键不会重复导出。长图结果只处理本窗口的按键，失焦后不拦截其他应用输入。缺少事件拦截权限时明确提示，不使用仅旁听的全局确认。原生反馈回路使用独立剪贴板验证失焦情况下的事件消费、PNG 像素和窗口关闭。
-
-## 翻译历史实现
-
-术语文件由 `glossary_file.dart` 解析为预览行并按既有术语键合并，CSV 与 JSON 使用同一字段契约。原生桥负责文件选择与保存；确认导入后通过设置页的串行事务提交，失败仅在预览中保留文件草稿和错误，取消不把未保存术语带入后续自动保存。
-
-文件与剪贴板图片经 `ScreenshotWindowController` 在后台解码为首帧、方向归正的 sRGB BGRA，复用截图引擎和编辑文档。普通图片窗口登记 `DockPresence`，关闭时撤销；图片不具有屏幕采集能力。截图翻译复用实时翻译的段落会话：主引擎为截图持有独立的 `LiveRegionSession` 实例，`translateScreenshotBlocks` 把识别出的段落块作为单个样本开始一次会话，快照经 `publishScreenshotTranslation` 带捕获 ID 推回，`ScreenshotWindowController.publishTranslation` 只转给仍是该截图的编辑引擎。原生关闭/替换经 `cancelScreenshotTranslation` 结束会话并取消在途批次。截图翻译不写翻译历史。排查日志（`subsystem == "TranslateApp"`，notice 级别）只记数字与状态：`LiveRegion` 类别记录截图识别耗时与段落数、发起翻译到主引擎受理的耗时、快照状态变化与批次计时（字段同实时翻译）；`SystemTranslation` 类别记录 Apple 系统翻译每次请求的开始、结束、段数、语言对、耗时与结果，只有开始没有结束即为框架调用未返回。
-
-`TranslationHistoryStore` 统一处理原文/译文关键词、来源、完成时间范围和稳定游标；日期由窗口按本地日历转换为左闭右开的毫秒范围。保留期限与确认状态存于 `history_meta`，默认 30 天，可选 90/365/永久；首次存在过期记录时等用户确认，确认后在启动、写入和设置期限时删除过期记录，列表与来源查询只按期限下界过滤、不写库；改期限时先按原期限删除，再应用新期限。期限提交与清理在同一事务中，单条删除及清空仅操作翻译历史。刷新/分页失败保留各自重试语义和可见记录。
-
-生词本 `VocabularyStore` 与翻译历史共用主引擎同一个 SQLite（`vocabulary` 表，单词不区分大小写唯一）。翻译模式下原文满足 `SelectionSession.isDictionaryTerm` 时，会话在翻译的同时经 `lookupDefinition` 调用 Swift `DCSCopyTextDefinition` 离线查询，释义到达后卡片右栏改为词典；`overlay/dictionary_definition.dart` 的 `parseDefinition` 按英汉词典与汉语词典的符号格式把纯文本拆成词条、词性、义项、例句行，未识别片段原样保留。历史窗口的生词本分段经 `vocabularyList`、`deleteVocabulary`、`vocabularyCsv` 请求主引擎，导出经 Swift `saveTextFile` 的系统保存面板写入；增删后与历史共用 `historyChanged` 通知刷新。
-
-截图历史 `ScreenshotHistoryStore` 同样由主引擎持有：元数据写入同一 SQLite 的 `screenshot_history` 表（`capture_id` 唯一，同一截图再次导出覆盖为最后一次），图片写入 Application Support 的 `ScreenshotHistory` 目录，先写临时文件再改名；「记录截图历史」开关保存在 `history_meta`，默认关闭。截图窗口每次导出只把合成 PNG 经 `copyScreenshot`、`saveScreenshot`（「复制并保存」携带 `copy: true`，保存成功后由 Swift 写剪贴板）或 `pinScreenshot` 交给 Swift 一次；`saveScreenshot` 与长截图保存在后台建目录、写文件，写完回到主线程再写剪贴板与记录历史。Swift 在导出成功后先经 `requestApplication` 向主引擎查询 `screenshotHistoryRecording` 开关（不带图片），开启时再发送 `recordScreenshotHistory`（id、bytes、capturedAt），关闭时整图不跨引擎；导出反馈与关闭不等待记录结果。每次写入后按 100 条、30 天清理，只删除历史目录内的文件；图片写入、改名与删除使用异步文件接口，记录、加入、删除与清空按请求到达顺序串行执行，同一截图连续导出仍以最后一次为准。历史窗口的截图历史分段经 `screenshotHistoryList`、`deleteScreenshotHistory`、`clearScreenshotHistory` 与开关请求主引擎；打开、复制图片、在 Finder 中显示由 Swift `openFile`、`copyImageFile`、`revealFile` 直接处理，文件不可读时复制返回 `copy_failed` 且不改剪贴板。变更同样经 `historyChanged` 通知刷新。拼接、拆分与比较（#109）由 Swift `ScreenshotComposer` 用 CoreGraphics 在后台队列按原始像素处理（沿用源图色彩空间、关闭插值），历史窗口经 `stitchScreenshots`、`splitScreenshot`、`compareScreenshots` 直接调用；结果经主引擎 `addScreenshotHistory` 加入历史，与导出记录共用写文件与清理逻辑但不检查记录开关，勾选状态只属于历史窗口页面。
-
-主 Dart 引擎持有 `TranslationHistoryStore`，SQLite 位于 Application Support，打开后启用 WAL 日志模式。独立 Flutter `historyMain` 窗口通过原生通道请求数据，Swift 不存储历史。卡片标题为来源应用名称或「截图」和本地完成日期，内容按译文、原文排列。分页按 `(completed_at, id)` 倒序，每批 10 条；游标避免新记录插入导致重复分页，刷新从最新记录开始。
-
-选区来源显示名在 Swift 捕获选区时随事件传入 Dart；成功记录使用激活时的服务和语言方向。截图由 `translateScreenshotText` 编排本地语言识别、分段翻译和写入；请求携带 captureId，网络请求前及完成后都核对原生截图身份。只有完整成功且未被取消的结果写入，每次独立保存，不去重。记录开关持久化于同一 SQLite，默认开启，关闭只阻止新写入。翻译历史不存储图片、窗口坐标或密钥。
-
-## 连续采集与本地媒体
-
-未裁剪 MP4 保存复用后台转换任务与 `ScreenshotStorage.publish`，只复制一次到临时文件后原子发布。复制不可中途打断，取消在发布前检查；关闭结果等待任务释放资源，成功发布的文件保留。主线程只管理忙碌状态，完成时验证采集身份与阶段。
-
-截图工具栏的“录制”“滚动长截图”默认挂在“截图”之下（`ScreenshotActions.defaultChildren`），通过截图通道交给 `CaptureWindowController`。录制目标与应用图标使用同工具栏动态行及独立按钮材料；开始按钮提交冻结帧身份、目标、选区像素坐标与录制延时，长截图携带冻结帧身份和像素坐标直接开始。录制延时（#129）由 `MediaCaptureService.startRecording` 在建立捕获流前以准备阶段倒计时，快照的 `countdown` 驱动控制条文案与 `StatusBarController.showCountdown` 的菜单栏图标；放弃或「停止采集」走准备阶段的取消路径，恢复同一截图草稿。截图工具栏「录制选项」经 `saveRecordingOptions` 进入主引擎设置队列，偏好 `recordingDelay`、`recordingClickEffect` 与 `recordingClickRightDistinct` 随截图快照与工具栏变更通知回到截图引擎，保存成功后刷新设置页。`captureMain` 使用独立Flutter引擎呈现四个独立气泡控制条和视频结果，通过 `translateapp/capture` 交换实际状态。`MediaCaptureService` 在主执行器管理会话ID、ScreenCaptureKit流与临时目录；暂停、结束、放弃与恢复均校验真实阶段和会话。选区翻译与采集相互独立：只有截图取帧期间挂起选区监听并隐藏翻译浮层；录屏与长截图期间照常翻译。
-
-显示器、应用可见窗口与选区开始前重新校验。原生配置给出屏幕点坐标范围，`CaptureShadeView` 绘制穿透鼠标的实时边框和选区外阴影；采集与暂停都保持可见，仅区域录制（排除实时翻译、窗口与长截图）期间叠加 `CAShapeLayer` 虚线流光动画（暂停通过图层时间轴锁定相位）。控制气泡、选区外阴影、长截图预览、截图面板与跨屏目标预览以 `AppConstants.captureControlWindowIdentifier` 标记，`DisplayCapture.controlWindows` 按该标记取出（含隐藏窗口）：录屏（显示器、区域用 `SCContentFilter(display:excludingWindows:)`，应用录制包含所选应用与本应用）只排除这些窗口，翻译卡片、实时翻译盖层等本应用其余窗口和录制中新出现的窗口都进入画面；长截图排除本应用全部窗口。区域和全屏通过 `SCRecordingOutput` 写入同会话MP4分段；应用通过每屏仅包含所选应用的 `SCStream` 采集，由 `ApplicationRecorder` 将每屏最新帧按桌面位置合成到固定联合画布，以最高显示倍率编码，其他区域填黑；编码按录制帧率固定追加，上次合成后没有显示器送来新帧时直接追加上一张合成画布，不重新合成；暂停完成当前段、恢复追加下一段，结束按顺序无间隙合并并验证解码后交付。区域与全屏录制按偏好 `recordingClickEffect` 与 `recordingClickRightDistinct` 配置点击特效：选为 `system` 时设置 `SCStreamConfiguration.showMouseClicks`；选为 5 种光学预设（`optical`、`liquid`、`spotlight`、`prism`、`minimal`）时，由 `RecordingClickOverlay` 在实际采集开始后挂载覆盖录制屏幕的非激活透明穿透 `NSPanel`，监听全局左/右键按下、拖动与抬起并以 `SyntheticEvent.isMarked` 过滤合成事件，使用原生 CoreAnimation `CALayer`/`CAShapeLayer` 绘制点击特效与拖动轨迹，并在暂停、停止、放弃与失败时随捕获流清理；窗口（应用）录制保持无指针策略，不开启点击高亮或特效叠层。结果页裁剪由 `AVPlayerView.beginTrimming` 取得首尾时间，区间由 `MediaCaptureService` 持有并随会话清空。`GIFExporter` 按截图设置中的帧率与最大宽度、在裁剪区间（未裁剪为完整视频）内逐帧编码 GIF 或 APNG；裁剪后的 MP4 与已裁剪视频的剪贴板复制均经 `AVAssetExportSession` 按区间导出。`WebMExporter` 用 `AVAssetReader` 按区间读取 NV12 帧，在后台经 `VTPixelTransferSession` 转为 BT.601 矩阵（VP8 码流只能按 BT.601 解释颜色），交给不挂窗口的 `WKWebView` 以 WebCodecs 编码 VP8，再由 `WebMWriter` 写成保持原分辨率与原帧时间的 WebM，输出帧数少于读入帧数时失败；编码会话与写文件在主线程，`WKWebView` 只在主线程创建与释放；隐藏页面在没有宿主请求时会被 WebKit 挂起，因此由宿主逐帧调用页面，帧经应用自定义 URL 协议交给页面，编码块以 base64 随返回值交回；页面编码当前帧期间宿主在后台读取下一帧，读帧仍逐帧串行。四种导出共用同一后台转换流程，转换中快照的 `exporting` 为共享枚举 `RecordingExport`，`cancelRecordingExport` 统一取消。结果在完整可读后由`ScreenshotStorage`原子发布到截图根目录下的视频、gif、apng、webm 分类日期目录，PNG使用截图分类；重名追加序号，失败保留源媒体。复制视频（`copyRecording` 按钮或 `⌘C`）在后台将完整源件或裁剪片段写入 `NSTemporaryDirectory()` 下剪贴板子目录（`录屏-yyyyMMdd-HHmmss.mp4`）并向系统剪贴板写入文件引用；`AppDelegate` 启动时在后台清空上次启动残留的剪贴板子目录。
-
-用户展开录制目标时准备隐藏的采集界面，开始采集直接复用该引擎。采集控制条为非激活的 status-bar 层级面板，可出现在其他应用的全屏空间。视频结果使用普通层级的带标题栏 NSWindow，提供红黄绿按钮；AppKit 将系统边框计入等比媒体与底部居中横排 `356×48` 工具栏（上/左/右边距 `8pt`，工具栏与媒体间隔 `8pt`，最小内容区 `356×65`）的整体边界。切换阶段时新建对应类型的原生窗口并转移同一 Flutter 内容。准备态在视图缩放前立即通知Flutter，以便同步缩放取得新画面；媒体结果在原生几何更新后通知，确保结果布局拥有足够空间。系统关闭、工具栏关闭与键盘关闭复用同一立即放弃路径，清理临时资源并保留已保存文件，内部窗口切换不触发用户关闭逻辑。保存与GIF/APNG/WebM导出的日期在操作开始时冻结，不弹路径确认。
-
-应用联合画布编码器将首个实际写入帧的时间固定为零，后续主机经过时间量化到 600 刻度，只写入严格递增的帧时间。首帧成功写入才确认录制就绪；无有效帧时结束明确失败，放弃直接取消写入。
-
-输入翻译通过系统日志 `subsystem=TranslateApp`、`category=Performance` 分段记录耗时（阶段名与毫秒，不含文本）：`input-read`（原生从开始采集到发出选区事件）、`input-first-token`（Dart 从发起翻译到首段非空译文）、`input-complete`（到翻译完整成功）、`input-replace`（`replaceSelection` 粘贴替换）；后三项由 `perfMark` 交原生写入。原生处理 `detectLanguage` 与 `readCredentials` 时另记 `translate-detect`（设备语言识别）与 `credentials-read`（钥匙串读取），所有翻译入口共用。`LanguageDetection` 负责识别：识别器先验中可识别的 57 种语言权重 1、热门语言 3、用户语言 30，首位置信度不足 0.5 时取前 3 名中的用户语言，仍没有且原文为纯 ASCII、用户只有一种拉丁文字语言时取该语言，中文按用户简繁写法做字形转换判断。
-
-录制启动通过系统日志 `subsystem=TranslateApp`、`category=CaptureStartup` 记录界面同步工作、来源配置、系统流资源创建、异步启动及实际开始写入的耗时；仅包含固定步骤名和毫秒时长，不包含截图、窗口标题或文件路径。
-
-长截图通过串行 `SCScreenshotManager` 取得固定单屏选区，按100ms开始间隔采样，间隔包含采集和拼接耗时，不堆积并行请求；暂停不请求新帧并拒绝迟到帧。`ScrollStitcher` 先验证正文位移，再区分同位置固定像素与正文空白，自动排除上下固定带并合成首帧顶部与末帧底部。单帧接不上（位移超出重叠范围或接缝歧义）只丢弃该帧并提示往回滚，参照帧保持为最后确认画面，回到重叠范围即继续；单帧位移超过允许最大值60%时提示放慢，提示画在本应用遮罩窗口里（已排除在采集外、不接收鼠标），按选区上、下、左、右避开控制面板与缩略图，放不下才居中，显示1000ms且至少间隔1000ms。滚动与暂停期间，控制面板正上方常驻已确认长图底部的实时缩略图；接不上时用红框标出下一帧必须重叠的参照帧正文底部。尺寸变化、资源上限等不可恢复错误才停止，已确认图像与原因留在采集会话并打开“长截图结果”窗口；先确认该窗口可见再撤下采集遮罩，关闭后才释放会话。结果窗口是普通层级，打开时盖过当前前台应用，失焦后不截获其他应用按键。正文配准在纵向平滑后的采样上允许整段一致的四分之一像素插值，覆盖网页在分数像素位置按面积重绘的文字；相差2像素以内的整数候选视为同一接缝，更远的候选须明显更差才不算歧义。条带高度按累计分数位移取整，避免逐帧舍入累积成重复或缺行；输出保持原始条带像素。控制与预览材料不进入像素。设置为自动滚动时，`AutoScrollTarget` 按 `CGWindowList` 取选区中心处最上层的非本应用窗口，在该应用内做辅助功能命中测试，找到最近 `AXScrollArea` 的可设置纵向滚动条；采集循环用纯状态机 `AutoScrollPlan` 在画面停稳后写入新的滚动条值（目标为选区高度一半，按实测位移校准），接缝失败退回并减半，1500ms 无移动即暂停。没有可设置的滚动条、读写失败或首步不移动时改用 `AutoScrollKeys`：向来源进程发送上下方向键，不产生鼠标事件，步进单位为按键次数，单步目标为选区高度 25%、最多放大 1.5 倍，接缝失败时目标与步长同时减半；方向键首步也不移动才改为手动；自动滚动期间不显示放慢、回滚提示，缩略图不标回滚红框。自动滚动不发送滚轮事件、不移动指针；只读的全局滚轮监听只在自动滚动期间安装，事件位置落在选区内即改为手动。
-
-## 区域截图
-
-截图贴纸下拉框由 Flutter 绘制，锚定在「贴纸」按钮下方，分「Emoji」与「贴纸」两段：Emoji 段直接列出应用内表情目录 `EmojiCatalog`（`SliverGrid` 只构建可见格子），点选即放置为 Emoji 贴纸；两段底部都有「管理贴纸…」，经 `openStickerSettings` 让原生先结束本次截图（与 Esc 相同）再打开设置窗口。Swift 的系统截图模块用本进程 ScreenCaptureKit 申请屏幕录制并取得显示器冻结帧；未授权不进入编辑。冻结帧是 BGRA（sRGB、8 位）`CGImage`，原生冻结视图直接显示；截图快照以 `pixels`（原始字节）与 `rowBytes`、`width`、`height` 交给截图引擎，全程不编解码 PNG。Dart 的 `ScreenshotApp` 用 `ui.decodeImageFromPixels` 建一次源图交给 `EditDocument`，编辑画面、马赛克与取色预览、导出合成共用；它在冻结帧上框选（选区外变暗、选区内清晰），负责标注、自动文件名和导出。识别文字与二维码使用 Dart 合成后交来的 PNG。截图结果用独立 captureId 拒绝过期操作，不属于选区会话。主界面就绪后 `ScreenshotWindowController.prewarm` 预热截图引擎与隐藏面板，首次截图直接复用。
-
-固定目录保存在 UserDefaults 的 `screenshotSaveDirectory`，只通过设置页修改。ScreenshotStorage 通过拒绝覆盖的实际写入和序号处理重名。翻译、输入翻译与截图热键由同一 Carbon 注册事务管理，已有组合交换用途时复用注册，全部新注册成功才更新配置。
-
-`ScreenshotWindowController.capture(_:)` 接收 `ScreenshotTarget`：指针所在屏以前台窗口为建议选区（只有该模式枚举窗口列表），指定显示器选中整屏并经快照 `cropSelected` 让 Dart 直接进入选中状态。`capture(_:)` 入口经 `CaptureWindowController.cancelCountdown` 结束未到时的录制倒计时，被替换的截图草稿不再恢复。冻结帧是否包含指针取偏好字典 `screenshotIncludesCursor`，`captureDisplayImage` 显式接收该选项，MCP 固定不含指针。
-
-截图取帧时暂停文本手势采集，翻译浮层保持显示并进入冻结帧；冻结编辑层显示期间（`onFrozenEditorVisibleChanged`）收起实时浮层，编辑层撤下或草稿结束后只恢复仍有效的浮层。截图的复制与保存不经过翻译层；“翻译文字”（`ScreenshotActions.ocrTranslate`，`_translateOcr`）经 `recognizeBlocks` 按段落识别后，交主引擎的截图翻译会话分批翻译；浮层由 `_FitText` 按 `fitOverlayFontSize` 取能放进段落矩形的最大字号。
-
-## MCP 截图接口
-
-App 包内的 `Contents/MacOS/translateapp-mcp` 由本机 MCP 客户端以 stdio 启动，只处理 JSON-RPC 最小子集（initialize、tools/list、tools/call、ping 与取消通知），工具名、协议文案和 socket 文件名与 App 共用 `AppConstants`。helper 把 tools/call 参数校验为 `MCPToolRequest`，经 `~/Library/Application Support/TranslateApp/mcp.sock`（权限 0600）一连接一请求转给运行中的 App；连接失败即返回「TranslateApp 未运行」，不启动 App。
-
-`MCPCaptureServer` 随 App 启动常驻监听；接受连接后先由 `MCPPeer` 按审计令牌核对对端：可执行文件必须是本 App 包内签名有效的 helper，本 App 有签名证书时还要求标识符为 `com.coolyang.translateApp.mcp` 且叶证书相同，否则返回拒绝并断开。之后按已提交偏好 `mcpEnabled` 受理请求，开关关闭时返回「MCP 未开启」；helper 断开时取消执行中的 Task，不再写回结果。`tools/list` 始终列出全部工具。只读工具是 `list_displays`、`list_windows`、`capture_screen`、`capture_rect`、`capture_window`、`snapshot`、`find`。写入工具 `click`、`type_text`、`press_key`、`scroll`、`drag`（`MCPToolRequest.isControl`）要求偏好 `mcpControlEnabled` 开启；关闭时不执行，并返回点名这五个工具的拒绝文案。`MCPToolRunner` 在 App 进程执行 `list_displays`、`list_windows`、`capture_screen`、`capture_rect`、`capture_window`：全部无需用户操作，不进入截图编辑或采集会话，不写翻译历史，不保存文件。截图前确认屏幕录制授权，执行期间 `StatusBarController` 把菜单栏图标换为 `camera.viewfinder` 并至少保持 1000ms，实时翻译的中止图标优先。
-
-`MCPAccessibility` 执行 `snapshot` 与 `find`：先确认辅助功能授权，按前台应用、应用名称或包标识、`window_id`（按位置与尺寸匹配无障碍窗口）或上次快照的 ref 确定读取根，本应用、`controlBlockedBundleIDs` 与「排除应用」中的应用一律拒绝；Chromium/Electron 应用先设置 `AXManualAccessibility`。`AXWalk` 在后台线程按深度优先遍历，每个元素一次批量读取属性，受深度、元素数（400，find 为 50）与 2 秒时间预算限制，提前结束时标为不完整；角色去掉 AX 前缀转小写，密码框为 `securetextfield` 且不输出值。元素句柄按快照保存在内存中（最近 8 次），ref 形如 `@s3:e12`，失效时返回提示重新快照；坐标经 `MCPToolRunner.standardRect` 换成所在显示器 standard 截图像素，与 `list_windows` 一致。
-
-`MCPControl` 执行 `click`、`type_text`、`press_key`、`scroll`、`drag`，同一时刻只执行一个。目标为 ref 时取元素中心，为截图坐标时经 `MCPToolRunner.globalPoint` 换成像素中心的全局点，并按窗口列表取该点下最上层普通窗口的应用；本应用与禁止名单中的应用拒绝。首次操作开始会话：各显示器挂上 `MCPControlBorder` 边框（MCP 截图经 `captureDisplayImage(excludingWindowIDs:)` 排除），`StatusBarController.setControlActive` 换图标并在菜单首项放「停止操控」，全局监听不带标记的输入——Esc 结束会话，其余输入记为用户正在使用。会话内首次操作某应用时 `MCPControlApproval` 显示不激活应用的授权面板。执行分档：ref 单击先用 `AXPress`／`AXShowMenu`，输入先设置 `AXSelectedText`，在后台完成；需要真实事件时目标在前台则直接发送，否则等用户静止 1 秒后激活目标、发送带标记的 CGEvent，再恢复原前台应用与指针。按进程投递的键盘事件在多数应用中不触发快捷键与输入，因此不采用。会话 30 分钟或空闲 5 分钟结束，关闭 MCP 或操控开关时立即结束；每次操作向 `control.log` 追加时间、应用、动作与目标，不含输入文字。
-
-`MCPImageOutput` 按清晰度的视觉 token 上限（⌈宽/28⌉×⌈高/28⌉，standard 1568、low 512）与 1568 px 长边等比缩放后编码 PNG，客户端不再二次缩放；`capture_rect` 的坐标取同一显示器在 `reference_detail` 清晰度下 `capture_screen` 输出图的像素坐标，按同一尺寸向外取整换算回原始像素后裁剪。`list_windows` 把窗口全局点坐标换算为所在显示器 standard 输出图像素并裁到图内，可直接作为 `capture_rect` 参数。显示器序号为 `NSScreen.screens` 顺序；窗口截图使用 ScreenCaptureKit 单窗口过滤器，遮挡时仍截取窗口自身内容。
-
-OCR 由 `ScreenCaptureService.recognizeDocument` 用 Vision 文档识别在原始像素上执行，把标题、段落、列表与表格组织为按阅读顺序排列的 Markdown 块：表格首行作表头、合并单元格只写起始格，已在表格或列表中的段落不重复输出。截图编辑的「识别文字」与 MCP 共用该输出，结果弹窗由 `MarkdownView` 只在显示时渲染，「复制全部」复制原文；截图通道 `recognizeText` 在后台经 `ScreenCaptureService.decodeImage` 把合成 PNG 解码一次，文字识别与 `ScreenCaptureService.detectCodes` 的二维码/条码识别（`DetectBarcodesRequest`，按位置排序、去重）并行执行，都完成后返回 `{text, codes}`；`openLink` 核对 captureId 后经 `ScreenshotLink` 只放行 http/https 链接交给 `NSWorkspace`，Dart 打开成功后关闭截图编辑（#108）；MCP 在 `include_positions` 时为每块附返回图像素坐标。tools/list 由保序 JSON 输出，参数按声明顺序排列；工具说明、参数约束与返回文案为英文，列表结果为制表符分隔的表格文本。
-
-设置窗口的「MCP」分段与通用、翻译、截图平级。`McpSettingsPage` 通过设置窗口通道读取 helper 实际路径，开关随普通偏好进入主引擎设置提交队列；「复制客户端配置」写入 `mcpServers.translateapp.command` 为 helper 路径的 JSON，按钮文字显示「已复制」1000ms。接入平台由 `mcp_platforms.dart` 的注册表驱动：命令式平台（Claude Code、Codex、Grok）通过 dart:io 在用户主目录执行各 CLI 的 `mcp get/list`、`mcp add`、`mcp remove`，CLI 在用户交互式登录 shell 的 PATH 中查找，安装先删除同名条目再添加；配置文件式平台（Claude 桌面）只读写 `claude_desktop_config.json` 的 `mcpServers.translateapp`，写入前备份为 `.bak` 并经临时文件改名。安装前清除 helper 的 `com.apple.quarantine`。新增平台只增加注册项，界面按注册表渲染。打包脚本在外层 App 之前以 `<bundle id>.mcp` 标识签名 helper。
-
-## 视觉偏好与分片恢复
-
-视觉设置与普通偏好一起由主 Dart 引擎提交；Swift 提交后通知每个 NativeGlassFactory，各独立引擎通过 appearance 通道只接收视觉快照。NativeGlassApp 重建主题并保留业务页面，NativeGlassSurface 使用单材料作用域防止嵌套折射。普通窗口由 NativeReadingCanvas 绘制贯穿标题与正文的 sRGB 阅读底色，NativeGlassWindowPage 使用同色且无内部圆角；contentLayoutGuide仅用于避让系统交互安全区。
-
-### 界面动效与光学高光（#142）
-
-界面动效参数集中定义在 `lib/src/common/constants/motion_metrics.dart`（物理弹簧 `420ms` / 阻尼比 `0.62`、舒缓入场 `440ms` / 错峰 `80ms` / 模糊 `4pt`、棱镜 `1.25pt` 银白倒角与 `0.16` 冷暖色散及 `1100ms` 完成扫光），共用组件位于 `lib/src/common/widgets/app_motion.dart`：
-- `AppMotion.bouncy` 使用 `motor` 的 `CupertinoMotion.bouncy(snapToEnd: true)` 驱动 `BouncyPresence`（翻译结果卡、工具栏状态组、悬浮控制气泡）、`NativeGlassSidebar` 的选中指示滑块以及 `NativeGlassSegments`（按各分段实测矩形做水平位移与宽度的弹簧滑块）；弹簧稳定后锁定精确 `1.0` 且保持同构子树，既消除亚像素变换偏差，也不拆装 `MenuAnchor` 等有状态控件。
-- `GentleReveal` 与 `GentleShimmerSkeleton` 通过带可取消延迟定时器的 `_ControlledAnimate` 驱动 `flutter_animate` 的 `FadeEffect`、`SlideEffect`、`BlurEffect`、`ShakeEffect` 与有限周期 `ShimmerEffect`，分别用于译文/词典段落错峰入场、失败轻抖与首字骨架扫光；承载 `AppKitView` 玻璃气泡的列表条目关闭模糊通道，避免跨层合成冲突。
-- `OpticalPrismOverlay` 在前景 `IgnorePointer` 叠加层以 Flutter Impeller 片段着色器 `shaders/optical_prism.frag` 绘制随指针受光角偏移的 `1.25pt` 银白倒角与微弱色散（预乘透明度，浅/暗峰值 `0.75`/`0.55`），并在结果完成时播放一次斜向扫光；底层 `AppKitView` 与 `NSGlassEffectView` 不进入着色流程、不重建。
-- `TranslationStatusIcon`、`SpeechWaveIcon`、`VocabularyBookmarkIcon`、`CopyConfirmIcon`、`RecordingPulseIcon` 以纯 Dart `CustomPainter`、`Canvas` 与可控动画控制器驱动状态切换微交互，不依赖原生动画运行库，并保证复制 `1.3s` 确认回弹等有限时长在卸载前自动收敛。
-- Swift 端 `OverlayPanelController` 按 `AppConstants.overlayFadeInDuration`（`0.16s`）与 `overlayResizeAnimationDuration`（`0.24s`）平滑处理非激活翻译浮层的显示渐显与流式尺寸过渡。
-- 系统强调色：`NativeGlassFactory.appearanceSnapshot` 在浅色、深色外观下分别解析 `NSColor.controlAccentColor` 为 sRGB ARGB（`accentLight`、`accentDark`），收到 `NSColor.systemColorsDidChangeNotification` 时沿用 `appearanceChanged` 广播；`GlassAppearance` 携带两份强调色，`NativeGlassTheme.data` 以 `GlassAccent` 主题扩展提供 accent，primary 浅色由强调色与黑按 75:25、深色与白按 65:35 混合，业务代码经 `NativeGlassTheme.accentOf` 读取。
-- `BusyRing` 统一接入共享 `NativeGlassSurface` 与 `NativeGlassSwitch`（覆写截图工具栏、采集控制与结果操作、权限向导、术语表、历史/生词本及截图拼接/拆分/比较等全部可测等待点）；等待期间在按钮外 `2pt` 处流动 `28%` 弧段，结构不随等待态重建以保持原生材料稳定，结束时闭合放大淡出；对应按钮不可见时截图工具栏状态组显示同样的环。
-- `CharReveal` 用一个动画控制器为段内新到达的字生成逐字 `TextSpan` 前景画笔（透明度与模糊），截图译文盖层用 `Text.rich`、翻译卡片译文用 `SelectableText.rich` 排版；追加文字只显影新字。原生实时翻译盖层 `LiveFitTextView` 经 `CharRevealBatch` 与 `CADisplayLink` 复用同一批序与时长参数（单字 `260ms`、错峰 `18ms`、总错峰上限 `600ms`、同色零偏移阴影近似模糊 `3pt→0`），字号按完整段落测算以保持排版稳定。
-- `CaptureShadeView` 在区域录制（排除实时翻译与长截图）期间通过 `CAShapeLayer` 绘制选区周长 `22%` 强调色光段（`2400ms` 一圈、`2pt` 线宽、`8pt` 发光）；暂停时置图层 `speed=0` 锁定当前相位并在恢复后接着流动，外观变更经 `viewDidChangeEffectiveAppearance` 更新强调色。
-- `LiquidSplit` 作为共享工具栏二级菜单组件，统一承载截图工具栏的子级组、工具属性组与可滚动附加行（支持可选 `lead` 与 `scrollable`）：各按钮挂 `_buttonKeys` 全局键，首帧后测量锚点按钮与目标格位中心的位移，展开沿主轴按阻尼比 `0.78`、周期 `240ms` 弹簧以 `20ms` 错峰滑出，收起与打断沿临界阻尼（阻尼比 `1.0`、周期 `120ms`、`10ms` 错峰）快速回弹，期间下方液滴经 `ImageFilter.blur` 与透明度阈值 `ColorFilter` 合成粘连并随按钮接近落位提前淡出至 `0`；相同锚点的打开与收起共用稳定键以支持展开或收起中途从当前进度无缝衔接，切换至任何带二级菜单的新工具、在展开美化时抑制绘图属性或收起中途再次切换工具时，`_syncClosing` 立即清空收起组，主配置组行同行两组两端对齐而次级插入行统一紧邻起点排列，工具栏在选区拖动隐藏期间由 `Visibility` 保持布局与动画状态不重建。
-- 全部动效统一遵循系统减少动态效果设置（Dart 读 `MediaQuery.disableAnimationsOf`，Swift 读 `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`），开启后以静态瞬时切换呈现，不另设应用内动效开关。
-
-TranslationProgress 只保存已完成分片、配对和上一片双尾；SelectionSession 持有冻结服务与方向，失败后通过 retry 重发失败片。翻译浮层仍消费统一 TranslationSnapshot，成功后的历史写入沿用主入口的完整结果边界。
-
-### 设置自动保存
-
-设置页对离散选择立即提交，对连续透明度调整在结束时提交。服务编辑器只在确认完整有效表单后提交配置与凭据。设置页保留当前草稿及编辑序号，通过现有主引擎版本事务串行保存；请求期间的后续编辑在上一事务完成后继续提交，旧回包和旧加载快照不覆盖最新草稿。失败保留编辑、显示重试，外部版本冲突要求显式重新加载。设置窗口左侧为正文之外的固定两级侧边栏（`NativeGlassSidebar`：一级图标置于 `22×22` 圆角 `6` 强调色方块内的 `12pt` 白色图标，选中滑块左右各留 `6pt` 内边距并与子项左缘对齐），右侧显示所选子页及其标题；`NativeGlassGroup` 在设置行之间自动插入 `0.5pt` 分割线，说明文字统一收入 `NativeGlassSettingRow.caption` 与 `NativeGlassSwitchTile.subtitle`，授权状态由固定绿/橙配色的独立语义胶囊 `NativeGlassStatus` 展示，使用外置字段标题和共享连续圆角，控件材料不延伸到空白行。
-
-正常保存不显示进度或成功文字，不改变页面高度。截图工具栏的功能登记在 `ScreenshotActions.composable`（各项声明能否作为父级），默认结构为“截图”下挂“录制”“滚动长截图”，其余为一级；一级功能放在网格格位中（`ToolbarColumn`：一种修饰键组合 + 6 格），格位决定快捷键，用户可在设置中拖到格位、隐藏并拼成最多两级的父子结构。网格、父子关系与显隐由 `ScreenshotToolbarPreferences` 校验（组合属于 `ToolbarModifiers.allowed` 且各组不重复、每组 6 格、最多 8 组、每个功能恰好一次），随普通偏好事务提交；没有网格的旧配置读取为默认网格。`AppSettings.validate` 经 `globalShortcutSlots`（`ToolbarGrid.slotOfCarbon`）把三个全局快捷键换算为格位，落在有工具的格位上时拒绝提交；设置页进入工具栏子页时经 `systemShortcuts` 读取 `com.apple.symbolichotkeys` 中已启用的项（`ToolbarGrid.slotOfCocoa` 换算），只标红提示、不阻止保存。该偏好域只含用户改过的项，数字行 1–6 加 ⌃⌥⌘ 目前没有默认启用的系统快捷键。Swift 只广播工具配置，截图引擎保留图像、选区和标注。非激活截图面板在原生会话按键路由按数字行物理键码（1–6）识别格位按键，不带 ⇧ 时消费并经 `screenshotToolbarSlot` 把修饰键与数字连同 captureId 交给截图引擎，由 `actionAt` 按网格（含默认网格）解析；方向键（不含 ⌘/⌃）同样由原生消费，经 `nudgeScreenshotCrop` 携带方向与 ⇧/⌥ 状态交给截图引擎微调选区；文字输入状态通知也绑定captureId。按钮与键盘共用动作映射，隐藏只影响按钮展示；上下文动作保持固定位置且没有格位快捷键。截图编辑器的工具栏由 `_toolbarLines` 分行：配置组前为组合标签（无修饰为「无」，插入组留同尺寸空位），按格位放按钮，隐藏与空格留出 32pt 空位，没有可见功能的组不显示，保存后的「在访达中显示」与忙碌沙漏为末尾状态组；这些组每行并排 `ToolbarGrid.groupsPerLine`（2）组，两端对齐、间距至少 `ToolbarGrid.groupGap`（12pt）。当前父级的子级组与当前工具的属性组（按 6 格分组，同样并排），以及美化参数、比例、录制目标与应用图标附加行（`_strips`），依次插在父级（或当前工具）所在行之后。横放（选区上方、下方及退让到选区内）时每组 6 格从左到右、各行自上而下；竖放（选区左右侧）时每组 6 格自上而下、各列从左到右。`_EditorSurface` 按 `_lineLengths` 给出的各行长度取最长一行为工具栏长度、行数为厚度；放下后工具栏长度小于最长组行时改为每行一组重新布局。工具栏叠在文字输入框之上，放进选区内时仍可点击。光标工具优先命中文字，再处理截图区域；两者共用八点、边线与内部移动命中规则，拖动只更新当前对象。
-
-截图文字编辑状态通过 `screenshotTextInput` 同步到原生控制器；编辑期间普通字符、编辑快捷键和输入法回车交给 Flutter 文本系统。原生事件路由消费已处理的截图命令，不重放字符。贴图使用非激活面板并接收首次鼠标按下，在开始 AppKit 拖动前选中当前贴图，使 Escape 只关闭该贴图。
-
-### macOS 对角拉伸光标
-
-截图与文本框的命中规则由Dart统一计算。两种对角轴通过 `NativeResizeCursor` 的鼠标会话向当前截图引擎发送 `setResizeCursor`，AppKit使用 `NSCursor.frameResize(position:directions:)` 显示原生双向光标；轴为 `nwse` 或 `nesw`。水平、垂直、文本、移动和按钮光标继续由Flutter系统会话管理。离开区域由下一光标会话接管，关闭编辑器清除本会话原生光标，关闭后的迟到请求不生效。
-
-## 绘制样式与来源身份
-
-截图美化（#103）由 `BeautifyStyle` 描述（背景为调色盘的 `ColorFill`，纯色或 `FillGradient` 渐变），`paintBeautifyBackdrop` 在内容外画背景并在背景上画阴影、覆盖圆角外四角；编辑器的 `_DimPainter` 以显示坐标调用它预览，`EditDocument.renderPng(beautify:, unit:)` 以像素倍率调用它导出，二者一致。复制与保存传入美化参数，贴图与 OCR 不传。美化参数只属于本次截图，不写偏好。贴纸为 `AnnotationKind.sticker`（`rotation`、`stickerId`），位图由截图页面按需从贴纸目录加载到 `EditDocument.stickerImages`；光标工具经 `box_transform.dart` 命中控制点与旋转手柄并用 `dragBox` 移动、缩放、旋转，拖动结束一次写入撤销历史；美化时贴纸可移到选区外扩内边距的范围，导出在背景合成后画到整幅画布。贴纸面板 `screenshot/sticker_panel.dart`；我的贴纸文件与默认大小由设置页管理，截图快照携带 `stickers` 与 `stickerDirectory`；非激活面板的 Delete 由原生转发为 `deleteScreenshotSelection`。通用调色盘 `ColorPicker`（`screenshot/drawing_controls.dart`）返回 `ColorFill`，绘图工具与美化背景共用；标注样式 `DrawingStyle.gradient` 为空即纯色，`EditDocument` 用 `FillGradient.shader` 按标注外接矩形绘制渐变，绘图偏好在 `color` 外以可选 `gradient` 字段保存。
-
-框选精确控制（#106）的可拖动矩形的命中与变换由 `screenshot/box_transform.dart` 的 `hitBoxHandle`、`dragBox` 完成（控制点为枚举 `BoxHandle`，矩形与旋转角为值对象 `BoxFrame`），裁剪框与文字框只以 `BoxRules` 区分。比例修正由 `common/utils/geometry.dart` 的 `ratioRect` 完成：给定不动的锚点、指针点、宽高比、驱动方向与截图尺寸，返回保持比例、不越界且较短边不小于下限的矩形；新框选、八个控制点、选择比例与 ⌥ 方向键共用它。比例与方向键微调状态只属于 `ScreenshotApp` 本次截图，不写偏好，也不进入 `EditDocument` 撤销历史。工具栏下方的展开状态由 `_ExpandedRow`（录制、实时翻译、美化、比例）统一表示，同一时刻最多展开一项；美化设置排在子级行的贴纸之后，不另起一行。
-
-DrawingStyle是标注组合的不可变样式，颜色与线宽控件只返回已确认的值；文档沿用现有命令历史。原生采集在取得前台应用时冻结显示名，不在异步完成后按PID重新查询。
-
-图形工具采用rect配置身份，四种图形、编号标记和普通/马赛克/荧光笔画笔通过同一绘制方法服务预览与PNG导出；浮层选择框不进入像素。`EditDocument.annotations` 只在文档变更（`notifyListeners`）后重建只读视图，画布 `_OverlayPainter` 按视图对象、拖动预览、选中图形、源图、像素倍率与尺寸判断是否重绘，并用 `RepaintBoundary` 与页面其他图层隔离；画笔拖动预览直接引用正在追加的笔迹点（只读视图）与逐点扩展的外接矩形，提交时复制一次。马赛克按从源图原点对齐的 12px 网格，每张源图经 `_rasterMosaic` 整张栅格化一次，图片随源图保存（`Expando`），源图释放后由垃圾回收释放；拖动预览、重绘与导出都从缓存图取标注所在区域并按轨迹裁剪。编号标记（#107）为 `AnnotationKind.step`，编号不存进标注，由 `stepNumbers` 按文档标注顺序推导后传给 `EditDocument.paintAnnotation`，撤销/重做增删标记后其余编号自然更新。荧光笔为 `ShapeMode.highlighter`，样式颜色保持不透明，绘制时整条轨迹一次施加 40% 不透明度。共享数值在common/constants/drawing_metrics.dart，控件在screenshot/drawing_controls.dart。
-
-取色与标尺（#111）是截图编辑器的瞬时状态，由 `screenshot/measure_layer.dart` 的 `MeasureLayer` 叠加在标注之上显示，不进入 `EditDocument`、撤销与导出：取色在每张截图首次使用时把 `EditDocument.source` 读为非预乘 RGBA 并缓存，按悬停或单击处的截图像素读取颜色，经 `copyText` 复制 `#RRGGBB`；标尺只保存两端截图像素。取色悬停点由 `ValueNotifier` 持有，悬停只重建取色标签层，不重建截图页面。确认截图的动作 `screenshotConfirmAction` 由 Swift 随截图快照与工具栏变更通知交给截图引擎。
-
-DrawingPreferences按工具保存颜色、线宽、形状与画笔模式，主Dart设置队列验证并写入screenshotDrawing偏好。历史SQLite插入成功通知原生转发historyChanged，窗口内按请求版本重载；主题内层Builder驱动完整历史列表样式重建。
-
-绘图属性按具体图形模式、普通画笔、马赛克画笔与荧光笔隔离。DrawingPreferences.styleFor负责解析对应子工具的不可变样式；调整写入自己的variants槽，基础配置用于初始化未调整的子工具，不在子工具之间传播修改。
+# TranSnap 系统架构
+
+**TranSnap** 采用 **Flutter/Dart + macOS 原生 Swift** 双层架构：
+- **Dart 层**：承载多窗口 UI、翻译编排、历史/生词本、截图标注与编辑文档状态，以及设置事务与校验。
+- **Swift 原生层**：负责 macOS 系统权限、全局事件监控、非激活悬浮面板、ScreenCaptureKit 采集与编码、Vision OCR / 条码识别、系统离线翻译 / 语音朗读，以及液态玻璃材料桥接。
+
+> 协议约束：跨模块通道名、方法名、偏好键、错误码与枚举在 Dart 端集中定义于 `lib/src/common/constants/`，在 Swift 端统一定义于 `macos/Runner/Common/Constants.swift`，两端字面量保持严格一致。
+
+---
+
+## 一、多引擎与进程窗口模型
+
+### 1. 主引擎与附属引擎分工
+| 窗口 / 模块 | 引擎归属 | 说明 |
+| --- | --- | --- |
+| 选区划词 / 翻译浮层 / 输入替换气泡 | 主引擎（`TranSnapApp`） | 持有唯一偏好状态、当前 `SelectionSession`、主翻译队列与实时翻译 `LiveRegionSession` |
+| 设置窗口（`settingsMain`） | 独立附属引擎 | 按需创建并预热，配置变更经 `transnap/settings` 通道提交到主引擎 |
+| 权限向导（`permissionWizardMain`） | 独立附属引擎 | 独立引导权限授权；授权完成直接进入主应用状态 |
+| 历史管理窗口（`historyMain`） | 独立附属引擎 | 承载翻译历史、生词本与截图历史三大分段，由数据库变更事件自动刷新 |
+| 截图与图片编辑（`screenshotMain`） | 独立附属引擎 | 承载 `ScreenshotApp` 画布与工具栏，文字识别与贴图等系统调用经控制器路由 |
+| 采集控制与结果窗（`captureMain`） | 独立附属引擎 | 承载录制悬浮四气泡控制条，以及视频与长截图结果窗 |
+
+### 2. 请求路由与数据唯一所有权
+- Swift 侧所有附属窗口由 `WindowEngine.start` 统一创建引擎、安装通道与注册原生玻璃平台视图。
+- `MacPlatformBridge.routeWindowRequest` 路由规则：**优先交由当前控制器处理本地系统能力，未实现的方法转发至主 Dart 引擎**，保证偏好写入、翻译服务调用与历史持久化只有一个写入源头。
+- 所有独立窗口均通过 `transnap/appearance` 通道接收来自 `NativeGlassFactory` 的外观快照（浅/深外观、`accentLight`/`accentDark` 系统强调色、透明度等）。
+
+---
+
+## 二、核心通道与原生服务清单
+
+### 1. 平台通道（`lib/src/common/constants/channel_names.dart` ↔ `AppConstants`）
+- `transnap/platform` & `transnap/platform/events`：主引擎核心请求（权限、选区读取、替换输入、浮层尺寸与显隐、系统翻译、语音朗读、历史读写、热键状态、性能打点）。
+- `transnap/settings`：设置页面草稿读取与序列化自动保存。
+- `transnap/screenshot`：截图快照、本地图片导入、OCR/条码、图内段落翻译、贴图、标注保存与确认操作。
+- `transnap/capture` & `transnap/capture_video_preview`：录制/长截图会话控制、实时帧预览与结果导出。
+- `transnap/appearance`：跨引擎实时外观与强调色快照广播。
+- `transnap/window_startup`：附属窗口首帧就绪握手。
+
+### 2. Swift 原生核心模块（`macos/Runner/`）
+- **选区与输入替换**：`SelectionMonitor` + `SelectionGestureDetector` + `TextSelectionContext` + `AccessibilitySelection`；输入替换时保持来源焦点并记录阶段耗时（`os_log` `subsystem=TranSnap`、`category=Performance`）。
+- **浮层与贴图**：`OverlayPanel` 管理非激活面板防抢焦定位与淡入/缩放；`PinOverlayController` 管理多个独立置顶贴图的命中、拖动与 Esc 单窗关闭。
+- **采集与导出流水线**：
+  - `ScreenCaptureService`：ScreenCaptureKit 截图、图像解码、Vision 文档 OCR（保留表格/列表 Markdown 结构）与并行二维码/条码解码。
+  - `MediaCaptureService` + `ApplicationRecorder`：区域/窗口/应用多屏合成录制与音频静音编码，启动耗时记入 `subsystem=TranSnap`、`category=CaptureStartup`。
+  - `GIFExporter` & `WebMExporter`：基于裁剪起止时间生成有限宽高 GIF/APNG 或无窗口 WebKit VP8 WebM（保证源帧时间戳与丢帧报错）。
+  - `ScrollStitcher` & `AutoScroll`：缩略图静止帧过滤、上下固定区与纵向位移匹配、辅助功能滚动条自动步进。
+  - `ScreenshotComposer`：截图历史多图原始像素拼接、拆分与逐像素差异比较。
+  - `ScreenshotStorage`：统一管理 `~/Library/Application Support/TranSnap/` 下分类日期目录与防重名写入。
+  - `RecordingClickOverlay`：采集期间透明点击穿透层，绘制光学点击波纹与拖动轨迹。
+  - `LiveRegionCapture` & `LiveRegionCoordinator`：实时区域未编码画面追踪与原位译文叠加渲染。
+- **系统服务**：`SystemTranslationService`（Apple 离线翻译会话与语言包检查）、`SpeechService`（离线 TTS）。
+
+---
+
+## 三、选区翻译与结果浮层架构
+
+1. **会话生命周期（`SelectionSession`）**：每次划词或快捷键触发创建冻结会话身份（锁定来源服务与语言方向），按分段并发或流式更新 `TranslationProgress`（保存已完成分段与双尾上下文，支持失败片单独 `retry`）。
+2. **智能上下文与防误触**：`SelectionMonitor` 过滤非文本焦点及排除应用；仅在确实产生有效选区且内容变化时展示触发按钮（`84×32` 命中窗）或直接展开译文。
+3. **译文浮层（`TranslationOverlay`）**：
+   - 使用 `TranslationOverlay.layoutFor` 统一 Dart 布局与原生窗口尺寸契约：单栏卡片固定 `560pt` 宽、高度随内容自适应（上译文、下原文）；双语对照（左译右原）与单词词典模式采用 `720×420`。
+   - 底部操作栏与各栏朗读/复制控件按悬停交互呈现，避免静态遮挡正文阅读区。
+
+---
+
+## 四、截图编辑、工具栏与统一结果窗
+
+### 1. 编辑文档与渲染一致（`EditDocument`）
+- **矢量标注与撤销栈**：图形（矩形/椭圆/箭头/直线）、普通/荧光/马赛克画笔、序号、文本、贴纸与渐变美化样式均使用同一条基于命令历史的 `EditDocument`；拖动预览层与 `Export` 使用统一 `paintAnnotation`、`paintBeautifyBackdrop`（渐变背景 + 外圆角阴影）和 `ratioRect`（`lib/src/common/utils/geometry.dart`）。
+- **性能隔离**：画布绘制使用 `RepaintBoundary` 隔离，马赛克针对每张源图仅做一次 12px 对齐整图栅格化缓存；取色器基于缓存非预乘 RGBA 读取像素，标尺与取色悬停状态不进入撤销历史。
+- **对角光标桥接**：斜向缩放命中由 `NativeResizeCursor` 通知 Swift 通过 `NSCursor.frameResize` 渲染原生双向光标。
+
+### 2. 工具栏网格与多级托盘
+- 工具动作登记在 `ScreenshotActions.composable`，通过 `hostsChildren` 区分父级能力（默认「截图」挂接「录制」「滚动长截图」）。
+- 设置端与编辑端共用 `ToolbarModifiers.allowed` 与 `ToolbarGrid`（每组 6 格对应物理键 `1–6`，最多 8 组，主行每行最多 `ToolbarGrid.groupsPerLine = 2` 组，无修饰符行不显示前置符号）。
+- 选中父工具、工具属性或点击需要附加参数的动作时，由 `LiquidSplit` 渲染统一的**二级/三级托盘**（带指向锚点按钮的 `4pt` 指示三角与流体合并动画），动态行与托盘按钮共用统一轻量样式而非嵌套原生玻璃。
+
+### 3. 统一结果窗骨架（`result_window.dart`）
+录制、长截图与「打开方式」导入图片复用 `ResultWindowCanvas`、`ResultWindowBar`、`ResultBarDivider`、`ResultTextButton`、`ResultIconButton` 与 `ResultUpwardTray`：
+- **画布与底栏**：媒体四周固定 `24pt` 中性衬底留白，底部工具栏固定 `52pt` 高度；最小窗口尺寸为录制 `600×200`、长截图与导入图片 `600×240`。
+- **播放器集成**：录制结果内嵌 `AVPlayerView` 并设置 `controlsStyle = .none`，由自定义进度条与 KVO 播放观察器同步时长与循环播放。
+- **截图历史入库条件**：仅当用户保存成功或主动选择「保留在历史」时写入 SQLite 历史表与归档目录；列表使用共享只读卡片容器 `HistoryGroupCard` 与统一悬浮操作按钮，保证大数据量下滚动稳定。
+
+---
+
+## 五、视觉体系、动效与图标系统
+
+- **视觉规范集中**：`GlassMetrics`（`lib/src/common/constants/glass_metrics.dart`）与 `MotionMetrics`（`motion_metrics.dart`）集中管理圆角、间距、字体尺寸与弹簧阻尼。
+- **跨层材料原则**：外层容器由 `NativeGlassSurface` 提供单层原生玻璃或 `NativeReadingCanvas` 绘制连续 sRGB 阅读底色（`contentLayoutGuide` 仅避让红绿灯等安全区），禁止嵌套多层玻璃导致双重折射。
+- **统一图标体系**：全局功能图标统一使用 **`lucide_icons_flutter`（`LucideIcons`）**；翻译状态、声波、生词收藏、复制打勾、录制脉冲与 `BusyRing` 加载环由纯 Dart `CustomPainter` 驱动；所有动效遵循系统「减少动态效果」设置（无应用内开关）。
+- **逐字显影与棱镜高光**：译文与实时翻译分别由 Dart `CharReveal` 与 Swift `LiveFitTextView` 按相同节奏逐字显影；`OpticalPrismOverlay` 在前景叠加 Impeller 着色器 `shaders/optical_prism.frag` 实现随指针变动的 `1.25pt` 银白倒角与完成扫光。
+
+---
+
+## 六、本地 MCP 接口设计
+
+- **独立可信 helper**：位于 `TranSnap.app/Contents/MacOS/transnap-mcp`（由 Xcode 目标 `TranSnapMCP` 构建），通过 stdio 处理 JSON-RPC 最小子集（`initialize`、`tools/list`、`tools/call`、`ping`、`notifications/cancelled`），并与主 App 共用 `AppConstants`。
+- **安全校验链路**：`MCPCaptureServer` 随主 App 启动监听本地 Unix socket；接入前由 `MCPPeer` 按进程审计令牌校验对端是否为本 App 包内签名一致的 helper（Bundle ID 为 `com.coolyang.transnap.mcp` 且叶证书匹配）。
+- **权限分层与隔离**：所有工具受设置项「允许 agent 截图」控制；点击/输入/快捷键/滚动/拖拽等界面操作受独立开关「允许操控电脑」二次隔离，并在首次操控目标应用时弹出人工授权面板；客户端设置页通过 `mcp_platforms.dart` 注册表读写 `mcpServers.transnap`。

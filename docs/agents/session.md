@@ -13,4 +13,4 @@
 
 ## 生成的 macOS App
 
-构建和无界面原生验证结束后，核对 bundle 身份和正在运行的可执行路径，再删除本次会话生成的 App 包以及 Release 构建路径中的 App 包。保留已安装的 `/Applications/TranslateApp.app` 和打包产物 `dist/TranslateApp.zip`。不删除源码、偏好、整个构建目录或正在运行的 App。
+构建和无界面原生验证结束后，核对 bundle 身份和正在运行的可执行路径，再删除本次会话生成的 App 包以及 Release 构建路径中的 App 包。保留已安装的 `/Applications/TranSnap.app` 和打包产物 `dist/TranSnap.zip`。不删除源码、偏好、整个构建目录或正在运行的 App。

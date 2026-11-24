@@ -1,18 +1,15 @@
 # 领域文档
 
-本仓库采用单一领域上下文。领域术语写在以下文件：
-
-- `docs/glossary.md`：选区翻译与采集工具领域术语。
-- `docs/specs/live-region-translation.md`：区域实时翻译术语。
+本仓库采用单一领域上下文，所有术语以 [领域术语表](../glossary.md) 为准。
 
 ## 代码约定
 
-见 `docs/agents/coding-conventions.md`。
+见 [coding-conventions.md](coding-conventions.md)。
 
 ## 用词
 
-以上文件中的规范术语在全文保持一致。同一术语定义不一致时，先询问以哪一份为准。
+`docs/glossary.md` 中的规范术语在代码、注释与文档中保持一致。出现同一术语定义冲突时，先向用户确认以哪一份为准。
 
 ## 规格分类
 
-开始需求、UI或架构工作前读取[三类规格索引](../specs/README.md)。
+开始需求、界面或架构工作前，先阅读 [三类规格索引](../specs/README.md)。

@@ -1,62 +1,75 @@
 # TranSnap
 
-[简体中文](README.md) | English
+[中文](README.md)
 
-<p align="center"><img src="docs/media/transnap-intro.gif" alt="TranSnap pixel-art intro animation: a summoner commands Grok, GPT, and Claude to showcase translation services, selection & input translation, pinning, screenshot annotation & OCR, scrolling capture, screen recording & GIF export, customizable toolbar, live screen translation & synchronized recording, and translation history" width="640"></p>
+**TranSnap** is a macOS 26+ desktop productivity suite combining instant global text translation with screen capture, annotation, recording, scrolling screenshots, live on-screen translation, and local MCP integration. Built with Flutter/Dart for UI and orchestration alongside a native Swift layer for non-activating panels, macOS Liquid Glass surfaces, and system capture frameworks.
 
-macOS 26+ Liquid Glass global selection & live screen translator with screenshot annotation, scrolling capture, pinning, and screen recording. Flutter/Dart powers the UI and translation logic; Swift provides native macOS capabilities and Liquid Glass materials.
+> Currently targets **macOS 26+ (Darwin 25+)** only.
 
-## Features
+![TranSnap Demo](docs/media/transnap-intro.gif)
 
-- **Selection Translation**: Select text in any app and click the **Translate** button or press a shortcut to expand a side-by-side paragraph card with translation on the left and source text on the right.
-- **Input Translation**: Type text in an input field and press a shortcut to replace it directly with its translation.
-- **Screenshot & Annotation**: Freeze the screen to select a region and annotate with shapes, arrows, text, brush, and mosaic; copy, save, or pin on top.
-- **OCR / Translate Text**: Recognize text in a screenshot for copying, or overlay translations directly over the original text in place.
-- **Screen Recording & GIF**: Record a region, window, or full screen to MP4, and export the result as GIF.
-- **Scrolling Capture**: Select a region and scroll down to stitch a long screenshot automatically while removing fixed headers and footers.
-- **Live Translation**: Select a region, window, or full screen to overlay paragraph translations in real time over the source text, with optional synchronized recording.
-- **Customizable Toolbar**: Reorder, hide, bind shortcuts, and combine tools into a two-level parent/child hierarchy in Settings.
-- **Translation History**: Successful translations are saved automatically with keyword, source, and date filtering, single deletion, and clear all; retained for 30 days by default or forever.
-- **Images & Glossary**: Open local or clipboard images for annotation, OCR, and translation; import, preview, and export glossaries in CSV/JSON.
+---
 
-See [Usage Guide](docs/usage.md) (in Chinese) for full details.
+## Key Features
 
-## Installation & Launch
+### 1. Global Selection Translation & Writing Tools
+- **Zero-Focus Disruption**: Trigger translation from any app via mouse selection or global hotkeys—results appear in a non-activating floating card near your selection.
+- **Four Processing Modes**: Switch seamlessly between **Translate**, **Polish**, **Correct**, and **Explain**, or retry with an alternate translation service per card.
+- **Adaptive Card Layouts**: Compact stacked layout for single blocks, side-by-side comparison (`720×420`), or dedicated dictionary view for single words, complete with offline TTS and **Vocabulary** bookmarking.
+- **Inline Input Translation**: Translate editable text selections directly via a compact popover and replace source text in place.
+- **Flexible Providers**: Works out of the box with Apple on-device system translation and zero-config web translation, plus configurable OpenAI-compatible endpoints, cloud translation APIs, and custom glossaries.
 
-```sh
+### 2. Screen Capture, Editing & Live Translation
+- **Region Capture & Annotation**: Interactive cropping, shapes (rect, oval, arrow, line), pens/highlighter/mosaic, step badges, rich text, color picker, ruler, custom stickers, and gradient beautification. Pin captures to your desktop or run local **Vision OCR** and barcode/QR decoding.
+- **Customizable Shortcut Grid**: Arrange tools into modifier-key rows mapped to keys `1–6` with nested secondary tool trays in **Settings**.
+- **Screen Recording & Export**: Record regions, windows, or entire apps with countdown timers, trim clips in a unified 52pt result window, and export to **MP4**, **GIF**, **APNG**, or **WebM**.
+- **Scrolling Capture & Image Tools**: Stitch long pages manually or with accessibility auto-scrolling, and stitch, split, or pixel-diff images in Screenshot History.
+- **Live Region Translation**: Continuously OCR and render real-time translated overlays above an active region or window.
+
+### 3. Local MCP Server
+- Bundles a verified stdio MCP helper at `/Applications/TranSnap.app/Contents/MacOS/transnap-mcp` with one-click setup for **Claude Code**, **Claude Desktop**, **Codex**, and **Grok** inside **Settings → MCP**.
+- Exposes screen/window inspection, controlled capture, Vision document OCR, and opt-in UI automation tools.
+
+---
+
+## Getting Started
+
+1. Install TranSnap to `/Applications/TranSnap.app` from GitHub Releases or by running `./scripts/package-and-install-macos.sh`.
+2. Launch `/Applications/TranSnap.app` and grant **Accessibility** and **Screen Recording** permissions in **Settings → General → Permissions & Startup**.
+
+```bash
+open /Applications/TranSnap.app
+```
+
+### Default Shortcuts
+| Action | Shortcut |
+| --- | --- |
+| Translate selection | `⌘ + ⇧ + T` |
+| Replace input / Translate selection | `⌘ + ⇧ + R` |
+| Region capture & recording | `⌘ + ⇧ + S` |
+
+---
+
+## Development & Packaging
+
+### Requirements
+- macOS 26.0+ (SDK 26+)
+- Xcode 27+ & Command Line Tools
+- Flutter SDK (Dart `^3.11.1`)
+- A `TranSnap Local Signing` certificate in your login keychain (see [macOS Guide](docs/macos.md))
+
+```bash
+flutter pub get
+flutter analyze && flutter test
 ./scripts/package-and-install-macos.sh
-open /Applications/TranslateApp.app
 ```
 
-Grant **Accessibility** (for selection translation) and **Screen Recording** (for screenshots, screen recording, and live translation) permissions on first launch. See [macOS Installation](docs/macos.md) (in Chinese) for code signing, permissions, and handling old copies.
+---
 
-| Default Shortcut | Action |
-|---|---|
-| ⌃⌥T | Translate current selection |
-| ⌃⌥R | Input translation: replace source text in the input field with its translation |
-| ⌃⌥S | Region screenshot |
+## Documentation
 
-## Translation Services
-
-Add and test services in **Settings → Translation → Service List**; API keys are stored only in macOS Keychain.
-
-| Service | Required Fields |
-|---|---|
-| Google Free API (unofficial, initial default) | None |
-| Baidu Translate | App ID, Secret Key |
-| Google Translate (Cloud Translation Basic v2) | API Key |
-| OpenAI | API Key, Model ID |
-| DeepSeek | API Key, Model ID |
-| Anthropic | API Key, Model ID |
-| Apple System Translation (on-device offline) | None; download language packs in System Settings |
-
-## Development
-
-```sh
-flutter test
-flutter analyze
-flutter run -d macos
-xcodebuild test -workspace macos/Runner.xcworkspace -scheme Runner -destination 'platform=macOS,arch=arm64'
-```
-
-Building requires Xcode with the macOS 26 SDK. See [Architecture](docs/architecture.md) for architecture details; requirements are tracked in GitHub Issues—see [Specs Index](docs/specs/README.md) (docs in Chinese).
+- [User Guide (Chinese)](docs/usage.md)
+- [Architecture Overview (Chinese)](docs/architecture.md)
+- [macOS Signing & Keychain Guide (Chinese)](docs/macos.md)
+- [Domain Glossary (Chinese)](docs/glossary.md)
+- [Docs Index (Chinese)](docs/index.md)

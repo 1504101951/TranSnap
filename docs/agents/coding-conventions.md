@@ -13,7 +13,7 @@ Source-Spec: #1。Codex-Thread: 01a0a9f5-d737-7871-a14f-c80c1fb51332。
 
 必须进常量的内容：
 
-- 平台通道名（`translateapp/...`）
+- 平台通道名（`transnap/...`）
 - 平台方法名（`invokeMethod` / `case` 分支）
 - UserDefaults 键
 - 引擎入口名（`settingsMain`、`screenshotMain` 等）

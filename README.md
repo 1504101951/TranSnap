@@ -1,62 +1,92 @@
 # TranSnap
 
-简体中文 | [English](README.en.md)
+[English](README.en.md)
 
-<p align="center"><img src="docs/media/transnap-intro.gif" alt="TranSnap 像素对局介绍动画《翻译峡谷》：召唤师指挥 Grok、GPT、Claude，依次演示翻译服务、选区翻译与快捷翻译、贴图、截图标注与识别文字、滚动长截图、录屏与 GIF、工具栏自由拼接、实时翻译与同步录制、翻译历史" width="640"></p>
+**TranSnap** 是一款面向 **macOS 26+** 的桌面效率工具，集成了全局选区翻译与屏幕采集套件。应用采用 Flutter/Dart 实现界面与业务编排，由 Swift 原生层提供非激活悬浮面板、`macOS 26+` 液态玻璃材料与系统级屏幕采集能力。
 
-macOS 26+ Liquid Glass 全局选区与实时屏幕翻译工具，集成截图标注、滚动长截图、贴图与录屏。Flutter/Dart 负责界面与翻译业务，Swift 负责系统能力和原生 Liquid Glass 材料。
+> 当前版本专注于 **macOS 26+（Darwin 25+）**。
 
-## 功能
+![TranSnap 功能演示](docs/media/transnap-intro.gif)
 
-- **选区翻译**：在任意应用选中文字，点「翻译」按钮或按快捷键，展开左译文、右原文的段落对照卡片。
-- **输入翻译**：在输入框写好原文，按快捷键直接替换为译文。
-- **截图与标注**：冻结画面框选，支持图形、箭头、文字、画笔、马赛克；可复制、保存或贴图置顶。
-- **识别文字 / 翻译文字**：识别截图中的文字供复制，或把译文直接盖在截图原位。
-- **录屏与 GIF**：区域、窗口、全屏录制 MP4，结果可导出 GIF。
-- **滚动长截图**：框选后手动下滚，自动拼接并去除固定的顶部与底部。
-- **实时翻译**：框选区域、窗口或全屏，译文按段落实时覆盖原文；可同时录制。
-- **工具栏自由拼接**：在设置里排序、隐藏、绑定快捷键，并拼成父子两级。
-- **翻译历史**：成功的翻译自动记录，支持关键词、来源与日期筛选、删除和清空；默认保留 30 天，可选永久。
-- **图片与术语文件**：打开本地或剪贴板图片进行标注、识别与翻译；术语表支持 CSV/JSON 导入预览与导出。
+---
 
-完整说明见 [使用说明](docs/usage.md)。
+## 核心能力
 
-## 安装与启动
+### 1. 全局选区翻译与写作助手
+- **即时划词与快捷键唤起**：在任意应用中选中文本，或按下全局快捷键，不抢占来源窗口焦点，在选区附近弹出翻译卡片。
+- **四种文本模式**：支持**翻译**、**润色**、**纠错**与**解释**，可在卡片内一键切换模式或临时切换翻译服务。
+- **自适应卡片布局**：常规文本采用上下紧凑单栏卡片，支持**双语对照**（左译右原）与**单词词典**布局；内置系统离线语音朗读（TTS）与**生词本**收藏。
+- **输入直译与原地替换**：在可编辑输入框中选中文本后触发快捷键，可在输入位置旁展开轻气泡直译并一键替换原文。
+- **多引擎服务**：内置 Apple 原生离线翻译与网页端免配置翻译，同时支持配置 OpenAI 兼容接口及主流云翻译 API（按需配置凭据与术语表）。
 
-```sh
+### 2. 屏幕采集、标注与实时翻译
+- **截图与标注编辑**：内置精准选区框选、矩形/椭圆/箭头/直线、画笔/荧光笔/马赛克、序号标记、文本、取色器、标尺、贴纸及渐变美化背景；可置顶为桌面**贴图**，或直接执行本地 **OCR 文档识别**与二维码/条码解析。
+- **自定义工具栏**：工具分组对应数字键 `1–6`，在设置中可自由拖拽排布、设置两级子菜单并搭配不同修饰键组合。
+- **屏幕录制与导出**：支持区域、窗口或应用维度录制与延时倒计时；录制完成后在统一结果窗内裁剪片段，导出 **MP4**、**GIF**、**APNG** 或 **WebM**。
+- **滚动长截图与历史合图**：支持手动及自动辅助滚屏拼接长图，在「截图历史」中支持勾选多图纵向/横向拼接、拆分及逐像素差异比较。
+- **实时区域翻译**：持续追踪屏幕选区或指定窗口内的画面文字，将翻译结果实时叠加于选区之上，支持随时隐藏原文或仅看译文。
+
+### 3. 本地 MCP 服务
+- 内置签名合规的 stdio helper（`TranSnap.app/Contents/MacOS/transnap-mcp`），可在「设置 → MCP」一键生成配置或安装至 Claude Code、Claude 桌面、Codex、Grok。
+- 支持显示器/窗口枚举、受控截图、OCR 文档识别与可授权的界面元素读取及辅助操作。
+
+---
+
+## 快速开始
+
+### 安装与运行
+1. 从 GitHub Releases 获取构建产物，或自行通过打包脚本完成签名安装，将应用安装至固定路径 `/Applications/TranSnap.app`。
+2. 直接打开或从终端启动：
+
+```bash
+open /Applications/TranSnap.app
+```
+
+首次运行请在顶部菜单栏或「设置 → 通用 → 权限与启动」按指引授予**辅助功能**与**屏幕录制**权限。
+
+### 默认全局快捷键
+| 动作 | 默认快捷键 |
+| --- | --- |
+| 翻译当前选区 | `⌘ + ⇧ + T` |
+| 替换选中文本 / 翻译选区内容 | `⌘ + ⇧ + R` |
+| 区域截图与采集 | `⌘ + ⇧ + S` |
+
+所有快捷键均可在「设置 → 翻译 → 快捷键」与工具栏设置中自定义。
+
+---
+
+## 从源码构建与打包
+
+### 环境要求
+- macOS 26.0 或更高版本（SDK 26+）
+- Xcode 27+ 与对应 Command Line Tools
+- Flutter SDK（Dart `^3.11.1`）
+- 本机登录钥匙串中的 `TranSnap Local Signing` 代码签名证书（配置指南见 [macOS 构建与签名说明](docs/macos.md)）
+
+### 常用命令
+
+```bash
+# 拉取依赖
+flutter pub get
+
+# 代码检查与 Dart 单元测试
+flutter analyze && flutter test
+
+# 构建 macOS 原生调试产物与 Swift 单测目标
+xcodebuild build-for-testing -workspace macos/Runner.xcworkspace -scheme Runner -destination 'platform=macOS,arch=arm64'
+
+# 固定签名打包 Release 版本、校验 ZIP 并安装至 /Applications/TranSnap.app
 ./scripts/package-and-install-macos.sh
-open /Applications/TranslateApp.app
 ```
 
-首次使用需授予辅助功能（选区翻译）与屏幕录制（截图、录屏、实时翻译）权限。签名、授权与旧副本处理见 [macOS 安装](docs/macos.md)。
+> 请使用 `xcodebuild build-for-testing` 配合独立目标校验原生编译；日常开发避免运行会拉起全量 Runner UI 测试的 `xcodebuild test`。
 
-| 默认快捷键 | 作用 |
-|---|---|
-| ⌃⌥T | 翻译当前选区 |
-| ⌃⌥R | 输入翻译：把输入框里的原文替换为译文 |
-| ⌃⌥S | 区域截图 |
+---
 
-## 翻译服务
+## 文档导航
 
-在「设置 → 翻译服务」添加并测试，API Key 仅保存在 macOS Keychain。
-
-| 服务 | 必填项 |
-|---|---|
-| Google 免费接口（非官方，初始默认） | 无 |
-| 百度通用翻译 | App ID、密钥 |
-| 谷歌翻译（Cloud Translation Basic v2） | API Key |
-| OpenAI | API Key、模型 ID |
-| DeepSeek | API Key、模型 ID |
-| Anthropic | API Key、模型 ID |
-| Apple 系统翻译（本机离线） | 无；需在系统设置下载语言包 |
-
-## 开发
-
-```sh
-flutter test
-flutter analyze
-flutter run -d macos
-xcodebuild test -workspace macos/Runner.xcworkspace -scheme Runner -destination 'platform=macOS,arch=arm64'
-```
-
-构建需要包含 macOS 26 SDK 的 Xcode。架构见 [架构说明](docs/architecture.md)；需求以 GitHub Issue 为准，导航见 [规格索引](docs/specs/README.md)。
+- [完整使用指南](docs/usage.md)：所有功能入口、浮层交互、截图工具栏、历史管理与设置详述
+- [系统架构说明](docs/architecture.md)：双端（Dart / Swift）职责划分、通道协议与多引擎窗口模型
+- [macOS 构建、权限与签名](docs/macos.md)：`package-and-install-macos.sh` 流程、权限排查与免弹窗钥匙串授权设置
+- [领域术语表](docs/glossary.md)：项目核心概念与规范命名
+- [目录索引](docs/index.md)：完整文档与子目录入口
