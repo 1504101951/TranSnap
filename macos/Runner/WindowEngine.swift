@@ -139,11 +139,15 @@ enum WindowEngine {
         return window
     }
 
-    /// window 为附属窗口；登记到 Dock 与 ⌘Tab（窗口关闭时由所属控制器撤销），激活应用并前置该窗口，无返回值。
+    /// window 为普通窗口（设置、历史、权限向导、打开的图片）；登记到 Dock 与 ⌘Tab（窗口关闭时由所属控制器撤销），
+    /// 先把它设为 key 并前置，再强制激活应用，无返回值。
+    /// 激活只把应用的 key/main 窗口带到前面：先前置本窗口，留在其他应用后面的设置等窗口不会跟着出现。
+    /// 使用 ignoringOtherApps：异步流程（如剪贴板图片解码后）里协作式 NSApp.activate() 会被系统拒绝，窗口会留在其他应用后面；
+    /// 系统不再接受该参数时需改用协作式激活并在用户操作的同步路径内调用。
     static func present(_ window: NSWindow) {
         DockPresence.enter(window)
-        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// name 为窗口名；引擎启动失败时按当前应用外观弹出提示，提供超时信息与数据目录入口，无返回值（#126、#144）。

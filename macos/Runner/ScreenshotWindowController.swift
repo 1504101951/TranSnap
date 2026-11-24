@@ -833,10 +833,10 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             if NSApp.isHidden { NSApp.unhideWithoutActivation() }
             window?.orderFrontRegardless()
             window?.makeKey()
-        } else {
-            if let window { DockPresence.enter(window) }
-            NSApp.activate()
-            window?.makeKeyAndOrderFront(nil)
+        } else if let window {
+            // present 登记 Dock、先前置本窗口再强制激活：图片在异步解码后才显示，协作式激活会被拒绝，
+            // 窗口会留在其他应用后面，直到别的操作激活应用时连同设置窗一起出现。
+            WindowEngine.present(window)
         }
         installScreenshotKeys()
     }

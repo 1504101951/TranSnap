@@ -321,6 +321,36 @@ void main() {
     expect(find.text('已复制图片'), findsOneWidget);
   });
 
+  testWidgets('源图像素建图失败时显示不自动消失的错误，不停在空白等待', (tester) async {
+    // 作用：打开的图片、剪贴板图片或长截图建图失败时，编辑器必须给出明确错误，而不是永远等待解码回调。
+    // 边界：8×8、每行 32 字节的 BGRA 源图需要 256 字节，只给 16 字节；错误提示超过 2s 错误停留时长后仍在。
+    const channel = MethodChannel('test/screenshot-bad-pixels');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == MethodNames.getScreenshot) {
+        return {
+          'id': 'shot-bad',
+          'pixels': Uint8List(16),
+          'rowBytes': 32,
+          'width': 8,
+          'height': 8,
+          'capturedAt': 1788662400000,
+          'directory': '/tmp/screenshots',
+        };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const ScreenshotApp(channel: channel));
+    await awaitCaptureSource(tester);
+    expect(tester.takeException(), isNotNull);
+    expect(find.text('无法载入这张图片（8 × 8 像素）。'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('无法载入这张图片（8 × 8 像素）。'), findsOneWidget);
+  });
+
   testWidgets('无屏幕录制权限时不进入编辑画布', (tester) async {
     // 边界：仅 screenAccess=false、无 bytes 时展示申请入口，不创建编辑画布。
     const channel = MethodChannel('test/screenshot-denied');

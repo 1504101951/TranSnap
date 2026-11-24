@@ -738,22 +738,55 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   }
 
   /// value 为原生截图快照；按 BGRA 原始像素（pixels、rowBytes、width、height）建一次源图，
-  /// 仍是同一捕获时装入文档并设置初始选区，无快照像素时不加载；返回装入完成的 Future（#68 批次 A）。
+  /// 仍是同一捕获时装入文档并设置初始选区，无快照像素时不加载；建图失败时显示不自动消失的错误提示，
+  /// 并把原始异常与堆栈交给 FlutterError 上报。返回装入完成的 Future（#68 批次 A）。
   Future<void> _loadSource(Map<Object?, Object?> value) async {
     final pixels = value['pixels'] as Uint8List?;
     if (pixels == null) return;
+    final width = (value['width'] as num).toInt();
+    final height = (value['height'] as num).toInt();
     // 建图计时（#68「性能测量边界」）。
     final watch = Stopwatch()..start();
-    final built = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-      pixels,
-      (value['width'] as num).toInt(),
-      (value['height'] as num).toInt(),
-      ui.PixelFormat.bgra8888,
-      built.complete,
-      rowBytes: value['rowBytes'] as int,
-    );
-    final image = await built.future;
+    // 不用 decodeImageFromPixels：它在解码失败时既不回调也不报错，编辑器会一直停在空白等待。
+    final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
+    final ui.Image image;
+    try {
+      descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: width,
+        height: height,
+        rowBytes: value['rowBytes'] as int,
+        pixelFormat: ui.PixelFormat.bgra8888,
+      );
+      codec = await descriptor.instantiateCodec();
+      image = (await codec.getNextFrame()).image;
+    } catch (error, stack) {
+      // 像素来自用户打开的文件、剪贴板或长截图，尺寸不受控；失败要让用户看见，原始异常保留堆栈上报。
+      if (mounted && _capture['id'] == value['id']) {
+        setState(
+          () => _setFeedback(
+            '无法载入这张图片（$width × $height 像素）。',
+            isError: true,
+            autoDismiss: false,
+          ),
+        );
+      }
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'screenshot',
+          context: ErrorDescription('载入截图源图'),
+        ),
+      );
+      return;
+    } finally {
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer.dispose();
+    }
     unawaited(_perfMark('screenshot-dart-image', watch));
     if (!mounted || _capture['id'] != value['id']) {
       image.dispose();
