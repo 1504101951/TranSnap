@@ -44,23 +44,32 @@ abstract final class ToolbarGrid {
   /// 截图工具栏每行（竖放为每列）并排的组数（#67）。
   static const groupsPerLine = 2;
 
-  /// 同行两组之间的分隔线：两侧各 8pt 留白，线宽 1pt、长 20pt（竖放为横线）（#67）。
-  static const groupDividerGap = 8.0;
-  static const groupDividerLength = 20.0;
+  /// 修饰键分区块（#67）：内边距 4pt、圆角 12（按钮 8 加内边距 4，内外同心），同行两块间距 8pt；
+  /// 块内修饰键提示区沿主轴 24pt，与按钮间距 4pt；主行厚度＝按钮 32 + 内边距 4×2。
+  static const blockPadding = 4.0;
+  static const blockRadius = 12.0;
+  static const blockGap = 8.0;
+  static const hintExtent = 24.0;
+  static const hintFont = 11.0;
+  static const blockThickness = 32 + blockPadding * 2;
 
-  /// 同行两组的间隔总长：留白 + 线宽 + 留白。
-  static const groupSpan = groupDividerGap * 2 + 1;
-
-  /// 子级与属性托盘（#67）：高与主行同为 32pt，内边距 2pt，按钮 28pt、间距 4pt，圆角 9（按钮 7 加内边距 2，内外同心），
+  /// 二级托盘（子级与属性，#67）：内边距 2pt，按钮 28pt、间距 4pt，圆角 9（按钮 7 加内边距 2），厚度 32；
+  /// 三级托盘（附加行）：按钮保持 32pt，圆角 10（按钮 8 加内边距 2），厚度 36；
   /// 指向锚点的三角高 4pt（等于行间距）、底宽 12pt；托盘内各组之间 1pt×16pt 短分隔线，两侧各 4pt。
   static const trayPadding = 2.0;
   static const trayButton = 28.0;
   static const trayButtonRadius = 7.0;
   static const trayRadius = 9.0;
+  static const trayThickness = trayButton + trayPadding * 2;
+  static const stripRadius = 10.0;
+  static const stripThickness = 32 + trayPadding * 2;
   static const trayCaretHeight = 4.0;
   static const trayCaretWidth = 12.0;
   static const traySeparatorLength = 16.0;
   static const traySeparatorGap = 4.0;
+
+  /// 工具栏行间距（竖放为列间距），等于托盘三角高度（#67）。
+  static const lineGap = 4.0;
 
   /// 默认列的组合：无、⌘、⌥。
   static const defaultModifiers = [

@@ -512,8 +512,8 @@ void main() {
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '贴纸');
     expect(find.text('还没有贴纸'), findsOneWidget);
-    await tester.ensureVisible(find.text('添加图片…'));
-    await tester.tap(find.text('添加图片…'));
+    await tester.ensureVisible(find.text('添加图片'));
+    await tester.tap(find.text('添加图片'));
     await tester.pumpAndSettle();
     expect(find.text('默认大小 512 × 256 pt'), findsOneWidget);
     final handle = find.byKey(const ValueKey('sticker-handle-3'));
@@ -631,8 +631,8 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '语言与服务');
-    await tester.ensureVisible(find.text('编辑提示词…'));
-    await tester.tap(find.text('编辑提示词…'));
+    await tester.ensureVisible(find.text('编辑提示词'));
+    await tester.tap(find.text('编辑提示词'));
     await tester.pumpAndSettle();
 
     for (final label in ['翻译', '润色', '纠错', '解释']) {
@@ -1055,7 +1055,7 @@ void main() {
     await tester.pump();
     expect(find.text('正在检查语言包…'), findsOneWidget);
     expect(find.text('Apple 离线翻译语言包'), findsOneWidget);
-    expect(find.text('管理…'), findsOneWidget);
+    expect(find.text('管理'), findsOneWidget);
 
     reply.complete('语言包已安装：English → 简体中文');
     await tester.pumpAndSettle();

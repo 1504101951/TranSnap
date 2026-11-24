@@ -444,13 +444,14 @@ void main() {
     expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
-    // 工具栏横放：图形在第 1 行，属性托盘作为一行紧跟其下（行间距 4 加托盘内边距），挤开后续行（#141、#67）。
+    // 工具栏横放：图形在第 1 行，属性托盘作为一行紧跟其下（块内边距 4、行间距 4 加托盘内边距 2），挤开后续行（#141、#67）。
     expect(
       tester
           .getRect(find.byKey(const Key('screenshot-attributes-group-0')))
           .top,
       tester.getRect(find.byKey(const Key('screenshot-grid-group-0'))).bottom +
-          4 +
+          ToolbarGrid.blockPadding +
+          ToolbarGrid.lineGap +
           ToolbarGrid.trayPadding,
     );
     await tap('${ScreenshotActions.shapePrefix}circle');

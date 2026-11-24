@@ -915,7 +915,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                               MethodNames
                                                   .openTranslationLanguages,
                                             ),
-                                        child: const Text('管理…'),
+                                        child: const Text('管理'),
                                       ),
                                     ),
                                   ),
@@ -1243,7 +1243,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           material: true,
                                           child: TextButton(
                                             onPressed: _editPrompts,
-                                            child: const Text('编辑提示词…'),
+                                            child: const Text('编辑提示词'),
                                           ),
                                         ),
                                       ],
@@ -1706,7 +1706,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           material: true,
                                           child: TextButton(
                                             onPressed: _addSticker,
-                                            child: const Text('添加图片…'),
+                                            child: const Text('添加图片'),
                                           ),
                                         ),
                                       ),

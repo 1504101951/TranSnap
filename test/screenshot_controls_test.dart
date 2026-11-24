@@ -90,9 +90,11 @@ void main() {
   });
 
   test('三四行工具栏在全屏贴边与横竖布局中保持屏幕内且不改变画布', () {
-    // 3/4行厚度120/156pt；源图倍率1/2及负原点显示器归一化后的视口使用相同局部几何。
+    // 作用：多行工具栏无论横放竖放都完整位于视口内，厚度按传入的各行厚度之和计算。
+    // 边界：三行＝分区行 40＋二级托盘 32＋三级托盘 36＋2 个行间距 4＝116；
+    // 四行再加一个分区行与行间距＝160（#67）；源图倍率1/2及负原点显示器归一化后的视口使用相同局部几何。
     for (final size in [const Size(960, 740), const Size(320, 600)]) {
-      for (final rows in [3, 4]) {
+      for (final thickness in [116.0, 160.0]) {
         for (final scale in [1.0, 2.0]) {
           for (final crop in [
             Offset.zero & size,
@@ -107,7 +109,7 @@ void main() {
                 crop.right * scale,
                 crop.bottom * scale,
               ),
-              rowCount: rows,
+              thickness: thickness,
               toolbarLength: 1200,
             );
             expect(layout.canvas, Offset.zero & size);
@@ -123,7 +125,7 @@ void main() {
               layout.axis == Axis.horizontal
                   ? layout.toolbar.height
                   : layout.toolbar.width,
-              16 + rows * 32 + (rows - 1) * 4,
+              thickness,
             );
           }
         }
@@ -782,11 +784,15 @@ void main() {
     expect(find.byKey(Key('toolbar-badge-$third')), findsNothing);
   });
 
-  testWidgets('工具栏每行两组以分隔线隔开，三级行插在父级所在行之后，放不下时每行一组（#141、#67）', (tester) async {
-    // 作用：两组并排节省厚度；录制目标等附加行紧跟父级所在行，不落到工具栏最底部。
-    // 边界：默认 3 组时无修饰组与 ⌘ 组同行，⌘ 组右缘贴工具栏右内边距 8pt，两组间隔为 8 + 1 + 8 = 17pt，⌥ 组在下一行；
-    // 截图（无修饰第 2 格）的子级组与录制目标行依次插在第一行与 ⌥ 组之间；
-    // 视口宽 400pt 时横栏可用长度 384pt 小于两组并排所需的 441 + 16 = 457pt，改为每行一组。
+  testWidgets('工具栏每行两个分区块并带修饰键提示，三级托盘对齐唤起按钮，放不下时每行一块（#141、#67）', (
+    tester,
+  ) async {
+    // 作用：两块并排节省厚度；每块前有修饰键提示；录制目标等三级托盘紧跟父级所在行，首个按钮对齐唤起它的「录制」。
+    // 边界：默认 3 组时无修饰块与 ⌘ 块同行，工具栏无整体背景板，⌘ 块按钮右缘距工具栏右缘为块内边距 4；
+    // 两块按钮之间隔着 4（块内边距）＋8（块间距）＋4（块内边距）＋24（提示区）＋4（提示与按钮间距）＝44；
+    // ⌘ 块有「⌘」提示，「无」块提示区留空；⌥ 块在下一行；
+    // 截图（无修饰第 2 格）的子级托盘与录制目标托盘依次插在第一行与 ⌥ 块之间，录制目标首个按钮中心与「录制」中心同列；
+    // 视口宽 400pt 时横栏可用长度 384pt 小于两块并排所需的 504pt，改为每行一块。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-lines');
@@ -820,8 +826,30 @@ void main() {
     final group1 = rect('screenshot-grid-group-1');
     final group2 = rect('screenshot-grid-group-2');
     expect(group1.top, group0.top);
-    expect(group1.right, toolbar.right - 8);
-    expect(group1.left - group0.right, ToolbarGrid.groupSpan);
+    expect(group1.right, toolbar.right - ToolbarGrid.blockPadding);
+    expect(
+      group1.left - group0.right,
+      ToolbarGrid.blockPadding * 2 +
+          ToolbarGrid.blockGap +
+          ToolbarGrid.hintExtent +
+          4,
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('toolbar-hint-screenshot-grid-group-1')),
+          )
+          .data,
+      '⌘',
+    );
+    expect(
+      rect('toolbar-hint-screenshot-grid-group-1').right,
+      lessThan(group1.left),
+    );
+    expect(
+      find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
+      findsNothing,
+    );
     expect(group2.top, greaterThan(group0.top));
     expect(group2.left, group0.left);
     final children = rect('screenshot-children-group-0');
@@ -832,6 +860,10 @@ void main() {
     await tester.pumpAndSettle();
     final targets = rect('recording-targets-row');
     expect(targets.top, greaterThan(rect('screenshot-children-group-0').top));
+    expect(
+      targets.left + 16,
+      tester.getCenter(find.byKey(const Key(ScreenshotActions.record))).dx,
+    );
     expect(targets.top, lessThan(rect('screenshot-grid-group-2').top));
 
     tester.view.physicalSize = const Size(400, 600);
@@ -901,7 +933,7 @@ void main() {
 
   testWidgets('切换父级时，新子级组紧跟新父级所在行，旧子级组直接移除（#142）', (tester) async {
     // 作用：验证从「截图」直接切到「美化」时不保留收起中的「截图」子级，新子级不被挤到第三行。
-    // 边界：切换后首帧无 screenshot-closing-group-0，且「美化」子级组紧跟「美化」所在组行（间距 4pt）。
+    // 边界：切换后首帧无 screenshot-closing-group-0，且「美化」子级托盘紧跟「美化」所在分区块（块内边距 4＋行间距 4＋托盘内边距 2）。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-switch-parent');
@@ -967,7 +999,8 @@ void main() {
     expect(
       horizontal ? childrenRect.top : childrenRect.left,
       (horizontal ? parentGroupRect.bottom : parentGroupRect.right) +
-          4 +
+          ToolbarGrid.blockPadding +
+          ToolbarGrid.lineGap +
           ToolbarGrid.trayPadding,
     );
     await tester.pumpAndSettle();
@@ -1081,7 +1114,8 @@ void main() {
     expect(
       horizontal ? attrGroupRect.top : attrGroupRect.left,
       (horizontal ? rectGroupRect.bottom : rectGroupRect.right) +
-          4 +
+          ToolbarGrid.blockPadding +
+          ToolbarGrid.lineGap +
           ToolbarGrid.trayPadding,
     );
     await tester.pumpAndSettle();

@@ -389,25 +389,26 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   /// 返回工具栏的各行（竖放为各列，由 _buildToolbar 决定方向）（#141）：
   /// 每种修饰键组合一组 6 格；配置组按格位放置功能，隐藏与空格为 null（留出空位），没有可见功能的组不显示；
   /// 保存后的「在访达中显示」与忙碌沙漏为最后的状态组。当前父级的子级组与当前工具的属性组（各按 6 格分组，同样并排），
-  /// 以及美化参数、比例、录制目标、应用图标附加行，依次插在父级（或当前工具）所在行之后，挤开后续行。
+  /// 以及美化参数、比例、录制目标、应用图标等三级托盘（附加行），依次插在父级（或当前工具）所在行之后，挤开后续行；托盘位置由 _placeTrays 计算。
   /// 行内 groups 为各组（slots 为真表示配置组，按钮显示键位），strip 为附加行的键（见 _strips），两者只有一个非空。
   List<_ToolbarLine> _toolbarLines(
     Map<String, VoidCallback?> actions,
     int perLine,
   ) {
-    // pair 把组按每行 perLine 个切成行；indent 为这些行沿主轴的起点缩进。
-    List<_ToolbarLine> pair(List<_ToolbarCells> groups, {double indent = 0}) =>
-        [
-          for (var start = 0; start < groups.length; start += perLine)
-            (
-              groups: groups.sublist(
-                start,
-                math.min(start + perLine, groups.length),
-              ),
-              strip: null,
-              indent: indent,
-            ),
-        ];
+    // pair 把组按每行 perLine 个切成行；anchor 为托盘挂靠的按钮（分区行为 null），位置由 _placeTrays 计算。
+    List<_ToolbarLine> pair(List<_ToolbarCells> groups, {String? anchor}) => [
+      for (var start = 0; start < groups.length; start += perLine)
+        (
+          groups: groups.sublist(
+            start,
+            math.min(start + perLine, groups.length),
+          ),
+          strip: null,
+          anchor: anchor,
+          indent: 0.0,
+          caret: null,
+        ),
+    ];
     List<List<String>> chunk(List<String> ids) => [
       for (var start = 0; start < ids.length; start += ToolbarGrid.slots)
         ids.sublist(start, math.min(start + ToolbarGrid.slots, ids.length)),
@@ -469,23 +470,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ));
     }
     final lines = pair(groups);
-    // indentFor 返回托盘对齐锚点按钮时的起点缩进：锚点所在行内前面各组长度与分隔间隔，加锚点格位 × 36（#67）。
-    double indentFor(int? groupIndex, String? id) {
-      if (groupIndex == null || id == null) return 0;
-      final cell = groups[groupIndex].cells.indexOf(id);
-      if (cell < 0) return 0;
-      var indent = cell * 36.0;
-      for (
-        var index = groupIndex - groupIndex % perLine;
-        index < groupIndex;
-        index++
-      ) {
-        indent +=
-            _cellsLength(groups[index].cells.length) + ToolbarGrid.groupSpan;
-      }
-      return indent;
-    }
-
     // extra 记录插在第 i 行之前的行。
     final extra = <int, List<_ToolbarLine>>{};
     // 正在收起的子级组插在它原父级所在行之后，播完液态收起后移除（#142）。
@@ -506,93 +490,219 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               cells: <String?>[...cells],
               modifiers: null,
             ),
-        ], indent: indentFor(closingGroup, closing.parent)),
+        ], anchor: closing.parent),
       );
     }
     // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
     final after = anchorGroup == null
         ? lines.length
         : anchorGroup ~/ perLine + 1;
+    final strips = _strips();
     (extra[after] ??= []).addAll([
-      ...pair(inserted, indent: indentFor(anchorGroup, anchor)),
-      for (final key in _strips().keys)
-        (groups: const <_ToolbarCells>[], strip: key, indent: 0.0),
+      ...pair(inserted, anchor: anchor),
+      for (final MapEntry(:key, :value) in strips.entries)
+        (
+          groups: const <_ToolbarCells>[],
+          strip: key,
+          anchor: value.anchor,
+          indent: 0.0,
+          caret: null,
+        ),
     ]);
-    return [
+    // _placeTrays 按锚点按钮位置为各托盘计算缩进与三角位置。
+    return _placeTrays([
       for (var index = 0; index <= lines.length; index++) ...[
         ...?extra[index],
         if (index < lines.length) lines[index],
       ],
-    ];
+    ], strips);
   }
 
-  /// 无参数；返回当前展开的附加行（键到按钮数），顺序即插入顺序：
-  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 32pt 按钮加 4pt 间距折算格数。
-  Map<String, int> _strips() => {
+  /// lines 为按顺序排好、尚未定位的各行，strips 为当前三级托盘；返回定位后的各行（#67）：
+  /// 二级托盘首个按钮中心对齐锚点按钮中心；三级托盘同样对齐，但超出最长的分区行与二级托盘时向起点平移到恰好放下；
+  /// caret 均指向锚点按钮中心。锚点不在工具栏上时托盘从行首开始，三角指向首个按钮。
+  static List<_ToolbarLine> _placeTrays(
+    List<_ToolbarLine> lines,
+    Map<String, _Strip> strips,
+  ) {
+    // centers 记录已定位各行中按钮中心沿主轴的位置。
+    final centers = <String, double>{};
+    void record(_ToolbarLine line) {
+      if (line.strip != null) {
+        for (final MapEntry(:key, :value)
+            in strips[line.strip]!.hosts.entries) {
+          centers[key] =
+              line.indent + ToolbarGrid.trayPadding + value * 36 + 16;
+        }
+        return;
+      }
+      final tray = _isTray(line);
+      var start = tray ? line.indent + ToolbarGrid.trayPadding : 0.0;
+      for (final group in line.groups) {
+        final step = tray ? ToolbarGrid.trayButton + 4 : 36.0;
+        final head = tray ? 0.0 : ToolbarGrid.blockPadding + _hintRun(group);
+        // 按钮中心＝组起点＋提示区＋格位×步长＋半个按钮（步长含 4pt 间距，减去 2）。
+        for (final (slot, id) in group.cells.indexed) {
+          if (id == null) continue;
+          centers[id] = start + head + slot * step + step / 2 - 2;
+        }
+        start += tray
+            ? _trayRun(group.cells.length) +
+                  ToolbarGrid.traySeparatorGap * 2 +
+                  1
+            : _blockLength(group) + ToolbarGrid.blockGap;
+      }
+    }
+
+    // hang 返回挂到锚点下方的托盘：limit 为托盘末端不超出的长度（二级托盘不限制）。
+    _ToolbarLine hang(_ToolbarLine line, double limit) {
+      final first =
+          ToolbarGrid.trayPadding +
+          (line.strip != null ? 16 : ToolbarGrid.trayButton / 2);
+      final center = centers[line.anchor];
+      final bare = _lineLength(line, strips);
+      final indent = center == null
+          ? 0.0
+          : math.min(
+              math.max(0.0, center - first),
+              math.max(0.0, limit - bare),
+            );
+      return (
+        groups: line.groups,
+        strip: line.strip,
+        anchor: line.anchor,
+        indent: indent,
+        caret: center == null ? first : center - indent,
+      );
+    }
+
+    final placed = <_ToolbarLine>[];
+    for (final line in lines) {
+      final next = _isTray(line) ? hang(line, double.infinity) : line;
+      if (next.strip == null) record(next);
+      placed.add(next);
+    }
+    final widest = [
+      0.0,
+      for (final line in placed)
+        if (line.strip == null) _lineLength(line, strips),
+    ].reduce(math.max);
+    for (final (index, line) in placed.indexed) {
+      if (line.strip == null) continue;
+      placed[index] = hang(line, widest);
+      record(placed[index]);
+    }
+    return placed;
+  }
+
+  /// 无参数；返回当前展开的三级托盘（键到按钮数、唤起它的按钮与托盘内的下一级锚点），顺序即插入顺序：
+  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 32pt 按钮加 4pt 间距折算格数（#67）。
+  Map<String, _Strip> _strips() => {
     if (_beautifyExpanded)
-      'screenshot-beautify-row':
-          1 +
-          ((BeautifyMetrics.paddingMenuWidth + 4) / 36).ceil() +
-          ((BeautifyMetrics.radiusMenuWidth + 4) / 36).ceil(),
+      'screenshot-beautify-row': (
+        count:
+            1 +
+            ((BeautifyMetrics.paddingMenuWidth + 4) / 36).ceil() +
+            ((BeautifyMetrics.radiusMenuWidth + 4) / 36).ceil(),
+        anchor: ScreenshotActions.beautify,
+        hosts: const {},
+      ),
     if (_expandedRow == _ExpandedRow.ratio)
-      'ratio-row': CropMetrics.ratios.length,
-    // 录制目标行：三个目标、录制选项、开始与取消共 6 个按钮（#129）。
+      'ratio-row': (
+        count: CropMetrics.ratios.length,
+        anchor: ScreenshotActions.ratio,
+        hosts: const {},
+      ),
+    // 录制目标行：当前选区、窗口、全屏三个目标、录制选项、开始与取消共 6 个按钮，「窗口」唤起应用图标托盘（#129）。
     if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
-      'recording-targets-row': 6,
+      'recording-targets-row': (
+        count: 6,
+        anchor: _liveExpanded
+            ? ScreenshotActions.live
+            : ScreenshotActions.record,
+        hosts: const {'recording-target-application': 1},
+      ),
     if ((_recordingExpanded || _liveExpanded) &&
         _tool == ScreenshotTool.crop &&
         _recordingTarget == CaptureTarget.application)
-      'recording-applications-row': math.max(1, _recordingApplications.length),
+      'recording-applications-row': (
+        count: math.max(1, _recordingApplications.length),
+        anchor: 'recording-target-application',
+        hosts: const {},
+      ),
   };
 
-  /// count 为一组格数；返回主行一组沿主轴的长度：格数 × 32 与 4pt 间距。
+  /// count 为一组格数；返回分区块内一组按钮沿主轴的长度：格数 × 32 与 4pt 间距。
   static double _cellsLength(int count) =>
       count * 32.0 + math.max(0, count - 1) * 4;
 
-  /// line 为工具栏一行；返回它是否为子级或属性托盘（含正在收起的子级）。
+  /// count 为一组格数；返回二级托盘内一组按钮沿主轴的长度：格数 × 28 与 4pt 间距。
+  static double _trayRun(int count) =>
+      count * ToolbarGrid.trayButton + math.max(0, count - 1) * 4;
+
+  /// group 为分区行的一组；返回块内修饰键提示区加间距的长度，状态组没有提示区为 0（#67）。
+  static double _hintRun(_ToolbarCells group) =>
+      group.modifiers == null ? 0 : ToolbarGrid.hintExtent + 4;
+
+  /// group 为分区行的一组；返回该分区块沿主轴的长度：两侧内边距、提示区与按钮（#67）。
+  static double _blockLength(_ToolbarCells group) =>
+      ToolbarGrid.blockPadding * 2 +
+      _hintRun(group) +
+      _cellsLength(group.cells.length);
+
+  /// line 为工具栏一行；返回它是否为二级托盘（子级、属性或正在收起的子级）。
   static bool _isTray(_ToolbarLine line) =>
       line.groups.isNotEmpty &&
       line.groups.first.modifiers == null &&
       line.groups.first.key != 'screenshot-status-group';
 
-  /// actions 为当前可用动作，perLine 为每行并排的组数；返回供 _EditorSurface 计算工具栏尺寸的各行长度（pt）：
-  /// lengths 为各行沿主轴的长度，grouped 为组行中最长的一行（附加行可滚动，不计入）。
-  /// 主行组长为格数×32 与 4pt 间距，同行两组之间为分隔间隔 17；托盘为缩进加内边距、28pt 按钮与组间短分隔线；
-  /// 附加行按其按钮数计算（#67）。
-  ({List<double> lengths, double grouped}) _lineLengths(
+  /// line 为工具栏一行，strips 为当前三级托盘；返回该行沿主轴的长度（含缩进）（#67）：
+  /// 分区行为各块长度加块间距 8；二级托盘为内边距、28pt 按钮与组间短分隔；三级托盘为内边距与 32pt 按钮。
+  static double _lineLength(_ToolbarLine line, Map<String, _Strip> strips) {
+    if (line.strip != null) {
+      return line.indent +
+          ToolbarGrid.trayPadding * 2 +
+          _cellsLength(strips[line.strip]!.count);
+    }
+    if (_isTray(line)) {
+      return line.indent +
+          ToolbarGrid.trayPadding * 2 +
+          line.groups.fold(
+            0.0,
+            (sum, group) => sum + _trayRun(group.cells.length),
+          ) +
+          (line.groups.length - 1) * (ToolbarGrid.traySeparatorGap * 2 + 1);
+    }
+    return line.groups.fold(0.0, (sum, group) => sum + _blockLength(group)) +
+        (line.groups.length - 1) * ToolbarGrid.blockGap;
+  }
+
+  /// line 为工具栏一行；返回它沿交叉方向的厚度：分区行 40、二级托盘 32、三级托盘 36（#67）。
+  static double _lineThickness(_ToolbarLine line) => line.strip != null
+      ? ToolbarGrid.stripThickness
+      : _isTray(line)
+      ? ToolbarGrid.trayThickness
+      : ToolbarGrid.blockThickness;
+
+  /// actions 为当前可用动作，perLine 为每行并排的分区块数；返回供 _EditorSurface 计算工具栏尺寸的数值（pt）：
+  /// lengths 为各行沿主轴的长度，grouped 为分区行与二级托盘中最长的一行（三级托盘可滚动，不计入），
+  /// thickness 为各行厚度之和加行间距（#67）。
+  ({List<double> lengths, double grouped, double thickness}) _lineLengths(
     Map<String, VoidCallback?> actions,
     int perLine,
   ) {
-    double run(int count) => _cellsLength(count);
-    double trayRun(int count) =>
-        count * ToolbarGrid.trayButton + math.max(0, count - 1) * 4;
     final strips = _strips();
     final lines = _toolbarLines(actions, perLine);
-    double length(_ToolbarLine line) {
-      if (line.strip != null) return run(strips[line.strip]!);
-      if (_isTray(line)) {
-        return line.indent +
-            ToolbarGrid.trayPadding * 2 +
-            line.groups.fold(
-              0.0,
-              (sum, group) => sum + trayRun(group.cells.length),
-            ) +
-            (line.groups.length - 1) * (ToolbarGrid.traySeparatorGap * 2 + 1);
-      }
-      return line.groups.fold(
-            0.0,
-            (sum, group) => sum + run(group.cells.length),
-          ) +
-          (line.groups.length - 1) * ToolbarGrid.groupSpan;
-    }
-
     return (
-      lengths: [for (final line in lines) length(line)],
+      lengths: [for (final line in lines) _lineLength(line, strips)],
       grouped: [
         0.0,
         for (final line in lines)
-          if (line.strip == null) length(line),
+          if (line.strip == null) _lineLength(line, strips),
       ].reduce(math.max),
+      thickness:
+          lines.fold(0.0, (sum, line) => sum + _lineThickness(line)) +
+          math.max(0, lines.length - 1) * ToolbarGrid.lineGap,
     );
   }
 
@@ -3387,6 +3497,41 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
+    // 工具栏没有整体背景板：分区块与托盘各自为实底块，分区块浅 #FBFBFC / 深 #2A2A2D，
+    // 托盘浅 #ECECED / 深 #1D1D1F，均带 0.5pt 描边与 0 4 12 / 20% 黑阴影（#67）。
+    final blockColor = dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC);
+    final trayColor = dark ? const Color(0xFF1D1D1F) : const Color(0xFFECECED);
+
+    /// color 为实底色，radius 为圆角；返回分区块与托盘共用的实底装饰。
+    ShapeDecoration panel(Color color, double radius) => ShapeDecoration(
+      color: color,
+      shape: RoundedSuperellipseBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.14),
+          width: 0.5,
+        ),
+      ),
+      shadows: const [
+        BoxShadow(
+          color: Color(0x33000000),
+          blurRadius: 12,
+          offset: Offset(0, 4),
+        ),
+      ],
+    );
+
+    /// child 为块内内容；返回分区块：实底、圆角 12、内边距 4（#67）。
+    Widget block(Widget child) => DecoratedBox(
+      decoration: panel(blockColor, ToolbarGrid.blockRadius),
+      child: Padding(
+        padding: const EdgeInsets.all(ToolbarGrid.blockPadding),
+        child: child,
+      ),
+    );
+
     /// group 为一组格，compact 为托盘内 28pt 尺寸；返回沿工具栏方向排列的格子：
     /// 配置组按住对应修饰键时凸起并显示键位（未按修饰键时「无」组凸起），按住其他组合时降到 40%；
     /// 插入的子级与属性组由 LiquidSplit 从锚点按钮液态展开（#67、#142）。
@@ -3452,18 +3597,49 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         spacing: 4,
         children: cells,
       );
+      // 末尾状态组为无提示区的分区块，带弹簧入场。
       if (group.modifiers == null) {
         return BouncyPresence(
           key: ValueKey('presence-${group.key}'),
           fromScale: 0.90,
-          child: row,
+          child: block(row),
         );
       }
-      // 按住某个修饰键组合时，其余分区（含「无」）降到 40%。
-      return AnimatedOpacity(
-        opacity: _heldModifiers != 0 && !raised ? 0.4 : 1,
-        duration: reduced ? Duration.zero : GlassMetrics.transition,
-        child: row,
+      // 分区块先放修饰键提示（沿主轴 24pt、11pt w600 次要色，放不下时等比缩小），「无」分区留空保持对齐（#67）。
+      final label = ToolbarModifiers.label(group.modifiers!);
+      final hint = SizedBox(
+        width: axis == Axis.horizontal ? ToolbarGrid.hintExtent : 32,
+        height: axis == Axis.horizontal ? 32 : ToolbarGrid.hintExtent,
+        child: label.isEmpty
+            ? null
+            : Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    key: Key('toolbar-hint-${group.key}'),
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: ToolbarGrid.hintFont,
+                      fontWeight: FontWeight.w600,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+      );
+      // 按住某个修饰键组合时，其余分区块（含「无」）的提示与按钮降到 40%，块底保持不变。
+      return block(
+        AnimatedOpacity(
+          opacity: _heldModifiers != 0 && !raised ? 0.4 : 1,
+          duration: reduced ? Duration.zero : GlassMetrics.transition,
+          child: Flex(
+            direction: axis,
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [hint, row],
+          ),
+        ),
       );
     }
 
@@ -3501,21 +3677,24 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    /// key 为行身份、children 为按钮、anchorId 为触发该附加行的锚点按钮标识；
-    /// 全部工具栏附加行均复用可滚动的 LiquidSplit 液态展开组件（#67 第 10 条、#142）。
-    Widget captureRow(
-      String key,
-      List<Widget> children, {
-      required String anchorId,
-    }) => LiquidSplit(
-      key: ValueKey('liquid-strip-$anchorId-$key'),
-      flexKey: Key(key),
-      axis: axis,
-      scrollable: true,
-      items: children,
-      anchor: _buttonKeys.putIfAbsent(anchorId, GlobalKey.new),
-      color: NativeGlassTheme.accentOf(context),
-    );
+    // stripSpecs 为当前三级托盘，与 _toolbarLines 同源，唤起按钮从这里取。
+    final stripSpecs = _strips();
+
+    /// key 为三级托盘身份、children 为按钮；返回从唤起按钮液态展开的可滚动按钮行，
+    /// 全部三级托盘均复用 LiquidSplit 液态展开组件（#67 第 10 条、#142）。
+    Widget captureRow(String key, List<Widget> children) {
+      final anchorId = stripSpecs[key]!.anchor;
+      return LiquidSplit(
+        key: ValueKey('liquid-strip-$anchorId-$key'),
+        flexKey: Key(key),
+        axis: axis,
+        scrollable: true,
+        items: children,
+        anchor: _buttonKeys.putIfAbsent(anchorId, GlobalKey.new),
+        color: NativeGlassTheme.accentOf(context),
+      );
+    }
+
     final beautify = _beautify;
     // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
     final beautifyControls = <Widget>[
@@ -3577,13 +3756,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
       ],
     ];
-    // 附加行按键取用，键与条件和 _strips 一致，位置由 _toolbarLines 决定。
+    // 三级托盘（附加行）内容按键取用，键与条件和 _strips 一致，位置由 _toolbarLines 与 _placeTrays 决定。
     final strips = <String, Widget>{
       if (beautifyControls.isNotEmpty)
         'screenshot-beautify-row': captureRow(
           'screenshot-beautify-row',
           beautifyControls,
-          anchorId: ScreenshotActions.beautify,
         ),
       // 比例行：自由与固定宽高比，锁定后框选与调整保持比例（#106）。
       if (_expandedRow == _ExpandedRow.ratio)
@@ -3598,105 +3776,96 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               () => _chooseRatio(preset.ratio),
               selected: _cropRatio == preset.ratio,
             ),
-        ], anchorId: ScreenshotActions.ratio),
+        ]),
       if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
-        'recording-targets-row': captureRow(
-          'recording-targets-row',
-          [
-            for (final target in const {
-              CaptureTarget.region: ('当前选区', Icons.crop),
-              CaptureTarget.application: ('窗口', Icons.apps),
-              CaptureTarget.display: ('全屏', Icons.desktop_mac),
-            }.entries)
-              (() {
-                final button = captureButton(
-                  target.value.$1,
-                  Icon(target.value.$2, size: 16),
-                  () => _selectRecordingTarget(target.key),
-                  selected: _recordingTarget == target.key,
-                );
-                // 窗口目标按钮同时作为应用列表行的液态展开锚点。
-                return target.key == CaptureTarget.application
-                    ? KeyedSubtree(
-                        key: _buttonKeys.putIfAbsent(
-                          'recording-target-application',
-                          GlobalKey.new,
+        'recording-targets-row': captureRow('recording-targets-row', [
+          for (final target in const {
+            CaptureTarget.region: ('当前选区', Icons.crop),
+            CaptureTarget.application: ('窗口', Icons.apps),
+            CaptureTarget.display: ('全屏', Icons.desktop_mac),
+          }.entries)
+            (() {
+              final button = captureButton(
+                target.value.$1,
+                Icon(target.value.$2, size: 16),
+                () => _selectRecordingTarget(target.key),
+                selected: _recordingTarget == target.key,
+              );
+              // 窗口目标按钮同时作为应用列表行的液态展开锚点。
+              return target.key == CaptureTarget.application
+                  ? KeyedSubtree(
+                      key: _buttonKeys.putIfAbsent(
+                        'recording-target-application',
+                        GlobalKey.new,
+                      ),
+                      child: button,
+                    )
+                  : button;
+            })(),
+          if (!_liveExpanded)
+            // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
+            MenuAnchor(
+              style: NativeGlassMenuPanel.anchorStyle,
+              menuChildren: [
+                NativeGlassMenuPanel(
+                  children: [
+                    for (final delay in RecordingOptions.delays)
+                      NativeGlassMenuItem(
+                        label: delay == 0 ? '不延时' : '延时 $delay 秒',
+                        checked: delay == _recordingDelay,
+                        onPressed: () => _saveRecordingOptions(
+                          delay: delay,
+                          clickEffect: _recordingClickEffect,
                         ),
-                        child: button,
-                      )
-                    : button;
-              })(),
-            if (!_liveExpanded)
-              // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
-              MenuAnchor(
-                style: NativeGlassMenuPanel.anchorStyle,
-                menuChildren: [
-                  NativeGlassMenuPanel(
-                    children: [
-                      for (final delay in RecordingOptions.delays)
-                        NativeGlassMenuItem(
-                          label: delay == 0 ? '不延时' : '延时 $delay 秒',
-                          checked: delay == _recordingDelay,
-                          onPressed: () => _saveRecordingOptions(
-                            delay: delay,
-                            clickEffect: _recordingClickEffect,
-                          ),
-                        ),
-                      const Divider(height: 9, thickness: 1),
-                      for (final effect in RecordingClickEffect.values)
-                        NativeGlassMenuItem(
-                          label: effect == RecordingClickEffect.off
-                              ? '点击特效：关闭'
-                              : effect.label,
-                          checked: effect == _recordingClickEffect,
-                          // 应用录制不含指针，不显示点击特效。
-                          onPressed:
-                              _recordingTarget == CaptureTarget.application
-                              ? null
-                              : () => _saveRecordingOptions(
-                                  delay: _recordingDelay,
-                                  clickEffect: effect,
-                                ),
-                        ),
-                    ],
-                  ),
-                ],
-                builder: (context, controller, _) => captureButton(
-                  _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
-                  const Icon(Icons.tune, size: 16),
-                  () => controller.isOpen
-                      ? controller.close()
-                      : controller.open(),
-                  selected:
-                      _recordingDelay != 0 ||
-                      _recordingClickEffect != RecordingClickEffect.off,
+                      ),
+                    const Divider(height: 9, thickness: 1),
+                    for (final effect in RecordingClickEffect.values)
+                      NativeGlassMenuItem(
+                        label: effect == RecordingClickEffect.off
+                            ? '点击特效：关闭'
+                            : effect.label,
+                        checked: effect == _recordingClickEffect,
+                        // 应用录制不含指针，不显示点击特效。
+                        onPressed: _recordingTarget == CaptureTarget.application
+                            ? null
+                            : () => _saveRecordingOptions(
+                                delay: _recordingDelay,
+                                clickEffect: effect,
+                              ),
+                      ),
+                  ],
                 ),
+              ],
+              builder: (context, controller, _) => captureButton(
+                _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
+                const Icon(Icons.tune, size: 16),
+                () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+                selected:
+                    _recordingDelay != 0 ||
+                    _recordingClickEffect != RecordingClickEffect.off,
               ),
-            captureButton(
-              _liveExpanded ? '开始实时翻译' : '开始录制',
-              const Icon(Icons.fiber_manual_record, size: 16),
-              _loadingApplications ||
-                      (_recordingTarget == CaptureTarget.application &&
-                          _recordingApplication == null)
-                  ? null
-                  : () =>
-                        _prepareCapture(_recordingTarget, live: _liveExpanded),
             ),
-            captureButton(
-              _liveExpanded ? '取消实时翻译' : '取消录制',
-              const Icon(Icons.close, size: 16),
-              () => setState(() {
-                _expandedRow = null;
-                unawaited(_syncRecordingPreview());
-                unawaited(_syncLivePreview());
-                _recordingApplication = null;
-              }),
-            ),
-          ],
-          anchorId: _liveExpanded
-              ? ScreenshotActions.live
-              : ScreenshotActions.record,
-        ),
+          captureButton(
+            _liveExpanded ? '开始实时翻译' : '开始录制',
+            const Icon(Icons.fiber_manual_record, size: 16),
+            _loadingApplications ||
+                    (_recordingTarget == CaptureTarget.application &&
+                        _recordingApplication == null)
+                ? null
+                : () => _prepareCapture(_recordingTarget, live: _liveExpanded),
+          ),
+          captureButton(
+            _liveExpanded ? '取消实时翻译' : '取消录制',
+            const Icon(Icons.close, size: 16),
+            () => setState(() {
+              _expandedRow = null;
+              unawaited(_syncRecordingPreview());
+              unawaited(_syncLivePreview());
+              _recordingApplication = null;
+            }),
+          ),
+        ]),
       if ((_recordingExpanded || _liveExpanded) &&
           _tool == ScreenshotTool.crop &&
           _recordingTarget == CaptureTarget.application)
@@ -3727,72 +3896,53 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   _recordingApplication?['applicationID'] ==
                   app['applicationID'],
             ),
-        ], anchorId: 'recording-target-application'),
+        ]),
     };
     final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
-    // separator 返回沿交叉方向的分隔线：主行组间 1pt×20、两侧各 8；托盘内组间 1pt×16、两侧各 4（#67）。
-    Widget separator({required bool tray}) {
-      final length = tray
-          ? ToolbarGrid.traySeparatorLength
-          : ToolbarGrid.groupDividerLength;
-      final gap = tray
-          ? ToolbarGrid.traySeparatorGap
-          : ToolbarGrid.groupDividerGap;
-      return Padding(
-        padding: axis == Axis.horizontal
-            ? EdgeInsets.symmetric(horizontal: gap)
-            : EdgeInsets.symmetric(vertical: gap),
-        child: Center(
-          child: SizedBox(
-            width: axis == Axis.horizontal ? 1 : length,
-            height: axis == Axis.horizontal ? length : 1,
-            child: ColoredBox(color: line),
-          ),
+    // separator 返回二级托盘内组间的分隔线：沿交叉方向 1pt×16、两侧各 4（#67）。
+    Widget separator() => Padding(
+      padding: axis == Axis.horizontal
+          ? const EdgeInsets.symmetric(horizontal: ToolbarGrid.traySeparatorGap)
+          : const EdgeInsets.symmetric(vertical: ToolbarGrid.traySeparatorGap),
+      child: Center(
+        child: SizedBox(
+          width: axis == Axis.horizontal ? 1 : ToolbarGrid.traySeparatorLength,
+          height: axis == Axis.horizontal ? ToolbarGrid.traySeparatorLength : 1,
+          child: ColoredBox(color: line),
         ),
-      );
-    }
+      ),
+    );
 
-    // tray 把子级与属性组放进锚点按钮下方的凹槽托盘：起点缩进对齐锚点，底色浅 6% 黑 / 深 30% 黑并带内阴影，
-    // 顶部（竖放为左侧）4pt 三角指向锚点按钮中心（#67）。
-    final trayColor = dark ? const Color(0x4D000000) : const Color(0x0F000000);
+    // tray 返回挂在锚点按钮下方（竖放为右侧）的托盘：二级托盘装子级与属性组（28pt 按钮、r9），
+    // 三级托盘装附加行（32pt 按钮、r10、内容超出时托盘内滚动）；起点缩进与三角位置由 _placeTrays 计算，
+    // 顶部（竖放为左侧）4pt 高、12pt 宽、同托盘底色的三角指向锚点按钮中心（#67）。
     Widget tray(_ToolbarLine row) {
+      final strip = row.strip != null;
       final children = <Widget>[];
       for (final (index, group) in row.groups.indexed) {
-        if (index > 0) children.add(separator(tray: true));
+        if (index > 0) children.add(separator());
         children.add(groupOf(group, compact: true));
       }
       final body = DecoratedBox(
-        decoration: ShapeDecoration(
-          color: trayColor,
-          shape: RoundedSuperellipseBorder(
-            borderRadius: BorderRadius.circular(ToolbarGrid.trayRadius),
-          ),
-          shadows: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 2,
-              offset: Offset(0, 1),
-              blurStyle: BlurStyle.inner,
-            ),
-          ],
+        decoration: panel(
+          trayColor,
+          strip ? ToolbarGrid.stripRadius : ToolbarGrid.trayRadius,
         ),
         child: Padding(
           padding: const EdgeInsets.all(ToolbarGrid.trayPadding),
-          child: Flex(
-            direction: axis,
-            mainAxisSize: MainAxisSize.min,
-            children: children,
-          ),
+          child: strip
+              ? strips[row.strip]!
+              : Flex(
+                  direction: axis,
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
         ),
       );
-      // 三角中心对齐锚点格中心：托盘起点即锚点格起点，锚点格中心在 16pt 处。
-      final caret = Positioned(
-        left: axis == Axis.horizontal
-            ? 16 - ToolbarGrid.trayCaretWidth / 2
-            : -ToolbarGrid.trayCaretHeight,
-        top: axis == Axis.horizontal
-            ? -ToolbarGrid.trayCaretHeight
-            : 16 - ToolbarGrid.trayCaretWidth / 2,
+      final caret = row.caret! - ToolbarGrid.trayCaretWidth / 2;
+      final pointer = Positioned(
+        left: axis == Axis.horizontal ? caret : -ToolbarGrid.trayCaretHeight,
+        top: axis == Axis.horizontal ? -ToolbarGrid.trayCaretHeight : caret,
         child: CustomPaint(
           size: axis == Axis.horizontal
               ? const Size(
@@ -3806,68 +3956,44 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           painter: _TrayCaretPainter(color: trayColor, axis: axis),
         ),
       );
-      return Padding(
-        padding: axis == Axis.horizontal
-            ? EdgeInsets.only(left: row.indent)
-            : EdgeInsets.only(top: row.indent),
-        child: Stack(clipBehavior: Clip.none, children: [body, caret]),
+      // 三级托盘可能比剩余长度长，用 Flexible 限制在工具栏内，由内部 LiquidSplit 滚动。
+      return Flex(
+        direction: axis,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: axis == Axis.horizontal ? row.indent : null,
+            height: axis == Axis.horizontal ? null : row.indent,
+          ),
+          Flexible(
+            child: Stack(clipBehavior: Clip.none, children: [body, pointer]),
+          ),
+        ],
       );
     }
 
-    // 各行沿交叉方向依次排列：主行组间以分隔线隔开、从起点排列；子级与属性为托盘；附加行原样（#67、#141）。
-    final groups = Flex(
+    // 工具栏没有整体背景板：各行沿交叉方向依次排列、行间距 4，分区行为并排的分区块（块间距 8），
+    // 托盘按 _placeTrays 的缩进挂在锚点下方；各行厚度见 _lineThickness（#67、#141）。
+    return Flex(
+      key: const Key('screenshot-toolbar'),
       direction: cross,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 4,
+      spacing: ToolbarGrid.lineGap,
       children: [
         for (final row in _toolbarLines(actions, perLine))
           SizedBox(
-            width: axis == Axis.vertical ? 32 : null,
-            height: axis == Axis.horizontal ? 32 : null,
-            child: row.strip != null
-                ? strips[row.strip]!
-                : _isTray(row)
-                ? Flex(
-                    direction: axis,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [tray(row)],
-                  )
+            width: axis == Axis.vertical ? _lineThickness(row) : null,
+            height: axis == Axis.horizontal ? _lineThickness(row) : null,
+            child: row.strip != null || _isTray(row)
+                ? tray(row)
                 : Flex(
                     direction: axis,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final (index, group) in row.groups.indexed) ...[
-                        if (index > 0) separator(tray: false),
-                        groupOf(group),
-                      ],
-                    ],
+                    spacing: ToolbarGrid.blockGap,
+                    children: [for (final group in row.groups) groupOf(group)],
                   ),
           ),
       ],
-    );
-    // 工具栏为实底面板（不用液态玻璃）：浅 #FBFBFC / 深 #2A2A2D、r16、0.5pt 描边、0 10 28 阴影（#67）。
-    return DecoratedBox(
-      key: const Key('screenshot-toolbar'),
-      decoration: ShapeDecoration(
-        color: dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC),
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.14),
-            width: 0.5,
-          ),
-        ),
-        shadows: const [
-          BoxShadow(
-            color: Color(0x38000000),
-            blurRadius: 28,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Padding(padding: const EdgeInsets.all(8), child: groups),
     );
   }
 }
@@ -3924,9 +4050,13 @@ class _EditorSurface extends StatefulWidget {
   final Rect? toolbarSafeArea;
   final Size? displaySize;
 
-  /// perLine 为每行并排的组数；返回工具栏各行（竖放为各列）沿主轴的长度（pt，含插入的子级、属性、状态组与附加行，
-  /// 空表示没有可见按钮）与最长组行的长度，用于决定工具栏尺寸与是否改为每行一组（#141）。
-  final ({List<double> lengths, double grouped}) Function(int perLine) lines;
+  /// perLine 为每行并排的分区块数；返回工具栏各行（竖放为各列）沿主轴的长度（pt，含二级与三级托盘及状态组，
+  /// 空表示没有可见按钮）、分区行与二级托盘中最长一行的长度，以及各行厚度之和加行间距，
+  /// 用于决定工具栏尺寸与是否改为每行一块（#67、#141）。
+  final ({List<double> lengths, double grouped, double thickness}) Function(
+    int perLine,
+  )
+  lines;
 
   /// 本次截图的美化参数；非 null 时在选区外预览背景与阴影。
   final BeautifyStyle? beautify;
@@ -4019,45 +4149,46 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   resultSize.height,
                 );
           // 只按已提交选区定位；拖动过程中保持同一个图片坐标系。
-          // 工具栏长度取最长一行加两侧 8pt 内边距，至少容纳一个按钮；厚度为行数（#141）。
-          // placeFor 按各行长度与行数计算图片与工具栏位置。
-          ScreenshotEditorLayout placeFor(List<double> lengths) =>
-              ScreenshotEditorLayout.place(
-                viewport: constraints.biggest,
-                imageRect: resultRect,
-                available:
-                    widget.toolbarSafeArea == null || widget.displaySize == null
-                    ? null
-                    : Rect.fromLTRB(
-                        widget.toolbarSafeArea!.left *
-                            constraints.maxWidth /
-                            widget.displaySize!.width,
-                        widget.toolbarSafeArea!.top *
-                            constraints.maxHeight /
-                            widget.displaySize!.height,
-                        widget.toolbarSafeArea!.right *
-                            constraints.maxWidth /
-                            widget.displaySize!.width,
-                        widget.toolbarSafeArea!.bottom *
-                            constraints.maxHeight /
-                            widget.displaySize!.height,
-                      ),
-                image: imageSize,
-                crop: widget.document.cropRect,
-                toolbarLength: 16 + [...lengths, 32.0].reduce(math.max),
-                rowCount: math.max(1, lengths.length),
-              );
+          // 工具栏没有整体背景板：长度取最长一行，至少容纳一个按钮；厚度为各行厚度之和加行间距（#67、#141）。
+          // placeFor 按各行长度与总厚度计算图片与工具栏位置。
+          ScreenshotEditorLayout placeFor(
+            ({List<double> lengths, double grouped, double thickness}) lines,
+          ) => ScreenshotEditorLayout.place(
+            viewport: constraints.biggest,
+            imageRect: resultRect,
+            available:
+                widget.toolbarSafeArea == null || widget.displaySize == null
+                ? null
+                : Rect.fromLTRB(
+                    widget.toolbarSafeArea!.left *
+                        constraints.maxWidth /
+                        widget.displaySize!.width,
+                    widget.toolbarSafeArea!.top *
+                        constraints.maxHeight /
+                        widget.displaySize!.height,
+                    widget.toolbarSafeArea!.right *
+                        constraints.maxWidth /
+                        widget.displaySize!.width,
+                    widget.toolbarSafeArea!.bottom *
+                        constraints.maxHeight /
+                        widget.displaySize!.height,
+                  ),
+            image: imageSize,
+            crop: widget.document.cropRect,
+            toolbarLength: [...lines.lengths, 32.0].reduce(math.max),
+            thickness: math.max(lines.thickness, ToolbarGrid.blockThickness),
+          );
           var perLine = ToolbarGrid.groupsPerLine;
           var lines = widget.lines(perLine);
-          var layout = placeFor(lines.lengths);
+          var layout = placeFor(lines);
           // 可用长度放不下两组并排时改为每行一组重新布局（#141）。
           final length = layout.axis == Axis.horizontal
               ? layout.toolbar.width
               : layout.toolbar.height;
-          if (length < 16 + lines.grouped) {
+          if (length < lines.grouped) {
             perLine = 1;
             lines = widget.lines(perLine);
-            layout = placeFor(lines.lengths);
+            layout = placeFor(lines);
           }
           // 工具栏已提升至根 Stack，同步最新工具栏矩形供反馈气泡锚定（#144）。
           final toolbarRect = layout.toolbar;
@@ -4832,12 +4963,19 @@ class _OverlayPainter extends CustomPainter {
 typedef _ToolbarCells = ({String key, List<String?> cells, int? modifiers});
 
 /// 截图工具栏的一行（竖放为一列）：groups 为并排的组，strip 为附加行的键，两者只有一个非空；
-/// indent 为沿主轴的起点缩进，子级与属性托盘用它对齐锚点按钮，其余行为 0（#141、#67）。
+/// anchor 为托盘挂靠的按钮标识（分区行为 null）；indent 为沿主轴的起点缩进，托盘用它对齐锚点按钮，分区行为 0；
+/// caret 为托盘三角中心距托盘起点的距离，分区行为 null（#141、#67）。
 typedef _ToolbarLine = ({
   List<_ToolbarCells> groups,
   String? strip,
+  String? anchor,
   double indent,
+  double? caret,
 });
+
+/// 截图工具栏的一条三级托盘（附加行）：count 为按钮数，anchor 为唤起它的按钮标识，
+/// hosts 为托盘内还会唤起下一级托盘的按钮标识到其格位（从 0 起）（#67）。
+typedef _Strip = ({int count, String anchor, Map<String, int> hosts});
 
 /// 一块截图译文浮层；text 为段落译文，rect 为该段在源图中的像素矩形（#138）。
 class _OcrOverlay {

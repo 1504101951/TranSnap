@@ -1,4 +1,4 @@
-import '../common/constants/glass_metrics.dart';
+import '../common/constants/toolbar_grid.dart';
 
 import 'dart:math' as math;
 
@@ -23,24 +23,20 @@ class ScreenshotEditorLayout {
   static double _safeClamp(double value, double lo, double hi) =>
       value.clamp(lo, math.max(lo, hi)).toDouble();
 
-  /// viewport为窗口尺寸，image为源像素尺寸，crop为源图选区，rowCount为实际行数，available为显示器可用局部点坐标，imageRect为等比图片在视口中的矩形；
+  /// viewport为窗口尺寸，image为源像素尺寸，crop为源图选区，toolbarLength为工具栏沿主轴的长度，
+  /// thickness为工具栏各行厚度之和加行间距（默认单个分区行），available为显示器可用局部点坐标，imageRect为等比图片在视口中的矩形；
   /// 返回完整位于窗口内的工具栏；优先选区外侧，空间不足时贴选区内缘。
   factory ScreenshotEditorLayout.place({
     required Size viewport,
     required Size image,
     required Rect crop,
     double toolbarLength = 640,
-    int rowCount = 1,
+    double thickness = ToolbarGrid.blockThickness,
     Rect? available,
     Rect? imageRect,
   }) {
     const margin = 8.0;
     const gap = 8.0;
-    // rowCount包含工具、属性、录制目标和应用行；每行32pt、间距4pt、两侧padding8pt。
-    final thickness =
-        GlassMetrics.toolbarPadding * 2 +
-        rowCount * GlassMetrics.hitSize +
-        (rowCount - 1) * 4;
     final viewportRect = Offset.zero & viewport;
     final canvas = imageRect ?? viewportRect;
     final safe = available?.intersect(viewportRect) ?? viewportRect;

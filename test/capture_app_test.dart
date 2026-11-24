@@ -597,7 +597,8 @@ void main() {
       await tester.pumpAndSettle();
       // 默认网格中截图在裸数字第 2 格，提示为「名称 + 键位」（#141）。
       expect(find.byTooltip('截图 2'), findsOneWidget);
-      // 截图的子级组紧跟截图所在的第 1 组，挤开后续组：横放时在下一行，竖放时在右一列（#141）。
+      // 截图的子级托盘紧跟截图所在的第 1 组，挤开后续组：横放时在下一行，竖放时在右一列；
+      // 托盘内按钮距分区块按钮为块内边距 4＋行间距 4＋托盘内边距 2（#141、#67）。
       final children = find.byKey(const Key('screenshot-children-group-0'));
       expect(
         find.descendant(of: children, matching: find.byTooltip('录制')),
@@ -613,7 +614,8 @@ void main() {
         (horizontal
                 ? tester.getRect(first).bottom
                 : tester.getRect(first).right) +
-            4 +
+            ToolbarGrid.blockPadding +
+            ToolbarGrid.lineGap +
             ToolbarGrid.trayPadding,
       );
       if (scrolling) {
