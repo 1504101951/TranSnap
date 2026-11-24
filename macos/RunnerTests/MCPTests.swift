@@ -74,14 +74,14 @@ final class MCPTests: XCTestCase {
         await exchangeOutput(lines, count: count).all
     }
 
-    /// 作用：同 exchange，返回收集器以便读取原始行。参数 lines、count：同 exchange；control：helper 读到的操控开关。
+    /// 作用：同 exchange，返回收集器以便读取原始行。参数 lines、count：同 exchange。
     /// 返回：输出收集器。
-    private func exchangeOutput(_ lines: [String], count: Int, control: Bool = false) async -> Output {
+    private func exchangeOutput(_ lines: [String], count: Int) async -> Output {
         let output = Output()
         let done = expectation(description: "收到 \(count) 条输出")
         output.expectation = done
         output.expectedCount = count
-        let session = MCPHelperSession(socketPath: socketPath, version: "test", controlEnabled: { control }) { output.append($0) }
+        let session = MCPHelperSession(socketPath: socketPath, version: "test") { output.append($0) }
         lines.forEach { session.receive(Data($0.utf8)) }
         await fulfillment(of: [done], timeout: 10)
         return output
@@ -163,13 +163,15 @@ final class MCPTests: XCTestCase {
     }
 
 
-    /// tools/list 声明五个工具与英文说明；截图工具参数按声明顺序输出，output 默认 image，约束由 schema 关键字表达。
-    /// 边界依据：#96 决策 6 与「工具」参数表。
+    /// 作用：tools/list 按声明顺序给出全部工具与英文说明；截图工具参数按声明顺序输出。
+    /// 边界依据：名称顺序等于 MCPTool.allCases；capture_rect 的 required 为五个坐标参数，output 默认 image。
     func testToolsListDeclaresOrderedEnglishSchemas() async throws {
         let output = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1)
         let tools = (output.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]
-        XCTAssertEqual(tools.map { $0["name"] as? String },
-                       ["list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window"])
+        XCTAssertEqual(tools.map { $0["name"] as? String }, [
+            "list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window",
+            "snapshot", "find", "click", "type_text", "press_key", "scroll", "drag",
+        ])
         let byName = Dictionary(uniqueKeysWithValues: tools.map { ($0["name"] as! String, $0) })
         XCTAssertTrue((byName["list_displays"]!["description"] as! String).contains("Use when you need screen information"))
         XCTAssertTrue((byName["list_windows"]!["description"] as! String).contains("Use when you need screen information"))
@@ -193,25 +195,31 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(positions, positions.sorted())
     }
 
-    /// 作用：「允许操控电脑」决定 tools/list 是否列出无障碍工具，App 执行前再校验（#140）。
-    /// 边界依据：开关关闭时只有五个截图工具；开启后 snapshot、find 依声明顺序排在其后；关闭时直接调用也不执行。
+    /// 作用：「允许操控电脑」只拒绝写入工具；tools/list 始终列出全部工具，只读的 snapshot 仍执行（#140）。
+    /// 边界依据：列表顺序含 snapshot、find 与五个写入工具；开关关闭时 snapshot 进入执行且 isError 为 false，click 不进入执行并返回点名五个写入工具的拒绝文案。
     @MainActor
-    func testControlSwitchGatesListingAndExecution() async {
-        let hidden = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1, control: false)
-        let shown = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1, control: true)
-        let names = { (output: Output) in
-            ((output.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]).map { $0["name"] as! String }
-        }
-        XCTAssertEqual(names(hidden), ["list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window"])
-        XCTAssertEqual(names(shown), names(hidden) + ["snapshot", "find", "click", "type_text", "press_key", "scroll", "drag"])
+    func testControlSwitchBlocksWriteToolsOnly() async {
+        let listed = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1)
+        let names = ((listed.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]).map { $0["name"] as! String }
+        XCTAssertEqual(names, [
+            "list_displays", "list_windows", "capture_screen", "capture_rect", "capture_window",
+            "snapshot", "find", "click", "type_text", "press_key", "scroll", "drag",
+        ])
 
         var executed = false
         startServer(control: false) { _ in
             executed = true
             return .displays([])
         }
-        let messages = await exchange([#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"snapshot"}}"#], count: 1)
-        XCTAssertEqual(toolResult(messages[0]).content.first?["text"] as? String, AppConstants.mcpControlDisabledMessage)
+        let snapshot = await exchange([#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"snapshot"}}"#], count: 1)
+        XCTAssertFalse(toolResult(snapshot[0]).isError)
+        XCTAssertTrue(executed)
+
+        executed = false
+        // click 带合法坐标，请求能通过参数校验并到达 App；拒绝发生在执行前。
+        let click = await exchange([#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"click","arguments":{"display_index":0,"x":1,"y":1}}}"#], count: 1)
+        XCTAssertEqual(toolResult(click[0]).content.first?["text"] as? String, AppConstants.mcpControlDisabledMessage)
+        XCTAssertTrue(toolResult(click[0]).isError)
         XCTAssertFalse(executed)
     }
 
@@ -544,7 +552,7 @@ final class MCPTests: XCTestCase {
             return .displays([])
         }
         let output = Output()
-        let session = MCPHelperSession(socketPath: socketPath, version: "test", controlEnabled: { false }) { output.append($0) }
+        let session = MCPHelperSession(socketPath: socketPath, version: "test") { output.append($0) }
         session.receive(Data(#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_windows"}}"#.utf8))
         await fulfillment(of: [started], timeout: 5)
         session.receive(Data(#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":7}}"#.utf8))

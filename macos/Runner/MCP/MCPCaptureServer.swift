@@ -75,10 +75,10 @@ final class MCPCaptureServer {
 
     /// 作用：按开关受理一次请求。
     /// 参数 request：helper 转来的工具请求。
-    /// 返回：开关关闭为「MCP 未开启」；操控类请求在「允许操控电脑」关闭时为对应错误；否则为执行结果。
+    /// 返回：MCP 开关关闭为「MCP 未开启」；写入类请求在「允许操控电脑」关闭时为拒绝文案；否则为执行结果。
     func handle(_ request: MCPToolRequest) async -> MCPToolReply {
         guard isEnabled() else { return .failed(message: AppConstants.mcpDisabledMessage) }
-        // helper 的 tools/list 已按开关隐藏操控类工具，这里是执行前的权威校验（#140）。
+        // 写入类请求在执行前校验「允许操控电脑」（#140）。
         guard !request.isControl || isControlEnabled() else { return .failed(message: AppConstants.mcpControlDisabledMessage) }
         return await run(request)
     }

@@ -543,10 +543,8 @@ enum AppConstants {
     static let mcpEnabledKey = "mcpEnabled"
     /// 偏好字典中「允许操控电脑」开关的键，与 Dart PreferenceKeys.mcpControlEnabled 一致（#140）。
     static let mcpControlEnabledKey = "mcpControlEnabled"
-    /// App 的包标识；helper 据此读取 App 偏好判断 tools/list 是否列出操控类工具（#140）。
-    static let appBundleIdentifier = "com.coolyang.translateApp"
-    /// 「允许操控电脑」关闭时调用操控类工具返回的错误。
-    static let mcpControlDisabledMessage = "Computer control is disabled in TranslateApp settings."
+    /// 「允许操控电脑」关闭时调用写入类工具返回的错误；点名全部写入工具。
+    static let mcpControlDisabledMessage = "Computer control is disabled in TranslateApp settings. click, type_text, press_key, scroll, and drag are not allowed."
     /// 辅助功能未授权时操控类工具返回的错误。
     static let mcpAccessibilityPermissionMessage = "TranslateApp lacks Accessibility permission. Allow it in System Settings > Privacy & Security > Accessibility, then retry."
     /// 目标应用禁止读取或操作时的错误；name 为应用显示名。
@@ -786,11 +784,13 @@ enum MCPTool: String, CaseIterable {
     case scroll
     case drag
 
-    /// 无参数；返回是否为「允许操控电脑」开启后才提供的工具（#140）。
+    /// 无参数；返回是否为写入类工具。写入类在「允许操控电脑」关闭时不执行（#140）。
     var isControl: Bool {
         switch self {
-        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
-        case .snapshot, .find, .click, .typeText, .pressKey, .scroll, .drag: true
+        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow, .snapshot, .find:
+            false
+        case .click, .typeText, .pressKey, .scroll, .drag:
+            true
         }
     }
 }

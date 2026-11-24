@@ -36,11 +36,13 @@ enum MCPToolRequest: Codable, Equatable {
     case scroll(target: MCPPointTarget, direction: MCPScrollDirection, amount: Int, screenshot: Bool)
     case drag(from: MCPPointTarget, toX: Int, toY: Int, screenshot: Bool)
 
-    /// 无参数；返回是否为「允许操控电脑」开启后才可执行的请求。
+    /// 无参数；返回是否为写入类请求。写入类在「允许操控电脑」关闭时不执行（#140）。
     var isControl: Bool {
         switch self {
-        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow: false
-        case .snapshot, .find, .click, .typeText, .pressKey, .scroll, .drag: true
+        case .listDisplays, .listWindows, .captureScreen, .captureRect, .captureWindow, .snapshot, .find:
+            false
+        case .click, .typeText, .pressKey, .scroll, .drag:
+            true
         }
     }
 }
@@ -211,7 +213,7 @@ enum MCPProtocol {
         ]
     }
 
-    /// 作用：返回五个工具的定义，说明与参数原文见 #96「工具」。
+    /// 作用：返回全部工具的定义。截图工具说明见 #96「工具」，只读无障碍与写入工具见 #140。
     /// 返回：按 MCPTool.allCases 顺序排列的定义。
     static func toolDefinitions() -> [MCPToolDefinition] {
         let displayIndex = { (defaultValue: MCPOrderedJSON?) in
@@ -386,12 +388,10 @@ enum MCPProtocol {
         }
     }
 
-    /// 作用：生成 tools/list 结果的 JSON。
-    /// 参数 includeControl：「允许操控电脑」是否开启；关闭时不列出操控类工具（#140）。
+    /// 作用：生成 tools/list 结果的 JSON。列表包含全部工具，不按「允许操控电脑」裁剪（#140）。
     /// 返回：{"tools": [...]} 的 UTF-8 数据，参数按声明顺序排列。
-    static func toolsListResult(includeControl: Bool) -> Data {
-        let tools = toolDefinitions().filter { includeControl || !MCPTool(rawValue: $0.name)!.isControl }
-        return MCPOrderedJSON.object([("tools", .array(tools.map(\.json)))]).data
+    static func toolsListResult() -> Data {
+        MCPOrderedJSON.object([("tools", .array(toolDefinitions().map(\.json)))]).data
     }
 
     /// 作用：把 tools/call 参数转换为工具请求。
@@ -749,19 +749,16 @@ final class MCPForwardCall {
 final class MCPHelperSession {
     private let socketPath: String
     private let version: String
-    private let controlEnabled: () -> Bool
     private let write: (Data) -> Void
     private let lock = NSLock()
     /// 进行中的 tools/call，键为类型前缀加 id 文本，区分数字 1 与字符串 "1"。
     private var calls: [String: MCPForwardCall] = [:]
 
     /// 参数 socketPath：App socket 路径；version：serverInfo.version；
-    /// controlEnabled：返回「允许操控电脑」是否开启，决定 tools/list 是否列出操控类工具（#140）；
     /// write：接收一条不含换行的 JSON 消息并写到 stdout，由会话串行调用。
-    init(socketPath: String, version: String, controlEnabled: @escaping () -> Bool, write: @escaping (Data) -> Void) {
+    init(socketPath: String, version: String, write: @escaping (Data) -> Void) {
         self.socketPath = socketPath
         self.version = version
-        self.controlEnabled = controlEnabled
         self.write = write
     }
 
@@ -788,7 +785,7 @@ final class MCPHelperSession {
         case "ping":
             emit(MCPProtocol.response(id: id, result: [:]))
         case "tools/list":
-            emitRaw(id: id, result: MCPProtocol.toolsListResult(includeControl: controlEnabled()))
+            emitRaw(id: id, result: MCPProtocol.toolsListResult())
         case "tools/call":
             call(id: id, key: key, params: params)
         default:
