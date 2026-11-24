@@ -2,9 +2,8 @@
 
 本仓库采用单一领域上下文。领域术语写在以下文件：
 
-- `docs/glossary.md`：选区翻译领域术语。
+- `docs/glossary.md`：选区翻译与采集工具领域术语。
 - `docs/specs/live-region-translation.md`：区域实时翻译术语。
-- `docs/capture-roadmap.md`：采集工具术语。
 
 ## 代码约定
 
