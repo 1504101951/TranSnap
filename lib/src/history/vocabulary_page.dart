@@ -172,8 +172,8 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: Text(
                   entry.word,
                   style: TextStyle(
-                    fontSize: 14,
-                    height: 20 / 14,
+                    fontSize: 15,
+                    height: 22 / 15,
                     color: colors.onSurface,
                   ),
                 ),

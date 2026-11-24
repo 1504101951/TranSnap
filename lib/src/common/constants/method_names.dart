@@ -24,6 +24,13 @@ abstract final class MethodNames {
 
   /// 从裁剪起点播放到终点；未裁剪时播放完整视频。
   static const previewRecording = 'previewRecording';
+
+  /// 切换录制结果播放器播放/暂停状态。
+  static const toggleRecordingPlayback = 'toggleRecordingPlayback';
+
+  /// 将录制结果播放器定位到指定秒数；参数 {id, seconds}。
+  static const seekRecording = 'seekRecording';
+
   static const exportRecordingGIF = 'exportRecordingGIF';
 
   /// 按 GIF 设置导出 APNG（#110）。

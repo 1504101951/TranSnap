@@ -820,6 +820,11 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             ? NSRect(x: displayFrame.midX - 220, y: displayFrame.midY - 90, width: 440, height: 180)
             : overlay ? displayFrame : Self.imageResultFrame(pixels: pixels, scale: selectedScale, visible: displayFrame)
         if let window {
+            if !overlay {
+                window.title = pixels.width > 0 && pixels.height > 0
+                    ? "图片 · \(Int(pixels.width)) × \(Int(pixels.height))" : "图片"
+                window.contentMinSize = AppConstants.longScreenshotResultMinimumSize
+            }
             NativeGlassFactory.applyAppearance(to: window)
             window.setFrame(frame, display: true)
         }
@@ -897,7 +902,8 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         }
         panel.onUndo = { [weak self] in self?.channel?.invokeMethod(AppConstants.undoPressedMethod, arguments: nil) }
         panel.onRedo = { [weak self] in self?.channel?.invokeMethod(AppConstants.redoPressedMethod, arguments: nil) }
-        panel.title = overlay ? "" : "截图"
+        panel.title = overlay ? "" : (pixels.width > 0 && pixels.height > 0
+            ? "图片 · \(Int(pixels.width)) × \(Int(pixels.height))" : "图片")
         panel.isFloatingPanel = overlay
         panel.level = overlay ? .statusBar : .normal
         panel.collectionBehavior = overlay ? [.canJoinAllSpaces, .fullScreenAuxiliary] : [.moveToActiveSpace, .fullScreenAuxiliary]
@@ -907,15 +913,15 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         if overlay {
             panel.backgroundColor = .clear
         } else {
-            // 普通图片窗沿用与 NativeReadingCanvas 同源的浅/深阅读底色，消除手动明暗切换接缝（#144 U-18）。
+            // 普通图片窗沿用与 ResultWindowColors.canvas 同源的浅/深中性衬底色（#67、#145）。
             panel.backgroundColor = NSColor(name: nil) { appearance in
                 let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                let value: CGFloat = dark ? 23.0 / 255.0 : 247.0 / 255.0
+                let value: CGFloat = dark ? 28.0 / 255.0 : 233.0 / 255.0
                 return NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
             }
         }
         panel.hasShadow = !overlay
-        if !overlay { panel.contentMinSize = NSSize(width: 320, height: 240) }
+        if !overlay { panel.contentMinSize = AppConstants.longScreenshotResultMinimumSize }
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         panel.contentViewController = content
@@ -923,12 +929,15 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
         return panel
     }
 
-    /// pixels/scale为来源原图与倍率，visible为来源屏可用区；返回保留逻辑宽、允许纵向滚动的结果窗口框。
+    /// pixels/scale为来源原图与倍率，visible为来源屏可用区；返回包含 24pt 四周留白、底部 52pt 操作栏及最小 600×240 的结果窗口框（#67、#145）。
     static func imageResultFrame(pixels: NSSize, scale: CGFloat, visible: NSRect) -> NSRect {
         let style = AppConstants.captureResultWindowStyle
         let available = NSWindow.contentRect(forFrameRect: visible, styleMask: style)
-        let size = NSSize(width: min(available.width, max(320, pixels.width / scale + 72)),
-                          height: min(available.height, max(240, pixels.height / scale + 16)))
+        let reservedWidth = AppConstants.resultWindowCanvasPadding * 2
+        let reservedHeight = AppConstants.resultWindowCanvasPadding * 2 + AppConstants.resultWindowBarHeight
+        let minSize = AppConstants.longScreenshotResultMinimumSize
+        let size = NSSize(width: min(available.width, max(minSize.width, pixels.width / scale + reservedWidth)),
+                          height: min(available.height, max(minSize.height, pixels.height / scale + reservedHeight)))
         let frame = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: size), styleMask: style)
         return NSRect(x: visible.midX - frame.width / 2, y: visible.midY - frame.height / 2,
                       width: frame.width, height: frame.height)

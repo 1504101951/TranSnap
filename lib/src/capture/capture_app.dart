@@ -11,6 +11,7 @@ import '../common/constants/method_names.dart';
 import '../common/utils/screenshot_filename.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
+import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
 
 /// 采集工具的统一悬浮控制条、长图保留页及视频结果；选区准备由截图选择层负责。
@@ -38,6 +39,8 @@ class _CaptureAppState extends State<CaptureApp> {
   bool _feedbackIsError = false;
   bool _feedbackHovered = false;
   Timer? _feedbackTimer;
+  // 长截图默认使用「适合宽度」模式，每次新结果重置（#67 第 5 条、#145）。
+  bool _fitWidth = true;
 
   CapturePhase get _phase => CapturePhase.parse(_state['phase'] as String);
 
@@ -77,6 +80,7 @@ class _CaptureAppState extends State<CaptureApp> {
       _feedback = null;
       _feedbackIsError = false;
       _feedbackHovered = false;
+      _fitWidth = true;
     }
     if (state['error'] != null && state['error'] != previous['error']) {
       _showFeedback(state['error'] as String, isError: true);
@@ -365,13 +369,43 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// 无参数；返回等比视频与固定在底部居中的横排工具栏，系统标题栏由原生窗口承载（#67、#142）。
+  /// seconds 为秒数；格式化为 m:ss，供录制结果播放条使用。
+  String _formatDuration(double seconds) {
+    final total = seconds.isFinite && seconds > 0 ? seconds.floor() : 0;
+    return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
+  }
+
+  /// seconds 为目标秒数；仅转发合法位置给原生 AVPlayer，避免频繁拖动阻塞按钮禁用态。
+  void _seekTo(double seconds) {
+    final id = _state['id'];
+    if (id == null) return;
+    setState(() => _state = {..._state, 'position': seconds});
+    unawaited(
+      widget.channel.invokeMethod<void>(MethodNames.seekRecording, {
+        'id': id,
+        'seconds': seconds,
+      }),
+    );
+  }
+
+  /// 无参数；返回统一结果窗骨架：中性衬底（四周 24pt 留白）+ 底部 52pt 实底操作栏，
+  /// 标题栏与播放器控制条隐藏，全部操作收进底部栏（#67 第 4、7 条、#145）。
   Widget _videoResult() {
     final pixels = Size(
       (_state['width'] as num).toDouble(),
       (_state['height'] as num).toDouble(),
     );
     final logical = pixels / (_state['previewScale'] as num).toDouble();
+    final duration = ((_state['duration'] as num?)?.toDouble() ?? 0).clamp(
+      0.0,
+      86400.0,
+    );
+    final maxSlider = math.max(duration, 0.1);
+    final position = ((_state['position'] as num?)?.toDouble() ?? 0).clamp(
+      0.0,
+      maxSlider,
+    );
+    final playing = _state['playing'] == true;
     final converting = _phase == CapturePhase.converting;
     // 文件复制没有可测量的编码进度；缺少 progress 的忙碌快照只显示保存状态。
     final saving = converting && _state['progress'] == null;
@@ -380,165 +414,227 @@ class _CaptureAppState extends State<CaptureApp> {
     final exporting = converting
         ? RecordingExport.parse(_state['exporting'] as String)
         : null;
-    // 四种导出共用同一位置规则：类型、文字、图标与发起方法。
-    const exports = [
-      (
-        RecordingExport.mp4,
-        '保存 MP4',
-        Icons.save_outlined,
-        MethodNames.saveRecording,
-      ),
-      (
-        RecordingExport.gif,
-        '导出 GIF',
-        Icons.gif_box_outlined,
-        MethodNames.exportRecordingGIF,
-      ),
-      (
-        RecordingExport.apng,
-        '导出 APNG',
-        Icons.animation,
-        MethodNames.exportRecordingAPNG,
-      ),
-      (
-        RecordingExport.webm,
-        '导出 WebM',
-        Icons.video_file_outlined,
-        MethodNames.exportRecordingWebM,
-      ),
-    ];
-    // 八个操作保持固定位置；转换时对应导出按钮直接提供取消并显示进度环，复制与其余操作禁用。
-    final actions = <(String, IconData, VoidCallback?, bool)>[
-      (
-        '播放视频',
-        Icons.play_arrow,
-        enabled ? () => _invoke(MethodNames.previewRecording) : null,
-        _pending && _pendingMethod == MethodNames.previewRecording,
-      ),
-      (
-        '裁剪',
-        Icons.content_cut,
-        enabled ? () => _invoke(MethodNames.trimRecording) : null,
-        _pending && _pendingMethod == MethodNames.trimRecording,
-      ),
-      (
-        '复制视频',
-        Icons.content_copy,
-        enabled ? () => _copyVideo() : null,
-        _pending && _pendingMethod == MethodNames.copyRecording,
-      ),
-      for (final (kind, label, icon, method) in exports)
-        kind == exporting
-            ? (
-                saving ? '取消保存' : '取消转换',
-                Icons.cancel_outlined,
-                _pending
-                    ? null
-                    : () => _invoke(MethodNames.cancelRecordingExport),
-                true,
-              )
-            : (
-                label,
-                icon,
-                enabled ? () => _invoke(method) : null,
-                _pending && _pendingMethod == method,
-              ),
-      (
-        '关闭当前采集',
-        Icons.close,
-        _pending ? null : _discard,
-        _pending && _pendingMethod == MethodNames.cancelCapture,
-      ),
-    ];
+    final colors = Theme.of(context).colorScheme;
+    final timeStyle = TextStyle(
+      fontSize: GlassMetrics.statusFont,
+      height: 16 / GlassMetrics.statusFont,
+      color: colors.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const margin = GlassMetrics.toolbarPadding;
-        const gap = GlassMetrics.toastGap;
-        // 上边距和左右边距 8pt；视频下方隔 8pt 是 48pt 厚的横排工具栏，纵向共预留 64pt（#67、#142）。
-        const reservedWidth = margin * 2;
-        const reservedHeight = GlassMetrics.toolbarThickness + gap + margin;
-        final toolbarWidth =
-            actions.length * GlassMetrics.hitSize +
-            (actions.length - 1) * GlassMetrics.captureResultActionGap +
-            margin * 2;
-        final availableWidth = math.max(
-          0.0,
-          constraints.maxWidth - reservedWidth,
+        final barRect = Rect.fromLTWH(
+          0,
+          math.max(0, constraints.maxHeight - GlassMetrics.resultBarHeight),
+          constraints.maxWidth,
+          GlassMetrics.resultBarHeight,
         );
-        final availableHeight = math.max(
-          0.0,
-          constraints.maxHeight - reservedHeight,
-        );
-        final scale = math.min(
-          1.0,
-          math.min(
-            availableWidth / logical.width,
-            availableHeight / logical.height,
-          ),
-        );
-        final size = logical * scale;
-        final media = Rect.fromLTWH(
-          margin + (availableWidth - size.width) / 2,
-          margin + (availableHeight - size.height) / 2,
-          size.width,
-          size.height,
-        );
-        // 底部 356×48 工具栏水平居中，自身四周带 8pt 内边距，窗口缩至 356×65 时仍不覆盖视频。
-        final toolbar = Rect.fromLTWH(
-          (constraints.maxWidth - toolbarWidth) / 2,
-          constraints.maxHeight - GlassMetrics.toolbarThickness,
-          toolbarWidth,
-          GlassMetrics.toolbarThickness,
-        );
+        // 最小窗口 600pt 下预留所有固定按钮，剩余宽度分配给播放进度滑块并封顶 220pt。
+        final sliderWidth = (constraints.maxWidth - 490)
+            .clamp(64.0, 220.0)
+            .toDouble();
         return Stack(
           children: [
-            Positioned.fromRect(
-              rect: media,
-              child: Semantics(
-                label:
-                    '录制结果，${_state['duration']}秒，${pixels.width.toInt()}×${pixels.height.toInt()}像素',
-                child: AppKitView(
-                  key: ValueKey(_state['id']),
-                  viewType: ChannelNames.captureVideoPreview,
-                  creationParams: {'id': _state['id']},
-                  creationParamsCodec: const StandardMessageCodec(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ResultWindowCanvas(
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                        GlassMetrics.resultCanvasPadding,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, mediaBox) {
+                          final scale = math.min(
+                            1.0,
+                            math.min(
+                              mediaBox.maxWidth / logical.width,
+                              mediaBox.maxHeight / logical.height,
+                            ),
+                          );
+                          final size = logical * scale;
+                          return ResultMediaFrame(
+                            child: SizedBox.fromSize(
+                              size: size,
+                              child: Semantics(
+                                label:
+                                    '录制结果，${_state['duration']}秒，${pixels.width.toInt()}×${pixels.height.toInt()}像素',
+                                child: AppKitView(
+                                  key: ValueKey(_state['id']),
+                                  viewType: ChannelNames.captureVideoPreview,
+                                  creationParams: {'id': _state['id']},
+                                  creationParamsCodec:
+                                      const StandardMessageCodec(),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Positioned.fromRect(
-              rect: toolbar,
-              child: Padding(
-                padding: const EdgeInsets.all(margin),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < actions.length; i++) ...[
-                      if (i > 0)
-                        const SizedBox(
-                          width: GlassMetrics.captureResultActionGap,
-                        ),
-                      SizedBox.square(
-                        dimension: GlassMetrics.hitSize,
-                        child: NativeGlassSurface(
-                          material: true,
-                          radius: GlassMetrics.controlRadius,
-                          busy: actions[i].$4,
-                          child: IconButton(
-                            tooltip: actions[i].$1,
-                            padding: EdgeInsets.zero,
-                            onPressed: actions[i].$3,
-                            icon: Icon(actions[i].$2, size: GlassMetrics.icon),
+                ResultWindowBar(
+                  leading: [
+                    ResultTextButton(
+                      buttonKey: const Key('result-discard'),
+                      label: '放弃',
+                      weak: true,
+                      tooltip: '关闭当前采集',
+                      onPressed: _pending ? null : _discard,
+                      busy:
+                          _pending && _pendingMethod == MethodNames.cancelCapture,
+                    ),
+                    const ResultBarDivider(),
+                    ResultIconButton(
+                      buttonKey: const Key('result-play-toggle'),
+                      icon: playing ? Icons.pause : Icons.play_arrow,
+                      tooltip: playing ? '暂停视频' : '播放视频',
+                      onPressed: enabled
+                          ? () => _invoke(MethodNames.toggleRecordingPlayback)
+                          : null,
+                      busy:
+                          _pending &&
+                          _pendingMethod == MethodNames.toggleRecordingPlayback,
+                    ),
+                    Text(_formatDuration(position), style: timeStyle),
+                    SizedBox(
+                      width: sliderWidth,
+                      height: GlassMetrics.buttonHeight,
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 4,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6,
                           ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 12,
+                          ),
+                          activeTrackColor: NativeGlassTheme.accentOf(context),
+                          thumbColor: NativeGlassTheme.accentOf(context),
+                        ),
+                        child: Slider(
+                          key: const Key('result-video-slider'),
+                          min: 0,
+                          max: maxSlider,
+                          value: position,
+                          onChanged: enabled ? _seekTo : null,
                         ),
                       ),
-                    ],
+                    ),
+                    Text(_formatDuration(duration), style: timeStyle),
+                    ResultTextButton(
+                      buttonKey: const Key('result-trim'),
+                      label: '裁剪',
+                      icon: Icons.content_cut,
+                      onPressed: enabled
+                          ? () => _invoke(MethodNames.trimRecording)
+                          : null,
+                      busy:
+                          _pending &&
+                          _pendingMethod == MethodNames.trimRecording,
+                    ),
+                  ],
+                  trailing: [
+                    ResultTextButton(
+                      buttonKey: const Key('result-copy'),
+                      label: '复制',
+                      icon: Icons.content_copy,
+                      tooltip: '复制视频',
+                      onPressed: enabled ? _copyVideo : null,
+                      busy:
+                          _pending &&
+                          _pendingMethod == MethodNames.copyRecording,
+                    ),
+                    if (converting &&
+                        exporting != null &&
+                        exporting != RecordingExport.mp4)
+                      ResultTextButton(
+                        buttonKey: const Key('result-cancel-export'),
+                        label: '取消转换',
+                        icon: Icons.close,
+                        busy: true,
+                        onPressed: _pending
+                            ? null
+                            : () => _invoke(MethodNames.cancelRecordingExport),
+                      )
+                    else
+                      MenuAnchor(
+                        style: NativeGlassMenuPanel.anchorStyle,
+                        menuChildren: [
+                          NativeGlassMenuPanel(
+                            children: [
+                              NativeGlassMenuItem(
+                                label: '导出 GIF',
+                                onPressed: enabled
+                                    ? () =>
+                                          _invoke(MethodNames.exportRecordingGIF)
+                                    : null,
+                              ),
+                              NativeGlassMenuItem(
+                                label: '导出 APNG',
+                                onPressed: enabled
+                                    ? () => _invoke(
+                                        MethodNames.exportRecordingAPNG,
+                                      )
+                                    : null,
+                              ),
+                              NativeGlassMenuItem(
+                                label: '导出 WebM',
+                                onPressed: enabled
+                                    ? () => _invoke(
+                                        MethodNames.exportRecordingWebM,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ],
+                        builder: (context, controller, _) => ResultTextButton(
+                          buttonKey: const Key('result-export-menu'),
+                          label: '导出',
+                          trailing: Icons.keyboard_arrow_down,
+                          onPressed: enabled
+                              ? () => controller.isOpen
+                                    ? controller.close()
+                                    : controller.open()
+                              : null,
+                        ),
+                      ),
+                    if (saving)
+                      ResultTextButton(
+                        buttonKey: const Key('result-cancel-save'),
+                        label: '取消保存',
+                        icon: Icons.close,
+                        primary: true,
+                        busy: true,
+                        onPressed: _pending
+                            ? null
+                            : () => _invoke(MethodNames.cancelRecordingExport),
+                      )
+                    else
+                      ResultTextButton(
+                        buttonKey: const Key('result-save'),
+                        label: '保存',
+                        icon: Icons.save_outlined,
+                        primary: true,
+                        tooltip: '保存 MP4',
+                        onPressed: enabled
+                            ? () => _invoke(MethodNames.saveRecording)
+                            : null,
+                        busy:
+                            _pending &&
+                            _pendingMethod == MethodNames.saveRecording,
+                      ),
                   ],
                 ),
-              ),
+              ],
             ),
             if (_feedback != null || converting)
               ToolbarFeedback(
-                toolbar: toolbar,
+                toolbar: barRect,
                 message:
                     _feedback ??
                     (saving
@@ -588,7 +684,7 @@ class _CaptureAppState extends State<CaptureApp> {
     ),
   );
 
-  /// 无参数；按源逻辑尺寸滚动长图，右侧只有保存、复制、放弃。
+  /// 无参数；返回长截图结果窗：中性衬底四周 24pt 留白，默认适合宽度且可切换实际大小，底部 52pt 操作栏提供放弃、缩放与复制保存（#67 第 5、7 条、#145）。
   Widget _imageResult() {
     final pixels = Size(
       (_state['width'] as num).toDouble(),
@@ -597,120 +693,153 @@ class _CaptureAppState extends State<CaptureApp> {
     final logical = pixels / (_state['previewScale'] as num).toDouble();
     final bytes = _state['imageBytes'] as Uint8List;
     final enabled = !_pending;
-    // 三个操作固定在右侧，不提供裁剪、贴图或编辑工具。
-    final actions = <(String, IconData, VoidCallback?, bool)>[
-      (
-        '保存',
-        Icons.save_outlined,
-        enabled
-            ? () => _invoke(MethodNames.saveScreenshot, {
-                'name': screenshotFilename(DateTime.now()),
-              })
-            : null,
-        _pending && _pendingMethod == MethodNames.saveScreenshot,
-      ),
-      (
-        '复制',
-        Icons.copy_outlined,
-        enabled ? () => _copyImage() : null,
-        _pending && _pendingMethod == MethodNames.copyScreenshot,
-      ),
-      (
-        '放弃',
-        Icons.close,
-        _pending ? null : _discard,
-        _pending && _pendingMethod == MethodNames.cancelCapture,
-      ),
-    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const margin = GlassMetrics.toolbarPadding;
-        const gap = GlassMetrics.toastGap;
-        const reservedWidth = GlassMetrics.toolbarThickness + gap + margin * 2;
-        final toolbarHeight =
-            actions.length * GlassMetrics.hitSize +
-            (actions.length - 1) * GlassMetrics.captureResultActionGap +
-            margin * 2;
-        final viewport = Rect.fromLTWH(
-          margin,
-          margin,
-          math.max(0, constraints.maxWidth - reservedWidth),
-          math.max(0, constraints.maxHeight - margin * 2),
-        );
-        final toolbar = Rect.fromLTWH(
-          constraints.maxWidth - margin - GlassMetrics.toolbarThickness,
-          (constraints.maxHeight - toolbarHeight) / 2,
-          GlassMetrics.toolbarThickness,
-          toolbarHeight,
+        final barRect = Rect.fromLTWH(
+          0,
+          math.max(0, constraints.maxHeight - GlassMetrics.resultBarHeight),
+          constraints.maxWidth,
+          GlassMetrics.resultBarHeight,
         );
         return Stack(
           children: [
-            Positioned.fromRect(
-              rect: viewport,
-              child: SingleChildScrollView(
-                primary: false,
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  key: const Key('long-image-scroll'),
-                  primary: false,
-                  scrollDirection: Axis.vertical,
-                  child: SizedBox(
-                    width: math.max(viewport.width, logical.width),
-                    height: math.max(viewport.height, logical.height),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Semantics(
-                        label:
-                            '长截图结果，${pixels.width.toInt()}×${pixels.height.toInt()}像素',
-                        child: SizedBox(
-                          key: const Key('long-image-preview'),
-                          width: logical.width,
-                          height: logical.height,
-                          child: Image.memory(
-                            bytes,
-                            fit: BoxFit.fill,
-                            filterQuality: FilterQuality.none,
-                            gaplessPlayback: true,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ResultWindowCanvas(
+                    child: LayoutBuilder(
+                      builder: (context, mediaBox) {
+                        const pad = GlassMetrics.resultCanvasPadding;
+                        final availableWidth = math.max(
+                          1.0,
+                          mediaBox.maxWidth - pad * 2,
+                        );
+                        final scale = _fitWidth
+                            ? math.min(1.0, availableWidth / logical.width)
+                            : 1.0;
+                        final displaySize = logical * scale;
+                        return SingleChildScrollView(
+                          primary: false,
+                          scrollDirection: Axis.horizontal,
+                          child: SingleChildScrollView(
+                            key: const Key('long-image-scroll'),
+                            primary: false,
+                            scrollDirection: Axis.vertical,
+                            child: SizedBox(
+                              width: math.max(
+                                mediaBox.maxWidth,
+                                displaySize.width + pad * 2,
+                              ),
+                              height: math.max(
+                                mediaBox.maxHeight,
+                                displaySize.height + pad * 2,
+                              ),
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(pad),
+                                  child: ResultMediaFrame(
+                                    child: Semantics(
+                                      label:
+                                          '长截图结果，${pixels.width.toInt()}×${pixels.height.toInt()}像素',
+                                      child: SizedBox(
+                                        key: const Key('long-image-preview'),
+                                        width: displaySize.width,
+                                        height: displaySize.height,
+                                        child: Image.memory(
+                                          bytes,
+                                          fit: BoxFit.fill,
+                                          filterQuality: scale == 1.0
+                                              ? FilterQuality.none
+                                              : FilterQuality.medium,
+                                          gaplessPlayback: true,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ),
-              ),
-            ),
-            Positioned.fromRect(
-              rect: toolbar,
-              child: Padding(
-                padding: const EdgeInsets.all(margin),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < actions.length; i++) ...[
-                      if (i > 0)
-                        SizedBox(height: GlassMetrics.captureResultActionGap),
-                      SizedBox.square(
-                        dimension: GlassMetrics.hitSize,
-                        child: NativeGlassSurface(
-                          material: true,
-                          radius: GlassMetrics.controlRadius,
-                          busy: actions[i].$4,
-                          child: IconButton(
-                            tooltip: actions[i].$1,
-                            padding: EdgeInsets.zero,
-                            onPressed: actions[i].$3,
-                            icon: Icon(actions[i].$2, size: GlassMetrics.icon),
-                          ),
+                ResultWindowBar(
+                  leading: [
+                    ResultTextButton(
+                      buttonKey: const Key('result-discard'),
+                      label: '放弃',
+                      weak: true,
+                      tooltip: '放弃',
+                      onPressed: _pending ? null : _discard,
+                      busy:
+                          _pending && _pendingMethod == MethodNames.cancelCapture,
+                    ),
+                    const ResultBarDivider(),
+                    MenuAnchor(
+                      style: NativeGlassMenuPanel.anchorStyle,
+                      menuChildren: [
+                        NativeGlassMenuPanel(
+                          children: [
+                            NativeGlassMenuItem(
+                              label: '适合宽度',
+                              checked: _fitWidth,
+                              onPressed: () => setState(() => _fitWidth = true),
+                            ),
+                            NativeGlassMenuItem(
+                              label: '实际大小',
+                              checked: !_fitWidth,
+                              onPressed: () => setState(() => _fitWidth = false),
+                            ),
+                          ],
                         ),
+                      ],
+                      builder: (context, controller, _) => ResultTextButton(
+                        buttonKey: const Key('result-zoom-menu'),
+                        label: _fitWidth ? '适合宽度' : '实际大小',
+                        trailing: Icons.keyboard_arrow_down,
+                        onPressed: enabled
+                            ? () => controller.isOpen
+                                  ? controller.close()
+                                  : controller.open()
+                            : null,
                       ),
-                    ],
+                    ),
+                  ],
+                  trailing: [
+                    ResultTextButton(
+                      buttonKey: const Key('result-copy'),
+                      label: '复制',
+                      icon: Icons.copy_outlined,
+                      onPressed: enabled ? _copyImage : null,
+                      busy:
+                          _pending &&
+                          _pendingMethod == MethodNames.copyScreenshot,
+                    ),
+                    ResultTextButton(
+                      buttonKey: const Key('result-save'),
+                      label: '保存',
+                      icon: Icons.save_outlined,
+                      primary: true,
+                      onPressed: enabled
+                          ? () => _invoke(MethodNames.saveScreenshot, {
+                              'name': screenshotFilename(DateTime.now()),
+                            })
+                          : null,
+                      busy:
+                          _pending &&
+                          _pendingMethod == MethodNames.saveScreenshot,
+                    ),
                   ],
                 ),
-              ),
+              ],
             ),
             if (_feedback != null)
               ToolbarFeedback(
-                toolbar: toolbar,
+                toolbar: barRect,
                 message: _feedback!,
                 isError: _feedbackIsError,
                 onHoverChanged: _feedbackIsError

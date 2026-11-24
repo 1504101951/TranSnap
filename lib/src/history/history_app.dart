@@ -910,8 +910,8 @@ class _HistoryAppState extends State<HistoryApp> {
                 child: SelectableText(
                   item.translatedText,
                   style: TextStyle(
-                    fontSize: 14,
-                    height: 20 / 14,
+                    fontSize: 15,
+                    height: 22 / 15,
                     color: colors.onSurface,
                   ),
                 ),

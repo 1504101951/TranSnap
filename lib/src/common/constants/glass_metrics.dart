@@ -72,6 +72,13 @@ abstract final class GlassMetrics {
   static const toolbarThickness = hitSize + toolbarPadding * 2;
   // 采集结果工具栏相邻操作间距（视频结果为底部横排、长截图为右侧纵排），按Spec #67与原生承载尺寸保持一致。
   static const captureResultActionGap = 12.0;
+
+  /// 统一结果窗口骨架尺寸（#67、#145）：媒体区四周留白、底部操作栏高度、分组分隔线与文字按钮高度。
+  static const resultCanvasPadding = 24.0;
+  static const resultBarHeight = 52.0;
+  static const resultDividerWidth = 1.0;
+  static const resultDividerHeight = 20.0;
+  static const resultDividerGap = 6.0;
   static const toastGap = 8.0;
   static const feedbackDuration = Duration(milliseconds: 1000);
 

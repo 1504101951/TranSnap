@@ -428,7 +428,11 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
-    expect(find.text('8 × 8'), findsOneWidget);
+    // 打开图片使用统一结果窗骨架：中性衬底、52pt 底部工具行，不挂载截图浮动网格或屏幕采集按钮（#67、#145）。
+    expect(find.byKey(const Key('result-window-canvas')), findsOneWidget);
+    expect(find.byKey(const Key('result-window-bar')), findsOneWidget);
+    expect(find.byKey(const Key('screenshot-toolbar')), findsNothing);
+    expect(find.byKey(const Key('crop-size-label')), findsNothing);
     expect(find.text('申请屏幕录制权限'), findsNothing);
     expect(find.textContaining('截图需要屏幕录制权限'), findsNothing);
     for (final action in [
@@ -436,11 +440,35 @@ void main() {
       ScreenshotActions.scrolling,
       ScreenshotActions.live,
     ]) {
-      expect(
-        tester.widget<IconButton>(find.byKey(Key(action))).onPressed,
-        isNull,
-      );
+      expect(find.byKey(Key(action)), findsNothing);
     }
+    // 底部工具行包含左区六工具+撤销重做、右区识别文字/翻译/贴图/复制/保存；选中画笔等工具从底部向上展开托盘（#67、#145）。
+    for (final key in [
+      const Key(ScreenshotActions.cursor),
+      const Key(ScreenshotActions.rect),
+      const Key(ScreenshotActions.arrow),
+      const Key(ScreenshotActions.text),
+      const Key(ScreenshotActions.brush),
+      const Key('${ScreenshotActions.brushPrefix}mosaic-tool'),
+      const Key('screenshot-undo'),
+      const Key('screenshot-redo'),
+      const Key(ScreenshotActions.ocrCopy),
+      const Key(ScreenshotActions.ocrTranslate),
+      const Key(ScreenshotActions.pin),
+      const Key(ScreenshotActions.copy),
+      const Key(ScreenshotActions.save),
+    ]) {
+      expect(find.byKey(key), findsOneWidget);
+    }
+    expect(find.byKey(const Key('opened-image-upward-tray')), findsNothing);
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.pumpAndSettle();
+    final upwardTray = find.byKey(const Key('opened-image-upward-tray'));
+    expect(upwardTray, findsOneWidget);
+    expect(
+      tester.getRect(upwardTray).bottom,
+      lessThan(tester.getRect(find.byKey(const Key('result-window-bar'))).top),
+    );
 
     // _tapExport 让识别消费编辑器实际导出的 PNG，并展示可复制的文字结果。
     await _tapExport(tester, const Key(ScreenshotActions.ocrCopy));

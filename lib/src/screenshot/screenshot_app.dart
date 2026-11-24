@@ -22,6 +22,7 @@ import '../common/utils/geometry.dart';
 import '../common/utils/screenshot_filename.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
+import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
 import '../common/widgets/native_brush_cursor.dart';
 import '../common/widgets/native_resize_cursor.dart';
@@ -139,6 +140,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Rect _strokeBounds = Rect.zero;
 
   Map<Object?, Object?> _capture = {};
+  /// 打开图片结果窗口模式（#67、#145 第 38、41 条）：非屏幕采集且带 imageScale 时使用「标题栏 · 媒体 · 52pt 底部操作栏」骨架。
+  bool get _isOpenedImage =>
+      _capture['canCaptureMedia'] != true && _capture['imageScale'] != null;
   final GlobalKey _editorKey = GlobalKey();
   DrawingPreferences _drawing = DrawingPreferences();
   Future<void> _drawingSave = Future.value();
@@ -913,7 +917,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _strokePoints.clear();
       _ocrOverlays = [];
       _recognition = null;
-      _tool = ScreenshotTool.crop;
+      _tool =
+          (value['canCaptureMedia'] != true && value['imageScale'] != null)
+          ? ScreenshotTool.cursor
+          : ScreenshotTool.crop;
       _selectedTextId = null;
       _selectedShapeId = null;
       _shapeSelecting = false;
@@ -995,8 +1002,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           cropH,
         ),
       );
-      // 前台窗口只提供初始范围预览，首次拖动重新框选；整屏直接选中，可拖控制点调整（#105）。
-      _cropSelected = value['cropSelected'] == true;
+      // 打开图片默认进入光标编辑模式且不显示整图裁剪控制点；冻结截图按原生决定是否预选中选区（#105、#145）。
+      _cropSelected = !_isOpenedImage && value['cropSelected'] == true;
     });
   }
 
@@ -2905,7 +2912,98 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           body: Stack(
             fit: StackFit.expand,
             children: [
-              if (hasImage)
+              if (hasImage && _isOpenedImage)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: ResultWindowCanvas(
+                        child: _EditorSurface(
+                          key: ValueKey(_capture['id']),
+                          openedImage: true,
+                          imageScale:
+                              (_capture['imageScale'] as num?)?.toDouble(),
+                          channel: widget.channel,
+                          document: _document,
+                          tool: _tool,
+                          dragStart: _dragStart,
+                          dragCurrent: _dragCurrent,
+                          previewAnnotation: _previewAnnotation,
+                          previewCrop: _previewCrop,
+                          recordingWindows: null,
+                          recordingPreview: false,
+                          pixelRatio: _pixelRatio,
+                          brushCursor: NativeBrushCursor(
+                            diameter: math.max(
+                              NativeBrushCursor.minimumDiameter,
+                              _drawing.styleFor(ScreenshotTool.brush).strokeWidth,
+                            ),
+                            color: _shapeMode == ShapeMode.mosaic
+                                ? null
+                                : _drawing
+                                      .styleFor(ScreenshotTool.brush)
+                                      .color
+                                      .toARGB32(),
+                            channel: widget.channel,
+                          ),
+                          busy: _busy,
+                          textInputOpen: _textInputOpen && !_dialogOpen,
+                          sourceImage: _document.source,
+                          selectedShape: _selectedShapeId == null
+                              ? null
+                              : _styleSelection,
+                          textController: _textController,
+                          textFocus: _textFocus,
+                          selectedText: _document.annotations
+                              .where((item) => item.id == _selectedTextId)
+                              .firstOrNull,
+                          onDragStart: _onDragStart,
+                          onDragUpdate: _onDragUpdate,
+                          onDragEnd: _onDragEnd,
+                          onTextTap: (point) {
+                            if (_tool == renderedTool) _onTextTap(point);
+                          },
+                          onCropTap: _onCropTap,
+                          onStepTap: (point) {
+                            if (_tool == renderedTool) _placeStep(point);
+                          },
+                          ruler: _ruler,
+                          picker: _picker,
+                          pickerColor: _colorAt,
+                          onPickerHover: _hoverPicker,
+                          onPickerTap: (point) {
+                            if (_tool == renderedTool) unawaited(_pickColor(point));
+                          },
+                          cropSelected: false,
+                          activeHandle: _resizeHandle,
+                          onDoubleTapDown: (point) => _doubleTapPoint = point,
+                          onDoubleTap: () {
+                            final point = _doubleTapPoint;
+                            _doubleTapPoint = null;
+                            if (point == null) return;
+                            final hit = _tool == ScreenshotTool.cursor
+                                ? _hitText(point)
+                                : null;
+                            if (hit != null) {
+                              _openExistingText(hit);
+                            } else {
+                              _export('copy', closeAfterCopy: true);
+                            }
+                          },
+                          toolbarBuilder: _buildToolbar,
+                          toolbarSafeArea: null,
+                          displaySize: null,
+                          lines: (perLine) => _lineLengths(actions, perLine),
+                          beautify: _beautify,
+                          toolbarRect: _toolbarRect,
+                          ocrOverlays: _ocrOverlays,
+                        ),
+                      ),
+                    ),
+                    _buildOpenedImageBar(context, actions),
+                  ],
+                )
+              else if (hasImage)
                 _EditorSurface(
                   key: ValueKey(_capture['id']),
                   imageScale: (_capture['imageScale'] as num?)?.toDouble(),
@@ -3134,12 +3232,22 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                     );
                   },
                 ),
+              if (hasImage && _isOpenedImage)
+                ..._buildOpenedImageTray(context, actions),
               // 反馈气泡置于识别结果弹窗之上，保证复制或打开链接失败时不被弹窗遮挡（#144）。
               if (hasImage && _feedbackMessage != null)
                 ValueListenableBuilder<Rect>(
                   valueListenable: _toolbarRect,
                   builder: (context, toolbarRect, _) => ToolbarFeedback(
-                    toolbar: toolbarRect,
+                    toolbar: _isOpenedImage
+                        ? Rect.fromLTWH(
+                            0,
+                            MediaQuery.sizeOf(context).height -
+                                GlassMetrics.resultBarHeight,
+                            MediaQuery.sizeOf(context).width,
+                            GlassMetrics.resultBarHeight,
+                          )
+                        : toolbarRect,
                     message: _feedbackMessage!,
                     isError: _failed,
                     onHoverChanged: _failed ? _onFeedbackHoverChanged : null,
@@ -3353,6 +3461,258 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
     };
     return _busy ? actions.map((id, _) => MapEntry(id, null)) : actions;
+  }
+
+  /// context 为主题上下文，actions 为当前可用编辑动作；构建打开图片结果窗口的 52pt 底部操作栏（#67、#145）。
+  Widget _buildOpenedImageBar(
+    BuildContext context,
+    Map<String, VoidCallback?> actions,
+  ) {
+    final brushMode = _styleSelection?.shapeMode ?? _shapeMode;
+    final isMosaic =
+        _tool == ScreenshotTool.brush && brushMode == ShapeMode.mosaic;
+    return ResultWindowBar(
+      leading: [
+        ResultIconButton(
+          buttonKey: const Key(ScreenshotActions.cursor),
+          icon: Icons.near_me_outlined,
+          tooltip: '光标',
+          selected: _tool == ScreenshotTool.cursor,
+          onPressed: actions[ScreenshotActions.cursor],
+        ),
+        ResultIconButton(
+          buttonKey: const Key(ScreenshotActions.rect),
+          icon: Icons.crop_square,
+          tooltip: '图形',
+          selected: _tool == ScreenshotTool.rect,
+          onPressed: actions[ScreenshotActions.rect],
+        ),
+        ResultIconButton(
+          buttonKey: const Key(ScreenshotActions.arrow),
+          icon: Icons.north_east,
+          tooltip: '箭头',
+          selected: _tool == ScreenshotTool.arrow,
+          onPressed: actions[ScreenshotActions.arrow],
+        ),
+        ResultIconButton(
+          buttonKey: const Key(ScreenshotActions.text),
+          icon: Icons.text_fields,
+          tooltip: '文字',
+          selected: _tool == ScreenshotTool.text,
+          onPressed: actions[ScreenshotActions.text],
+        ),
+        ResultIconButton(
+          buttonKey: const Key(ScreenshotActions.brush),
+          icon: Icons.brush,
+          tooltip: '画笔',
+          selected: _tool == ScreenshotTool.brush && !isMosaic,
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  if (_textInputOpen) _commitText();
+                  _tool = ScreenshotTool.brush;
+                  if (_shapeMode == ShapeMode.mosaic) {
+                    _drawing = _drawing.copyWith(brushMode: ShapeMode.solid);
+                    _persistDrawing();
+                  }
+                  _selectedShapeId = null;
+                  _selectedTextId = null;
+                }),
+        ),
+        ResultIconButton(
+          buttonKey: const Key('${ScreenshotActions.brushPrefix}mosaic-tool'),
+          icon: Icons.grid_on,
+          tooltip: '马赛克',
+          selected: isMosaic,
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  if (_textInputOpen) _commitText();
+                  _tool = ScreenshotTool.brush;
+                  if (_shapeMode != ShapeMode.mosaic) {
+                    _drawing = _drawing.copyWith(brushMode: ShapeMode.mosaic);
+                    _persistDrawing();
+                  }
+                  _selectedShapeId = null;
+                  _selectedTextId = null;
+                }),
+        ),
+        const ResultBarDivider(),
+        ResultIconButton(
+          buttonKey: const Key('screenshot-undo'),
+          icon: Icons.undo,
+          tooltip: '撤销',
+          onPressed: !_busy && _document.canUndo ? _document.undo : null,
+        ),
+        ResultIconButton(
+          buttonKey: const Key('screenshot-redo'),
+          icon: Icons.redo,
+          tooltip: '重做',
+          onPressed: !_busy && _document.canRedo ? _document.redo : null,
+        ),
+      ],
+      trailing: [
+        ResultTextButton(
+          buttonKey: const Key(ScreenshotActions.ocrCopy),
+          label: '识别文字',
+          icon: Icons.text_snippet_outlined,
+          onPressed: actions[ScreenshotActions.ocrCopy],
+          busy: _busy && _busyId == ScreenshotActions.ocrCopy,
+        ),
+        ResultTextButton(
+          buttonKey: const Key(ScreenshotActions.ocrTranslate),
+          label: '翻译',
+          icon: Icons.translate,
+          onPressed: actions[ScreenshotActions.ocrTranslate],
+          busy: _busy && _busyId == ScreenshotActions.ocrTranslate,
+        ),
+        ResultTextButton(
+          buttonKey: const Key(ScreenshotActions.pin),
+          label: '贴图',
+          icon: Icons.push_pin_outlined,
+          onPressed: actions[ScreenshotActions.pin],
+          busy: _busy && _busyId == ScreenshotActions.pin,
+        ),
+        const ResultBarDivider(),
+        ResultTextButton(
+          buttonKey: const Key(ScreenshotActions.copy),
+          label: '复制',
+          icon: Icons.copy_outlined,
+          onPressed: actions[ScreenshotActions.copy],
+          busy: _busy && _busyId == ScreenshotActions.copy,
+        ),
+        ResultTextButton(
+          buttonKey: const Key(ScreenshotActions.save),
+          label: '保存',
+          icon: Icons.save_outlined,
+          primary: true,
+          onPressed: actions[ScreenshotActions.save],
+          busy: _busy && _busyId == ScreenshotActions.save,
+        ),
+      ],
+    );
+  }
+
+  /// context 为主题上下文，actions 为当前动作；在底部工具栏上方展开指向锚点工具的属性托盘（#67、#145）。
+  List<Widget> _buildOpenedImageTray(
+    BuildContext context,
+    Map<String, VoidCallback?> actions,
+  ) {
+    final styleTool = _styleTool;
+    final brushMode = _styleSelection?.shapeMode ?? _shapeMode;
+    final items = <Widget>[];
+    var anchorIndex = -1;
+
+    /// id 为动作标识，icon 为图标，selected 控制高亮态；追加 28pt 紧凑托盘按钮。
+    void addItem(String id, IconData icon, {bool selected = false}) {
+      if (items.isNotEmpty) items.add(const SizedBox(width: 4));
+      items.add(
+        ResultIconButton(
+          buttonKey: Key(id),
+          icon: icon,
+          tooltip: ScreenshotActions.labels[id] ?? id,
+          compact: true,
+          selected: selected,
+          onPressed: actions[id],
+        ),
+      );
+    }
+
+    /// 组间分隔线：1×16 竖线。
+    void addDivider() {
+      if (items.isEmpty) return;
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      items.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: SizedBox(
+            width: 1,
+            height: 16,
+            child: ColoredBox(color: ResultWindowColors.hairline(dark)),
+          ),
+        ),
+      );
+    }
+
+    switch (styleTool) {
+      case ScreenshotTool.rect:
+        anchorIndex = 1;
+        addItem(
+          '${ScreenshotActions.shapePrefix}rectangle',
+          Icons.crop_square,
+          selected: _styleShape == ShapeVariant.rectangle,
+        );
+        addItem(
+          '${ScreenshotActions.shapePrefix}circle',
+          Icons.circle_outlined,
+          selected: _styleShape == ShapeVariant.circle,
+        );
+        addItem(
+          '${ScreenshotActions.shapePrefix}filledRectangle',
+          Icons.square,
+          selected: _styleShape == ShapeVariant.filledRectangle,
+        );
+        addItem(
+          '${ScreenshotActions.shapePrefix}filledCircle',
+          Icons.circle,
+          selected: _styleShape == ShapeVariant.filledCircle,
+        );
+        addDivider();
+        addItem(ScreenshotActions.palette, Icons.palette_outlined);
+        if (!_styleShape.filled) {
+          addItem(ScreenshotActions.width, Icons.line_weight);
+        }
+      case ScreenshotTool.arrow:
+        anchorIndex = 2;
+        addItem(ScreenshotActions.palette, Icons.palette_outlined);
+        addItem(ScreenshotActions.width, Icons.line_weight);
+      case ScreenshotTool.text:
+        anchorIndex = 3;
+        addItem(ScreenshotActions.palette, Icons.palette_outlined);
+        if (actions.containsKey(ScreenshotActions.sizeDown)) {
+          addItem(ScreenshotActions.sizeDown, Icons.text_decrease);
+        }
+        if (actions.containsKey(ScreenshotActions.sizeUp)) {
+          addItem(ScreenshotActions.sizeUp, Icons.text_increase);
+        }
+      case ScreenshotTool.brush:
+        if (brushMode == ShapeMode.mosaic) {
+          anchorIndex = 5;
+          addItem(ScreenshotActions.width, Icons.line_weight);
+        } else {
+          anchorIndex = 4;
+          addItem(
+            '${ScreenshotActions.brushPrefix}solid',
+            Icons.brush,
+            selected: brushMode == ShapeMode.solid,
+          );
+          addItem(
+            '${ScreenshotActions.brushPrefix}highlighter',
+            Icons.border_color,
+            selected: brushMode == ShapeMode.highlighter,
+          );
+          addDivider();
+          addItem(ScreenshotActions.palette, Icons.palette_outlined);
+          addItem(ScreenshotActions.width, Icons.line_weight);
+        }
+      default:
+        return const [];
+    }
+    if (items.isEmpty || anchorIndex < 0) return const [];
+    final anchorCenterX =
+        GlassMetrics.space12 + anchorIndex * 36.0 + GlassMetrics.hitSize / 2;
+    const trayLeft = GlassMetrics.space12;
+    return [
+      Positioned(
+        key: const Key('opened-image-upward-tray'),
+        left: trayLeft,
+        bottom: GlassMetrics.resultBarHeight + GlassMetrics.space8,
+        child: ResultUpwardTray(
+          anchorCenterX: anchorCenterX - trayLeft,
+          children: items,
+        ),
+      ),
+    ];
   }
 
   /// context 为主题来源，axis 为横/竖方向，perLine 为每行并排的组数；返回透明容器中按行排列的独立按钮（#141）：
@@ -4046,6 +4406,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 class _EditorSurface extends StatefulWidget {
   const _EditorSurface({
     super.key,
+    this.openedImage = false,
     this.imageScale,
     required this.channel,
     required this.document,
@@ -4090,6 +4451,7 @@ class _EditorSurface extends StatefulWidget {
   });
 
   /// 长图来源像素倍率；为空表示整屏冻结画布，非空时保留选区逻辑宽度。
+  final bool openedImage;
   final double? imageScale;
   final Rect? toolbarSafeArea;
   final Size? displaySize;
@@ -4184,15 +4546,31 @@ class _EditorSurfaceState extends State<_EditorSurface> {
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
           final imageSize = widget.document.imageSize;
-          // 长图以采集倍率恢复原选区点宽；滚动只平移等比画布，不各自缩放横纵轴。
+          // 长图与打开图片以采集倍率恢复逻辑尺寸；打开图片四周保留 24pt 衬底边距并居中对齐（#67、#145）。
           final imageScale = widget.imageScale;
           final resultSize = imageScale == null ? null : imageSize / imageScale;
+          final canvasPad = widget.openedImage
+              ? GlassMetrics.resultCanvasPadding
+              : 0.0;
+          final paddedWidth = resultSize == null
+              ? 0.0
+              : resultSize.width + canvasPad * 2;
+          final paddedHeight = resultSize == null
+              ? 0.0
+              : resultSize.height + canvasPad * 2;
+          final hOffset = _horizontal.hasClients ? _horizontal.offset : 0.0;
+          final vOffset = _vertical.hasClients ? _vertical.offset : 0.0;
           final resultRect = resultSize == null
               ? null
               : Rect.fromLTWH(
-                  math.max(0, (constraints.maxWidth - resultSize.width) / 2) -
-                      (_horizontal.hasClients ? _horizontal.offset : 0),
-                  -(_vertical.hasClients ? _vertical.offset : 0.0),
+                  paddedWidth <= constraints.maxWidth
+                      ? (constraints.maxWidth - resultSize.width) / 2
+                      : canvasPad - hOffset,
+                  widget.openedImage
+                      ? (paddedHeight <= constraints.maxHeight
+                            ? (constraints.maxHeight - resultSize.height) / 2
+                            : canvasPad - vOffset)
+                      : -vOffset,
                   resultSize.width,
                   resultSize.height,
                 );
@@ -4507,18 +4885,31 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                           child: SizedBox(
                             width: math.max(
                               constraints.maxWidth,
-                              resultSize.width,
+                              paddedWidth,
                             ),
                             height: math.max(
                               constraints.maxHeight,
-                              resultSize.height,
+                              paddedHeight,
                             ),
                             child: Align(
-                              alignment: Alignment.topCenter,
-                              child: SizedBox(
-                                width: resultSize.width,
-                                height: resultSize.height,
-                                child: canvasContent,
+                              alignment: widget.openedImage
+                                  ? Alignment.center
+                                  : Alignment.topCenter,
+                              child: Padding(
+                                padding: EdgeInsets.all(canvasPad),
+                                child: widget.openedImage
+                                    ? ResultMediaFrame(
+                                        child: SizedBox(
+                                          width: resultSize.width,
+                                          height: resultSize.height,
+                                          child: canvasContent,
+                                        ),
+                                      )
+                                    : SizedBox(
+                                        width: resultSize.width,
+                                        height: resultSize.height,
+                                        child: canvasContent,
+                                      ),
                               ),
                             ),
                           ),
@@ -4526,29 +4917,31 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 选区外的暗角用独立层，避免吞掉画布手势。
-                IgnorePointer(
-                  child: CustomPaint(
-                    size: constraints.biggest,
-                    painter: _DimPainter(
-                      accent: NativeGlassTheme.accentOf(context),
-                      recordingPreview: widget.recordingPreview,
-                      cropDisplay: cropDisplay,
-                      beautify: widget.beautify,
-                      // 显示坐标中每个屏幕点的长度，使预览内边距与导出一致。
-                      beautifyUnit:
-                          fitted.width / (imageSize.width / widget.pixelRatio),
-                      showHandles: widget.cropSelected,
-                      windows: widget.recordingWindows
-                          ?.map(
-                            (rect) => mapRectToFitted(rect, imageSize, fitted),
-                          )
-                          .toList(),
+                // 打开图片使用中性衬底且无外部暗角遮罩；冻结截图的选区外暗角保留在独立层（#67、#145）。
+                if (!widget.openedImage)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      size: constraints.biggest,
+                      painter: _DimPainter(
+                        accent: NativeGlassTheme.accentOf(context),
+                        recordingPreview: widget.recordingPreview,
+                        cropDisplay: cropDisplay,
+                        beautify: widget.beautify,
+                        // 显示坐标中每个屏幕点的长度，使预览内边距与导出一致。
+                        beautifyUnit:
+                            fitted.width / (imageSize.width / widget.pixelRatio),
+                        showHandles: widget.cropSelected,
+                        windows: widget.recordingWindows
+                            ?.map(
+                              (rect) => mapRectToFitted(rect, imageSize, fitted),
+                            )
+                            .toList(),
+                      ),
                     ),
                   ),
-                ),
-                // 选区像素尺寸标签：优先在左上角外侧上方，空间不足时放进选区内（#106）。
-                if ((widget.tool == ScreenshotTool.crop ||
+                // 选区像素尺寸标签：冻结截图显示在选区左上角；打开图片改由原生标题栏显示尺寸（#67、#145）。
+                if (!widget.openedImage &&
+                    (widget.tool == ScreenshotTool.crop ||
                         widget.tool == ScreenshotTool.cursor) &&
                     widget.recordingWindows == null &&
                     !widget.textInputOpen)
@@ -4665,7 +5058,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                 // 拖动时不让工具栏遮住正在变化的选区，但保持挂载以保留 LiquidSplit/BouncyPresence 状态、避免松手后重播（#142）；
                 // Visibility 默认 maintainSize 为 false（底层 Offstage），隐藏时不绘制也不接收点击。
                 // 工具栏叠在文字输入框之上：网格工具栏较厚，放进选区内时仍要可以点击（#141）。
-                if (lines.lengths.isNotEmpty)
+                if (!widget.openedImage && lines.lengths.isNotEmpty)
                   Positioned.fromRect(
                     rect: layout.toolbar,
                     child: Visibility(

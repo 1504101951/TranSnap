@@ -72,9 +72,10 @@ enum AppConstants {
     static let scrollPreviewMaxImageHeight: CGFloat = 240
     static let scrollPreviewImageRadius: CGFloat = 4
     static let scrollPreviewTargetLine: CGFloat = 2
-    /// 录制结果底部工具栏长度与厚度（8 个 32pt 按钮、7 个 12pt 间距和左右各 8pt 内边距：8×32+7×12+16=356；上下各 8pt 内边距：32+16=48）；与 Dart 一致。
-    static let captureResultToolbarLength: CGFloat = 356
-    static let captureResultToolbarThickness: CGFloat = 48
+    /// 统一结果窗口骨架（#67 第 4、5、7 条、#145）：媒体区四周 24pt 留白、底部 52pt 操作栏，以及录制结果最小内容尺寸 600×200；与 Dart 一致。
+    static let resultWindowCanvasPadding: CGFloat = 24
+    static let resultWindowBarHeight: CGFloat = 52
+    static let recordingResultMinimumSize = NSSize(width: 600, height: 200)
     /// 录制最高帧率：ScreenCaptureKit 最小帧间隔为其倒数；WebM 编码以此作为码率分配的帧率提示（#110）。
     static let recordingFramesPerSecond: Int32 = 30
     /// WebM 编码页面的自定义 URL 协议名；编码页面与待编码帧都经此协议交给不挂窗口的 WKWebView（#110）。
@@ -98,6 +99,8 @@ enum AppConstants {
     /// 录屏复制到剪贴板使用的临时子目录名；下次启动应用时清空（#68 第 10 条、#142）。
     static let recordingClipboardDirectoryName = "TranslateApp-Clipboard"
     static let previewRecordingMethod = "previewRecording"
+    static let toggleRecordingPlaybackMethod = "toggleRecordingPlayback"
+    static let seekRecordingMethod = "seekRecording"
     static let exportRecordingGIFMethod = "exportRecordingGIF"
     /// exportRecordingAPNG 协议值；按 GIF 设置导出 APNG（#110），与Dart常量同步。
     static let exportRecordingAPNGMethod = "exportRecordingAPNG"
@@ -454,8 +457,8 @@ enum AppConstants {
     static let keychainErrorDomain = "TranslateApp.Keychain"
     /// 缺少屏幕录制权限时显示给用户的统一提示。
     static let screenRecordingRequiredMessage = "需要屏幕录制权限，请在系统设置中允许 TranslateApp 后重试。"
-    /// 长图结果窗的最小内容尺寸，单位点。
-    static let longScreenshotResultMinimumSize = NSSize(width: 320, height: 240)
+    /// 长图结果与打开图片结果窗的最小内容尺寸，单位点（#67 第 5 条、#145）。
+    static let longScreenshotResultMinimumSize = NSSize(width: 600, height: 240)
     /// 设置与历史独立窗口的系统框架持久化键名（#144 U-34）。
     static let settingsWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppSettingsWindow"
     static let historyWindowAutosaveName: NSWindow.FrameAutosaveName = "TranslateAppHistoryWindow"

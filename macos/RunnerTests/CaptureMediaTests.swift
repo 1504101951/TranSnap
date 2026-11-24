@@ -315,22 +315,22 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(NSApp.isActive, wasActive)
     }
 
-    /// 无参数；853×434 媒体占 869×498 内容区，系统标题栏计入窗口边界，全屏及宽/高极值均须完整容纳且不裁掉 356×65 工具栏。
+    /// 无参数；853×434 媒体加四周 24pt 衬底与底部 52pt 操作栏占 901×534 内容区，全屏及宽/高极值均须完整容纳且不裁掉 600×200 最小内容（#67、#145）。
     @MainActor
     func testVideoResultBoundsDoNotCreateAnInvisibleDesktopOverlay() {
         let visible = NSRect(x: -1920, y: 24, width: 1920, height: 1056)
         let ordinary = CaptureWindowController.resultFrame(pixels: NSSize(width: 1706, height: 868), scale: 2, visible: visible)
         let content = NSWindow.contentRect(forFrameRect: ordinary, styleMask: AppConstants.captureResultWindowStyle)
-        XCTAssertEqual(content.size, NSSize(width: 869, height: 498))
+        XCTAssertEqual(content.size, NSSize(width: 901, height: 534))
         XCTAssertGreaterThan(ordinary.height, content.height)
         XCTAssertFalse(ordinary.contains(NSPoint(x: visible.minX + 1, y: visible.minY + 1)))
         for pixels in [NSSize(width: 72, height: 48), NSSize(width: 20000, height: 1000),
                        NSSize(width: 720, height: 4800), NSSize(width: 3840, height: 2160)] {
             let frame = CaptureWindowController.resultFrame(pixels: pixels, scale: 2, visible: visible)
             XCTAssertTrue(visible.contains(frame))
-            XCTAssertGreaterThanOrEqual(frame.width, 356)
-            // 内容至少容纳底部 48pt 工具栏、上下各 8pt 间距与至少 1pt 视频（356×65），再加系统标题栏（#142）。
-            XCTAssertGreaterThan(frame.height, 65)
+            XCTAssertGreaterThanOrEqual(frame.width, 600)
+            // 内容至少容纳最小结果窗高度 200pt，再加系统标题栏（#67、#145）。
+            XCTAssertGreaterThan(frame.height, 200)
         }
     }
 

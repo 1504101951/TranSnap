@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translate_app/src/capture/capture_app.dart';
 import 'package:translate_app/src/common/constants/channel_names.dart';
+import 'package:translate_app/src/common/constants/glass_metrics.dart';
 import 'package:translate_app/src/common/constants/method_names.dart';
 import 'package:translate_app/src/common/constants/preference_keys.dart';
 import 'package:translate_app/src/common/constants/screenshot_actions.dart';
@@ -137,16 +138,24 @@ void main() {
     }
   });
 
-  testWidgets('视频结果等比显示源逻辑尺寸且八个操作在底部居中横向排列', (tester) async {
-    // 1706×868源像素来自2倍屏，1200×900视口足以按853×434逻辑尺寸完整显示，底部横向工具栏为356×48pt（#142）。
+  testWidgets('视频结果等比显示源逻辑尺寸，采用中性衬底与52pt底部操作栏骨架', (tester) async {
+    // 1706×868源像素来自2倍屏，1200×900视口足以按853×434逻辑尺寸完整显示，
+    // 四周24pt中性衬底，底部52pt实底操作栏含左侧放弃/播放条/裁剪与右侧复制/导出▾/保存（#67、#145）。
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final invoked = <(String, Object?)>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      invoked.add((call.method, call.arguments));
+      return state;
+    });
     state = {
       'id': 'video-result',
       'phase': 'videoReady',
       'duration': 9.45,
+      'position': 2.0,
+      'playing': false,
       'width': 1706,
       'height': 868,
       'previewScale': 2.0,
@@ -159,40 +168,61 @@ void main() {
           widget.viewType == ChannelNames.captureVideoPreview,
     );
     expect(tester.getSize(video), const Size(853, 434));
-    expect(find.byType(IconButton), findsNWidgets(8));
-    // 底部八个操作的32pt命中区从左至右保持12pt间距，水平居中且不覆盖媒体。
+    expect(find.byKey(const Key('result-window-canvas')), findsOneWidget);
+    final bar = find.byKey(const Key('result-window-bar'));
+    expect(bar, findsOneWidget);
     final viewport = Offset.zero & const Size(1200, 900);
+    final barRect = tester.getRect(bar);
     final media = tester.getRect(video);
-    final buttons = <Rect>[];
-    Rect? previous;
-    for (final action in [
-      '播放视频',
-      '裁剪',
-      '复制视频',
-      '保存 MP4',
-      '导出 GIF',
-      '导出 APNG',
-      '导出 WebM',
-      '关闭当前采集',
+    expect(barRect.height, GlassMetrics.resultBarHeight);
+    expect(barRect.bottom, viewport.bottom);
+    expect(media.overlaps(barRect), isFalse);
+    expect(media.bottom, lessThanOrEqualTo(barRect.top - 24));
+    for (final key in [
+      const Key('result-discard'),
+      const Key('result-play-toggle'),
+      const Key('result-video-slider'),
+      const Key('result-trim'),
+      const Key('result-copy'),
+      const Key('result-export-menu'),
+      const Key('result-save'),
     ]) {
-      expect(find.byTooltip(action).hitTestable(), findsOneWidget);
-      final button = tester.getRect(find.byTooltip(action));
-      expect(viewport.contains(button.topLeft), isTrue);
-      expect(viewport.contains(button.bottomRight), isTrue);
-      expect(media.overlaps(button), isFalse);
-      expect(button.top, greaterThan(media.bottom));
-      expect(button.bottom, viewport.bottom - 8);
-      if (previous != null) {
-        expect(button.top, previous.top);
-        expect(button.left - previous.right, 12);
-      }
-      buttons.add(button);
-      previous = button;
+      final rect = tester.getRect(find.byKey(key));
+      expect(barRect.contains(rect.topLeft), isTrue);
+      expect(barRect.contains(rect.bottomRight), isTrue);
     }
+    expect(find.text('放弃'), findsOneWidget);
+    expect(find.text('裁剪'), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('导出'), findsOneWidget);
+    expect(find.text('保存'), findsOneWidget);
+    expect(find.text('0:02'), findsOneWidget);
+    expect(find.text('0:09'), findsOneWidget);
+    // 左组从放弃到裁剪，右组从复制到保存，依次排开且放弃在最左。
     expect(
-      (buttons.first.left + buttons.last.right) / 2,
-      moreOrLessEquals(viewport.center.dx, epsilon: 0.01),
+      tester.getRect(find.byKey(const Key('result-discard'))).right,
+      lessThan(tester.getRect(find.byKey(const Key('result-play-toggle'))).left),
     );
+    expect(
+      tester.getRect(find.byKey(const Key('result-trim'))).right,
+      lessThan(tester.getRect(find.byKey(const Key('result-copy'))).left),
+    );
+    expect(
+      tester.getRect(find.byKey(const Key('result-export-menu'))).right,
+      lessThan(tester.getRect(find.byKey(const Key('result-save'))).left),
+    );
+    invoked.clear();
+    await tester.tap(find.byKey(const Key('result-play-toggle')));
+    await tester.pumpAndSettle();
+    expect(
+      invoked.any((e) => e.$1 == MethodNames.toggleRecordingPlayback),
+      isTrue,
+    );
+    await tester.tap(find.byKey(const Key('result-export-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('导出 GIF'), findsOneWidget);
+    expect(find.text('导出 APNG'), findsOneWidget);
+    expect(find.text('导出 WebM'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(
       find.byWidgetPredicate(
@@ -203,8 +233,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('受限视频窗口为底部工具栏保留完整外边距且不裁剪媒体', (tester) async {
-    // 原生窗口底部预留64pt、左右预留16pt；超大视频应等比缩小，保留上左右8pt外边距与底部工具栏。
+  testWidgets('受限视频窗口为四周24pt衬底与52pt底部栏保留外边距且不裁剪媒体', (tester) async {
+    // 媒体区四周留白24pt、底部操作栏高52pt；超大视频应等比缩小，不与操作栏重叠。
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -226,32 +256,27 @@ void main() {
             widget.viewType == ChannelNames.captureVideoPreview,
       ),
     );
+    final bar = tester.getRect(find.byKey(const Key('result-window-bar')));
     expect(media.width / media.height, closeTo(16 / 9, 0.001));
-    expect(media.left, greaterThanOrEqualTo(8));
-    expect(media.top, greaterThanOrEqualTo(8));
-    for (final action in [
-      '播放视频',
-      '裁剪',
-      '复制视频',
-      '保存 MP4',
-      '导出 GIF',
-      '导出 APNG',
-      '导出 WebM',
-      '关闭当前采集',
+    expect(media.left, greaterThanOrEqualTo(24));
+    expect(media.top, greaterThanOrEqualTo(24));
+    expect(media.bottom, lessThanOrEqualTo(bar.top - 24));
+    for (final key in [
+      const Key('result-discard'),
+      const Key('result-play-toggle'),
+      const Key('result-trim'),
+      const Key('result-copy'),
+      const Key('result-export-menu'),
+      const Key('result-save'),
     ]) {
-      final rect = tester.getRect(find.byTooltip(action));
-      expect(rect.top, greaterThanOrEqualTo(media.bottom + 16));
-      expect(rect.left, greaterThanOrEqualTo(8));
-      expect(rect.right, lessThanOrEqualTo(892));
-      expect(rect.bottom, lessThanOrEqualTo(592));
-      expect(find.byTooltip(action).hitTestable(), findsOneWidget);
+      expect(find.byKey(key).hitTestable(), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('关闭与Escape单击放弃，转换中仍能关闭', (tester) async {
-    // 关闭即丢弃会话；覆盖转换中关闭以及录制结果最小尺寸 356×65pt（底部 356×48 工具栏、16pt 间距及 1pt 媒体）。
-    tester.view.physicalSize = const Size(356, 65);
+    // 关闭即丢弃会话；覆盖转换中关闭以及录制结果最小尺寸 600×200pt（#67、#145）。
+    tester.view.physicalSize = const Size(600, 200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -266,16 +291,16 @@ void main() {
     final resultState = Map<String, Object?>.of(state);
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('关闭当前采集'));
+    await tester.tap(find.byKey(const Key('result-discard')));
     await tester.pumpAndSettle();
-    expect(find.byType(IconButton), findsNothing);
+    expect(find.byKey(const Key('result-window-bar')), findsNothing);
     expect(tester.takeException(), isNull);
     // 新结果按一次Escape即可清理；不要求第二次键盘或确认输入。
     await notify(tester, resultState);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.byType(IconButton), findsNothing);
+    expect(find.byKey(const Key('result-window-bar')), findsNothing);
     tester.view.physicalSize = const Size(900, 600);
     await notify(tester, {
       ...resultState,
@@ -285,15 +310,19 @@ void main() {
       'progress': 0.5,
     });
     await tester.pump();
-    await tester.tap(find.byTooltip('关闭当前采集'));
+    await tester.tap(find.byKey(const Key('result-discard')));
     await tester.pumpAndSettle();
-    expect(find.byType(IconButton), findsNothing);
+    expect(find.byKey(const Key('result-window-bar')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('MP4后台保存只显示保存状态，防重复且保留取消与关闭入口', (tester) async {
     // 边界：完整 MP4 的复制没有编码进度；忙碌快照缺少 progress，不能显示 0% 或其他虚构百分比。
     // 返回结果页后可再次保存；取消保存保留源视频，关闭保存中的结果结束当前会话。
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     state = {
       'id': 'saving-video',
       'phase': 'videoReady',
@@ -316,62 +345,55 @@ void main() {
     });
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('保存 MP4'));
+    await tester.tap(find.byKey(const Key('result-save')));
     await tester.pump();
-    // 正在保存时仅「取消保存」按钮外圈进度环激活，其余按钮进度环为假（#142）。
-    BusyRing ringOf(String tooltip) => tester.widget<BusyRing>(
-      find
-          .ancestor(
-            of: find.byTooltip(tooltip),
-            matching: find.byType(BusyRing),
-          )
-          .first,
+    // 正在保存时仅「取消保存」按钮外圈进度环激活，其余操作禁用且保留放弃按钮（#142、#145）。
+    BusyRing ringOf(Key key) => tester.widget<BusyRing>(
+      find.ancestor(of: find.byKey(key), matching: find.byType(BusyRing)).first,
     );
-    expect(ringOf('取消保存').active, isTrue);
-    expect(ringOf('导出 GIF').active, isFalse);
+    expect(ringOf(const Key('result-cancel-save')).active, isTrue);
     expect(find.text('正在保存…'), findsOneWidget);
     expect(find.textContaining('%'), findsNothing);
-    expect(find.byTooltip('保存 MP4'), findsNothing);
-    final buttons = {
-      for (final button in tester.widgetList<IconButton>(
-        find.byType(IconButton),
-      ))
-        button.tooltip!: button,
-    };
-    for (final label in [
-      '播放视频',
-      '裁剪',
-      '复制视频',
-      '导出 GIF',
-      '导出 APNG',
-      '导出 WebM',
-    ]) {
-      expect(buttons[label]!.onPressed, isNull);
-    }
-    expect(buttons['关闭当前采集']!.onPressed, isNotNull);
-    await tester.tap(find.byTooltip('取消保存'));
-    await tester.pump();
-    expect(ringOf('保存 MP4').active, isFalse);
-    expect(find.text('保存已取消，源视频保持不变。'), findsOneWidget);
+    expect(find.byKey(const Key('result-save')), findsNothing);
     expect(
-      tester
-          .widgetList<IconButton>(find.byType(IconButton))
-          .firstWhere((button) => button.tooltip == '保存 MP4')
-          .onPressed,
+      tester.widget<IconButton>(find.byKey(const Key('result-play-toggle'))).onPressed,
+      isNull,
+    );
+    for (final key in [
+      const Key('result-trim'),
+      const Key('result-copy'),
+      const Key('result-export-menu'),
+    ]) {
+      expect(tester.widget<TextButton>(find.byKey(key)).onPressed, isNull);
+    }
+    expect(
+      tester.widget<TextButton>(find.byKey(const Key('result-discard'))).onPressed,
       isNotNull,
     );
-    await tester.pump(const Duration(seconds: 1));
-    await tester.tap(find.byTooltip('保存 MP4'));
+    await tester.tap(find.byKey(const Key('result-cancel-save')));
     await tester.pump();
-    await tester.tap(find.byTooltip('关闭当前采集'));
+    expect(ringOf(const Key('result-save')).active, isFalse);
+    expect(find.text('保存已取消，源视频保持不变。'), findsOneWidget);
+    expect(
+      tester.widget<TextButton>(find.byKey(const Key('result-save'))).onPressed,
+      isNotNull,
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.tap(find.byKey(const Key('result-save')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('result-discard')));
     await tester.pumpAndSettle();
-    expect(find.byType(IconButton), findsNothing);
+    expect(find.byKey(const Key('result-window-bar')), findsNothing);
     expect(find.text('正在保存…'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('GIF直接导出全视频，取消和保存反馈在工具栏外仅停留一秒', (tester) async {
-    // 非整数源时长由原生元数据决定；结果页不要求用户输入尺寸和片段。
+  testWidgets('GIF从导出菜单发起，取消和保存反馈在工具栏外停留对应时长', (tester) async {
+    // 非整数源时长由原生元数据决定；结果页不要求用户输入尺寸，导出收进「导出 ▾」菜单（#67、#145）。
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     state = {
       'id': 'video',
       'phase': 'videoReady',
@@ -404,45 +426,46 @@ void main() {
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.byTooltip('导出 GIF'));
+    await tester.tap(find.byKey(const Key('result-export-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出 GIF'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('正在转换 50%'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
-    await tester.tap(find.byTooltip('取消转换'));
+    await tester.tap(find.byKey(const Key('result-cancel-export')));
     await tester.pump();
     final bubble = find.byKey(const Key('toolbar-feedback-bubble'));
     expect(find.textContaining('源视频保持不变'), findsOneWidget);
-    for (final button in tester.widgetList<IconButton>(
-      find.byType(IconButton),
-    )) {
-      // 跳过错误提示气泡自身的手动关闭按钮，只校对工具栏外围操作按钮不被气泡遮挡。
-      if (button.key == const Key('toolbar-feedback-dismiss')) continue;
-      final target = find.byTooltip(button.tooltip!);
-      expect(tester.getRect(bubble).overlaps(tester.getRect(target)), isFalse);
-      expect(target.hitTestable(), findsOneWidget);
-    }
+    expect(
+      tester
+          .getRect(bubble)
+          .overlaps(tester.getRect(find.byKey(const Key('result-window-bar')))),
+      isFalse,
+    );
     // 取消回调通过 state['error'] 呈现，沿用 2000ms 错误停读；随后保存成功反馈沿用 1000ms（#144）。
     await tester.pump(const Duration(milliseconds: 1999));
     expect(bubble, findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1));
     expect(bubble, findsNothing);
-    await tester.tap(find.byTooltip('保存 MP4'));
+    await tester.tap(find.byKey(const Key('result-save')));
     await tester.pump();
     expect(find.text('已保存 MP4'), findsOneWidget);
     expect(
-      tester.getRect(bubble).overlaps(tester.getRect(find.byTooltip('保存 MP4'))),
+      tester
+          .getRect(bubble)
+          .overlaps(tester.getRect(find.byKey(const Key('result-save')))),
       isFalse,
     );
     await tester.pump(const Duration(seconds: 1));
     expect(bubble, findsNothing);
-    expect(find.byTooltip('播放视频').hitTestable(), findsOneWidget);
+    expect(find.byKey(const Key('result-play-toggle')).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('裁剪期间全部操作等待；APNG/WebM 转换只把对应位置换成取消，完成后提示对应保存结果', (tester) async {
-    // 边界：裁剪调用在用户点系统「裁剪」或「取消」前不返回，期间七个操作都不可用（#110）；
-    // exporting 为 apng 时只有第五个位置、为 webm 时只有第六个位置变为取消，其余导出禁用，关闭仍可用；
-    // 新的 apngPath/webmPath 才显示对应保存反馈。
+  testWidgets('裁剪期间全部操作等待；APNG/WebM 转换将导出按钮变为取消，完成后提示对应保存结果', (tester) async {
+    // 边界：裁剪调用在用户点系统「裁剪」或「取消」前不返回，期间其余操作都不可用（#110）；
+    // exporting 为 apng/webm 时导出区变为取消且进度环激活，保存禁用，放弃仍可用。
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -456,7 +479,6 @@ void main() {
       'height': 480,
     };
     final trimming = Completer<void>();
-    // 两种逐帧导出的发起方法、exporting 值、提示文字、保存路径键与反馈。
     const exports = [
       (
         MethodNames.exportRecordingAPNG,
@@ -491,30 +513,42 @@ void main() {
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
 
-    /// 无参数；返回自上而下每个操作的提示文字及是否可点。
-    List<(String, bool)> actions() => [
-      for (final button in tester.widgetList<IconButton>(
-        find.byType(IconButton),
-      ))
-        (button.tooltip!, button.onPressed != null),
-    ];
-    await tester.tap(find.byTooltip('裁剪'));
+    await tester.tap(find.byKey(const Key('result-trim')));
     await tester.pump();
-    expect(actions().every((action) => !action.$2), isTrue);
+    for (final key in [
+      const Key('result-discard'),
+      const Key('result-trim'),
+      const Key('result-copy'),
+      const Key('result-export-menu'),
+      const Key('result-save'),
+    ]) {
+      expect(tester.widget<TextButton>(find.byKey(key)).onPressed, isNull);
+    }
     trimming.complete();
     await tester.pumpAndSettle();
-    expect(actions().every((action) => action.$2), isTrue);
+    for (final key in [
+      const Key('result-discard'),
+      const Key('result-trim'),
+      const Key('result-copy'),
+      const Key('result-export-menu'),
+      const Key('result-save'),
+    ]) {
+      expect(tester.widget<TextButton>(find.byKey(key)).onPressed, isNotNull);
+    }
 
-    for (final (_, _, label, pathKey, path, feedback) in exports) {
-      await tester.tap(find.byTooltip(label));
+    for (final (_, _, menuLabel, pathKey, path, feedback) in exports) {
+      await tester.tap(find.byKey(const Key('result-export-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(menuLabel));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
       expect(find.text('正在转换 25%'), findsOneWidget);
       expect(
         tester
             .widget<BusyRing>(
               find
                   .ancestor(
-                    of: find.byTooltip('取消转换'),
+                    of: find.byKey(const Key('result-cancel-export')),
                     matching: find.byType(BusyRing),
                   )
                   .first,
@@ -522,16 +556,14 @@ void main() {
             .active,
         isTrue,
       );
-      expect(actions(), [
-        ('播放视频', false),
-        ('裁剪', false),
-        ('复制视频', false),
-        ('保存 MP4', false),
-        ('导出 GIF', false),
-        for (final other in ['导出 APNG', '导出 WebM'])
-          other == label ? ('取消转换', true) : (other, false),
-        ('关闭当前采集', true),
-      ]);
+      expect(
+        tester.widget<TextButton>(find.byKey(const Key('result-save'))).onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<TextButton>(find.byKey(const Key('result-discard'))).onPressed,
+        isNotNull,
+      );
       await notify(tester, {
         ...state,
         'phase': 'videoReady',
@@ -539,7 +571,12 @@ void main() {
         pathKey: path,
       });
       expect(find.text(feedback), findsOneWidget);
-      expect(actions().every((action) => action.$2), isTrue);
+      expect(
+        tester
+            .widget<TextButton>(find.byKey(const Key('result-export-menu')))
+            .onPressed,
+        isNotNull,
+      );
       await tester.pump(const Duration(seconds: 1));
     }
     expect(tester.takeException(), isNull);
@@ -803,14 +840,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('长图结果保留来源逻辑宽度并等比滚动，只提供保存复制放弃', (tester) async {
-    // 200×2000像素来自2x屏幕，逻辑宽100、高1000；800×600视口不能放大或压扁，右侧只有三枚操作。
-    tester.view.physicalSize = const Size(800, 600);
+  testWidgets('长图结果保留来源逻辑宽度并支持适合宽度与实际大小切换，底部栏提供放弃缩放复制保存', (tester) async {
+    // 1600×2400像素来自2x屏幕，逻辑宽800、高1200；在700×600视口中，
+    // 默认「适合宽度」按可用宽 700-48=652 缩为 652×978；切到「实际大小」恢复 800×1200 且保留24pt衬底（#67、#145）。
+    tester.view.physicalSize = const Size(700, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final png = await tester.runAsync(
-      () => _selectionImage(width: 200, height: 2000),
+      () => _selectionImage(width: 1600, height: 2400),
     );
     String? copiedId;
     String? savedName;
@@ -831,8 +869,8 @@ void main() {
       'id': 'long-image',
       'phase': 'imageReady',
       'kind': 'scrolling',
-      'width': 200,
-      'height': 2000,
+      'width': 1600,
+      'height': 2400,
       'previewScale': 2.0,
       'imageBytes': png,
       'warning': '相邻画面缺少稳定的重叠内容，请减小单次滚动幅度或避开动态内容。已保留确认部分。',
@@ -840,10 +878,17 @@ void main() {
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pump();
     final preview = find.byKey(const Key('long-image-preview'));
-    expect(tester.getSize(preview), const Size(100, 1000));
+    final fitSize = tester.getSize(preview);
+    expect(fitSize.width, closeTo(652, 0.01));
+    expect(fitSize.height, closeTo(978, 0.01));
     expect(find.textContaining('相邻画面缺少稳定的重叠内容'), findsOneWidget);
-    expect(find.byTooltip('复制图片'), findsNothing);
     expect(find.byKey(const Key('screenshot-canvas')), findsNothing);
+    // 切到「实际大小」后恢复源逻辑尺寸 800×1200 并纵向滚动验证 24pt 顶部衬底（24 - 400 = -376）。
+    await tester.tap(find.byKey(const Key('result-zoom-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('实际大小'));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(preview), const Size(800, 1200));
     tester
         .state<ScrollableState>(
           find.descendant(
@@ -854,27 +899,26 @@ void main() {
         .position
         .jumpTo(400);
     await tester.pump();
-    expect(tester.getSize(preview), const Size(100, 1000));
-    // 视口上边距8pt，滚动400后预览顶边为-392，源逻辑尺寸不变。
-    expect(tester.getTopLeft(preview).dy, -392);
-    Rect? previous;
-    for (final action in ['保存', '复制', '放弃']) {
-      expect(find.byTooltip(action).hitTestable(), findsOneWidget);
-      final button = tester.getRect(find.byTooltip(action));
-      expect(button.left, greaterThan(tester.getRect(preview).right));
-      if (previous != null) {
-        expect(button.left, previous.left);
-        expect(button.top - previous.bottom, 12);
-      }
-      previous = button;
+    expect(tester.getSize(preview), const Size(800, 1200));
+    expect(tester.getTopLeft(preview).dy, -376);
+    final bar = tester.getRect(find.byKey(const Key('result-window-bar')));
+    for (final key in [
+      const Key('result-discard'),
+      const Key('result-zoom-menu'),
+      const Key('result-copy'),
+      const Key('result-save'),
+    ]) {
+      final rect = tester.getRect(find.byKey(key));
+      expect(bar.contains(rect.topLeft), isTrue);
+      expect(bar.contains(rect.bottomRight), isTrue);
     }
-    await tester.tap(find.byTooltip('复制'));
+    await tester.tap(find.byKey(const Key('result-copy')));
     await tester.pump();
     expect(copiedId, 'long-image');
     expect(find.text('已复制'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 2));
     expect(find.textContaining('相邻画面缺少稳定的重叠内容'), findsNothing);
-    await tester.tap(find.byTooltip('保存'));
+    await tester.tap(find.byKey(const Key('result-save')));
     await tester.pump();
     expect(savedName, startsWith('截图_'));
     expect(savedName, endsWith('.png'));
@@ -1281,7 +1325,7 @@ void main() {
   });
 
   // 验证录制结果按钮与 ⌘C 复制视频交互：等待态防重入、成功展示「已复制视频」、转换中禁用以及原生错误直接展示（#142）。
-  testWidgets('录制结果支持点击复制视频与⌘C，等待及转换中不可重复触发并展示失败原因（#142）', (tester) async {
+  testWidgets('录制结果支持点击复制与⌘C，等待及转换中不可重复触发并展示失败原因（#142）', (tester) async {
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1312,9 +1356,9 @@ void main() {
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
 
-    // 1. 点击复制视频并挂起原生调用：验证按钮与 ⌘C 均禁用、外圈等待进度环激活。
+    // 1. 点击复制并挂起原生调用：验证按钮与 ⌘C 均禁用、外圈等待进度环激活。
     pendingCopy = Completer<void>();
-    await tester.tap(find.byTooltip('复制视频'));
+    await tester.tap(find.byKey(const Key('result-copy')));
     await tester.pump();
     expect(copyCalls, 1);
     expect(
@@ -1322,7 +1366,7 @@ void main() {
           .widget<BusyRing>(
             find
                 .ancestor(
-                  of: find.byTooltip('复制视频'),
+                  of: find.byKey(const Key('result-copy')),
                   matching: find.byType(BusyRing),
                 )
                 .first,
@@ -1336,14 +1380,16 @@ void main() {
     await tester.pump();
     expect(copyCalls, 1);
 
-    // 完成后进度环停转，出现「已复制视频」且不覆盖工具栏按钮，1 秒后消失。
+    // 完成后进度环停转，出现「已复制视频」且不覆盖底部操作栏，1 秒后消失。
     pendingCopy.complete();
     pendingCopy = null;
     await tester.pumpAndSettle();
     expect(find.text('已复制视频'), findsOneWidget);
     final bubble = find.byKey(const Key('toolbar-feedback-bubble'));
     expect(
-      tester.getRect(bubble).overlaps(tester.getRect(find.byTooltip('复制视频'))),
+      tester
+          .getRect(bubble)
+          .overlaps(tester.getRect(find.byKey(const Key('result-copy')))),
       isFalse,
     );
     await tester.pump(const Duration(seconds: 1));
@@ -1358,7 +1404,7 @@ void main() {
     expect(find.text('已复制视频'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
 
-    // 3. 转换中「复制视频」不可点且 ⌘C 不触发调用。
+    // 3. 转换中「复制」不可点且 ⌘C 不触发调用。
     await notify(tester, {
       ...state,
       'phase': 'converting',
@@ -1366,13 +1412,7 @@ void main() {
       'progress': 0.4,
     });
     expect(
-      tester
-          .widget<IconButton>(
-            find.byWidgetPredicate(
-              (w) => w is IconButton && w.tooltip == '复制视频',
-            ),
-          )
-          .onPressed,
+      tester.widget<TextButton>(find.byKey(const Key('result-copy'))).onPressed,
       isNull,
     );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
@@ -1384,7 +1424,7 @@ void main() {
     // 4. 恢复就绪后若原生失败，展示原生返回的错误信息而非成功反馈。
     await notify(tester, {...state, 'phase': 'videoReady', 'exporting': null});
     copyError = '录制文件不存在，无法复制。';
-    await tester.tap(find.byTooltip('复制视频'));
+    await tester.tap(find.byKey(const Key('result-copy')));
     await tester.pumpAndSettle();
     expect(copyCalls, 3);
     expect(find.text('录制文件不存在，无法复制。'), findsOneWidget);
@@ -1435,7 +1475,7 @@ void main() {
   testWidgets('采集请求进行中阻止并发重入，failed 阶段仍展示错误气泡（#144）', (tester) async {
     // 作用：验证同一帧并发点击只发出首个请求，以及失败阶段不会退回隐藏空白页。
     // 边界：保存请求挂起期间同帧点击导出不发出第二个原生调用；phase=failed 且带 error 时保留错误气泡。
-    tester.view.physicalSize = const Size(520, 420);
+    tester.view.physicalSize = const Size(640, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1462,8 +1502,8 @@ void main() {
     invoked.clear();
 
     // 同帧尚未重绘禁用态前连续点击两个操作：第二个调用被 _pending 守卫拦截。
-    await tester.tap(find.byTooltip('保存 MP4'));
-    await tester.tap(find.byTooltip('导出 GIF'));
+    await tester.tap(find.byKey(const Key('result-save')));
+    await tester.tap(find.byKey(const Key('result-copy')));
     expect(invoked, [MethodNames.saveRecording]);
 
     pendingSave.complete({...state, 'savedPath': '/tmp/out.mp4'});

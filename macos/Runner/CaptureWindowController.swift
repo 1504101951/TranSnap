@@ -16,6 +16,9 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
     private var player: AVPlayer?
     private weak var playerView: AVPlayerView?
     private var playerSession: String?
+    private var playerTimeObserver: Any?
+    private var playerEndObserver: NSObjectProtocol?
+    private var playerStatusObservation: NSKeyValueObservation?
     private var preparingScreenshot = false
     private var shuttingDown = false
     private var discarding = false
@@ -236,7 +239,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
             window = NSWindow(contentRect: frame, styleMask: AppConstants.captureResultWindowStyle,
                 backing: .buffered, defer: false)
             window.title = "录制结果"
-            window.contentMinSize = Self.recordingResultMinimumSize()
+            window.contentMinSize = AppConstants.recordingResultMinimumSize
         }
         window.isReleasedWhenClosed = false
         window.isOpaque = !compact
@@ -248,20 +251,19 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
-    /// pixels 为源视频像素，scale 为来源显示倍率，visible 为屏幕可用区；返回包含系统标题栏、等比媒体与底部 356×48 工具栏的窗口（#67、#142）。
+    /// pixels 为源视频像素，scale 为来源显示倍率，visible 为屏幕可用区；返回包含系统标题栏、等比媒体（四周 24pt 衬底）与底部 52pt 操作栏的窗口（#67、#145）。
     static func resultFrame(pixels: NSSize, scale: CGFloat, visible: NSRect) -> NSRect {
         let logical = NSSize(width: pixels.width / scale, height: pixels.height / scale)
-        let inset = AppConstants.captureControlGap
         // 系统标题栏和边框占用真实窗口空间，Flutter 只布局标题栏下方的可用内容。
         let available = NSWindow.contentRect(forFrameRect: visible, styleMask: AppConstants.captureResultWindowStyle).size
-        // 上边距和左右边距 8pt；视频下方隔 8pt 是 48pt 厚的横排工具栏（宽 356pt），纵向预留 64pt。
-        let reservedWidth = inset * 2
-        let reservedHeight = inset * 2 + AppConstants.captureResultToolbarThickness
+        // 四周 24pt 留白（水平 48pt），纵向另加底部 52pt 操作栏共 100pt。
+        let reservedWidth = AppConstants.resultWindowCanvasPadding * 2
+        let reservedHeight = AppConstants.resultWindowCanvasPadding * 2 + AppConstants.resultWindowBarHeight
         let fit = min(1, min((available.width - reservedWidth) / logical.width,
                              (available.height - reservedHeight) / logical.height))
-        // 浮点缩放可能在恰好铺满时多出亚像素；窗口宽度至少容纳 356pt 工具栏并限制在可用屏幕内。
-        let contentSize = NSSize(width: min(available.width, max(logical.width * fit + reservedWidth, AppConstants.captureResultToolbarLength)),
-                                 height: min(available.height, logical.height * fit + reservedHeight))
+        let contentSize = NSSize(
+            width: min(available.width, max(logical.width * fit + reservedWidth, AppConstants.recordingResultMinimumSize.width)),
+            height: min(available.height, max(logical.height * fit + reservedHeight, AppConstants.recordingResultMinimumSize.height)))
         let frame = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: AppConstants.captureResultWindowStyle)
         let size = NSSize(width: min(visible.width, frame.width), height: min(visible.height, frame.height))
@@ -286,6 +288,10 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         }
         var state = service.snapshot()
         state["previewScale"] = originScreen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1
+        if [.videoReady, .converting].contains(service.phase) {
+            state["playing"] = player?.timeControlStatus == .playing
+            state["position"] = currentPlaybackPosition()
+        }
         return state
     }
 
@@ -420,17 +426,27 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         window.orderFrontRegardless()
     }
 
-    /// window为已经换成普通标题样式的结果窗；长图和视频使用不同标题与最小内容，避免工具栏被裁掉。
+    /// window为已经换成普通标题样式的结果窗；标题栏展示类型与尺寸，长图和视频保持各自最小内容（#67、#145）。
     private func applyResultChrome(to window: NSWindow) {
+        let state = service.snapshot()
         let image = service.phase == .imageReady
-        window.title = image ? "长截图结果" : "录制结果"
-        window.contentMinSize = image ? AppConstants.longScreenshotResultMinimumSize : Self.recordingResultMinimumSize()
+        if let width = state["width"] as? Int, let height = state["height"] as? Int {
+            if image {
+                window.title = "长截图 · \(width) × \(height)"
+            } else {
+                let duration = (state["duration"] as? Double) ?? 0
+                window.title = "录制 · \(Self.formattedDuration(duration)) · \(width) × \(height)"
+            }
+        } else {
+            window.title = image ? "长截图结果" : "录制结果"
+        }
+        window.contentMinSize = image ? AppConstants.longScreenshotResultMinimumSize : AppConstants.recordingResultMinimumSize
     }
 
-    /// 无参数；返回录制结果窗的最小内容尺寸（356×65），保留底部横排八操作、间距与至少 1pt 视频，缩放不裁掉工具栏（#142）。
-    private static func recordingResultMinimumSize() -> NSSize {
-        NSSize(width: AppConstants.captureResultToolbarLength,
-               height: AppConstants.captureControlGap * 2 + AppConstants.captureResultToolbarThickness + 1)
+    /// seconds 为秒数；格式化为 m:ss，供结果窗标题栏展示。
+    private static func formattedDuration(_ seconds: Double) -> String {
+        let total = Int(floor(max(0, seconds.isFinite ? seconds : 0)))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     /// 无参数；控制条固定在发起截图显示器的右下角，不随窗口移动或采集范围跳屏。
@@ -611,11 +627,63 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
 
     /// 无参数；暂停并释放播放器对临时文件的引用，再由资源层处理清理。
     private func releasePlayer() {
+        if let playerTimeObserver {
+            player?.removeTimeObserver(playerTimeObserver)
+            self.playerTimeObserver = nil
+        }
+        if let playerEndObserver {
+            NotificationCenter.default.removeObserver(playerEndObserver)
+            self.playerEndObserver = nil
+        }
+        playerStatusObservation?.invalidate()
+        playerStatusObservation = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         playerView?.player = nil
         player = nil
         playerSession = nil
+    }
+
+    /// 无参数；读取播放器当前位置秒数，无效时回退为 0。
+    private func currentPlaybackPosition() -> Double {
+        guard let player else { return 0 }
+        let seconds = player.currentTime().seconds
+        return seconds.isFinite && seconds > 0 ? seconds : 0
+    }
+
+    /// target 为当前 AVPlayer 实例；同步播放状态与进度给结果页底部播放条。
+    private func installPlayerObservers(on target: AVPlayer) {
+        let sessionId = playerSession
+        playerTimeObserver = target.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.player === target, self.playerSession == sessionId,
+                      [.videoReady, .converting].contains(self.service.phase) else { return }
+                self.channel?.invokeMethod(AppConstants.captureStateChangedMethod, arguments: self.captureState())
+            }
+        }
+        playerStatusObservation = target.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in
+                guard let self, self.player === target, self.playerSession == sessionId,
+                      [.videoReady, .converting].contains(self.service.phase) else { return }
+                self.channel?.invokeMethod(AppConstants.captureStateChangedMethod, arguments: self.captureState())
+            }
+        }
+        playerEndObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.didPlayToEndTimeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self, self.player === target, self.playerSession == sessionId,
+                      let item = notification.object as? AVPlayerItem, item === target.currentItem,
+                      [.videoReady, .converting].contains(self.service.phase) else { return }
+                target.pause()
+                self.channel?.invokeMethod(AppConstants.captureStateChangedMethod, arguments: self.captureState())
+            }
+        }
     }
 
     /// 无参数；返回当前长图的源像素PNG。没有可保存结果时返回nil。
@@ -677,6 +745,13 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
                     try await copyRecording()
                 case AppConstants.previewRecordingMethod:
                     try await preview()
+                case AppConstants.toggleRecordingPlaybackMethod:
+                    try await togglePlayback()
+                case AppConstants.seekRecordingMethod:
+                    guard let seconds = (args["seconds"] as? NSNumber)?.doubleValue else {
+                        throw GIFExporter.ExportError(message: "缺少播放位置。")
+                    }
+                    try await seek(to: seconds)
                 case AppConstants.trimRecordingMethod:
                     try await trim()
                 case AppConstants.exportRecordingGIFMethod, AppConstants.exportRecordingAPNGMethod:
@@ -744,19 +819,21 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         return directory.appendingPathComponent("录屏-\(formatter.string(from: date)).\(kind.fileExtension)")
     }
 
-    /// id为Flutter结果身份；返回绑定当前完整视频的系统播放器，迟到视图不读取新会话。
+    /// id为Flutter结果身份；返回绑定当前完整视频的系统播放器（不显示自带控制条），迟到视图不读取新会话（#67 第 4 条）。
     fileprivate func makePreview(id: String) -> NSView {
         let view = AVPlayerView()
+        view.controlsStyle = .none
         guard id == service.id, [.videoReady, .converting].contains(service.phase) else { return view }
         do {
             let url = try service.previewURL()
             if playerSession != id {
                 releasePlayer()
-                player = AVPlayer(url: url)
+                let nextPlayer = AVPlayer(url: url)
+                player = nextPlayer
                 playerSession = id
+                installPlayerObservers(on: nextPlayer)
             }
             view.player = player
-            view.controlsStyle = .floating
             playerView = view
         } catch { showError(error) }
         return view
@@ -773,12 +850,74 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         // 新播放项沿用裁剪端点，再次进入裁剪时手柄停在上次确认的位置。
         item.reversePlaybackEndTime = range.start
         item.forwardPlaybackEndTime = range.end
-        if player == nil { player = AVPlayer(); playerSession = token }
+        if player == nil {
+            let nextPlayer = AVPlayer()
+            player = nextPlayer
+            playerSession = token
+            installPlayerObservers(on: nextPlayer)
+        }
         player?.replaceCurrentItem(with: item)
         playerView?.player = player
         await player?.seek(to: range.start, toleranceBefore: .zero, toleranceAfter: .zero)
         guard token == service.id else { return }
         player?.play()
+    }
+
+    /// 无参数；切换当前录制结果的播放/暂停；若已播至末尾则回到裁剪起点开始播放。
+    private func togglePlayback() async throws {
+        let token = service.id
+        let url = try service.recordingURL()
+        let info = try await GIFExporter.metadata(url)
+        guard token == service.id else { throw GIFExporter.ExportError(message: "录制会话已失效。") }
+        if player == nil || playerSession != token {
+            releasePlayer()
+            let nextPlayer = AVPlayer(url: url)
+            player = nextPlayer
+            playerSession = token
+            playerView?.player = nextPlayer
+            installPlayerObservers(on: nextPlayer)
+        }
+        guard let player else { return }
+        if player.timeControlStatus == .playing {
+            player.pause()
+            return
+        }
+        let range = service.trim ?? CMTimeRange(start: .zero, duration: CMTime(seconds: info.duration, preferredTimescale: 60000))
+        if player.currentItem == nil {
+            let item = AVPlayerItem(url: url)
+            item.reversePlaybackEndTime = range.start
+            item.forwardPlaybackEndTime = range.end
+            player.replaceCurrentItem(with: item)
+        } else {
+            player.currentItem?.reversePlaybackEndTime = range.start
+            player.currentItem?.forwardPlaybackEndTime = range.end
+        }
+        let current = currentPlaybackPosition()
+        let startSec = range.start.seconds.isFinite ? max(0, range.start.seconds) : 0
+        let endSec = range.end.seconds.isFinite ? max(startSec, range.end.seconds) : info.duration
+        if current < startSec - 0.05 || current >= endSec - 0.05 {
+            await player.seek(to: range.start, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+        guard token == service.id else { return }
+        player.play()
+    }
+
+    /// seconds 为目标秒数；在结果区间内精确跳转到指定时间。
+    private func seek(to seconds: Double) async throws {
+        let token = service.id
+        let url = try service.recordingURL()
+        let info = try await GIFExporter.metadata(url)
+        guard token == service.id else { throw GIFExporter.ExportError(message: "录制会话已失效。") }
+        if player == nil || playerSession != token {
+            releasePlayer()
+            let nextPlayer = AVPlayer(url: url)
+            player = nextPlayer
+            playerSession = token
+            playerView?.player = nextPlayer
+            installPlayerObservers(on: nextPlayer)
+        }
+        let clamped = min(max(0, seconds.isFinite ? seconds : 0), max(0, info.duration))
+        await player?.seek(to: CMTime(seconds: clamped, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     /// 无参数；让结果页播放器进入系统裁剪模式并等待用户操作。点「裁剪」把区间交给资源层，
@@ -790,6 +929,8 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
             throw GIFExporter.ExportError(message: "播放器尚未就绪，请稍后再试。")
         }
         player?.pause()
+        playerView.controlsStyle = .inline
+        defer { playerView.controlsStyle = .none }
         let result = await playerView.beginTrimming()
         guard token == service.id, result == .okButton else { return }
         // 未设置的端点为无效时间，按视频起点或终点处理。
