@@ -127,14 +127,14 @@ class TranslationOverlay extends StatefulWidget {
     if (session.sourceIsTarget) {
       content = measure(snap.sourceText, lead, textWidth);
     } else {
-      // 译文未到达时按骨架两行估算；原文右侧常驻两个 32pt 悬停按钮槽与 8pt 间距。
+      // 译文未到达时按骨架两行估算；原文占满内容宽度（#134 第 4 条）。
       final translated = snap.translatedText.isEmpty
           ? lead.height! * lead.fontSize! * 2
           : measure(snap.translatedText, lead, textWidth);
       final source = measure(
         snap.sourceText,
         textStyleFor(translated: false, dictionary: false, single: true),
-        textWidth - GlassMetrics.space8 - GlassMetrics.hitSize * 2,
+        textWidth,
       );
       content = translated + GlassMetrics.space8 + source;
     }
@@ -366,7 +366,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             else ...[
               revealedResult,
               const SizedBox(height: GlassMetrics.space8),
-              _sourceBlock(snap.sourceText, sourceBody),
+              sourceBody,
             ],
           ],
         ),
@@ -385,11 +385,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                 ),
                 const Divider(),
                 Expanded(
-                  child: _pane(
-                    title: '原文',
-                    body: sourceBody,
-                    actions: _sourceActions(snap.sourceText),
-                  ),
+                  child: _pane(title: '原文', body: sourceBody),
                 ),
               ],
             ),
@@ -418,7 +414,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ],
       );
     } else {
-      // 对照布局：左译文右原文各半，原文栏悬停时栏名右侧出现朗读与复制（#134 第 5 条）。
+      // 对照布局：左译文右原文各半，原文复制与朗读沉到底部操作行右侧（#134 第 5 条）。
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -427,11 +423,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: _pane(
-              title: '原文',
-              body: sourceBody,
-              actions: _sourceActions(snap.sourceText),
-            ),
+            child: _pane(title: '原文', body: sourceBody),
           ),
         ],
       );
@@ -483,6 +475,26 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
               label: _speaking(sourceOnly) ? '停止朗读' : '朗读',
               onPressed: primaryText.isEmpty ? null : () => _speak(sourceOnly),
             ),
+            if (!sourceOnly) ...[
+              const Spacer(),
+              _FooterAction(
+                key: const ValueKey('card-copy-source'),
+                icon: CopyConfirmIcon(
+                  trigger: _copyTriggers['source'] ?? 0,
+                  size: 14,
+                ),
+                label: '复制原文',
+                onPressed: snap.sourceText.isEmpty
+                    ? null
+                    : () => _copy('source', snap.sourceText),
+              ),
+              _FooterAction(
+                key: const ValueKey('card-speak-source'),
+                icon: SpeechWaveIcon(speaking: _speaking(true), size: 14),
+                label: _speaking(true) ? '停止朗读' : '朗读原文',
+                onPressed: snap.sourceText.isEmpty ? null : () => _speak(true),
+              ),
+            ],
           ],
         ),
       ),
@@ -644,47 +656,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     }
     widget.onSpeak(source);
   }
-
-  /// text 为原文全文；返回「朗读原文」「复制原文」两个 24pt 可见、32pt 命中的图标按钮，原文为空时禁用。
-  List<Widget> _sourceActions(String text) => [
-    _CardButton(
-      tooltip: _speaking(true) ? '停止朗读' : '朗读原文',
-      icon: SpeechWaveIcon(speaking: _speaking(true), size: 14),
-      onPressed: text.isEmpty ? null : () => _speak(true),
-      visual: 24,
-      radius: GlassMetrics.menuItemRadius,
-      iconSize: 14,
-    ),
-    _CardButton(
-      tooltip: '复制原文',
-      icon: CopyConfirmIcon(trigger: _copyTriggers['source'] ?? 0, size: 14),
-      onPressed: text.isEmpty ? null : () => _copy('source', text),
-      visual: 24,
-      radius: GlassMetrics.menuItemRadius,
-      iconSize: 14,
-    ),
-  ];
-
-  /// text 为原文全文，body 为原文段落；返回单栏布局下的原文块，悬停时右侧显示朗读与复制（#134 第 4 条）。
-  /// 按钮位置常驻、只切换可见性，悬停不会让原文重新换行。
-  Widget _sourceBlock(String text, Widget body) => MouseRegion(
-    onEnter: (_) => setState(() => _hoveredPane = '原文'),
-    onExit: (_) => setState(() => _hoveredPane = null),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: body),
-        const SizedBox(width: GlassMetrics.space8),
-        Visibility.maintain(
-          visible: _hoveredPane == '原文',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _sourceActions(text),
-          ),
-        ),
-      ],
-    ),
-  );
 
   /// title 为栏名（也是悬停标识），body 为可滚动正文，actions 为悬停该栏时在栏名右侧出现的按钮；
   /// 返回 28pt 栏头加独立滚动正文的一栏（对照与词典布局）。

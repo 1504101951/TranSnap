@@ -53,16 +53,14 @@ abstract final class ToolbarGrid {
   static const hintFont = 11.0;
   static const blockThickness = 32 + blockPadding * 2;
 
-  /// 二级托盘（子级与属性，#67）：内边距 2pt，按钮 28pt、间距 4pt，圆角 9（按钮 7 加内边距 2），厚度 32；
-  /// 三级托盘（附加行）：按钮保持 32pt，圆角 10（按钮 8 加内边距 2），厚度 36；
+  /// 二级托盘（子级与属性）与三级托盘（附加行，#67）共用同一尺寸与圆角：
+  /// 内边距 2pt，按钮 28pt、间距 4pt，圆角 9（按钮 7 加内边距 2），厚度 32；
   /// 指向锚点的三角高 4pt（等于行间距）、底宽 12pt；托盘内各组之间 1pt×16pt 短分隔线，两侧各 4pt。
   static const trayPadding = 2.0;
   static const trayButton = 28.0;
   static const trayButtonRadius = 7.0;
   static const trayRadius = 9.0;
   static const trayThickness = trayButton + trayPadding * 2;
-  static const stripRadius = 10.0;
-  static const stripThickness = 32 + trayPadding * 2;
   static const trayCaretHeight = 4.0;
   static const trayCaretWidth = 12.0;
   static const traySeparatorLength = 16.0;

@@ -304,10 +304,24 @@ final class SelectionMonitor {
         let pid = app.processIdentifier
         // 在原文采集开始时冻结来源名称，不在异步完成后重新按PID查询。
         let sourceAppName = app.localizedName
+        if gesture == .hotkey {
+            // 全局翻译快捷键先即时唤起处于读取/翻译状态的面板，选区读取由 Dart 经 readSelectionForTranslation 异步完成，
+            // 避免被 80ms 去抖或网页模拟复制的轮询等待卡住面板弹出。
+            stopObservingSelection()
+            let anchor = NSEvent.mouseLocation
+            MacPlatformBridge.Shared.instance?.emitSelectionCaptured(
+                text: "", gesture: gesture.rawValue, readFailure: nil, x: anchor.x, y: anchor.y,
+                sourcePID: pid, sourceAppName: sourceAppName, inputAnchor: nil, inputSelection: nil
+            )
+            return
+        }
         // 仅输入翻译记录“读取原文”阶段耗时：从开始采集到选区事件发出。
         let inputReadStart: ContinuousClock.Instant? = gesture == .inputHotkey ? ContinuousClock.now : nil
         captureTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
+            // 明确输入翻译快捷键不等待被动选区 80ms 去抖。
+            if !gesture.isExplicit {
+                do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
+            }
             // 读取绑定手势来源，切换应用或新手势会取消本次读取。
             var selection = await AccessibilitySelection.readFrontmostSelection(sourcePID: pid, allowCopy: gesture.isExplicit)
             // 输入翻译读不到选区时，在非安全文本输入框内全选后再读，替换整个输入框。

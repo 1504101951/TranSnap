@@ -48,8 +48,8 @@ enum AccessibilitySelection {
            let copied = await readByCopyingSelection(pasteboard: .general, copy: postCopyKey, accepts: { copied in
                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID else { return false }
                guard let original = result.text else { return true }
-               // 只允许浏览器补回空白；其他文本可能来自用户的新复制，不能恢复旧剪贴板覆盖它。
-               return original.filter { !$0.isWhitespace } == copied.filter { !$0.isWhitespace }
+               // 只允许浏览器补回空白、换行或去掉 AX 注入的列表符号；其他文本可能来自用户的新复制，不能恢复旧剪贴板覆盖它。
+               return TextSelectionContext.matchesCopiedSelection(axText: original, copiedText: copied)
            }) {
             return (copied, result.element)
         }

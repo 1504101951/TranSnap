@@ -198,10 +198,17 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
             guard currentSessionId == sessionId, let pid = sourceProcessIdentifier else { result(nil); return }
             selectionReadTask?.cancel()
-            // 明确点击翻译后才允许复制读取段落，自动检测阶段不注入按键。
+            // 明确点击或热键唤起后才允许复制读取段落，自动检测阶段不注入按键。
             selectionReadTask = Task { @MainActor [weak self] in
                 let selection = await AccessibilitySelection.readFrontmostSelection(sourcePID: pid, allowCopy: true)
                 guard let self, !Task.isCancelled, self.currentSessionId == sessionId else { result(nil); return }
+                let text = selection.text ?? ""
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   await AccessibilitySelection.focusIsSecure(sourcePID: pid) {
+                    guard !Task.isCancelled, self.currentSessionId == sessionId else { result(nil); return }
+                    result(FlutterError(code: SelectionReadFailure.secureField.rawValue, message: "密码框中的文字不会被读取。", details: nil))
+                    return
+                }
                 result(selection.text)
             }
         case AppConstants.replaceSelectionMethod:

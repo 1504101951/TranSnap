@@ -1166,6 +1166,25 @@ class RunnerTests: XCTestCase {
         // 网页已有 AX 文字也需保留段落；原生文本框的完整 AX 文字不额外动剪贴板。
         XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXStaticText", "AXWebArea"], hasAXText: true, allowCopy: true))
         XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXTextArea"], hasAXText: true, allowCopy: true))
+
+        // 作用：验证网页无序列表在 AX 含 • 粘连而浏览器复制含换行不含 • 时仍判定同一选区，无关剪贴板拒绝。
+        // 边界：覆盖多条列表项目符号粘连、纯文本换行一致，以及内容不匹配或空串。
+        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
+            axText: "• First item.• Second item.",
+            copiedText: "First item.\nSecond item."
+        ))
+        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
+            axText: "Paragraph oneParagraph two",
+            copiedText: "Paragraph one\n\nParagraph two"
+        ))
+        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
+            axText: "• First item.",
+            copiedText: "Unrelated clipboard text"
+        ))
+        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
+            axText: "•",
+            copiedText: ""
+        ))
     }
 
     /// 无参数；在位图上绘制文字后 OCR Markdown 必须读出该词，空图返回空串。

@@ -628,8 +628,12 @@ void main() {
         final targetRow = find.byKey(const Key('recording-targets-row'));
         expect(targetRow, findsOneWidget);
         expect(
-          find.descendant(of: targetRow, matching: find.byType(AppKitView)),
+          find.descendant(of: targetRow, matching: find.byType(IconButton)),
           findsNWidgets(6),
+        );
+        expect(
+          find.descendant(of: targetRow, matching: find.byType(AppKitView)),
+          findsNothing,
         );
         // 原生Esc收起目标行后保留冻结帧和裁剪；再次展开仍可启动同一个选区。
         await messenger.handlePlatformMessage(
@@ -1236,10 +1240,14 @@ void main() {
     final confirm = find.byTooltip('开始录制');
     expect(confirm, findsOneWidget);
     final targetRow = find.byKey(const Key('recording-targets-row'));
-    // 三个目标、录制选项、开始与取消各自使用独立材料（#129）。
+    // 三个目标、录制选项、开始与取消共用三级实底托盘且不逐按钮使用玻璃材料（#67）。
+    expect(
+      find.descendant(of: targetRow, matching: find.byType(IconButton)),
+      findsNWidgets(6),
+    );
     expect(
       find.descendant(of: targetRow, matching: find.byType(AppKitView)),
-      findsNWidgets(6),
+      findsNothing,
     );
     final screen =
         Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
@@ -1247,7 +1255,10 @@ void main() {
       final rect = tester.getRect(find.byTooltip(tooltip));
       expect(screen.contains(rect.topLeft), isTrue);
       expect(screen.contains(rect.bottomRight), isTrue);
-      expect(rect.size, const Size(32, 32));
+      expect(
+        rect.size,
+        const Size(ToolbarGrid.trayButton, ToolbarGrid.trayButton),
+      );
       expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
     }
     expect(find.byTooltip('固定区域'), findsNothing);

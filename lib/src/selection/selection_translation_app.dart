@@ -124,7 +124,10 @@ class _TranslateAppState extends State<TranslateApp> {
         // 结果尺寸与卡片布局共用 TranslationOverlay.layoutFor：单栏按内容定高，对照与词典为 720×420（#134）。
         final size = explicit ? _resultSize() : _triggerSize;
         if (explicit) {
-          unawaited(_activate(readSelection: false));
+          // 全局翻译快捷键先立即唤起面板，文本尚未随事件到达时后台异步补读选区。
+          final needsRead =
+              gesture == SelectionGestureTypes.hotkey && text.trim().isEmpty;
+          unawaited(_activate(readSelection: needsRead));
         }
         // 输入翻译全过程不显示按钮或卡片，结果只体现在来源输入框或失败气泡（#99）。
         if (_replaceSessionId == sessionId) return;

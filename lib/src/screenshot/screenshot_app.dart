@@ -529,10 +529,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final centers = <String, double>{};
     void record(_ToolbarLine line) {
       if (line.strip != null) {
+        const step = ToolbarGrid.trayButton + 4;
         for (final MapEntry(:key, :value)
             in strips[line.strip]!.hosts.entries) {
           centers[key] =
-              line.indent + ToolbarGrid.trayPadding + value * 36 + 16;
+              line.indent +
+              ToolbarGrid.trayPadding +
+              value * step +
+              ToolbarGrid.trayButton / 2;
         }
         return;
       }
@@ -556,9 +560,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
     // hang 返回挂到锚点下方的托盘：limit 为托盘末端不超出的长度（二级托盘不限制）。
     _ToolbarLine hang(_ToolbarLine line, double limit) {
-      final first =
-          ToolbarGrid.trayPadding +
-          (line.strip != null ? 16 : ToolbarGrid.trayButton / 2);
+      const first = ToolbarGrid.trayPadding + ToolbarGrid.trayButton / 2;
       final center = centers[line.anchor];
       final bare = _lineLength(line, strips);
       final indent = center == null
@@ -596,17 +598,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   }
 
   /// 无参数；返回当前展开的三级托盘（键到按钮数、唤起它的按钮与托盘内的下一级锚点），顺序即插入顺序：
-  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 32pt 按钮加 4pt 间距折算格数（#67）。
-  Map<String, _Strip> _strips() => {
-    if (_beautifyExpanded)
-      'screenshot-beautify-row': (
-        count:
-            1 +
-            ((BeautifyMetrics.paddingMenuWidth + 4) / 36).ceil() +
-            ((BeautifyMetrics.radiusMenuWidth + 4) / 36).ceil(),
-        anchor: ScreenshotActions.beautify,
-        hosts: const {},
-      ),
+  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 28pt 按钮加 4pt 间距折算格数（#67）。
+  Map<String, _Strip> _strips() {
+    const step = ToolbarGrid.trayButton + 4;
+    return {
+      if (_beautifyExpanded)
+        'screenshot-beautify-row': (
+          count:
+              1 +
+              ((BeautifyMetrics.paddingMenuWidth + 4) / step).ceil() +
+              ((BeautifyMetrics.radiusMenuWidth + 4) / step).ceil(),
+          anchor: ScreenshotActions.beautify,
+          hosts: const {},
+        ),
     if (_expandedRow == _ExpandedRow.ratio)
       'ratio-row': (
         count: CropMetrics.ratios.length,
@@ -622,15 +626,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             : ScreenshotActions.record,
         hosts: const {'recording-target-application': 1},
       ),
-    if ((_recordingExpanded || _liveExpanded) &&
-        _tool == ScreenshotTool.crop &&
-        _recordingTarget == CaptureTarget.application)
-      'recording-applications-row': (
-        count: math.max(1, _recordingApplications.length),
-        anchor: 'recording-target-application',
-        hosts: const {},
-      ),
-  };
+      if ((_recordingExpanded || _liveExpanded) &&
+          _tool == ScreenshotTool.crop &&
+          _recordingTarget == CaptureTarget.application)
+        'recording-applications-row': (
+          count: math.max(1, _recordingApplications.length),
+          anchor: 'recording-target-application',
+          hosts: const {},
+        ),
+    };
+  }
 
   /// count 为一组格数；返回分区块内一组按钮沿主轴的长度：格数 × 32 与 4pt 间距。
   static double _cellsLength(int count) =>
@@ -657,12 +662,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       line.groups.first.key != 'screenshot-status-group';
 
   /// line 为工具栏一行，strips 为当前三级托盘；返回该行沿主轴的长度（含缩进）（#67）：
-  /// 分区行为各块长度加块间距 8；二级托盘为内边距、28pt 按钮与组间短分隔；三级托盘为内边距与 32pt 按钮。
+  /// 分区行为各块长度加块间距 8；二级与三级托盘均为内边距、28pt 按钮与组间短分隔。
   static double _lineLength(_ToolbarLine line, Map<String, _Strip> strips) {
     if (line.strip != null) {
       return line.indent +
           ToolbarGrid.trayPadding * 2 +
-          _cellsLength(strips[line.strip]!.count);
+          _trayRun(strips[line.strip]!.count);
     }
     if (_isTray(line)) {
       return line.indent +
@@ -677,10 +682,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (line.groups.length - 1) * ToolbarGrid.blockGap;
   }
 
-  /// line 为工具栏一行；返回它沿交叉方向的厚度：分区行 40、二级托盘 32、三级托盘 36（#67）。
-  static double _lineThickness(_ToolbarLine line) => line.strip != null
-      ? ToolbarGrid.stripThickness
-      : _isTray(line)
+  /// line 为工具栏一行；返回它沿交叉方向的厚度：分区行 40、二级与三级托盘 32（#67）。
+  static double _lineThickness(_ToolbarLine line) =>
+      line.strip != null || _isTray(line)
       ? ToolbarGrid.trayThickness
       : ToolbarGrid.blockThickness;
 
@@ -3654,7 +3658,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    /// label为提示与可访问名称，icon为图标，selected为选择状态；返回32pt独立材料按钮。
+    /// label 为提示与可访问名称，icon 为图标，selected 为选择状态；返回复用二级托盘样式的 28pt/r7 按钮（无逐按钮材料底）。
     Widget captureButton(
       String label,
       Widget icon,
@@ -3663,23 +3667,42 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }) {
       final accentFill = NativeGlassTheme.accentFillOf(context);
       final onAccent = NativeGlassTheme.onAccentOf(context);
-      return NativeGlassSurface(
-        material: true,
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: MergeSemantics(
-            child: Semantics(
-              label: label,
-              selected: selected,
-              child: IconButton(
-                tooltip: label,
-                onPressed: _busy ? null : action,
-                icon: icon,
-                style: IconButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  backgroundColor: selected ? accentFill : Colors.transparent,
-                  foregroundColor: selected ? onAccent : colors.onSurface,
+      const radius = ToolbarGrid.trayButtonRadius;
+      return DecoratedBox(
+        decoration: ShapeDecoration(
+          color: selected ? accentFill : Colors.transparent,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(radius),
+          ),
+        ),
+        child: NativeGlassButtonFeedback(
+          radius: radius,
+          enabled: !_busy && action != null,
+          bezel: false,
+          child: SizedBox.square(
+            dimension: ToolbarGrid.trayButton,
+            child: MergeSemantics(
+              child: Semantics(
+                label: label,
+                selected: selected,
+                child: IconButton(
+                  tooltip: label,
+                  onPressed: _busy ? null : action,
+                  icon: icon,
+                  style: ButtonStyle(
+                    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                    backgroundColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
+                    ),
+                    foregroundColor: WidgetStatePropertyAll(
+                      selected ? onAccent : colors.onSurface,
+                    ),
+                    shape: WidgetStatePropertyAll(
+                      RoundedSuperellipseBorder(
+                        borderRadius: BorderRadius.circular(radius),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -3707,16 +3730,22 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
 
     final beautify = _beautify;
+    final beautifyMenuFlat = ShapeDecoration(
+      color: Colors.transparent,
+      shape: RoundedSuperellipseBorder(
+        borderRadius: BorderRadius.circular(ToolbarGrid.trayButtonRadius),
+      ),
+    );
     // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
     final beautifyControls = <Widget>[
       if (_beautifyExpanded) ...[
         captureButton(
           '背景',
           beautify == null
-              ? const Icon(Icons.block, size: 16)
+              ? const Icon(Icons.block, size: 14)
               : Container(
-                  width: 16,
-                  height: 16,
+                  width: 14,
+                  height: 14,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: beautify.background.gradient == null
@@ -3735,9 +3764,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
         SizedBox(
           width: BeautifyMetrics.paddingMenuWidth,
-          height: 32,
+          height: ToolbarGrid.trayButton,
           child: NativeGlassMenuButton<double>(
             value: beautify?.padding ?? BeautifyMetrics.defaultPadding,
+            dense: true,
+            flat: beautifyMenuFlat,
             items: {
               for (final value in BeautifyMetrics.paddings)
                 value: '内边距 ${value.round()}',
@@ -3751,9 +3782,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
         SizedBox(
           width: BeautifyMetrics.radiusMenuWidth,
-          height: 32,
+          height: ToolbarGrid.trayButton,
           child: NativeGlassMenuButton<double>(
             value: beautify?.cornerRadius ?? BeautifyMetrics.roundRadius,
+            dense: true,
+            flat: beautifyMenuFlat,
             items: {
               BeautifyMetrics.squareRadius: '直角',
               BeautifyMetrics.roundRadius: '圆角',
@@ -3798,7 +3831,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             (() {
               final button = captureButton(
                 target.value.$1,
-                Icon(target.value.$2, size: 16),
+                Icon(target.value.$2, size: 14),
                 () => _selectRecordingTarget(target.key),
                 selected: _recordingTarget == target.key,
               );
@@ -3849,7 +3882,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               ],
               builder: (context, controller, _) => captureButton(
                 _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
-                const Icon(Icons.tune, size: 16),
+                const Icon(Icons.tune, size: 14),
                 () =>
                     controller.isOpen ? controller.close() : controller.open(),
                 selected:
@@ -3859,7 +3892,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             ),
           captureButton(
             _liveExpanded ? '开始实时翻译' : '开始录制',
-            const Icon(Icons.fiber_manual_record, size: 16),
+            const Icon(Icons.fiber_manual_record, size: 14),
             _loadingApplications ||
                     (_recordingTarget == CaptureTarget.application &&
                         _recordingApplication == null)
@@ -3868,7 +3901,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ),
           captureButton(
             _liveExpanded ? '取消实时翻译' : '取消录制',
-            const Icon(Icons.close, size: 16),
+            const Icon(Icons.close, size: 14),
             () => setState(() {
               _expandedRow = null;
               unawaited(_syncRecordingPreview());
@@ -3883,9 +3916,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         'recording-applications-row': captureRow('recording-applications-row', [
           if (_loadingApplications)
             const SizedBox(
-              width: 32,
-              height: 32,
-              child: Icon(Icons.hourglass_top, size: 16),
+              width: ToolbarGrid.trayButton,
+              height: ToolbarGrid.trayButton,
+              child: Icon(Icons.hourglass_top, size: 14),
             ),
           for (final app in _recordingApplications)
             captureButton(
@@ -3893,10 +3926,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               app['icon'] is Uint8List
                   ? Image.memory(
                       app['icon'] as Uint8List,
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                     )
-                  : const Icon(Icons.apps, semanticLabel: '应用图标不可用'),
+                  : const Icon(
+                      Icons.apps,
+                      size: 14,
+                      semanticLabel: '应用图标不可用',
+                    ),
               _loadingApplications
                   ? null
                   : () {
@@ -3924,9 +3961,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ),
     );
 
-    // tray 返回挂在锚点按钮下方（竖放为右侧）的托盘：二级托盘装子级与属性组（28pt 按钮、r9），
-    // 三级托盘装附加行（32pt 按钮、r10、内容超出时托盘内滚动）；起点缩进与三角位置由 _placeTrays 计算，
-    // 顶部（竖放为左侧）4pt 高、12pt 宽、同托盘底色的三角指向锚点按钮中心（#67）。
+    // tray 返回挂在锚点按钮下方（竖放为右侧）的托盘：二级与三级托盘共用 28pt 按钮、r9；
+    // 起点缩进与三角位置由 _placeTrays 计算，顶部（竖放为左侧）4pt 高、12pt 宽、同托盘底色的三角指向锚点按钮中心（#67）。
     Widget tray(_ToolbarLine row) {
       final strip = row.strip != null;
       final children = <Widget>[];
@@ -3935,10 +3971,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         children.add(groupOf(group, compact: true));
       }
       final body = DecoratedBox(
-        decoration: panel(
-          trayColor,
-          strip ? ToolbarGrid.stripRadius : ToolbarGrid.trayRadius,
-        ),
+        decoration: panel(trayColor, ToolbarGrid.trayRadius),
         child: Padding(
           padding: const EdgeInsets.all(ToolbarGrid.trayPadding),
           child: strip

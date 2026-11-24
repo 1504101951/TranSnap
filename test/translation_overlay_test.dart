@@ -253,9 +253,14 @@ void main() {
         tester.getTopLeft(find.text('你好')).dx,
         tester.getTopLeft(find.text('Hello')).dx,
       );
-      // 原文的复制在悬停原文时出现；译文的复制在底部操作行。
-      expect(find.byTooltip('复制原文'), findsOneWidget);
+      // 原文的复制与译文的复制均在底部操作行，分别位于左右两侧。
+      expect(find.byKey(const ValueKey('card-copy-source')), findsOneWidget);
+      expect(find.text('复制原文'), findsOneWidget);
       expect(find.text('复制译文'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('复制译文')).dx,
+        lessThan(tester.getTopLeft(find.text('复制原文')).dx),
+      );
       // 标题下缘空白也能拖动；正文/关闭保持独立，拖动不改变结果内容或会话。
       // 边界：标题区高 44pt（#134），在距顶 40pt 处起拖仍属拖动区。
       final dragArea = find.byKey(const ValueKey('result-drag-area'));
@@ -276,7 +281,7 @@ void main() {
     },
   );
 
-  testWidgets('底部「朗读」朗读译文，悬停原文的「朗读原文」朗读原文，空内容禁用（#101、#134）', (tester) async {
+  testWidgets('底部操作行左侧「朗读」朗读译文、右侧「朗读原文」朗读原文，空内容禁用（#101、#134）', (tester) async {
     // 边界：译文为空（翻译刚开始）时底部「朗读」禁用、「朗读原文」可用；两者都有内容时各自回报 false（译文）与 true（原文）。
     final session = SelectionSession(
       provider: _Provider(),
@@ -310,17 +315,7 @@ void main() {
       ),
     );
     expect(footer('朗读').onPressed, isNull);
-    expect(
-      tester
-          .widget<IconButton>(
-            find.ancestor(
-              of: find.byTooltip('朗读原文'),
-              matching: find.byType(IconButton),
-            ),
-          )
-          .onPressed,
-      isNotNull,
-    );
+    expect(footer('朗读原文').onPressed, isNotNull);
     session.snapshot = const TranslationSnapshot(
       phase: TranslationPhase.completed,
       sourceText: 'Hello',
@@ -329,7 +324,7 @@ void main() {
     session.notifyListeners();
     await tester.pump();
     await tester.tap(find.text('朗读'));
-    await tester.tap(find.byTooltip('朗读原文'));
+    await tester.tap(find.text('朗读原文'));
     expect(spoken, [false, true]);
   });
 
@@ -541,10 +536,11 @@ void main() {
     session.begin(sessionId: 'same', text: '今天天气很好');
     await pumpCard(tester, session);
     expect(session.sourceIsTarget, isTrue);
-    // 原文是唯一正文：底部复制作用于原文，没有译文入口，也没有悬停原文块。
+    // 原文是唯一正文：底部只保留左侧「复制原文」「朗读」，右侧不再重复出现第二组原文按钮。
     expect(find.text('复制原文'), findsOneWidget);
     expect(find.text('复制译文'), findsNothing);
-    expect(find.byTooltip('复制原文'), findsNothing);
+    expect(find.byKey(const ValueKey('card-copy-source')), findsNothing);
+    expect(find.byKey(const ValueKey('card-speak-source')), findsNothing);
     expect(find.text('今天天气很好'), findsOneWidget);
   });
 
@@ -681,11 +677,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('原文栏「朗读原文」与底部「朗读」各自切换，并同步外部 speakingSource 状态（#101、#144）', (
+  testWidgets('底部「朗读原文」与「朗读」各自切换，并同步外部 speakingSource 状态（#101、#144）', (
     tester,
   ) async {
     // 作用：验证原文（含词典单词发音）与译文分别朗读、不发生状态反转，且支持外部 speakingSource 受控同步。
-    // 边界：词典布局点击「朗读原文」后原文按钮变为「停止朗读」，底部仍为「朗读」；外部 speakingSource=false 时底部为「停止朗读」。
+    // 边界：词典布局点击「朗读原文」后该按钮变为「停止朗读」，译文按钮仍为「朗读」；外部 speakingSource=false 时译文按钮为「停止朗读」。
     tester.view.physicalSize = const Size(720, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -719,21 +715,39 @@ void main() {
     await session.activate();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('朗读原文'));
+    await tester.tap(find.byKey(const ValueKey('card-speak-source')));
     await tester.pump();
     expect(spoken, [true]);
-    expect(find.byTooltip('停止朗读'), findsOneWidget);
-    expect(find.text('朗读'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('card-speak-source')),
+        matching: find.text('停止朗读'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('card-speak')),
+        matching: find.text('朗读'),
+      ),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byTooltip('停止朗读'));
+    await tester.tap(find.byKey(const ValueKey('card-speak-source')));
     await tester.pump();
     expect(spoken, [true, true]);
-    expect(find.byTooltip('朗读原文'), findsOneWidget);
+    expect(find.text('朗读原文'), findsOneWidget);
 
     await tester.pumpWidget(card(speakingSource: false));
     await tester.pump();
-    expect(find.text('停止朗读'), findsOneWidget);
-    expect(find.byTooltip('朗读原文'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('card-speak')),
+        matching: find.text('停止朗读'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('朗读原文'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

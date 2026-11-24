@@ -17,6 +17,7 @@ import 'package:translate_app/src/screenshot/drawing_controls.dart';
 import 'package:translate_app/src/screenshot/edit_document.dart';
 import 'package:translate_app/src/screenshot/screenshot_app.dart';
 import 'package:translate_app/src/common/widgets/app_motion.dart';
+import 'package:translate_app/src/common/widgets/native_glass.dart';
 import 'package:translate_app/src/common/widgets/native_resize_cursor.dart';
 import 'package:translate_app/src/screenshot/screenshot_editor_layout.dart';
 
@@ -91,10 +92,10 @@ void main() {
 
   test('三四行工具栏在全屏贴边与横竖布局中保持屏幕内且不改变画布', () {
     // 作用：多行工具栏无论横放竖放都完整位于视口内，厚度按传入的各行厚度之和计算。
-    // 边界：三行＝分区行 40＋二级托盘 32＋三级托盘 36＋2 个行间距 4＝116；
-    // 四行再加一个分区行与行间距＝160（#67）；源图倍率1/2及负原点显示器归一化后的视口使用相同局部几何。
+    // 边界：三行＝分区行 40＋二级托盘 32＋三级托盘 32＋2 个行间距 4＝112；
+    // 四行再加一个分区行与行间距＝156（#67）；源图倍率1/2及负原点显示器归一化后的视口使用相同局部几何。
     for (final size in [const Size(960, 740), const Size(320, 600)]) {
-      for (final thickness in [116.0, 160.0]) {
+      for (final thickness in [112.0, 156.0]) {
         for (final scale in [1.0, 2.0]) {
           for (final crop in [
             Offset.zero & size,
@@ -904,9 +905,17 @@ void main() {
     await tester.pumpAndSettle();
     final targets = rect('recording-targets-row');
     expect(targets.top, greaterThan(rect('screenshot-children-group-0').top));
+    expect(targets.height, ToolbarGrid.trayButton);
     expect(
-      targets.left + 16,
+      targets.left + ToolbarGrid.trayButton / 2,
       tester.getCenter(find.byKey(const Key(ScreenshotActions.record))).dx,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('recording-targets-row')),
+        matching: find.byType(NativeGlassSurface),
+      ),
+      findsNothing,
     );
     expect(targets.top, lessThan(rect('screenshot-grid-group-2').top));
 

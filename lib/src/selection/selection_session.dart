@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../common/constants/selection_gesture_types.dart';
 import '../common/constants/text_limits.dart';
@@ -227,6 +228,16 @@ class SelectionSession extends ChangeNotifier {
         );
         notifyListeners();
       }
+    } on PlatformException catch (error) {
+      if (generation != _generation) return;
+      snapshot = snapshot.copyWith(
+        phase: TranslationPhase.failed,
+        message: error.code == SelectionReadFailures.secureField
+            ? '密码框中的文字不会被读取。'
+            : '无法准备选区翻译：${error.message ?? error.code}',
+      );
+      notifyListeners();
+      return;
     } catch (error) {
       if (generation != _generation) return;
       snapshot = snapshot.copyWith(

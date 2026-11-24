@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translate_app/src/common/constants/selection_gesture_types.dart';
 import 'package:translate_app/src/common/constants/text_mode.dart';
 import 'package:translate_app/src/selection/selection_session.dart';
 import 'package:translate_app/src/translation/language_direction.dart';
@@ -441,5 +443,51 @@ void main() {
       provider.requests.map((r) => r.sourceText).join().length,
       SelectionSession.selectionLimit,
     );
+  });
+
+  test('先唤起面板后异步读取选区完成翻译，密码框错误码返回明确失败提示', () async {
+    // 作用：验证全局翻译快捷键空文本先进入 translating 态再通过 readSelection 补读原文并完成翻译，
+    // 以及原生返回 secureField 错误码时进入 failed 态并展示密码框提示。
+    // 边界：readSelection 挂起期间 snapshot.phase == translating；密码框错误不触发翻译请求。
+    final provider = RecordingProvider(
+      events: const [TranslationUpdate('你好'), TranslationCompleted()],
+    );
+    final session = SelectionSession(
+      detectLanguage: (_) async => 'en',
+      provider: provider,
+      language: language,
+    );
+    session.begin(sessionId: 'hotkey-1', text: '', awaitSelection: true);
+    expect(session.snapshot.phase, TranslationPhase.trigger);
+
+    final pendingRead = Completer<String?>();
+    final activation = session.activate(readSelection: () => pendingRead.future);
+    expect(session.snapshot.phase, TranslationPhase.translating);
+    expect(session.snapshot.sourceText, isEmpty);
+
+    pendingRead.complete('Hello');
+    await activation;
+    expect(session.snapshot.phase, TranslationPhase.completed);
+    expect(session.snapshot.sourceText, 'Hello');
+    expect(session.snapshot.translatedText, '你好');
+
+    final secureProvider = RecordingProvider();
+    final secureSession = SelectionSession(
+      detectLanguage: (_) async => 'en',
+      provider: secureProvider,
+      language: language,
+    );
+    secureSession.begin(sessionId: 'hotkey-2', text: '', awaitSelection: true);
+    await secureSession.activate(
+      readSelection: () => Future<String?>.error(
+        PlatformException(
+          code: SelectionReadFailures.secureField,
+          message: '密码框中的文字不会被读取。',
+        ),
+      ),
+    );
+    expect(secureSession.snapshot.phase, TranslationPhase.failed);
+    expect(secureSession.snapshot.message, '密码框中的文字不会被读取。');
+    expect(secureProvider.requests, isEmpty);
   });
 }
