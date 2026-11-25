@@ -520,12 +520,14 @@ class NativeGlassSwitchTile extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.leading,
+    this.busy = false,
   });
   final String title;
   final String? subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
   final Widget? leading;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -546,6 +548,7 @@ class NativeGlassSwitchTile extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       label: title,
+      busy: busy,
     ),
   );
 }

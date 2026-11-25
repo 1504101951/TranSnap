@@ -14,7 +14,7 @@ import 'package:transnap/src/history/screenshot_history.dart';
 import 'package:transnap/src/history/screenshot_history_page.dart';
 
 void main() {
-  testWidgets('图片缺失的条目只能删除；删除与清空需确认，关闭记录后提示开启方式', (tester) async {
+  testWidgets('图片缺失的条目只能删除；删除与清空需确认', (tester) async {
     final directory = Directory.systemTemp.createTempSync('screenshot-page-');
     addTearDown(() => directory.deleteSync(recursive: true));
     final existing = File('${directory.path}/a.png')
@@ -44,17 +44,11 @@ void main() {
         'exists': false,
       },
     ];
-    var recording = true;
     messenger.setMockMethodCallHandler(channel, (call) async {
       final arguments = call.arguments as Map?;
       switch (call.method) {
         case MethodNames.screenshotHistoryList:
           return rows;
-        case MethodNames.screenshotHistoryRecording:
-          return recording;
-        case MethodNames.setScreenshotHistoryRecording:
-          recording = arguments!['enabled'] as bool;
-          return null;
         case MethodNames.deleteScreenshotHistory:
           rows.removeWhere((row) => row['id'] == arguments!['id']);
           return null;
@@ -112,14 +106,6 @@ void main() {
           .onPressed,
       isNull,
     );
-
-    await tester.tap(find.byType(NativeGlassSwitch));
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch)).value,
-      isFalse,
-    );
-    expect(find.text('还没有截图记录'), findsOneWidget);
   });
 
   testWidgets('勾选决定拼接、拆分与比较是否可用；结果加入历史后清空勾选，比较显示差异摘要', (tester) async {

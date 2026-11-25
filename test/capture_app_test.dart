@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
 import 'package:transnap/src/common/constants/screenshot_actions.dart';
 import 'package:transnap/src/common/widgets/app_motion.dart';
+import 'package:transnap/src/common/widgets/app_tooltip.dart';
 import 'package:transnap/src/screenshot/screenshot_app.dart';
 import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:transnap/src/common/constants/toolbar_grid.dart';
@@ -95,8 +97,31 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    Finder findAppTooltip(String message) => find.byWidgetPredicate(
+      (widget) => widget is AppTooltip && widget.message == message,
+    );
     for (final kind in ['recording', 'scrolling']) {
       await tester.pumpWidget(const SizedBox.shrink());
+      final tooltipCalls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == MethodNames.showOverlayTooltip ||
+            call.method == MethodNames.hideOverlayTooltip) {
+          tooltipCalls.add(call);
+          return null;
+        }
+        if (call.method == MethodNames.setCapturePaused) {
+          final paused = (call.arguments as Map)['paused'] == true;
+          state = {...state, 'phase': paused ? 'paused' : state['kind']};
+        }
+        if (call.method == MethodNames.stopCapture &&
+            ['recording', 'scrolling', 'paused'].contains(state['phase'])) {
+          state = {...state, 'phase': 'finalizing'};
+        }
+        if (call.method == MethodNames.cancelCapture) {
+          state = {'id': 'new-session', 'phase': 'idle'};
+        }
+        return state;
+      });
       state = {
         'id': kind,
         'kind': kind,
@@ -109,10 +134,34 @@ void main() {
       expect(find.byType(IconButton), findsNWidgets(3));
       final label = kind == 'recording' ? '录制：1:05' : '长截图：512 像素';
       expect(find.byType(AppKitView), findsNWidgets(4));
-      for (final tooltip in tester.widgetList<Tooltip>(find.byType(Tooltip))) {
-        expect(tooltip.preferBelow, isFalse);
+      for (final tooltip in tester.widgetList<AppTooltip>(
+        find.byType(AppTooltip),
+      )) {
+        expect(tooltip.preferAbove, isTrue);
       }
       expect(find.text(label), findsOneWidget);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(findAppTooltip('暂停')));
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(
+        tooltipCalls.where(
+          (call) =>
+              call.method == MethodNames.showOverlayTooltip &&
+              (call.arguments as Map)['message'] == '暂停' &&
+              (call.arguments as Map)['preferAbove'] == true,
+        ),
+        hasLength(1),
+      );
+      await mouse.moveTo(Offset.zero);
+      await tester.pump();
+      expect(
+        tooltipCalls.where(
+          (call) => call.method == MethodNames.hideOverlayTooltip,
+        ),
+        hasLength(1),
+      );
+      await mouse.removePointer();
       await notify(tester, {
         ...state,
         'error': '相邻画面缺少稳定的重叠内容，请减小单次滚动幅度或避开动态内容。已保留确认部分。',
@@ -121,7 +170,7 @@ void main() {
       final feedbackRect = tester.getRect(feedback);
       expect(feedbackRect.height, greaterThanOrEqualTo(28));
       for (final action in ['暂停', '结束', '放弃']) {
-        final button = find.byTooltip(action);
+        final button = findAppTooltip(action);
         expect(button.hitTestable(), findsOneWidget);
         expect(feedbackRect.overlaps(tester.getRect(button)), isFalse);
       }
@@ -129,29 +178,39 @@ void main() {
       expect(feedback, findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       expect(feedback, findsNothing);
-      await tester.tap(find.byTooltip('暂停'));
+      await tester.tap(findAppTooltip('暂停'));
       await tester.pumpAndSettle();
       expect(find.text('已暂停 · $label'), findsOneWidget);
-      expect(find.byTooltip('开始'), findsOneWidget);
-      await tester.tap(find.byTooltip('开始'));
+      expect(findAppTooltip('开始'), findsOneWidget);
+      await tester.tap(findAppTooltip('开始'));
       await tester.pumpAndSettle();
       expect(find.text(label), findsOneWidget);
-      await tester.tap(find.byTooltip('结束'));
+      await tester.tap(findAppTooltip('结束'));
       await tester.pumpAndSettle();
       expect(find.text('正在完成采集…'), findsOneWidget);
       expect(
         tester
-            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.square), matching: find.byType(IconButton)))
+            .widget<IconButton>(
+              find.ancestor(
+                of: findLineIcon(LucideIcons.square),
+                matching: find.byType(IconButton),
+              ),
+            )
             .onPressed,
         isNull,
       );
       expect(
         tester
-            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.pause), matching: find.byType(IconButton)))
+            .widget<IconButton>(
+              find.ancestor(
+                of: findLineIcon(LucideIcons.pause),
+                matching: find.byType(IconButton),
+              ),
+            )
             .onPressed,
         isNull,
       );
-      await tester.tap(find.byTooltip('放弃'));
+      await tester.tap(findAppTooltip('放弃'));
       await tester.pumpAndSettle();
       expect(find.byType(IconButton), findsNothing);
       expect(tester.takeException(), isNull);
@@ -771,8 +830,9 @@ void main() {
     );
 
     IconButton startButton() => tester.widget<IconButton>(
-      find.byWidgetPredicate(
-        (widget) => widget is IconButton && widget.tooltip == '开始录制',
+      find.descendant(
+        of: find.byTooltip('开始录制'),
+        matching: find.byType(IconButton),
       ),
     );
     expect(startButton().onPressed, isNull);
@@ -996,7 +1056,9 @@ void main() {
     VoidCallback? press(String description) => tester
         .widget<IconButton>(
           find.descendant(
-            of: find.byTooltip(description),
+            of: find.byWidgetPredicate(
+              (widget) => widget is AppTooltip && widget.message == description,
+            ),
             matching: find.byType(IconButton),
           ),
         )
@@ -1136,7 +1198,7 @@ void main() {
     expect(find.byKey(const Key('recording-targets-row')), findsOneWidget);
     expect(find.byTooltip('开始录制'), findsOneWidget);
     IconButton button(String tooltip) => tester.widget<IconButton>(
-      find.ancestor(
+      find.descendant(
         of: find.byTooltip(tooltip),
         matching: find.byType(IconButton),
       ).first,
@@ -1310,8 +1372,9 @@ void main() {
     expect(find.byTooltip('固定区域'), findsNothing);
     await tester.tap(confirm);
     await tester.pump();
-    final confirmButton = find.byWidgetPredicate(
-      (widget) => widget is IconButton && widget.tooltip == '开始录制',
+    final confirmButton = find.descendant(
+      of: find.byTooltip('开始录制'),
+      matching: find.byType(IconButton),
     );
     expect(tester.widget<IconButton>(confirmButton).onPressed, isNull);
     await tester.tap(confirm);

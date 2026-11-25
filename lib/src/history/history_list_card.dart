@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/motion_metrics.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
 
 class HistoryGroupCard extends StatelessWidget {
@@ -89,7 +90,7 @@ class _HistoryHoverIconButtonState extends State<HistoryHoverIconButton> {
       label: widget.semanticsLabel,
       button: true,
       enabled: enabled,
-      child: Tooltip(
+      child: AppTooltip(
         message: widget.tooltip,
         child: SizedBox.square(
           dimension: GlassMetrics.hitSize,

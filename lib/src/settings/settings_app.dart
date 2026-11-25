@@ -100,6 +100,10 @@ class _SettingsPageState extends State<_SettingsPage>
   SettingsPage _page = SettingsPage.general;
 
   String? _languagePackStatus;
+  bool? _historyRecording;
+  bool _savingHistoryRecording = false;
+  bool? _screenshotHistoryRecording;
+  bool _savingScreenshotHistoryRecording = false;
 
   static const List<NativeGlassSidebarSection<SettingsPage>> _sidebarSections =
       [
@@ -300,12 +304,84 @@ class _SettingsPageState extends State<_SettingsPage>
     if (mounted) setState(() => _status = status!);
   }
 
+  Future<void> _refreshHistoryRecording() async {
+    bool? historyRecording;
+    bool? screenshotRecording;
+    try {
+      historyRecording = await _channel.invokeMethod<bool>(
+        MethodNames.historyRecording,
+      );
+    } on MissingPluginException catch (_) {
+    } on PlatformException catch (_) {}
+    try {
+      screenshotRecording = await _channel.invokeMethod<bool>(
+        MethodNames.screenshotHistoryRecording,
+      );
+    } on MissingPluginException catch (_) {
+    } on PlatformException catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      if (historyRecording != null) _historyRecording = historyRecording;
+      if (screenshotRecording != null) {
+        _screenshotHistoryRecording = screenshotRecording;
+      }
+    });
+  }
+
+  Future<void> _setHistoryRecording(bool enabled) async {
+    setState(() {
+      _savingHistoryRecording = true;
+      _failed = false;
+      _message = null;
+    });
+    try {
+      await _channel.invokeMethod<void>(MethodNames.setHistoryRecording, {
+        'enabled': enabled,
+      });
+      if (!mounted) return;
+      setState(() => _historyRecording = enabled);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _message = error.message ?? '无法保存记录设置';
+        _failed = true;
+      });
+    } finally {
+      if (mounted) setState(() => _savingHistoryRecording = false);
+    }
+  }
+
+  Future<void> _setScreenshotHistoryRecording(bool enabled) async {
+    setState(() {
+      _savingScreenshotHistoryRecording = true;
+      _failed = false;
+      _message = null;
+    });
+    try {
+      await _channel.invokeMethod<void>(
+        MethodNames.setScreenshotHistoryRecording,
+        {'enabled': enabled},
+      );
+      if (!mounted) return;
+      setState(() => _screenshotHistoryRecording = enabled);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _message = error.message ?? '无法保存记录设置';
+        _failed = true;
+      });
+    } finally {
+      if (mounted) setState(() => _savingScreenshotHistoryRecording = false);
+    }
+  }
+
   Future<void> _load() async {
     try {
       final map = (await _channel.invokeMapMethod<Object?, Object?>(
         MethodNames.getSettings,
       ))!;
       await _refreshStatus();
+      await _refreshHistoryRecording();
       if (!mounted) return;
       if ((map['revision'] as int) < _revision) return;
       if (_dirty) {
@@ -1200,6 +1276,24 @@ class _SettingsPageState extends State<_SettingsPage>
                                   ),
                                 ],
                               ),
+                              NativeGlassGroup(
+                                title: '历史记录',
+                                children: [
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: LucideIcons.history,
+                                    ),
+                                    title: '记录翻译历史',
+                                    value: _historyRecording ?? false,
+                                    busy: _savingHistoryRecording,
+                                    onChanged:
+                                        _historyRecording == null ||
+                                            _savingHistoryRecording
+                                        ? null
+                                        : _setHistoryRecording,
+                                  ),
+                                ],
+                              ),
                             ] else if (_page == SettingsPage.services) ...[
                               NativeGlassGroup(
                                 dividerIndent: 0,
@@ -1436,6 +1530,19 @@ class _SettingsPageState extends State<_SettingsPage>
                                         ),
                                       ],
                                     ),
+                                  ),
+                                  NativeGlassSwitchTile(
+                                    leading: const NativeGlassRowIcon(
+                                      icon: LucideIcons.history,
+                                    ),
+                                    title: '记录截图历史',
+                                    value: _screenshotHistoryRecording ?? false,
+                                    busy: _savingScreenshotHistoryRecording,
+                                    onChanged:
+                                        _screenshotHistoryRecording == null ||
+                                            _savingScreenshotHistoryRecording
+                                        ? null
+                                        : _setScreenshotHistoryRecording,
                                   ),
                                 ],
                               ),

@@ -9,6 +9,7 @@ import '../common/constants/preference_keys.dart';
 import '../common/utils/date_text.dart';
 import '../common/utils/shortcut_tokens.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/window_drag_area.dart';
 import '../common/widgets/native_glass.dart';
 
@@ -47,13 +48,10 @@ class _DateRecordGroup {
 class _HistoryAppState extends State<HistoryApp> {
   final _items = <TranslationRecord>[];
 
-  bool? _recording;
-  bool _savingRecording = false;
   bool _loading = false;
   int _requestVersion = 0;
   bool _done = false;
   String? _pageError;
-  String? _recordingError;
   bool _failedReset = false;
   final _search = TextEditingController();
   final _pageKey = GlobalKey();
@@ -102,7 +100,6 @@ class _HistoryAppState extends State<HistoryApp> {
       await _refresh();
     });
     _loadMore();
-    _loadRecording();
     _loadManagement(prompt: true);
     _loadShortcuts();
   }
@@ -146,41 +143,6 @@ class _HistoryAppState extends State<HistoryApp> {
       _visited.add(section);
     });
     unawaited(_syncWindowTitle(_sectionTitle(section)));
-  }
-
-  Future<void> _loadRecording() async {
-    try {
-      final value = await widget.channel.invokeMethod<bool>(
-        MethodNames.historyRecording,
-      );
-      if (!mounted) return;
-      setState(() {
-        _recording = value!;
-        _recordingError = null;
-      });
-    } on PlatformException catch (error) {
-      if (!mounted) return;
-      setState(() => _recordingError = error.message ?? '无法读取记录设置');
-    }
-  }
-
-  Future<void> _setRecording(bool enabled) async {
-    setState(() => _savingRecording = true);
-    try {
-      await widget.channel.invokeMethod<void>(MethodNames.setHistoryRecording, {
-        'enabled': enabled,
-      });
-      if (!mounted) return;
-      setState(() {
-        _recording = enabled;
-        _recordingError = null;
-      });
-    } on PlatformException catch (error) {
-      if (!mounted) return;
-      setState(() => _recordingError = error.message ?? '无法保存记录设置');
-    } finally {
-      if (mounted) setState(() => _savingRecording = false);
-    }
   }
 
   Future<void> _loadMore({bool reset = false}) async {
@@ -400,7 +362,6 @@ class _HistoryAppState extends State<HistoryApp> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final segments = NativeGlassSegments<_HistorySection>(
       value: _section,
       options: const {
@@ -411,75 +372,12 @@ class _HistoryAppState extends State<HistoryApp> {
       navigation: true,
       onChanged: _selectSection,
     );
-    final recordingControl = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          _recording == false ? '记录 · 已暂停' : '记录',
-          style: TextStyle(
-            fontSize: GlassMetrics.captionFont,
-            height: GlassMetrics.captionLine / GlassMetrics.captionFont,
-            color: _recording == false
-                ? colors.onSurfaceVariant
-                : colors.onSurface,
-          ),
-        ),
-        const SizedBox(width: GlassMetrics.space8),
-        NativeGlassSwitch(
-          label: '记录翻译历史',
-          value: _recording ?? false,
-          busy: _savingRecording,
-          onChanged: _recording == null || _savingRecording
-              ? null
-              : _setRecording,
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final inBand =
-            _section == _HistorySection.history && constraints.maxWidth >= 520;
-        final below =
-            _section == _HistorySection.history && constraints.maxWidth < 520;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            WindowDragArea(
-              channel: widget.channel,
-              child: SizedBox(
-                height: GlassMetrics.compactTitlebarHeight,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    segments,
-                    if (inBand)
-                      Positioned(
-                        right: GlassMetrics.space16,
-                        top: 0,
-                        bottom: 0,
-                        child: recordingControl,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (below)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  GlassMetrics.pagePadding,
-                  GlassMetrics.space4,
-                  GlassMetrics.space16,
-                  0,
-                ),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: recordingControl,
-                ),
-              ),
-          ],
-        );
-      },
+    return WindowDragArea(
+      channel: widget.channel,
+      child: SizedBox(
+        height: GlassMetrics.compactTitlebarHeight,
+        child: Center(child: segments),
+      ),
     );
   }
 
@@ -632,21 +530,28 @@ class _HistoryAppState extends State<HistoryApp> {
           active: _loading && _items.isNotEmpty,
           color: NativeGlassTheme.accentOf(context),
           radius: GlassMetrics.controlRadius + MotionMetrics.busyRingOutset,
-          child: IconButton(
-            key: const ValueKey('history-more-button'),
-            tooltip: '更多操作',
-            padding: EdgeInsets.zero,
-            style: IconButton.styleFrom(
-              hoverColor: colors.onSurface.withValues(
-                alpha: GlassMetrics.hoverOpacity,
+          child: AppTooltip(
+            message: '更多操作',
+            child: IconButton(
+              key: const ValueKey('history-more-button'),
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                hoverColor: colors.onSurface.withValues(
+                  alpha: GlassMetrics.hoverOpacity,
+                ),
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.circular(
+                    GlassMetrics.controlRadius,
+                  ),
+                ),
               ),
-              shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+              onPressed: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              icon: const LineIcon(
+                LucideIcons.ellipsis,
+                size: GlassMetrics.icon,
               ),
             ),
-            onPressed: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            icon: const LineIcon(LucideIcons.ellipsis, size: GlassMetrics.icon),
           ),
         ),
       ),
@@ -686,7 +591,7 @@ class _HistoryAppState extends State<HistoryApp> {
               ),
             ),
             const SizedBox(width: 2),
-            Tooltip(
+            AppTooltip(
               message: '移除$label筛选',
               child: InkWell(
                 onTap: onRemove,
@@ -730,12 +635,17 @@ class _HistoryAppState extends State<HistoryApp> {
                     child: TextField(
                       key: const ValueKey('history-search'),
                       controller: _search,
+                      maxLines: 1,
+                      textAlignVertical: TextAlignVertical.center,
                       decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
                         enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
                         hintText: '搜索原文或译文',
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: GlassMetrics.hitSize,
-                          minHeight: GlassMetrics.hitSize,
+                        prefixIconConstraints: const BoxConstraints.tightFor(
+                          width: GlassMetrics.hitSize,
+                          height: GlassMetrics.hitSize,
                         ),
                         prefixIcon: const LineIcon(
                           LucideIcons.search,
@@ -743,31 +653,33 @@ class _HistoryAppState extends State<HistoryApp> {
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10,
-                          vertical: 7,
+                          vertical: 0,
                         ),
-                        suffixIconConstraints: const BoxConstraints(
-                          minWidth: GlassMetrics.hitSize,
-                          minHeight: GlassMetrics.hitSize,
+                        suffixIconConstraints: const BoxConstraints.tightFor(
+                          width: GlassMetrics.hitSize,
+                          height: GlassMetrics.hitSize,
                         ),
                         suffixIcon: _search.text.isEmpty
                             ? null
-                            : IconButton(
-                                key: const ValueKey('history-search-clear'),
-                                tooltip: '清空搜索',
-                                constraints: const BoxConstraints(
-                                  minWidth: GlassMetrics.hitSize,
-                                  minHeight: GlassMetrics.hitSize,
+                            : AppTooltip(
+                                message: '清空搜索',
+                                child: IconButton(
+                                  key: const ValueKey('history-search-clear'),
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: GlassMetrics.hitSize,
+                                    height: GlassMetrics.hitSize,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  icon: const LineIcon(
+                                    LucideIcons.x,
+                                    size: GlassMetrics.icon,
+                                  ),
+                                  onPressed: () {
+                                    _searchDebounce?.cancel();
+                                    setState(_search.clear);
+                                    _loadMore(reset: true);
+                                  },
                                 ),
-                                padding: EdgeInsets.zero,
-                                icon: const LineIcon(
-                                  LucideIcons.x,
-                                  size: GlassMetrics.icon,
-                                ),
-                                onPressed: () {
-                                  _searchDebounce?.cancel();
-                                  setState(_search.clear);
-                                  _loadMore(reset: true);
-                                },
                               ),
                       ),
                       onChanged: _onSearchChanged,
@@ -1131,26 +1043,6 @@ class _HistoryAppState extends State<HistoryApp> {
                   Column(
                     children: [
                       _buildManagement(context),
-                      if (_recordingError != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            GlassMetrics.pagePadding,
-                            GlassMetrics.space8,
-                            GlassMetrics.pagePadding,
-                            0,
-                          ),
-                          child: NativeGlassBanner(
-                            message: _recordingError!,
-                            isError: true,
-                            action: NativeGlassSurface(
-                              material: true,
-                              child: TextButton(
-                                onPressed: _loadRecording,
-                                child: const Text('重新读取设置'),
-                              ),
-                            ),
-                          ),
-                        ),
                       Expanded(child: _buildHistoryBody(context)),
                     ],
                   ),

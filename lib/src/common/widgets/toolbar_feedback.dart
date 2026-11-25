@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
+import 'app_tooltip.dart';
 import 'native_glass.dart';
 
 class ToolbarFeedback extends StatelessWidget {
@@ -65,17 +66,19 @@ class ToolbarFeedback extends StatelessWidget {
                 NativeGlassButtonFeedback(
                   radius: GlassMetrics.menuItemRadius,
                   enabled: true,
-                  child: IconButton(
-                    key: const Key('toolbar-feedback-dismiss'),
-                    tooltip: '关闭提示',
-                    onPressed: onDismiss,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: GlassMetrics.minTouchTarget,
-                      height: GlassMetrics.minTouchTarget,
+                  child: AppTooltip(
+                    message: '关闭提示',
+                    child: IconButton(
+                      key: const Key('toolbar-feedback-dismiss'),
+                      onPressed: onDismiss,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: GlassMetrics.minTouchTarget,
+                        height: GlassMetrics.minTouchTarget,
+                      ),
+                      iconSize: 14,
+                      icon: const LineIcon(LucideIcons.x),
                     ),
-                    iconSize: 14,
-                    icon: const LineIcon(LucideIcons.x),
                   ),
                 ),
               ],

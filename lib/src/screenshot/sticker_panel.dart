@@ -8,6 +8,7 @@ import '../common/widgets/line_icon.dart';
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/emoji_catalog.dart';
 import '../common/constants/glass_metrics.dart';
+import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
 import 'stickers.dart';
 
@@ -108,7 +109,7 @@ class _StickerPanelState extends State<StickerPanel> {
       itemCount: widget.stickers.length,
       itemBuilder: (context, index) {
         final sticker = widget.stickers[index];
-        return Tooltip(
+        return AppTooltip(
           message: '贴纸',
           child: InkWell(
             key: ValueKey('sticker-cell-${sticker.id}'),

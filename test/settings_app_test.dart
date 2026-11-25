@@ -1180,4 +1180,74 @@ void main() {
     expect((globalRect.left - inputRect.left).abs(), lessThanOrEqualTo(0.01));
     expect((globalRect.right - inputRect.right).abs(), lessThanOrEqualTo(0.01));
   });
+
+  testWidgets('翻译历史与截图历史记录开关在设置页加载并可切换', (tester) async {
+    const channel = MethodChannel(ChannelNames.settings);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var translationHistoryRecording = true;
+    var screenshotHistoryRecording = false;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case MethodNames.checkSystemTranslation:
+          return languagePackInstalledStatus;
+        case MethodNames.systemStatus:
+          return {'accessibility': true, 'screenAccess': true};
+        case MethodNames.getSettings:
+          return {'revision': 0};
+        case MethodNames.historyRecording:
+          return translationHistoryRecording;
+        case MethodNames.setHistoryRecording:
+          translationHistoryRecording = (call.arguments as Map)['enabled'] as bool;
+          return null;
+        case MethodNames.screenshotHistoryRecording:
+          return screenshotHistoryRecording;
+        case MethodNames.setScreenshotHistoryRecording:
+          screenshotHistoryRecording = (call.arguments as Map)['enabled'] as bool;
+          return null;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpAndSettle();
+
+    await openSettingsPage(tester, '语言与服务');
+    final translationTile = find.byWidgetPredicate(
+      (w) => w is NativeGlassSwitchTile && w.title == '记录翻译历史',
+    );
+    await tester.scrollUntilVisible(
+      translationTile,
+      300,
+      scrollable: settingsContentScrollable(),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<NativeGlassSwitchTile>(translationTile).value, isTrue);
+    await tester.tap(
+      find.descendant(
+        of: translationTile,
+        matching: find.byType(NativeGlassSwitch),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(translationHistoryRecording, isFalse);
+    expect(tester.widget<NativeGlassSwitchTile>(translationTile).value, isFalse);
+
+    await openSettingsPage(tester, '保存与导出');
+    final screenshotTile = find.byWidgetPredicate(
+      (w) => w is NativeGlassSwitchTile && w.title == '记录截图历史',
+    );
+    expect(tester.widget<NativeGlassSwitchTile>(screenshotTile).value, isFalse);
+    await tester.tap(
+      find.descendant(
+        of: screenshotTile,
+        matching: find.byType(NativeGlassSwitch),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(screenshotHistoryRecording, isTrue);
+    expect(tester.widget<NativeGlassSwitchTile>(screenshotTile).value, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 }

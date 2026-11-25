@@ -96,8 +96,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('翻译历史'), findsOneWidget);
-    expect(find.text('记录'), findsOneWidget);
-    expect(find.byType(NativeGlassSwitch), findsOneWidget);
 
     for (final mode in [AppearanceModes.dark, AppearanceModes.light]) {
       GlassAppearance.current.value = GlassAppearance(mode: mode);
@@ -133,7 +131,7 @@ void main() {
     GlassAppearance.current.value = const GlassAppearance();
   });
 
-  testWidgets('分段与记录开关在 38pt 标题栏带内同排，空白处拖动转给原生窗口，窄窗口开关移到带下（#67）', (tester) async {
+  testWidgets('分段在 38pt 标题栏带内居中，空白处拖动转给原生窗口（#67）', (tester) async {
     final calls = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -159,11 +157,9 @@ void main() {
     final segments = find.byWidgetPredicate(
       (widget) => widget is NativeGlassSegments,
     );
-    final toggle = find.byType(NativeGlassSwitch);
     expect(tester.getCenter(segments).dy, GlassMetrics.compactTitlebarHeight / 2);
     expect(tester.getCenter(segments).dx, 260);
-    expect(tester.getCenter(toggle).dy, GlassMetrics.compactTitlebarHeight / 2);
-    expect(tester.getRect(toggle).right, 520 - GlassMetrics.space16);
+    expect(find.byType(NativeGlassSwitch), findsNothing);
 
     await tester.dragFrom(const Offset(90, 19), const Offset(40, 30));
     await tester.pumpAndSettle();
@@ -184,13 +180,6 @@ void main() {
         ).first,
       ),
       const Size.square(GlassMetrics.minTouchTarget),
-    );
-
-    tester.view.physicalSize = const Size(480, 640);
-    await tester.pumpAndSettle();
-    expect(
-      tester.getRect(toggle).top,
-      greaterThan(GlassMetrics.compactTitlebarHeight),
     );
     expect(tester.takeException(), isNull);
   });
@@ -243,7 +232,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('长文及窄窗口可阅读，关闭记录将文字改为「记录 · 已暂停」且不显示非错误横幅', (tester) async {
+  testWidgets('长文及窄窗口可阅读', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -259,20 +248,6 @@ void main() {
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
     expect(find.textContaining('未记录来源 · '), findsOneWidget);
-    database.execute('PRAGMA query_only = ON');
-    await tester.tap(find.byType(NativeGlassSwitch));
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch)).value,
-      isTrue,
-    );
-    expect(find.textContaining('readonly'), findsOneWidget);
-    database.execute('PRAGMA query_only = OFF');
-    await tester.tap(find.byType(NativeGlassSwitch));
-    await tester.pumpAndSettle();
-    expect(store.recordingEnabled, isFalse);
-    expect(find.text('记录 · 已暂停'), findsOneWidget);
-    expect(find.text('已暂停记录；已有历史仍保留。'), findsNothing);
     expect(find.text('完整译文\n保留换行'), findsOneWidget);
     expect(store.page(), hasLength(1));
     expect(tester.takeException(), isNull);
@@ -460,34 +435,6 @@ void main() {
     expect(store.retentionConfirmed, isTrue);
     expect(store.page(), hasLength(1));
     expect(find.text('旧记录'), findsOneWidget);
-  });
-
-  testWidgets('历史窗口切换记录历史等待期间开关外圈显示进度环，完成后收起（#142）', (tester) async {
-    final pending = Completer<void>();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          if (call.method == MethodNames.setHistoryRecording) {
-            await pending.future;
-          }
-          return handleHistoryRequest(store, call);
-        });
-    await tester.pumpWidget(const HistoryApp(channel: channel));
-    await tester.pumpAndSettle();
-
-    final toggle = find.byType(NativeGlassSwitch);
-    BusyRing ring() => tester.widget<BusyRing>(
-      find.descendant(of: toggle, matching: find.byType(BusyRing)).first,
-    );
-    expect(ring().active, isFalse);
-
-    await tester.tap(toggle);
-    await tester.pump();
-    expect(ring().active, isTrue);
-
-    pending.complete();
-    await tester.pumpAndSettle();
-    expect(ring().active, isFalse);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('搜索防抖生效，支持输入框内清除并区分无匹配与空列表', (tester) async {

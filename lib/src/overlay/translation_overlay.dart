@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/app_tooltip.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 
 import '../selection/selection_session.dart';
@@ -260,7 +261,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
     final sourceOnly = widget.session.sourceIsTarget;
     final sourceActions = [
-      _CardButton(
+      GlassIconButton(
         key: sourceOnly
             ? const ValueKey('card-copy')
             : const ValueKey('card-copy-source'),
@@ -277,7 +278,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         iconSize: 14,
         material: false,
       ),
-      _CardButton(
+      GlassIconButton(
         key: sourceOnly
             ? const ValueKey('card-speak')
             : const ValueKey('card-speak-source'),
@@ -291,7 +292,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       ),
     ];
     final resultActions = [
-      _CardButton(
+      GlassIconButton(
         key: const ValueKey('card-copy'),
         tooltip: '复制$resultLabel',
         icon: CopyConfirmIcon(trigger: _copyTriggers['result'] ?? 0, size: 14),
@@ -303,7 +304,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         iconSize: 14,
         material: false,
       ),
-      _CardButton(
+      GlassIconButton(
         key: const ValueKey('card-speak'),
         tooltip: _speaking(false) ? '停止朗读' : '朗读$resultLabel',
         icon: SpeechWaveIcon(speaking: _speaking(false), size: 14),
@@ -352,7 +353,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
               body: DictionaryDefinitionView(definition: definition),
               actions: [
                 if (snap.phase == TranslationPhase.completed)
-                  _CardButton(
+                  GlassIconButton(
                     key: const ValueKey('card-vocabulary'),
                     tooltip: widget.session.savedToVocabulary
                         ? '已加入生词本'
@@ -369,7 +370,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                     iconSize: 14,
                     material: false,
                   ),
-                _CardButton(
+                GlassIconButton(
                   tooltip: '复制词典',
                   icon: CopyConfirmIcon(
                     trigger: _copyTriggers['dictionary'] ?? 0,
@@ -520,7 +521,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                             onChanged: busy ? null : widget.onService,
                           ),
                           const SizedBox(width: GlassMetrics.space4),
-                          _CardButton(
+                          GlassIconButton(
                             key: const ValueKey('overlay-close-button'),
                             tooltip: '关闭',
                             icon: const LineIcon(LucideIcons.x),
@@ -825,59 +826,4 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       ),
     );
   }
-}
-
-class _CardButton extends StatelessWidget {
-  const _CardButton({
-    super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    required this.visual,
-    required this.radius,
-    required this.iconSize,
-    this.material = true,
-  });
-  final String tooltip;
-  final Widget icon;
-  final VoidCallback? onPressed;
-  final double visual;
-  final double radius;
-  final double iconSize;
-
-  final bool material;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: GlassMetrics.hitSize,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            excludeFromSemantics: true,
-            behavior: HitTestBehavior.opaque,
-            onTap: onPressed,
-          ),
-        ),
-        SizedBox.square(
-          dimension: visual,
-          child: NativeGlassSurface(
-            material: material,
-            radius: radius,
-            child: AppTooltip(
-              message: tooltip,
-              child: IconButton(
-                onPressed: onPressed,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tight(Size.square(visual)),
-                iconSize: iconSize,
-                icon: icon,
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
 }

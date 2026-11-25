@@ -7,6 +7,7 @@ import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 import '../overlay/dictionary_definition.dart';
 import 'history_empty_state.dart';
@@ -276,17 +277,13 @@ class _VocabularyPageState extends State<VocabularyPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              NativeGlassSurface(
-                material: true,
+              GlassIconButton(
+                tooltip: '刷新生词本',
                 busy: _loading && entries != null,
-                child: IconButton(
-                  tooltip: '刷新生词本',
-                  onPressed: _loading ? null : _load,
-                  icon: const LineIcon(
-                    LucideIcons.refreshCw,
-                    size: GlassMetrics.icon,
-                  ),
-                  visualDensity: VisualDensity.standard,
+                onPressed: _loading ? null : _load,
+                icon: const LineIcon(
+                  LucideIcons.refreshCw,
+                  size: GlassMetrics.icon,
                 ),
               ),
               const SizedBox(width: GlassMetrics.actionGap),

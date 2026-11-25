@@ -6,6 +6,7 @@ import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
 import '../constants/motion_metrics.dart';
 import 'app_motion.dart';
+import 'app_tooltip.dart';
 import 'native_glass.dart';
 
 abstract final class ResultWindowColors {
@@ -288,7 +289,7 @@ class ResultTextButton extends StatelessWidget {
       ),
     );
     if (tooltip != null) {
-      button = Tooltip(message: tooltip!, child: button);
+      button = AppTooltip(message: tooltip!, child: button);
     }
     return BusyRing(
       active: busy,
@@ -356,32 +357,34 @@ class ResultIconButton extends StatelessWidget {
             bezel: false,
             child: SizedBox.square(
               dimension: size,
-              child: IconButton(
-                key: buttonKey,
-                tooltip: tooltip,
-                onPressed: onPressed,
-                style: ButtonStyle(
-                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                  backgroundColor: const WidgetStatePropertyAll(
-                    Colors.transparent,
-                  ),
-                  overlayColor: WidgetStatePropertyAll(
-                    selected
-                        ? onAccent.withValues(alpha: 0.10)
-                        : colors.onSurface.withValues(
-                            alpha: GlassMetrics.hoverOpacity,
-                          ),
-                  ),
-                  foregroundColor: WidgetStatePropertyAll(effectiveFg),
-                  shape: WidgetStatePropertyAll(
-                    RoundedSuperellipseBorder(
-                      borderRadius: BorderRadius.circular(radius),
+              child: AppTooltip(
+                message: tooltip,
+                child: IconButton(
+                  key: buttonKey,
+                  onPressed: onPressed,
+                  style: ButtonStyle(
+                    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                    backgroundColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
+                    ),
+                    overlayColor: WidgetStatePropertyAll(
+                      selected
+                          ? onAccent.withValues(alpha: 0.10)
+                          : colors.onSurface.withValues(
+                              alpha: GlassMetrics.hoverOpacity,
+                            ),
+                    ),
+                    foregroundColor: WidgetStatePropertyAll(effectiveFg),
+                    shape: WidgetStatePropertyAll(
+                      RoundedSuperellipseBorder(
+                        borderRadius: BorderRadius.circular(radius),
+                      ),
                     ),
                   ),
-                ),
-                icon: IconTheme(
-                  data: IconThemeData(size: iconSize, color: effectiveFg),
-                  child: glyph ?? LineIcon(icon),
+                  icon: IconTheme(
+                    data: IconThemeData(size: iconSize, color: effectiveFg),
+                    child: glyph ?? LineIcon(icon),
+                  ),
                 ),
               ),
             ),

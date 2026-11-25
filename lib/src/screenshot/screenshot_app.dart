@@ -24,6 +24,8 @@ import '../common/constants/screenshot_enums.dart';
 import '../common/utils/geometry.dart';
 import '../common/utils/screenshot_filename.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/app_tooltip.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
@@ -2961,14 +2963,11 @@ class _ScreenshotAppState extends State<ScreenshotApp>
                 Positioned(
                   right: 16,
                   top: 16,
-                  child: NativeGlassSurface(
-                    material: true,
-                    child: IconButton(
-                      key: const Key(ScreenshotActions.close),
-                      tooltip: '关闭',
-                      onPressed: _busy ? null : _close,
-                      icon: const LineIcon(LucideIcons.x),
-                    ),
+                  child: GlassIconButton(
+                    buttonKey: const Key(ScreenshotActions.close),
+                    tooltip: '关闭',
+                    onPressed: _busy ? null : _close,
+                    icon: const LineIcon(LucideIcons.x),
                   ),
                 ),
               if (_recognition != null)
@@ -3631,40 +3630,44 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       final size = compact ? ToolbarGrid.trayButton : 32.0;
       final radius = compact ? ToolbarGrid.trayButtonRadius : 8.0;
       final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
-      final iconButton = Semantics(
-        selected: selected,
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: IconButton(
-            key: Key(id),
-            tooltip: [
-              ScreenshotActions.labels[id]!,
-              ?_toolbar.shortcutLabel(id),
-            ].join(' '),
-            onPressed: actions[id],
-            style: ButtonStyle(
-              padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-              backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
-              foregroundColor: WidgetStatePropertyAll(
-                selected ? onAccent : colors.onSurface,
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.circular(radius),
+      final iconButton = AppTooltip(
+        message: [
+          ScreenshotActions.labels[id]!,
+          ?_toolbar.shortcutLabel(id),
+        ].join(' '),
+        child: Semantics(
+          selected: selected,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: IconButton(
+              key: Key(id),
+              onPressed: actions[id],
+              style: ButtonStyle(
+                padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                backgroundColor: const WidgetStatePropertyAll(
+                  Colors.transparent,
+                ),
+                foregroundColor: WidgetStatePropertyAll(
+                  selected ? onAccent : colors.onSurface,
+                ),
+                shape: WidgetStatePropertyAll(
+                  RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(radius),
+                  ),
                 ),
               ),
+              icon: switch (id) {
+                '${ScreenshotActions.shapePrefix}filledRectangle' =>
+                  ShapeFillIcon(circle: false, size: compact ? 14 : 16),
+                '${ScreenshotActions.shapePrefix}filledCircle' =>
+                  ShapeFillIcon(circle: true, size: compact ? 14 : 16),
+                _ => LineIcon(
+                  icons[id] ?? LucideIcons.circleDot,
+                  size: compact ? 14 : 16,
+                ),
+              },
             ),
-            icon: switch (id) {
-              '${ScreenshotActions.shapePrefix}filledRectangle' =>
-                ShapeFillIcon(circle: false, size: compact ? 14 : 16),
-              '${ScreenshotActions.shapePrefix}filledCircle' =>
-                ShapeFillIcon(circle: true, size: compact ? 14 : 16),
-              _ => LineIcon(
-                icons[id] ?? LucideIcons.circleDot,
-                size: compact ? 14 : 16,
-              ),
-            },
           ),
         ),
       );
@@ -3919,11 +3922,10 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       );
       final handleActive = _toolbarHandleHovered || _toolbarLifted;
       final hintControl = !dragHandlePlaced
-          ? Tooltip(
+          ? AppTooltip(
               message: _toolbarExpanded
                   ? '拖动移动工具栏，双击图标或连按两次 Tab 收起为常用工具栏'
                   : '拖动移动工具栏，双击图标或连按两次 Tab 展开完整工具栏',
-              preferBelow: false,
               child: MouseRegion(
                 cursor: _toolbarLifted
                     ? SystemMouseCursors.grabbing
@@ -4033,21 +4035,23 @@ class _ScreenshotAppState extends State<ScreenshotApp>
               child: Semantics(
                 label: label,
                 selected: selected,
-                child: IconButton(
-                  tooltip: label,
-                  onPressed: _busy ? null : action,
-                  icon: icon,
-                  style: ButtonStyle(
-                    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                    backgroundColor: const WidgetStatePropertyAll(
-                      Colors.transparent,
-                    ),
-                    foregroundColor: WidgetStatePropertyAll(
-                      selected ? onAccent : colors.onSurface,
-                    ),
-                    shape: WidgetStatePropertyAll(
-                      RoundedSuperellipseBorder(
-                        borderRadius: BorderRadius.circular(radius),
+                child: AppTooltip(
+                  message: label,
+                  child: IconButton(
+                    onPressed: _busy ? null : action,
+                    icon: icon,
+                    style: ButtonStyle(
+                      padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                      backgroundColor: const WidgetStatePropertyAll(
+                        Colors.transparent,
+                      ),
+                      foregroundColor: WidgetStatePropertyAll(
+                        selected ? onAccent : colors.onSurface,
+                      ),
+                      shape: WidgetStatePropertyAll(
+                        RoundedSuperellipseBorder(
+                          borderRadius: BorderRadius.circular(radius),
+                        ),
                       ),
                     ),
                   ),

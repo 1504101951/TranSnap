@@ -5,6 +5,7 @@ import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_enums.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 import 'markdown_view.dart';
 
@@ -91,33 +92,25 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
                         ),
                       ),
                       if (widget.text.trim().isNotEmpty) ...[
-                        NativeGlassSurface(
-                          material: true,
-                          child: IconButton(
-                            onPressed: () {
-                              setState(() => _copyAllTrigger++);
-                              widget.onCopyAll();
-                            },
-                            tooltip: '复制全部',
-                            icon: CopyConfirmIcon(
-                              trigger: _copyAllTrigger,
-                              size: GlassMetrics.icon,
-                            ),
-                            visualDensity: VisualDensity.standard,
+                        GlassIconButton(
+                          tooltip: '复制全部',
+                          onPressed: () {
+                            setState(() => _copyAllTrigger++);
+                            widget.onCopyAll();
+                          },
+                          icon: CopyConfirmIcon(
+                            trigger: _copyAllTrigger,
+                            size: GlassMetrics.icon,
                           ),
                         ),
                         const SizedBox(width: 8),
                       ],
-                      NativeGlassSurface(
-                        material: true,
-                        child: IconButton(
-                          onPressed: widget.onClose,
-                          tooltip: '关闭',
-                          icon: const LineIcon(
-                            LucideIcons.x,
-                            size: GlassMetrics.icon,
-                          ),
-                          visualDensity: VisualDensity.standard,
+                      GlassIconButton(
+                        tooltip: '关闭',
+                        onPressed: widget.onClose,
+                        icon: const LineIcon(
+                          LucideIcons.x,
+                          size: GlassMetrics.icon,
                         ),
                       ),
                     ],
@@ -225,27 +218,22 @@ class _CodeRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          NativeGlassSurface(
-            material: true,
-            child: IconButton(
-              onPressed: onCopy,
-              tooltip: '复制内容',
-              icon: CopyConfirmIcon(
-                trigger: copyTrigger,
-                size: GlassMetrics.icon,
-              ),
-              visualDensity: VisualDensity.standard,
+          GlassIconButton(
+            tooltip: '复制内容',
+            onPressed: onCopy,
+            icon: CopyConfirmIcon(
+              trigger: copyTrigger,
+              size: GlassMetrics.icon,
             ),
           ),
           if (onOpen != null) ...[
             const SizedBox(width: 8),
-            NativeGlassSurface(
-              material: true,
-              child: IconButton(
-                onPressed: onOpen,
-                tooltip: '打开链接',
-                icon: const LineIcon(LucideIcons.externalLink, size: GlassMetrics.icon),
-                visualDensity: VisualDensity.standard,
+            GlassIconButton(
+              tooltip: '打开链接',
+              onPressed: onOpen,
+              icon: const LineIcon(
+                LucideIcons.externalLink,
+                size: GlassMetrics.icon,
               ),
             ),
           ],

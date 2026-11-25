@@ -12,6 +12,8 @@ import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/screenshot_filename.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/app_tooltip.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
@@ -221,22 +223,14 @@ class _CaptureAppState extends State<CaptureApp> {
     final countdown = _state['countdown'] as int?;
     final status = label;
 
-    Widget bubble(String description, Widget child, {bool busy = false}) =>
-        Tooltip(
-          message: description,
-          preferBelow: false,
-          verticalOffset: GlassMetrics.hitSize / 2 + GlassMetrics.toastGap,
-          constraints: const BoxConstraints(
-            minHeight: GlassMetrics.buttonHeight,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: NativeGlassSurface(
-            material: true,
-            radius: GlassMetrics.controlRadius,
-            busy: busy,
-            child: child,
-          ),
-        );
+    Widget statusBubble(String description, Widget child) => AppTooltip(
+      message: description,
+      child: NativeGlassSurface(
+        material: true,
+        radius: GlassMetrics.controlRadius,
+        child: child,
+      ),
+    );
 
     Widget action(
       int index,
@@ -248,102 +242,117 @@ class _CaptureAppState extends State<CaptureApp> {
       key: ValueKey('capture-bubble-$index'),
       staggerIndex: index,
       blur: false,
-      child: SizedBox.square(
-        dimension: GlassMetrics.hitSize,
-        child: bubble(
-          description,
-          IconButton(
-            onPressed: action,
-            padding: EdgeInsets.zero,
-            icon: LineIcon(
-              icon,
-              size: GlassMetrics.icon,
-              semanticLabel: description,
-            ),
-          ),
-          busy: busy,
+      child: GlassIconButton(
+        tooltip: description,
+        icon: LineIcon(
+          icon,
+          size: GlassMetrics.icon,
+          semanticLabel: description,
         ),
+        onPressed: action,
+        visual: GlassMetrics.hitSize,
+        radius: GlassMetrics.controlRadius,
+        iconSize: GlassMetrics.icon,
+        material: true,
+        busy: busy,
       ),
     );
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: GentleReveal(
-            key: const ValueKey('capture-bubble-0'),
-            staggerIndex: 0,
-            blur: false,
-            child: bubble(
-              status,
-              ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minWidth: GlassMetrics.buttonMinWidth,
-                  maxWidth: 268,
-                  minHeight: GlassMetrics.hitSize,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Center(
-                    widthFactor: 1,
-                    heightFactor: 1,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (countdown != null ||
-                            _phase == CapturePhase.recording ||
-                            _phase == CapturePhase.paused) ...[
-                          RecordingPulseIcon(
-                            countdown: countdown,
-                            active: _phase == CapturePhase.recording,
-                            paused: paused,
-                            pulseKey: _state['elapsed'],
-                            size: 14,
+    return AppTooltipScope(
+      onShow: (message, anchor, preferAbove) {
+        widget.channel.invokeMethod<void>(MethodNames.showOverlayTooltip, {
+          if (_state['id'] != null) 'id': _state['id'],
+          'message': message,
+          'x': anchor.left,
+          'y': anchor.top,
+          'width': anchor.width,
+          'height': anchor.height,
+          'preferAbove': preferAbove,
+        }).ignore();
+      },
+      onHide: () {
+        widget.channel.invokeMethod<void>(MethodNames.hideOverlayTooltip).ignore();
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: GentleReveal(
+              key: const ValueKey('capture-bubble-0'),
+              staggerIndex: 0,
+              blur: false,
+              child: statusBubble(
+                status,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: GlassMetrics.buttonMinWidth,
+                    maxWidth: 268,
+                    minHeight: GlassMetrics.hitSize,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(
+                      widthFactor: 1,
+                      heightFactor: 1,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (countdown != null ||
+                              _phase == CapturePhase.recording ||
+                              _phase == CapturePhase.paused) ...[
+                            RecordingPulseIcon(
+                              countdown: countdown,
+                              active: _phase == CapturePhase.recording,
+                              paused: paused,
+                              pulseKey: _state['elapsed'],
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              status,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const SizedBox(width: 6),
                         ],
-                        Flexible(
-                          child: Text(
-                            status,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        action(
-          1,
-          paused ? '开始' : '暂停',
-          paused ? LucideIcons.play : LucideIcons.pause,
-          editable
-              ? () => _invoke(MethodNames.setCapturePaused, {'paused': !paused})
-              : null,
-          busy: _pending && _pendingMethod == MethodNames.setCapturePaused,
-        ),
-        const SizedBox(width: 6),
-        action(
-          2,
-          '结束',
-          LucideIcons.square,
-          editable ? () => _invoke(MethodNames.stopCapture) : null,
-          busy: _pending && _pendingMethod == MethodNames.stopCapture,
-        ),
-        const SizedBox(width: GlassMetrics.actionGap),
-        action(
-          3,
-          '放弃',
-          LucideIcons.x,
-          _pending ? null : _discard,
-          busy: _pending && _pendingMethod == MethodNames.cancelCapture,
-        ),
-      ],
+          const SizedBox(width: 6),
+          action(
+            1,
+            paused ? '开始' : '暂停',
+            paused ? LucideIcons.play : LucideIcons.pause,
+            editable
+                ? () =>
+                      _invoke(MethodNames.setCapturePaused, {'paused': !paused})
+                : null,
+            busy: _pending && _pendingMethod == MethodNames.setCapturePaused,
+          ),
+          const SizedBox(width: 6),
+          action(
+            2,
+            '结束',
+            LucideIcons.square,
+            editable ? () => _invoke(MethodNames.stopCapture) : null,
+            busy: _pending && _pendingMethod == MethodNames.stopCapture,
+          ),
+          const SizedBox(width: GlassMetrics.actionGap),
+          action(
+            3,
+            '放弃',
+            LucideIcons.x,
+            _pending ? null : _discard,
+            busy: _pending && _pendingMethod == MethodNames.cancelCapture,
+          ),
+        ],
+      ),
     );
   }
 

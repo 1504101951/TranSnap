@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-import CoreVideo
 import ScreenCaptureKit
 import Vision
 
@@ -325,12 +324,12 @@ enum ScreenCaptureService {
         return escapePipes ? single.replacingOccurrences(of: "|", with: "\\|") : single
     }
 
-    static func recognizeParagraphs(pixelBuffer: CVPixelBuffer) async throws -> [[String: Any]] {
-        let observations = try await paragraphRequest().perform(on: pixelBuffer)
+    static func recognizeParagraphs(image: CGImage) async throws -> [[String: Any]] {
+        let observations = try await paragraphRequest().perform(on: image)
         return paragraphBlocks(
             observations.flatMap { $0.document.paragraphs },
-            width: Double(CVPixelBufferGetWidth(pixelBuffer)),
-            height: Double(CVPixelBufferGetHeight(pixelBuffer))
+            width: Double(image.width),
+            height: Double(image.height)
         )
     }
 
@@ -371,12 +370,6 @@ enum ScreenCaptureService {
     }
 
     static func recognizeBlocks(png: Data) async throws -> [[String: Any]] {
-        let image = try decodeImage(png: png)
-        let observations = try await paragraphRequest().perform(on: image)
-        return paragraphBlocks(
-            observations.flatMap { $0.document.paragraphs },
-            width: Double(image.width),
-            height: Double(image.height)
-        )
+        try await recognizeParagraphs(image: try decodeImage(png: png))
     }
 }

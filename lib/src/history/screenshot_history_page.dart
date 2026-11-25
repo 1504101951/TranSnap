@@ -9,6 +9,7 @@ import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/glass_icon_button.dart';
 import '../common/widgets/native_glass.dart';
 import 'history_empty_state.dart';
 import 'screenshot_compose_dialogs.dart';
@@ -36,7 +37,6 @@ class ScreenshotHistoryPage extends StatefulWidget {
 
 class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   List<ScreenshotRecord>? _records;
-  bool? _recording;
   String? _loadError;
   String? _errorMessage;
   bool _loading = true;
@@ -77,14 +77,10 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
       final rows = await widget.channel.invokeListMethod<Map<Object?, Object?>>(
         MethodNames.screenshotHistoryList,
       );
-      final recording = await widget.channel.invokeMethod<bool>(
-        MethodNames.screenshotHistoryRecording,
-      );
       if (!mounted) return;
       final records = (rows ?? const []).map(ScreenshotRecord.fromMap).toList();
       setState(() {
         _records = records;
-        _recording = recording ?? false;
         _loading = false;
         _loadError = null;
         _selected = {
@@ -308,62 +304,32 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
           child: SizedBox(
             width: double.infinity,
             child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
+              alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: GlassMetrics.actionGap,
               runSpacing: GlassMetrics.space8,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('记录截图历史'),
-                    const SizedBox(width: GlassMetrics.actionGap),
-                    NativeGlassSwitch(
-                      label: '记录截图历史',
-                      value: _recording ?? false,
-                      onChanged: _recording == null || _busyAction != null
-                          ? null
-                          : (enabled) async {
-                              await _run(
-                                MethodNames.setScreenshotHistoryRecording,
-                                {'enabled': enabled},
-                                true,
-                              );
-                            },
-                    ),
-                  ],
+                GlassIconButton(
+                  tooltip: '刷新截图历史',
+                  busy: _loading && records != null,
+                  onPressed: _loading ? null : _load,
+                  icon: const LineIcon(
+                    LucideIcons.refreshCw,
+                    size: GlassMetrics.icon,
+                  ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    NativeGlassSurface(
-                      material: true,
-                      busy: _loading && records != null,
-                      child: IconButton(
-                        tooltip: '刷新截图历史',
-                        onPressed: _loading ? null : _load,
-                        icon: const LineIcon(
-                          LucideIcons.refreshCw,
-                          size: GlassMetrics.icon,
-                        ),
-                        visualDensity: VisualDensity.standard,
-                      ),
-                    ),
-                    const SizedBox(width: GlassMetrics.actionGap),
-                    NativeGlassSurface(
-                      material: true,
-                      busy: _busyAction == 'clear',
-                      child: TextButton(
-                        onPressed:
-                            _busyAction != null ||
-                                records == null ||
-                                records.isEmpty
-                            ? null
-                            : _clearAll,
-                        child: const Text('清空截图历史'),
-                      ),
-                    ),
-                  ],
+                NativeGlassSurface(
+                  material: true,
+                  busy: _busyAction == 'clear',
+                  child: TextButton(
+                    onPressed:
+                        _busyAction != null ||
+                            records == null ||
+                            records.isEmpty
+                        ? null
+                        : _clearAll,
+                    child: const Text('清空截图历史'),
+                  ),
                 ),
               ],
             ),
@@ -492,15 +458,11 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     }) => Semantics(
       label: semanticsLabel,
       button: semanticsLabel != null,
-      child: NativeGlassSurface(
-        material: true,
+      child: GlassIconButton(
+        tooltip: tooltip,
         busy: busy,
-        child: IconButton(
-          tooltip: tooltip,
-          onPressed: onPressed,
-          icon: icon,
-          visualDensity: VisualDensity.standard,
-        ),
+        onPressed: onPressed,
+        icon: icon,
       ),
     );
 

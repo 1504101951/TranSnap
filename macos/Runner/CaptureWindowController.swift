@@ -34,6 +34,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
     private var liveShadeFrame: NSRect?
     private var shownScrollHint: String?
     private var scrollPreviewWindow: NSPanel?
+    private let tooltip = OverlayTooltipBubble()
 
     var canStop: Bool {
         liveControlID != nil || service.isCountingDown || [.recording, .scrolling, .paused].contains(service.phase)
@@ -78,6 +79,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
 
     func shutdown() async {
         shuttingDown = true
+        tooltip.hide()
         pendingStartup?.cancel()
         pendingStartup = nil
         updateCaptureShades()
@@ -174,6 +176,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
                 self.engine = started.engine
                 self.channel = started.channel
                 let flutter = started.flutter
+                flutter.mouseTrackingMode = .always
                 flutter.registrar(forPlugin: "CaptureVideoPreview").register(
                     CapturePreviewFactory(owner: self), withId: AppConstants.captureVideoPreview)
                 let panel = Self.makeWindow(compact: true)
@@ -192,6 +195,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
             let panel = CaptureControlPanel(contentRect: frame,
                 styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
             panel.becomesKeyOnlyIfNeeded = true
+            panel.acceptsMouseMovedEvents = true
             panel.identifier = AppConstants.captureControlWindowIdentifier
             window = panel
         } else {
@@ -269,6 +273,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
     }
 
     func hideLiveControls() {
+        tooltip.hide()
         liveControlID = nil
         livePaused = false
         liveDetail = ""
@@ -289,6 +294,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         let showingResult = !live && [.videoReady, .converting, .imageReady].contains(service.phase)
         if !showingResult { updateCaptureShades() }
         if !live, [.idle, .failed].contains(service.phase) {
+            tooltip.hide()
             window?.orderOut(nil)
             compactPresentation = nil
             releasePlayer()
@@ -321,6 +327,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         let controlSize = AppConstants.captureControlSize
         let sizeChanged = compact && window.contentView?.frame.size != controlSize
         if changed {
+            if !compact { tooltip.hide() }
             compactPresentation = compact
             (window.contentViewController as? NativeGlassWindowContent)?.windowCanvas.isHidden = compact
         }
@@ -602,6 +609,39 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any] ?? [:]
         Task { @MainActor in
+            if call.method == AppConstants.showOverlayTooltipMethod {
+                guard let message = args["message"] as? String,
+                      let x = (args["x"] as? NSNumber)?.doubleValue,
+                      let y = (args["y"] as? NSNumber)?.doubleValue,
+                      let width = (args["width"] as? NSNumber)?.doubleValue,
+                      let height = (args["height"] as? NSNumber)?.doubleValue,
+                      width.isFinite, height.isFinite, width > 0, height > 0, x.isFinite, y.isFinite
+                else {
+                    result(FlutterError(code: AppConstants.badArgsError, message: "showOverlayTooltip 需要有效的 message/x/y/width/height", details: nil))
+                    return
+                }
+                guard compactPresentation == true, let window, window.isVisible else {
+                    result(nil)
+                    return
+                }
+                let preferAbove = args["preferAbove"] as? Bool ?? true
+                let anchor = NSRect(
+                    x: window.frame.minX + x,
+                    y: window.frame.maxY - y - height,
+                    width: width,
+                    height: height
+                )
+                let screenRect = (window.screen ?? NSScreen.screens.first { $0.frame.intersects(window.frame) } ?? NSScreen.main)?.visibleFrame
+                    ?? anchor
+                tooltip.show(message: message, anchor: anchor, screen: screenRect, preferAbove: preferAbove)
+                result(nil)
+                return
+            }
+            if call.method == AppConstants.hideOverlayTooltipMethod {
+                tooltip.hide()
+                result(nil)
+                return
+            }
             do {
                 if let liveControlID {
                     guard call.method == AppConstants.getCaptureStateMethod || args["id"] as? String == liveControlID else {
