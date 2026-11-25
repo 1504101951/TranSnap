@@ -17,6 +17,23 @@ abstract final class AppMotion {
   static bool reduced(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context);
 
+  static final bouncySpring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: math
+        .pow(
+          2 * math.pi / (MotionMetrics.bouncyDuration.inMicroseconds / 1e6),
+          2,
+        )
+        .toDouble(),
+    ratio: MotionMetrics.bouncyDampingRatio,
+  );
+
+  static final settleSpring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: bouncySpring.stiffness,
+    ratio: 1,
+  );
+
   static Motion bouncy(BuildContext context) => reduced(context)
       ? const Motion.linear(Duration.zero)
       : const CupertinoMotion.bouncy(
@@ -1610,6 +1627,119 @@ class _CharRevealState extends State<CharReveal>
       ),
     );
   }
+}
+
+class LiquidBlockSplit extends StatefulWidget {
+  const LiquidBlockSplit({
+    super.key,
+    required this.origin,
+    required this.order,
+    required this.entering,
+    required this.child,
+  });
+
+  final GlobalKey origin;
+  final int order;
+  final bool entering;
+  final Widget child;
+
+  @override
+  State<LiquidBlockSplit> createState() => _LiquidBlockSplitState();
+}
+
+class _LiquidBlockSplitState extends State<LiquidBlockSplit>
+    with SingleTickerProviderStateMixin {
+  late final _progress = AnimationController.unbounded(vsync: this);
+  final _selfKey = GlobalKey();
+  Offset? _delta;
+  double _scaleX = 1;
+  Timer? _delay;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  @override
+  void dispose() {
+    _delay?.cancel();
+    _progress.dispose();
+    super.dispose();
+  }
+
+  void _measure() {
+    if (!mounted) return;
+    final origin = widget.origin.currentContext?.findRenderObject();
+    final self = _selfKey.currentContext?.findRenderObject();
+    if (!widget.entering ||
+        AppMotion.reduced(context) ||
+        origin is! RenderBox ||
+        self is! RenderBox ||
+        !origin.hasSize ||
+        !self.hasSize) {
+      _progress.value = 1;
+      setState(() => _delta = Offset.zero);
+      return;
+    }
+    final from = origin.localToGlobal(Offset.zero) & origin.size;
+    final to = self.localToGlobal(Offset.zero) & self.size;
+    _progress.value = 0;
+    setState(() {
+      _delta = Offset(from.center.dx - to.center.dx, from.top - to.top);
+      _scaleX = from.width / to.width;
+    });
+    _delay = Timer(MotionMetrics.blockSplitStagger * widget.order, _expand);
+  }
+
+  void _expand() {
+    _delay?.cancel();
+    if (!mounted) return;
+    _progress
+        .animateWith(
+          SpringSimulation(
+            AppMotion.bouncySpring,
+            _progress.value,
+            1,
+            _progress.velocity,
+          ),
+        )
+        .then((_) {
+          if (mounted) _progress.value = 1;
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _progress,
+    child: KeyedSubtree(key: _selfKey, child: widget.child),
+    builder: (context, child) {
+      final delta = _delta;
+      final rest = delta == null ? 0.0 : 1 - _progress.value;
+      final blur = MotionMetrics.blockSplitBlur * rest.clamp(0.0, 1.0);
+      final opacity = delta == null
+          ? 0.0
+          : (MotionMetrics.blockSplitOpacity +
+                    (1 - MotionMetrics.blockSplitOpacity) * _progress.value)
+                .clamp(0.0, 1.0);
+      return Opacity(
+        opacity: opacity,
+        child: Transform(
+          alignment: Alignment.topCenter,
+          transform: Matrix4.translationValues(
+            (delta?.dx ?? 0) * rest,
+            (delta?.dy ?? 0) * rest,
+            0,
+          )..scaleByDouble(1 + (_scaleX - 1) * rest, 1, 1, 1),
+          child: ImageFiltered(
+            enabled: blur > 0.01,
+            imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+            child: child,
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class LiquidSplit extends StatefulWidget {

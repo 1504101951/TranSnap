@@ -92,8 +92,8 @@ TranslationProvider? assistProviderForService(
 
 List<ServiceChoice> serviceChoices(AppSettings settings) => [
   for (final (id, name) in [
-    (ServiceConfig.builtinId, ServiceConfig.builtinName),
     (ServiceConfig.systemId, ServiceConfig.systemName),
+    (ServiceConfig.builtinId, ServiceConfig.builtinName),
   ])
     (
       id: id,

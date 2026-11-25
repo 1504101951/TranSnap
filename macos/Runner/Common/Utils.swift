@@ -89,6 +89,7 @@ enum LanguageDetection {
         for code in AppConstants.languageDetectionPopular {
             weights[NLLanguage(rawValue: code)] = AppConstants.languageDetectionPopularWeight
         }
+        weights[.english] = AppConstants.languageDetectionEnglishWeight
         for code in preferred {
             let identifier = chineseScript(code).map { "zh-\($0)" } ?? Locale.Language(identifier: code).languageCode?.identifier
             guard let identifier, AppConstants.languageDetectionAll.contains(identifier) else { continue }
@@ -105,6 +106,7 @@ enum LanguageDetection {
             ? top.code
             : ranked.first { Locale.Language(identifier: $0.code).languageCode.map { bases.contains($0.identifier) } == true }?.code
                 ?? latinFallback(text: text, preferred: preferred)
+                ?? (AppConstants.languageDetectionPopular.contains(top.code) ? top.code : nil)
         guard let chosen, Locale.Language(identifier: chosen).languageCode?.identifier == "zh" else { return chosen }
         guard let script = preferred.lazy.compactMap(chineseScript).first else { return chosen }
         let transform = StringTransform(script == "Hans" ? "Hant-Hans" : "Hans-Hant")

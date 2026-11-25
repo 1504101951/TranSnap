@@ -1,6 +1,7 @@
 import AppKit
 import CoreMedia
 import CoreVideo
+import CoreImage
 import ScreenCaptureKit
 
 struct LiveOcrSlot {
@@ -175,6 +176,16 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
                     guard let buffer = CMSampleBufferGetImageBuffer(sample),
                           let imageBounds = bounds[identity] else { continue }
                     let found = try await ScreenCaptureService.recognizeParagraphs(pixelBuffer: buffer)
+                    if found.isEmpty, !LiveRegionDebugDump.done {
+                        LiveRegionDebugDump.done = true
+                        let ci = CIImage(cvPixelBuffer: buffer)
+                        let url = FileManager.default.temporaryDirectory.appendingPathComponent("transnap-live-frame.png")
+                        if let cg = CIContext().createCGImage(ci, from: ci.extent),
+                           let data = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) {
+                            try? data.write(to: url)
+                            LiveRegionLog.note("[DEBUG-live] empty frame dumped path=\(url.path) size=\(cg.width)x\(cg.height) bounds=\(imageBounds)")
+                        }
+                    }
                     let pixelWidth = Double(CVPixelBufferGetWidth(buffer))
                     let pixelHeight = Double(CVPixelBufferGetHeight(buffer))
                     guard pixelWidth > 0, pixelHeight > 0 else { continue }
@@ -377,4 +388,8 @@ final class LiveRegionCapture: NSObject, SCStreamDelegate, SCStreamOutput {
         config.queueDepth = 3
         return config
     }
+}
+
+enum LiveRegionDebugDump {
+    nonisolated(unsafe) static var done = false
 }

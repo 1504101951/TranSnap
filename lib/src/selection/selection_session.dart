@@ -79,8 +79,8 @@ class SelectionSession extends ChangeNotifier {
 
   List<ServiceChoice> Function() _serviceChoices = () => const [
     (
-      id: ServiceConfig.builtinId,
-      name: ServiceConfig.builtinName,
+      id: ServiceConfig.systemId,
+      name: ServiceConfig.systemName,
       isModel: false,
       isDefault: true,
     ),

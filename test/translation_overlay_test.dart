@@ -16,6 +16,7 @@ import 'package:transnap/src/history/translation_history.dart';
 import 'package:transnap/src/history/vocabulary.dart';
 import 'package:transnap/src/platform/channel_platform_bridge.dart';
 import 'package:transnap/src/translation/language_direction.dart';
+import 'package:transnap/src/common/widgets/app_tooltip.dart';
 import 'package:transnap/src/common/widgets/native_glass.dart';
 import 'package:transnap/src/overlay/dictionary_definition.dart';
 import 'package:transnap/src/overlay/translation_overlay.dart';
@@ -147,7 +148,7 @@ void main() {
       'y': 0,
     });
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('关闭'));
+    await tester.tap(find.byKey(const ValueKey('overlay-close-button')));
     await tester.pumpAndSettle();
     expect(session.snapshot.phase, TranslationPhase.idle);
     expect(find.text('你好'), findsNothing);
@@ -168,7 +169,7 @@ void main() {
       'sessionId': 'empty-hotkey',
     });
     expect(session.snapshot.phase, TranslationPhase.failed);
-    await tester.tap(find.byTooltip('关闭'));
+    await tester.tap(find.byKey(const ValueKey('overlay-close-button')));
     await tester.pumpAndSettle();
     expect(session.snapshot.phase, TranslationPhase.idle);
 
@@ -235,36 +236,59 @@ void main() {
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('你好')).dx,
-        lessThan(tester.getTopLeft(find.text('Hello')).dx),
+        tester.getTopLeft(find.text('Hello')).dx,
+        lessThan(tester.getTopLeft(find.text('你好')).dx),
       );
       expect(
-        tester.getTopLeft(find.text('你好')).dy,
         tester.getTopLeft(find.text('Hello')).dy,
+        tester.getTopLeft(find.text('你好')).dy,
       );
+      final sourceLangRect = tester.getRect(
+        find.byKey(const ValueKey('card-source-language')),
+      );
+      final targetLangRect = tester.getRect(
+        find.byKey(const ValueKey('card-target-language')),
+      );
+      final langCenterX = (sourceLangRect.left + targetLangRect.right) / 2;
+      expect((langCenterX - 360).abs(), lessThan(12));
       expect(find.byKey(const ValueKey('card-copy-source')), findsOneWidget);
+      expect(find.byKey(const ValueKey('card-copy')), findsOneWidget);
       expect(find.text('复制原文'), findsNothing);
+      expect(find.text('复制译文'), findsNothing);
+      expect(find.byTooltip('关闭'), findsOneWidget);
       expect(find.byTooltip('复制原文'), findsOneWidget);
-      expect(find.text('复制译文'), findsOneWidget);
+      expect(find.byTooltip('复制译文'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('复制译文')).dx,
-        lessThan(
-          tester.getTopLeft(find.byKey(const ValueKey('card-source-group'))).dx,
-        ),
+        tester
+            .widget<Tooltip>(
+              find.descendant(
+                of: find.byKey(const ValueKey('card-copy-source')),
+                matching: find.byType(Tooltip),
+              ),
+            )
+            .preferBelow,
+        isFalse,
       );
       expect(
-        tester.getTopLeft(find.byKey(const ValueKey('card-source-group'))).dx,
-        lessThan(
-          tester.getTopLeft(find.byKey(const ValueKey('card-copy-source'))).dx,
-        ),
+        tester
+            .widget<Tooltip>(
+              find.descendant(
+                of: find.byKey(const ValueKey('card-copy')),
+                matching: find.byType(Tooltip),
+              ),
+            )
+            .preferBelow,
+        isFalse,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('card-copy-source'))).dx,
+        lessThan(tester.getTopLeft(find.byKey(const ValueKey('card-copy'))).dx),
       );
       final dragArea = find.byKey(const ValueKey('result-drag-area'));
       expect(tester.getSize(dragArea).height, 44);
+      final dragBox = tester.getRect(dragArea);
       await tester.dragFrom(
-        Offset(
-          tester.getRect(dragArea).center.dx,
-          tester.getRect(dragArea).top + 40,
-        ),
+        Offset(sourceLangRect.left - 16, dragBox.center.dy),
         const Offset(40, 0),
       );
       await tester.pumpAndSettle();
@@ -272,14 +296,14 @@ void main() {
       expect(session.sessionId, 's1');
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);
-      await tester.tap(find.byTooltip('关闭'));
+      await tester.tap(find.byKey(const ValueKey('overlay-close-button')));
       await tester.pumpAndSettle();
       expect(session.snapshot.phase, TranslationPhase.idle);
       expect(find.text('你好'), findsNothing);
     },
   );
 
-  testWidgets('底部操作行左侧「朗读译文」朗读译文、右侧原文组朗读图标朗读原文，空内容禁用（#101、#134、#67）', (
+  testWidgets('译文栏「朗读译文」图标朗读译文、原文栏「朗读原文」图标朗读原文，空内容禁用（#101、#134、#67）', (
     tester,
   ) async {
     final session = SelectionSession(
@@ -308,20 +332,14 @@ void main() {
         ),
       ),
     );
-    TextButton footer(String label) => tester.widget<TextButton>(
-      find.ancestor(
-        of: find.text(label),
-        matching: find.byWidgetPredicate((widget) => widget is TextButton),
-      ),
-    );
-    IconButton sourceSpeak() => tester.widget<IconButton>(
+    IconButton buttonIn(ValueKey<String> key) => tester.widget<IconButton>(
       find.descendant(
-        of: find.byKey(const ValueKey('card-speak-source')),
+        of: find.byKey(key),
         matching: find.byType(IconButton),
       ),
     );
-    expect(footer('朗读译文').onPressed, isNull);
-    expect(sourceSpeak().onPressed, isNotNull);
+    expect(buttonIn(const ValueKey('card-speak')).onPressed, isNull);
+    expect(buttonIn(const ValueKey('card-speak-source')).onPressed, isNotNull);
     session.snapshot = const TranslationSnapshot(
       phase: TranslationPhase.completed,
       sourceText: 'Hello',
@@ -329,12 +347,12 @@ void main() {
     );
     session.notifyListeners();
     await tester.pump();
-    await tester.tap(find.text('朗读译文'));
+    await tester.tap(find.byKey(const ValueKey('card-speak')));
     await tester.tap(find.byKey(const ValueKey('card-speak-source')));
     expect(spoken, [false, true]);
   });
 
-  testWidgets('已验证的语义段落按译文原文成对展示', (tester) async {
+  testWidgets('已验证的语义段落按原文译文成对展示', (tester) async {
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -368,11 +386,11 @@ void main() {
     expect(find.text('First.'), findsOneWidget);
     expect(find.text('第二段。'), findsOneWidget);
     expect(find.text('完整译文'), findsNothing);
-    for (final pair in [('第一段。', 'First.'), ('第二段。', 'Second.')]) {
-      final translated = tester.getTopLeft(find.text(pair.$1));
-      final source = tester.getTopLeft(find.text(pair.$2));
-      expect(translated.dx, lessThan(source.dx));
-      expect(translated.dy, source.dy);
+    for (final pair in [('First.', '第一段。'), ('Second.', '第二段。')]) {
+      final source = tester.getTopLeft(find.text(pair.$1));
+      final translated = tester.getTopLeft(find.text(pair.$2));
+      expect(source.dx, lessThan(translated.dx));
+      expect(source.dy, translated.dy);
     }
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
@@ -434,8 +452,8 @@ void main() {
     session.begin(sessionId: 'one', text: 'Hello');
     await pumpCard(tester, session);
     expect(
-      tester.getTopLeft(find.text('你好')).dx,
-      lessThan(tester.getTopLeft(find.text('Hello')).dx),
+      tester.getTopLeft(find.text('Hello')).dx,
+      lessThan(tester.getTopLeft(find.text('你好')).dx),
     );
     expect(TranslationOverlay.cardSize, const Size(720, 420));
     BoxDecoration sourceDecoration(int index) =>
@@ -507,7 +525,7 @@ void main() {
     expect(picks, [(null, 'ja')]);
   });
 
-  testWidgets('查到词典：左 2/5 上译文下原文 15pt 半粗，右 3/5 词典；生词本在底部，复制词典在悬停词典时出现（#134）', (
+  testWidgets('查到词典：左 2/5 上原文下译文 15pt 半粗，右 3/5 词典；操作与生词本按钮嵌在栏标题行（#134）', (
     tester,
   ) async {
     final session = SelectionSession(
@@ -524,8 +542,8 @@ void main() {
     await pumpCard(tester, session);
     final translated = tester.getTopLeft(find.text('你好'));
     final source = tester.getTopLeft(find.text('pot'));
-    expect(translated.dx, source.dx);
-    expect(translated.dy, lessThan(source.dy));
+    expect(source.dx, translated.dx);
+    expect(source.dy, lessThan(translated.dy));
     final style = tester.widget<Text>(find.text('你好')).textSpan!.style!;
     expect(style.fontSize, 15);
     expect(style.fontWeight, FontWeight.w600);
@@ -536,8 +554,9 @@ void main() {
     expect(find.byType(EditableText), findsNothing);
     final dictionaryX = tester.getTopLeft(find.text('词典')).dx;
     expect(dictionaryX, greaterThan(288));
-    expect(translated.dx, lessThan(288));
-    expect(find.text('加入生词本'), findsOneWidget);
+    expect(source.dx, lessThan(288));
+    expect(find.byKey(const ValueKey('card-vocabulary')), findsOneWidget);
+    expect(find.byTooltip('加入生词本'), findsOneWidget);
     expect(
       tester.getSize(
         find.descendant(
@@ -565,8 +584,8 @@ void main() {
     session.begin(sessionId: 'same', text: '今天天气很好');
     await pumpCard(tester, session);
     expect(session.sourceIsTarget, isTrue);
-    expect(find.text('复制原文'), findsOneWidget);
-    expect(find.text('复制译文'), findsNothing);
+    expect(find.byTooltip('复制原文'), findsOneWidget);
+    expect(find.byTooltip('复制译文'), findsNothing);
     expect(find.byKey(const ValueKey('card-copy-source')), findsNothing);
     expect(find.byKey(const ValueKey('card-speak-source')), findsNothing);
     expect(find.text('今天天气很好'), findsOneWidget);
@@ -751,7 +770,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('card-speak')),
-        matching: find.text('朗读译文'),
+        matching: find.byTooltip('朗读译文'),
       ),
       findsOneWidget,
     );
@@ -766,12 +785,95 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('card-speak')),
-        matching: find.text('停止朗读'),
+        matching: find.byTooltip('停止朗读'),
       ),
       findsOneWidget,
     );
     expect(find.byTooltip('朗读原文'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('长文本悬停译文段落时原文栏同步高亮并自动滚动，手动滚动原文后不再强制跟随', (tester) async {
+    tester.view.physicalSize = const Size(720, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final pairs = [
+      for (var i = 0; i < 12; i++)
+        TranslationPair(
+          'Source paragraph $i line 1\nSource paragraph $i line 2\nSource paragraph $i line 3',
+          '第 $i 段译文第一行\n第 $i 段译文第二行\n第 $i 段译文第三行',
+        ),
+    ];
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+    );
+    addTearDown(session.dispose);
+    session.snapshot = TranslationSnapshot(
+      phase: TranslationPhase.completed,
+      sourceText: pairs.map((pair) => pair.source).join('\n\n'),
+      translatedText: pairs.map((pair) => pair.translation).join('\n\n'),
+      pairs: pairs,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranslationOverlay(
+          session: session,
+          onActivate: () {},
+          onDismiss: () {},
+          onDrag: () {},
+          onMode: (_) {},
+          onService: (_) {},
+          onLanguages: (_, _) {},
+          onSpeak: (_) {},
+          onAddVocabulary: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final resultScroller = tester
+        .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+        .last
+        .controller;
+    final sourceScroller = tester
+        .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+        .first
+        .controller!;
+    expect(resultScroller, isNotNull);
+    expect(sourceScroller.offset, 0);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('translated-paragraph-9')));
+    await tester.pumpAndSettle();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('translated-paragraph-9'))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sourceScroller.offset, greaterThan(100));
+    final sourceTopAfterFollow = tester
+        .getRect(find.byKey(const ValueKey('source-paragraph-9')))
+        .top;
+    expect(sourceTopAfterFollow, greaterThanOrEqualTo(44));
+    expect(sourceTopAfterFollow, lessThan(420));
+
+    await tester.drag(
+      find.byKey(const ValueKey('source-paragraph-9')),
+      const Offset(0, 120),
+    );
+    await tester.pumpAndSettle();
+    final manualOffset = sourceScroller.offset;
+
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('translated-paragraph-5'))),
+    );
+    await tester.pumpAndSettle();
+    expect(sourceScroller.offset, manualOffset);
   });
 
   testWidgets('词典释义词条采用 16pt 半粗标题并用纯文本间距替代 WidgetSpan（#144）', (tester) async {
@@ -807,6 +909,75 @@ void main() {
     });
     expect(hasWidgetSpan, isFalse);
     expect(root.toPlainText(), 'pot  BrE pɒt');
+  });
+
+  testWidgets('AppTooltipScope 接管浮层所有按钮提示：悬停 200ms 后携带窗口坐标触发上浮回调，移出或点击时收起', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+    );
+    addTearDown(session.dispose);
+    session.snapshot = const TranslationSnapshot(
+      phase: TranslationPhase.completed,
+      sourceText: 'Hello',
+      translatedText: '你好',
+    );
+    final shown = <(String message, Rect anchor, bool preferAbove)>[];
+    var hides = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTooltipScope(
+          onShow: (message, anchor, preferAbove) =>
+              shown.add((message, anchor, preferAbove)),
+          onHide: () => hides += 1,
+          child: TranslationOverlay(
+            session: session,
+            onActivate: () {},
+            onDismiss: () {},
+            onDrag: () {},
+            onMode: (_) {},
+            onService: (_) {},
+            onLanguages: (_, _) {},
+            onSpeak: (_) {},
+            onAddVocabulary: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+
+    final closeCenter = tester.getCenter(
+      find.byKey(const ValueKey('overlay-close-button')),
+    );
+    await mouse.moveTo(closeCenter);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(shown, isEmpty);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(shown, hasLength(1));
+    expect(shown.single.$1, '关闭');
+    expect(shown.single.$3, isTrue);
+    expect(shown.single.$2.top, lessThan(44));
+
+    await mouse.moveTo(tester.getCenter(find.byKey(const ValueKey('card-copy'))));
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(hides, 1);
+    expect(shown, hasLength(2));
+    expect(shown.last.$1, '复制译文');
+    expect(shown.last.$3, isTrue);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    expect(hides, 2);
   });
 }
 

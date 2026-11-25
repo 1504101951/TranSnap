@@ -39,6 +39,18 @@ abstract interface class OverlayHost {
 
   Future<void> dragOverlay({required String sessionId});
 
+  Future<void> showOverlayTooltip({
+    required String sessionId,
+    required String message,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    bool preferAbove = true,
+  });
+
+  Future<void> hideOverlayTooltip();
+
   Future<void> publishLiveRegion(Map<String, Object?> state);
 
   Future<void> publishScreenshotTranslation(Map<String, Object?> state);

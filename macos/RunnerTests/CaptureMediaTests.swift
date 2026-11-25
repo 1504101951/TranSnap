@@ -1600,20 +1600,20 @@ final class CaptureMediaTests: XCTestCase {
     @MainActor
     func testRecordingClickOverlayConfigAndLifecycle() throws {
         let defaults = RecordingClickOverlay.resolvedConfig(preferences: [:])
-        XCTAssertEqual(defaults.effect, .off)
-        XCTAssertTrue(defaults.rightDistinct)
+        XCTAssertFalse(defaults.enabled)
+        XCTAssertEqual(defaults.effect, .optical)
         let invalid = RecordingClickOverlay.resolvedConfig(preferences: [
             AppConstants.recordingClickEffectKey: "unknown",
-            AppConstants.recordingClickRightDistinctKey: false,
+            AppConstants.recordingClickEffectEnabledKey: true,
         ])
-        XCTAssertEqual(invalid.effect, .off)
-        XCTAssertFalse(invalid.rightDistinct)
+        XCTAssertTrue(invalid.enabled)
+        XCTAssertEqual(invalid.effect, .optical)
 
-        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .off, isApplicationTarget: false))
-        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .system, isApplicationTarget: false))
-        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .optical, isApplicationTarget: true))
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(enabled: false, effect: .optical, isApplicationTarget: false))
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(enabled: true, effect: .system, isApplicationTarget: false))
+        XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(enabled: true, effect: .optical, isApplicationTarget: true))
         for effect in [RecordingClickEffect.optical, .liquid, .spotlight, .prism, .minimal] {
-            XCTAssertTrue(RecordingClickOverlay.shouldRenderOverlay(effect: effect, isApplicationTarget: false))
+            XCTAssertTrue(RecordingClickOverlay.shouldRenderOverlay(enabled: true, effect: effect, isApplicationTarget: false))
         }
 
         let frame = NSRect(x: 100, y: 200, width: 300, height: 180)
@@ -1631,11 +1631,11 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertFalse(RecordingClickOverlay.shouldAcceptMonitorEvent(markedEvent))
 
         let overlay = RecordingClickOverlay()
-        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: false)
+        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectEnabledKey: true, AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: false)
         XCTAssertTrue(overlay.isRunning)
         overlay.stop()
         XCTAssertFalse(overlay.isRunning)
-        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: true)
+        overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectEnabledKey: true, AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: true)
         XCTAssertFalse(overlay.isRunning)
     }
 

@@ -99,8 +99,8 @@ class SettingsController {
               ..._current.toMap(),
               PreferenceKeys.recordingDelay:
                   options[PreferenceKeys.recordingDelay],
-              PreferenceKeys.recordingClickEffect:
-                  options[PreferenceKeys.recordingClickEffect],
+              PreferenceKeys.recordingClickEffectEnabled:
+                  options[PreferenceKeys.recordingClickEffectEnabled],
             }),
             {},
           );

@@ -78,7 +78,6 @@ abstract final class RecordingOptions {
 }
 
 enum RecordingClickEffect {
-  off('关闭'),
   optical('光学涟漪'),
   liquid('液态弹波'),
   spotlight('聚光微点'),
@@ -91,7 +90,7 @@ enum RecordingClickEffect {
   final String label;
 
   static RecordingClickEffect parse(String? wire) {
-    if (wire == null) return off;
+    if (wire == null) return optical;
     for (final value in values) {
       if (value.name == wire) return value;
     }

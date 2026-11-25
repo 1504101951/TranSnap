@@ -64,4 +64,7 @@ abstract final class MotionMetrics {
   static const liquidOpacity = 0.25;
   static const liquidCollapseDuration = Duration(milliseconds: 120);
   static const liquidCollapseStagger = Duration(milliseconds: 10);
+  static const blockSplitStagger = Duration(milliseconds: 30);
+  static const blockSplitBlur = 4.0;
+  static const blockSplitOpacity = 0.2;
 }

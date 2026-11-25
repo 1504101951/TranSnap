@@ -73,38 +73,32 @@ void main() {
     });
   });
 
-  test('录制选项：截图工具栏保存延时与点击特效，其他设置保持不变，非法延时或特效不提交（#129、#143）', () async {
+  test('录制选项：截图工具栏保存延时与点击特效开关，样式与其他设置保持不变，非法延时不提交（#129、#143）', () async {
     final committed = await controller.handle(
       MethodCall(MethodNames.saveRecordingOptions, {
         PreferenceKeys.recordingDelay: 5,
-        PreferenceKeys.recordingClickEffect: RecordingClickEffect.optical.name,
+        PreferenceKeys.recordingClickEffectEnabled: true,
       }),
     ) as Map;
     expect(committed['revision'], 1);
     expect(controller.current.recordingDelay, 5);
-    expect(controller.current.recordingClickEffect, RecordingClickEffect.optical);
-    expect(controller.current.recordingClickRightDistinct, isTrue);
+    expect(controller.current.recordingClickEffectEnabled, isTrue);
+    expect(
+      controller.current.recordingClickEffect,
+      RecordingClickEffect.optical,
+    );
     expect(controller.current.primaryLanguage, 'zh-CN');
     await expectLater(
       controller.handle(
         MethodCall(MethodNames.saveRecordingOptions, {
           PreferenceKeys.recordingDelay: 4,
-          PreferenceKeys.recordingClickEffect: RecordingClickEffect.off.name,
-        }),
-      ),
-      throwsFormatException,
-    );
-    await expectLater(
-      controller.handle(
-        MethodCall(MethodNames.saveRecordingOptions, {
-          PreferenceKeys.recordingDelay: 5,
-          PreferenceKeys.recordingClickEffect: 'invalidEffect',
+          PreferenceKeys.recordingClickEffectEnabled: false,
         }),
       ),
       throwsFormatException,
     );
     expect(controller.current.recordingDelay, 5);
-    expect(controller.current.recordingClickEffect, RecordingClickEffect.optical);
+    expect(controller.current.recordingClickEffectEnabled, isTrue);
   });
 
   test('存储目录不可用时不发布配置，修复目录后下一次提交成功', () async {

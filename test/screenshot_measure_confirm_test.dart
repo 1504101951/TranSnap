@@ -15,6 +15,7 @@ void main() {
 
   testWidgets('取色：悬停显示指针处色值，单击复制源像素的 #RRGGBB', (tester) async {
     final editor = await _pumpEditor(tester, 'test/eyedropper');
+    await revealToolbarChildren(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.eyedropper)));
     await tester.pumpAndSettle();
     final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
@@ -38,6 +39,7 @@ void main() {
 
   testWidgets('标尺：拖动显示长度与 Δx × Δy，测量线不进入导出，切换工具后清除', (tester) async {
     final editor = await _pumpEditor(tester, 'test/ruler');
+    await showFullToolbar(tester);
     await _copy(tester, editor);
     await tester.tap(find.byKey(const Key(ScreenshotActions.ruler)));
     await tester.pumpAndSettle();

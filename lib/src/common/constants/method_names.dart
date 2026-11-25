@@ -46,6 +46,7 @@ abstract final class MethodNames {
   static const screenshotToolbarChanged = 'screenshotToolbarChanged';
 
   static const screenshotToolbarSlot = 'screenshotToolbarSlot';
+  static const screenshotToolbarTab = 'screenshotToolbarTab';
 
   static const appReady = 'appReady';
 
@@ -96,6 +97,8 @@ abstract final class MethodNames {
   static const getSettings = 'getSettings';
 
   static const hideOverlay = 'hideOverlay';
+
+  static const hideOverlayTooltip = 'hideOverlayTooltip';
 
   static const historyPage = 'historyPage';
 
@@ -178,6 +181,8 @@ abstract final class MethodNames {
   static const startWindowDrag = 'startWindowDrag';
 
   static const showOverlay = 'showOverlay';
+
+  static const showOverlayTooltip = 'showOverlayTooltip';
 
   static const systemStatus = 'systemStatus';
 

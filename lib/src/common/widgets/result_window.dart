@@ -9,6 +9,8 @@ import 'app_motion.dart';
 import 'native_glass.dart';
 
 abstract final class ResultWindowColors {
+  static const mediaBorderWidth = 0.5;
+
   static Color canvas(bool dark) =>
       dark ? const Color(0xFF1C1C1E) : const Color(0xFFE9E9EB);
 
@@ -59,6 +61,7 @@ class ResultMediaFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    const outset = -ResultWindowColors.mediaBorderWidth;
     return DecoratedBox(
       decoration: BoxDecoration(
         boxShadow: [
@@ -69,15 +72,26 @@ class ResultMediaFrame extends StatelessWidget {
           ),
         ],
       ),
-      child: DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: ResultWindowColors.mediaBorder(dark),
-            width: 0.5,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: outset,
+            top: outset,
+            right: outset,
+            bottom: outset,
+            child: DecoratedBox(
+              key: const Key('result-media-border'),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: ResultWindowColors.mediaBorder(dark),
+                  width: ResultWindowColors.mediaBorderWidth,
+                ),
+              ),
+            ),
           ),
-        ),
-        child: child,
+          child,
+        ],
       ),
     );
   }
@@ -288,7 +302,8 @@ class ResultTextButton extends StatelessWidget {
 class ResultIconButton extends StatelessWidget {
   const ResultIconButton({
     super.key,
-    required this.icon,
+    this.icon,
+    this.glyph,
     required this.tooltip,
     required this.onPressed,
     this.selected = false,
@@ -297,7 +312,8 @@ class ResultIconButton extends StatelessWidget {
     this.buttonKey,
   });
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? glyph;
   final String tooltip;
   final VoidCallback? onPressed;
   final bool selected;
@@ -363,7 +379,10 @@ class ResultIconButton extends StatelessWidget {
                     ),
                   ),
                 ),
-                icon: LineIcon(icon, size: iconSize, color: effectiveFg),
+                icon: IconTheme(
+                  data: IconThemeData(size: iconSize, color: effectiveFg),
+                  child: glyph ?? LineIcon(icon),
+                ),
               ),
             ),
           ),

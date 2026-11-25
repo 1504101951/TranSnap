@@ -390,7 +390,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
 
     private func toolbarPreferences() -> [String: Any] {
         let preferences = AppPreferences.current
-        return preferences.filter { [AppConstants.screenshotToolbarColumnsKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingClickEffectKey, AppConstants.stickersKey].contains($0.key) }
+        return preferences.filter { [AppConstants.screenshotToolbarColumnsKey, AppConstants.screenshotToolbarChildrenKey, AppConstants.screenshotToolbarHiddenKey, AppConstants.screenshotToolbarFavoritesKey, AppConstants.screenshotDrawingKey, AppConstants.screenshotConfirmActionKey, AppConstants.recordingDelayKey, AppConstants.recordingClickEffectEnabledKey, AppConstants.stickersKey].contains($0.key) }
             .merging([AppConstants.stickerDirectoryKey: AppConstants.stickersURL.path]) { current, _ in current }
     }
 
@@ -911,6 +911,14 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
            let id = captureId {
             if !event.isARepeat {
                 channel?.invokeMethod(AppConstants.deleteScreenshotSelectionMethod, arguments: ["id": id])
+            }
+            return true
+        }
+        if event.keyCode == AppConstants.tabKeyCode,
+           event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+           let id = captureId {
+            if !event.isARepeat {
+                channel?.invokeMethod(AppConstants.screenshotToolbarTabMethod, arguments: ["id": id])
             }
             return true
         }

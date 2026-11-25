@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
 
 import '../selection/selection_session.dart';
@@ -72,10 +73,14 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   TranslationPhase? _lastPhase;
   String? _lastSessionId;
   int _sweepCount = 0;
-  bool _cardHovered = false;
   String? _hoveredPane;
   bool? _localSpeakingSource;
   final Map<String, int> _copyTriggers = {};
+  final ScrollController _sourceScroll = ScrollController();
+  final ScrollController _resultScroll = ScrollController();
+  final List<GlobalKey> _sourceParagraphKeys = [];
+  bool _sourceScrollDetached = false;
+  int _programmaticScrollDepth = 0;
 
   @override
   void initState() {
@@ -100,6 +105,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   @override
   void dispose() {
     widget.session.removeListener(_onSessionChanged);
+    _sourceScroll.dispose();
+    _resultScroll.dispose();
     super.dispose();
   }
 
@@ -115,6 +122,12 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       _lastSessionId = id;
       _localSpeakingSource = null;
       _copyTriggers.clear();
+      _hoveredParagraph = null;
+      _sourceScrollDetached = false;
+      _programmaticScrollDepth = 0;
+      Tooltip.dismissAllToolTips();
+      if (_sourceScroll.hasClients) _sourceScroll.jumpTo(0);
+      if (_resultScroll.hasClients) _resultScroll.jumpTo(0);
     }
     if (_lastPhase != phase) {
       _lastPhase = phase;
@@ -135,6 +148,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     final pairs = snap.pairs.isEmpty
         ? [TranslationPair(snap.sourceText, snap.translatedText)]
         : snap.pairs;
+    _syncSourceParagraphKeys(pairs.length);
     if (snap.phase == TranslationPhase.idle) {
       return const SizedBox.shrink();
     }
@@ -245,6 +259,61 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       failed: false,
     );
     final sourceOnly = widget.session.sourceIsTarget;
+    final sourceActions = [
+      _CardButton(
+        key: sourceOnly
+            ? const ValueKey('card-copy')
+            : const ValueKey('card-copy-source'),
+        tooltip: '复制原文',
+        icon: CopyConfirmIcon(
+          trigger: _copyTriggers[sourceOnly ? 'result' : 'source'] ?? 0,
+          size: 14,
+        ),
+        onPressed: snap.sourceText.isEmpty
+            ? null
+            : () => _copy(sourceOnly ? 'result' : 'source', snap.sourceText),
+        visual: 24,
+        radius: GlassMetrics.menuItemRadius,
+        iconSize: 14,
+        material: false,
+      ),
+      _CardButton(
+        key: sourceOnly
+            ? const ValueKey('card-speak')
+            : const ValueKey('card-speak-source'),
+        tooltip: _speaking(true) ? '停止朗读' : '朗读原文',
+        icon: SpeechWaveIcon(speaking: _speaking(true), size: 14),
+        onPressed: snap.sourceText.isEmpty ? null : () => _speak(true),
+        visual: 24,
+        radius: GlassMetrics.menuItemRadius,
+        iconSize: 14,
+        material: false,
+      ),
+    ];
+    final resultActions = [
+      _CardButton(
+        key: const ValueKey('card-copy'),
+        tooltip: '复制$resultLabel',
+        icon: CopyConfirmIcon(trigger: _copyTriggers['result'] ?? 0, size: 14),
+        onPressed: snap.translatedText.isEmpty
+            ? null
+            : () => _copy('result', snap.translatedText),
+        visual: 24,
+        radius: GlassMetrics.menuItemRadius,
+        iconSize: 14,
+        material: false,
+      ),
+      _CardButton(
+        key: const ValueKey('card-speak'),
+        tooltip: _speaking(false) ? '停止朗读' : '朗读$resultLabel',
+        icon: SpeechWaveIcon(speaking: _speaking(false), size: 14),
+        onPressed: snap.translatedText.isEmpty ? null : () => _speak(false),
+        visual: 24,
+        radius: GlassMetrics.menuItemRadius,
+        iconSize: 14,
+        material: false,
+      ),
+    ];
     final Widget body;
     if (definition != null) {
       body = Row(
@@ -255,11 +324,22 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             child: Column(
               children: [
                 Expanded(
-                  child: _pane(title: resultLabel, body: revealedResult),
+                  child: _pane(
+                    title: '原文',
+                    body: sourceBody,
+                    actions: sourceActions,
+                    scrollController: _sourceScroll,
+                    onScrollNotification: _onSourceScroll,
+                  ),
                 ),
                 const Divider(),
                 Expanded(
-                  child: _pane(title: '原文', body: sourceBody),
+                  child: _pane(
+                    title: resultLabel,
+                    body: revealedResult,
+                    actions: resultActions,
+                    scrollController: _resultScroll,
+                  ),
                 ),
               ],
             ),
@@ -271,6 +351,24 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
               title: '词典',
               body: DictionaryDefinitionView(definition: definition),
               actions: [
+                if (snap.phase == TranslationPhase.completed)
+                  _CardButton(
+                    key: const ValueKey('card-vocabulary'),
+                    tooltip: widget.session.savedToVocabulary
+                        ? '已加入生词本'
+                        : '加入生词本',
+                    icon: VocabularyBookmarkIcon(
+                      saved: widget.session.savedToVocabulary,
+                      size: 14,
+                    ),
+                    onPressed: widget.session.savedToVocabulary
+                        ? null
+                        : widget.onAddVocabulary,
+                    visual: 24,
+                    radius: GlassMetrics.menuItemRadius,
+                    iconSize: 14,
+                    material: false,
+                  ),
                 _CardButton(
                   tooltip: '复制词典',
                   icon: CopyConfirmIcon(
@@ -281,6 +379,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   visual: 24,
                   radius: GlassMetrics.menuItemRadius,
                   iconSize: 14,
+                  material: false,
                 ),
               ],
             ),
@@ -297,113 +396,35 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
           failed: false,
           lead: true,
         ),
+        actions: sourceActions,
+        scrollController: _sourceScroll,
+        onScrollNotification: _onSourceScroll,
       );
     } else {
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: _pane(title: resultLabel, body: revealedResult),
+            child: _pane(
+              title: '原文',
+              body: sourceBody,
+              actions: sourceActions,
+              scrollController: _sourceScroll,
+              onScrollNotification: _onSourceScroll,
+            ),
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: _pane(title: '原文', body: sourceBody),
+            child: _pane(
+              title: resultLabel,
+              body: revealedResult,
+              actions: resultActions,
+              scrollController: _resultScroll,
+            ),
           ),
         ],
       );
     }
-    final primaryText = sourceOnly ? snap.sourceText : snap.translatedText;
-    final footer = AnimatedOpacity(
-      opacity: _cardHovered ? 1 : 0.55,
-      duration: AppMotion.reduced(context)
-          ? Duration.zero
-          : GlassMetrics.transition,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          GlassMetrics.space8,
-          GlassMetrics.space4,
-          GlassMetrics.space8,
-          GlassMetrics.space4,
-        ),
-        child: Row(
-          spacing: GlassMetrics.space4,
-          children: [
-            _FooterAction(
-              key: const ValueKey('card-copy'),
-              icon: CopyConfirmIcon(
-                trigger: _copyTriggers['result'] ?? 0,
-                size: 14,
-              ),
-              label: sourceOnly ? '复制原文' : '复制$resultLabel',
-              onPressed: primaryText.isEmpty
-                  ? null
-                  : () => _copy('result', primaryText),
-            ),
-            _FooterAction(
-              key: const ValueKey('card-speak'),
-              icon: SpeechWaveIcon(speaking: _speaking(sourceOnly), size: 14),
-              label: _speaking(sourceOnly)
-                  ? '停止朗读'
-                  : sourceOnly
-                  ? '朗读原文'
-                  : '朗读$resultLabel',
-              onPressed: primaryText.isEmpty ? null : () => _speak(sourceOnly),
-            ),
-            if (definition != null && snap.phase == TranslationPhase.completed)
-              _FooterAction(
-                key: const ValueKey('card-vocabulary'),
-                icon: VocabularyBookmarkIcon(
-                  saved: widget.session.savedToVocabulary,
-                  size: 14,
-                ),
-                label: widget.session.savedToVocabulary ? '已加入生词本' : '加入生词本',
-                onPressed: widget.session.savedToVocabulary
-                    ? null
-                    : widget.onAddVocabulary,
-              ),
-            if (!sourceOnly) ...[
-              const Spacer(),
-              Text(
-                '原文',
-                key: const ValueKey('card-source-group'),
-                style: TextStyle(
-                  fontSize: GlassMetrics.statusFont,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 2),
-              _CardButton(
-                key: const ValueKey('card-copy-source'),
-                tooltip: '复制原文',
-                icon: CopyConfirmIcon(
-                  trigger: _copyTriggers['source'] ?? 0,
-                  size: 14,
-                ),
-                onPressed: snap.sourceText.isEmpty
-                    ? null
-                    : () => _copy('source', snap.sourceText),
-                visual: 24,
-                radius: GlassMetrics.menuItemRadius,
-                iconSize: 14,
-                material: false,
-                tooltipAbove: true,
-              ),
-              _CardButton(
-                key: const ValueKey('card-speak-source'),
-                tooltip: _speaking(true) ? '停止朗读' : '朗读原文',
-                icon: SpeechWaveIcon(speaking: _speaking(true), size: 14),
-                onPressed: snap.sourceText.isEmpty ? null : () => _speak(true),
-                visual: 24,
-                radius: GlassMetrics.menuItemRadius,
-                iconSize: 14,
-                material: false,
-                tooltipAbove: true,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
     return BouncyPresence(
       key: ValueKey('card-${widget.session.sessionId}'),
       fromScale: 0.94,
@@ -411,131 +432,129 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       child: OpticalPrismOverlay(
         radius: GlassMetrics.panelRadius,
         sweepTrigger: _sweepCount,
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _cardHovered = true),
-          onExit: (_) => setState(() => _cardHovered = false),
-          child: NativeGlassSurface(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: 44,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: GlassMetrics.space8,
-                    ),
-                    child: Row(
-                      children: [
-                        NativeGlassMenuButton<TextMode>(
-                          key: const ValueKey('card-mode-menu'),
-                          quiet: true,
-                          quietTextStyle: TextStyle(
-                            fontSize: GlassMetrics.bodyFont,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
+        child: NativeGlassSurface(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 44,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: GlassMetrics.space8,
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            key: const ValueKey('result-drag-area'),
+                            behavior: HitTestBehavior.opaque,
+                            onPanStart: (_) => widget.onDrag(),
                           ),
-                          value: mode,
-                          items: TranslationOverlay.modeLabels,
-                          onChanged: busy ? null : widget.onMode,
                         ),
-                        const SizedBox(width: GlassMetrics.space4),
-                        ..._languageMenus(busy),
-                        Expanded(
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.move,
-                            child: GestureDetector(
-                              key: const ValueKey('result-drag-area'),
-                              behavior: HitTestBehavior.opaque,
-                              onPanStart: (_) => widget.onDrag(),
-                              child: SizedBox.expand(
-                                child: status == null
-                                    ? null
-                                    : Row(
-                                        children: [
-                                          const SizedBox(
-                                            width: GlassMetrics.space8,
-                                          ),
-                                          TranslationStatusIcon(
-                                            phase: snap.phase,
-                                            size: 14,
-                                          ),
-                                          const SizedBox(
-                                            width: GlassMetrics.space8,
-                                          ),
-                                          Expanded(
-                                            child: Tooltip(
-                                              message: status,
-                                              child: Text(
-                                                status,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                      ),
+                      Row(
+                        children: [
+                          NativeGlassMenuButton<TextMode>(
+                            key: const ValueKey('card-mode-menu'),
+                            quiet: true,
+                            quietTextStyle: TextStyle(
+                              fontSize: GlassMetrics.bodyFont,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                            value: mode,
+                            items: TranslationOverlay.modeLabels,
+                            onChanged: busy ? null : widget.onMode,
+                          ),
+                          if (status != null)
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 120),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(width: GlassMetrics.space8),
+                                  TranslationStatusIcon(
+                                    phase: snap.phase,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: GlassMetrics.space4),
+                                  Flexible(
+                                    child: AppTooltip(
+                                      message: status,
+                                      child: Text(
+                                        status,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
                                       ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ),
-                        if (widget.session.canRetry && !statusInBanner)
-                          TextButton.icon(
-                            onPressed: widget.onActivate,
-                            icon: const LineIcon(
-                              LucideIcons.refreshCw,
-                              size: 14,
+                          const Spacer(),
+                          if (widget.session.canRetry && !statusInBanner)
+                            TextButton.icon(
+                              onPressed: widget.onActivate,
+                              icon: const LineIcon(
+                                LucideIcons.refreshCw,
+                                size: 14,
+                              ),
+                              label: const Text('重试'),
                             ),
-                            label: const Text('重试'),
+                          NativeGlassMenuButton<String>(
+                            quiet: true,
+                            value: currentService,
+                            items: {
+                              for (final choice in choices)
+                                if (mode == TextMode.translate ||
+                                    choice.isModel ||
+                                    choice.id == currentService)
+                                  choice.id: choice.name,
+                            },
+                            onChanged: busy ? null : widget.onService,
                           ),
-                        NativeGlassMenuButton<String>(
-                          quiet: true,
-                          value: currentService,
-                          items: {
-                            for (final choice in choices)
-                              if (mode == TextMode.translate ||
-                                  choice.isModel ||
-                                  choice.id == currentService)
-                                choice.id: choice.name,
-                          },
-                          onChanged: busy ? null : widget.onService,
-                        ),
-                        const SizedBox(width: GlassMetrics.space4),
-                        _CardButton(
-                          tooltip: '关闭',
-                          icon: const LineIcon(LucideIcons.x),
-                          onPressed: widget.onDismiss,
-                          visual: 28,
-                          radius: GlassMetrics.controlRadius,
-                          iconSize: GlassMetrics.icon,
-                          material: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(height: 0.5, thickness: 0.5),
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardTheme.color,
-                      borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(GlassMetrics.panelRadius),
+                          const SizedBox(width: GlassMetrics.space4),
+                          _CardButton(
+                            key: const ValueKey('overlay-close-button'),
+                            tooltip: '关闭',
+                            icon: const LineIcon(LucideIcons.x),
+                            onPressed: widget.onDismiss,
+                            visual: 28,
+                            radius: GlassMetrics.controlRadius,
+                            iconSize: GlassMetrics.icon,
+                            material: false,
+                          ),
+                        ],
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: body),
-                        footer,
-                      ],
-                    ),
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _languageMenus(busy),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              const Divider(height: 0.5, thickness: 0.5),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardTheme.color,
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(GlassMetrics.panelRadius),
+                    ),
+                  ),
+                  child: body,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -561,25 +580,82 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     widget.onSpeak(source);
   }
 
+  void _syncSourceParagraphKeys(int count) {
+    while (_sourceParagraphKeys.length < count) {
+      _sourceParagraphKeys.add(GlobalKey());
+    }
+    if (_sourceParagraphKeys.length > count) {
+      _sourceParagraphKeys.removeRange(count, _sourceParagraphKeys.length);
+    }
+  }
+
+  bool _onSourceScroll(ScrollNotification notification) {
+    if (_programmaticScrollDepth == 0 &&
+        notification is ScrollUpdateNotification) {
+      _sourceScrollDetached = true;
+    }
+    return false;
+  }
+
+  Future<void> _followSourceParagraph(int index) async {
+    if (_sourceScrollDetached ||
+        index < 0 ||
+        index >= _sourceParagraphKeys.length) {
+      return;
+    }
+    final target = _sourceParagraphKeys[index].currentContext;
+    if (target == null) return;
+    _programmaticScrollDepth += 1;
+    try {
+      await Scrollable.ensureVisible(
+        target,
+        alignment: 0.25,
+        duration: AppMotion.reduced(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      if (_programmaticScrollDepth > 0) {
+        _programmaticScrollDepth -= 1;
+      }
+    }
+  }
+
   Widget _pane({
     required String title,
     required Widget body,
     List<Widget> actions = const [],
+    ScrollController? scrollController,
+    NotificationListenerCallback<ScrollNotification>? onScrollNotification,
   }) {
     final header = SizedBox(
-      height: 28,
+      height: 32,
       child: Row(
         children: [
           Expanded(
             child: Text(title, style: Theme.of(context).textTheme.bodySmall),
           ),
           if (actions.isNotEmpty)
-            Visibility.maintain(
-              visible: _hoveredPane == title,
+            AnimatedOpacity(
+              opacity: _hoveredPane == title ? 1 : 0.65,
+              duration: AppMotion.reduced(context)
+                  ? Duration.zero
+                  : GlassMetrics.transition,
               child: Row(mainAxisSize: MainAxisSize.min, children: actions),
             ),
         ],
       ),
+    );
+    final scrollView = SingleChildScrollView(
+      controller: scrollController,
+      primary: false,
+      padding: const EdgeInsets.only(
+        left: GlassMetrics.space16,
+        right: GlassMetrics.space16,
+        bottom: GlassMetrics.space12,
+      ),
+      child: body,
     );
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -594,15 +670,12 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
           child: header,
         ),
         Expanded(
-          child: SingleChildScrollView(
-            primary: false,
-            padding: const EdgeInsets.only(
-              left: GlassMetrics.space16,
-              right: GlassMetrics.space16,
-              bottom: GlassMetrics.space12,
-            ),
-            child: body,
-          ),
+          child: onScrollNotification == null
+              ? scrollView
+              : NotificationListener<ScrollNotification>(
+                  onNotification: onScrollNotification,
+                  child: scrollView,
+                ),
         ),
       ],
     );
@@ -632,15 +705,18 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         quiet: true,
         value: session.sourceOverride ?? TranslationOverlay.autoLanguage,
         items: {
-          TranslationOverlay.autoLanguage: detectedName == null || session.sourceOverride != null
+          TranslationOverlay.autoLanguage:
+              detectedName == null || session.sourceOverride != null
               ? '自动检测'
               : '自动检测（$detectedName）',
           ...AppSettings.languages,
         },
         onChanged: onChanged == null
             ? null
-            : (value) =>
-                  onChanged(value == TranslationOverlay.autoLanguage ? null : value, target),
+            : (value) => onChanged(
+                value == TranslationOverlay.autoLanguage ? null : value,
+                target,
+              ),
       ),
       Text(
         '→',
@@ -688,9 +764,14 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             if (translated && !failed)
               MouseRegion(
                 key: ValueKey('${widget.session.sessionId}-reveal-$index'),
-                onEnter: (_) => setState(() {
-                  _hoveredParagraph = (widget.session.sessionId, index);
-                }),
+                onEnter: (_) {
+                  setState(() {
+                    _hoveredParagraph = (widget.session.sessionId, index);
+                  });
+                  if (pairs.length > 1) {
+                    _followSourceParagraph(index);
+                  }
+                },
                 onExit: (_) => setState(() => _hoveredParagraph = null),
                 child: CharReveal(
                   key: ValueKey('translated-paragraph-$index'),
@@ -709,24 +790,35 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                 child: translated
                     ? MouseRegion(
                         key: ValueKey('translated-paragraph-$index'),
-                        onEnter: (_) => setState(() {
-                          _hoveredParagraph = (widget.session.sessionId, index);
-                        }),
+                        onEnter: (_) {
+                          setState(() {
+                            _hoveredParagraph = (
+                              widget.session.sessionId,
+                              index,
+                            );
+                          });
+                          if (pairs.length > 1) {
+                            _followSourceParagraph(index);
+                          }
+                        },
                         onExit: (_) => setState(() => _hoveredParagraph = null),
                         child: Text(pairs[index].translation, style: style),
                       )
-                    : Container(
-                        key: ValueKey('source-paragraph-$index'),
-                        decoration: BoxDecoration(
-                          color:
-                              pairs.length > 1 &&
-                                  _hoveredParagraph ==
-                                      (widget.session.sessionId, index)
-                              ? colors.onSurface.withValues(alpha: 0.08)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
+                    : KeyedSubtree(
+                        key: _sourceParagraphKeys[index],
+                        child: Container(
+                          key: ValueKey('source-paragraph-$index'),
+                          decoration: BoxDecoration(
+                            color:
+                                pairs.length > 1 &&
+                                    _hoveredParagraph ==
+                                        (widget.session.sessionId, index)
+                                ? colors.onSurface.withValues(alpha: 0.08)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(pairs[index].source, style: style),
                         ),
-                        child: Text(pairs[index].source, style: style),
                       ),
               ),
         ],
@@ -745,7 +837,6 @@ class _CardButton extends StatelessWidget {
     required this.radius,
     required this.iconSize,
     this.material = true,
-    this.tooltipAbove = false,
   });
   final String tooltip;
   final Widget icon;
@@ -755,7 +846,6 @@ class _CardButton extends StatelessWidget {
   final double iconSize;
 
   final bool material;
-  final bool tooltipAbove;
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
@@ -775,9 +865,8 @@ class _CardButton extends StatelessWidget {
           child: NativeGlassSurface(
             material: material,
             radius: radius,
-            child: Tooltip(
+            child: AppTooltip(
               message: tooltip,
-              preferBelow: !tooltipAbove,
               child: IconButton(
                 onPressed: onPressed,
                 padding: EdgeInsets.zero,
@@ -785,55 +874,6 @@ class _CardButton extends StatelessWidget {
                 iconSize: iconSize,
                 icon: icon,
               ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _FooterAction extends StatelessWidget {
-  const _FooterAction({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final Widget icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: GlassMetrics.hitSize,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            excludeFromSemantics: true,
-            behavior: HitTestBehavior.opaque,
-            onTap: onPressed,
-          ),
-        ),
-        TextButton.icon(
-          onPressed: onPressed,
-          icon: icon,
-          label: Text(label),
-          style: TextButton.styleFrom(
-            minimumSize: const Size(0, 24),
-            fixedSize: const Size.fromHeight(24),
-            padding: const EdgeInsets.symmetric(
-              horizontal: GlassMetrics.space8,
-            ),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-            textStyle: Theme.of(context).textTheme.bodySmall,
-            iconSize: 14,
-            shape: RoundedSuperellipseBorder(
-              borderRadius: BorderRadius.circular(GlassMetrics.menuItemRadius),
             ),
           ),
         ),

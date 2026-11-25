@@ -16,23 +16,85 @@ void main() {
   const opt = ToolbarModifiers.option;
   const ctrl = ToolbarModifiers.control;
 
-  test('默认网格为无、⌘、⌥ 三列 6+6+4，格位推导快捷键', () {
+  test('默认常用 6 个占无修饰 1–6，其余 9 个一级工具分为 ⌘、⌥ 两组，不含光标，每个工具只有一个键位', () {
     final value = ScreenshotToolbarPreferences();
-    expect(value.columns.map((c) => c.modifiers), [0, cmd, opt]);
-    expect(value.columns[0].slots.first, ScreenshotActions.cursor);
-    expect(value.columns[1].slots[1], ScreenshotActions.beautify);
-    expect(value.columns[2].slots.sublist(4), [null, null]);
-    expect(value.shortcutLabel(ScreenshotActions.cursor), '1');
-    expect(value.shortcutLabel(ScreenshotActions.beautify), '⌘2');
-    expect(value.shortcutLabel(ScreenshotActions.close), '⌥4');
-    expect(value.shortcutLabel(ScreenshotActions.record), isNull);
-    expect(value.actionAt(cmd, 2), ScreenshotActions.beautify);
-    expect(value.actionAt(opt, 5), isNull);
+    expect(value.favorites, [
+      ScreenshotActions.crop,
+      ScreenshotActions.rect,
+      ScreenshotActions.record,
+      ScreenshotActions.ocrCopy,
+      ScreenshotActions.ocrTranslate,
+      ScreenshotActions.pin,
+    ]);
+    expect(value.columns.map((c) => c.modifiers), [cmd, opt]);
+    expect(value.columns[0].slots, [
+      ScreenshotActions.arrow,
+      ScreenshotActions.step,
+      ScreenshotActions.text,
+      ScreenshotActions.brush,
+      null,
+      null,
+    ]);
+    expect(value.columns[1].slots, [
+      ScreenshotActions.beautify,
+      ScreenshotActions.ratio,
+      ScreenshotActions.save,
+      ScreenshotActions.copy,
+      ScreenshotActions.close,
+      null,
+    ]);
+    expect(
+      ScreenshotActions.composable.containsKey(ScreenshotActions.cursor),
+      isFalse,
+    );
+    final grid = [for (final c in value.columns) ...c.slots.nonNulls];
+    expect(grid.toSet().intersection(value.favorites.toSet()), isEmpty);
+    expect(value.shortcutLabel(ScreenshotActions.crop), '1');
+    expect(value.shortcutLabel(ScreenshotActions.pin), '6');
+    expect(value.shortcutLabel(ScreenshotActions.arrow), '⌘1');
+    expect(value.shortcutLabel(ScreenshotActions.beautify), '⌥1');
+    expect(value.shortcutLabel(ScreenshotActions.close), '⌥5');
+    expect(value.shortcutLabel(ScreenshotActions.scrolling), isNull);
+    expect(value.actionAt(0, 2), ScreenshotActions.rect);
+    expect(value.actionAt(0, 6), ScreenshotActions.pin);
+    expect(value.actionAt(opt, 1), ScreenshotActions.beautify);
+    expect(value.actionAt(opt, 6), isNull);
     expect(value.actionAt(ctrl, 1), isNull);
   });
 
-  test('网格、子级与隐藏往返保存；空格存为空字符串', () {
-    final value = ScreenshotToolbarPreferences(hidden: {ScreenshotActions.pin});
+  test('网格、子级、隐藏与常用往返保存；空格存为空字符串', () {
+    final base = ScreenshotToolbarPreferences();
+    final value = base.copyWith(
+      hidden: {ScreenshotActions.save},
+      favorites: [ScreenshotActions.text, ScreenshotActions.crop],
+      columns: [
+        ToolbarColumn(cmd, [
+          ScreenshotActions.rect,
+          ScreenshotActions.arrow,
+          ScreenshotActions.step,
+          ScreenshotActions.brush,
+          ScreenshotActions.record,
+          null,
+        ]),
+        ToolbarColumn(opt, [
+          ScreenshotActions.beautify,
+          ScreenshotActions.ratio,
+          ScreenshotActions.save,
+          ScreenshotActions.copy,
+          ScreenshotActions.close,
+          ScreenshotActions.pin,
+        ]),
+        ToolbarColumn(ctrl, [
+          ScreenshotActions.ocrCopy,
+          ScreenshotActions.ocrTranslate,
+          null,
+          null,
+          null,
+          null,
+        ]),
+      ],
+    );
+    expect(value.validate, returnsNormally);
     final map = value.toMap();
     expect(
       (map[PreferenceKeys.screenshotToolbarColumns] as List).last,
@@ -43,9 +105,10 @@ void main() {
       restored.columns.map((c) => c.slots),
       value.columns.map((c) => c.slots),
     );
-    expect(restored.columns.map((c) => c.modifiers), [0, cmd, opt]);
+    expect(restored.columns.map((c) => c.modifiers), [cmd, opt, ctrl]);
     expect(restored.children, value.children);
-    expect(restored.hidden, {ScreenshotActions.pin});
+    expect(restored.hidden, {ScreenshotActions.save});
+    expect(restored.favorites, [ScreenshotActions.text, ScreenshotActions.crop]);
   });
 
   test('没有网格的旧结构整体重置为默认网格，不迁移旧顺序与快捷键', () {
@@ -54,14 +117,26 @@ void main() {
       'screenshotToolbarShortcuts': {
         ScreenshotActions.close: {'keyId': 0x31, 'modifiers': 0},
       },
-      PreferenceKeys.screenshotToolbarHidden: [ScreenshotActions.copy],
+      'screenshotToolbarHidden': [ScreenshotActions.copy],
+      'screenshotToolbarColumns': [
+        ToolbarColumn(0, [ScreenshotActions.close]).toMap(),
+      ],
+      'screenshotToolbarGroups': [
+        ToolbarColumn(cmd, [ScreenshotActions.crop]).toMap(),
+      ],
+      'screenshotToolbarFavorites': [ScreenshotActions.crop],
+      'screenshotToolbarChildren': {
+        ScreenshotActions.crop: [ScreenshotActions.record],
+      },
     });
     final defaults = ScreenshotToolbarPreferences();
     expect(
       restored.columns.map((c) => c.slots),
       defaults.columns.map((c) => c.slots),
     );
+    expect(restored.children, defaults.children);
     expect(restored.hidden, isEmpty);
+    expect(restored.favorites, defaults.favorites);
   });
 
   test('已保存网格缺少的功能：默认父级是一级时挂回，否则放进第一个空格，满了新增一列', () {
@@ -76,9 +151,9 @@ void main() {
     ];
     final restored = ScreenshotToolbarPreferences.fromMap({
       PreferenceKeys.screenshotToolbarColumns: withoutClose,
+      PreferenceKeys.screenshotToolbarFavorites: full.favorites,
       PreferenceKeys.screenshotToolbarChildren: {
         ScreenshotActions.crop: [
-          ScreenshotActions.scrolling,
           ScreenshotActions.eyedropper,
           ScreenshotActions.ruler,
         ],
@@ -87,24 +162,26 @@ void main() {
     });
     expect(
       restored.children[ScreenshotActions.crop],
-      contains(ScreenshotActions.record),
+      contains(ScreenshotActions.scrolling),
     );
-    expect(restored.shortcutLabel(ScreenshotActions.close), '⌥4');
+    expect(restored.shortcutLabel(ScreenshotActions.close), '⌘5');
 
     final twelve = topLevel.take(12).toList();
     final packed = ScreenshotToolbarPreferences.fromMap({
       PreferenceKeys.screenshotToolbarColumns: [
-        ToolbarColumn(0, twelve.sublist(0, 6)).toMap(),
-        ToolbarColumn(cmd, twelve.sublist(6, 12)).toMap(),
+        ToolbarColumn(cmd, twelve.sublist(0, 6)).toMap(),
+        ToolbarColumn(opt, twelve.sublist(6, 12)).toMap(),
       ],
+      PreferenceKeys.screenshotToolbarFavorites: const <String>[],
       PreferenceKeys.screenshotToolbarChildren:
           ScreenshotActions.defaultChildren,
     });
-    expect(packed.columns.map((c) => c.modifiers), [0, cmd, opt]);
+    expect(packed.favorites, isEmpty);
+    expect(packed.columns.map((c) => c.modifiers), [cmd, opt, ctrl]);
     expect(packed.columns[2].slots.whereType<String>(), topLevel.skip(12));
   });
 
-  test('校验：组合只能是 ⌘⌥⌃ 的组合、不含 ⇧、各列不重复，每列 6 格，最多 8 列', () {
+  test('校验：组合只能是 ⌘⌥⌃ 的组合、不能无修饰、不含 ⇧、各列不重复，每列 6 格，最多 8 列；常用最多 5 个一级工具', () {
     final base = ScreenshotToolbarPreferences();
     ScreenshotToolbarPreferences withModifiers(List<int> modifiers) =>
         base.copyWith(
@@ -114,9 +191,10 @@ void main() {
           ],
         );
     for (final invalid in [
-      [0, ToolbarModifiers.shift, opt],
-      [0, cmd | ToolbarModifiers.shift, opt],
-      [0, cmd, cmd],
+      [0, opt, cmd | opt],
+      [ToolbarModifiers.shift, opt, cmd | opt],
+      [cmd | ToolbarModifiers.shift, opt, cmd | opt],
+      [cmd, cmd, opt],
     ]) {
       expect(
         () => withModifiers(invalid).validate(),
@@ -132,7 +210,7 @@ void main() {
       () => base
           .copyWith(
             columns: [
-              ToolbarColumn(0, base.columns[0].slots.take(5).toList()),
+              ToolbarColumn(cmd, base.columns[0].slots.take(5).toList()),
               ...base.columns.skip(1),
             ],
           )
@@ -141,15 +219,28 @@ void main() {
     );
     final nine = [
       ...base.columns,
-      for (final modifiers in ToolbarModifiers.allowed.skip(3))
-        ToolbarColumn(modifiers, List.filled(ToolbarGrid.slots, null)),
+      for (final modifiers in ToolbarModifiers.allowed)
+        if (!base.columns.any((column) => column.modifiers == modifiers))
+          ToolbarColumn(modifiers, List.filled(ToolbarGrid.slots, null)),
       ToolbarColumn(cmd | opt, List.filled(ToolbarGrid.slots, null)),
+      ToolbarColumn(cmd, List.filled(ToolbarGrid.slots, null)),
     ];
     expect(nine.length, 9);
     expect(
       () => base.copyWith(columns: nine).validate(),
       throwsFormatException,
     );
+    for (final favorites in [
+      [...base.favorites, ScreenshotActions.arrow],
+      [ScreenshotActions.crop, ScreenshotActions.crop],
+      [ScreenshotActions.scrolling],
+    ]) {
+      expect(
+        () => base.copyWith(favorites: favorites).validate(),
+        throwsFormatException,
+        reason: '$favorites',
+      );
+    }
   });
 
   test('校验：每个功能在格位与子级中恰好一次，只有一级的工具可以带子级', () {
@@ -157,11 +248,17 @@ void main() {
     final duplicate = base.copyWith(
       columns: [
         base.columns[0],
-        base.columns[1],
-        base.columns[2].withSlot(4, ScreenshotActions.cursor),
+        base.columns[1].withSlot(5, ScreenshotActions.arrow),
       ],
     );
     expect(duplicate.validate, throwsFormatException);
+    final favoriteTwice = base.copyWith(
+      columns: [
+        base.columns[0],
+        base.columns[1].withSlot(5, ScreenshotActions.crop),
+      ],
+    );
+    expect(favoriteTwice.validate, throwsFormatException);
     expect(
       () => base
           .copyWith(
@@ -206,21 +303,28 @@ void main() {
         isA<FormatException>().having(
           (error) => error.message,
           'message',
-          contains('画笔'),
+          contains('箭头'),
         ),
       ),
     );
     expect(
-      () => withTranslate(23, ShortcutKeys.option).validate(),
+      () => withTranslate(
+        23,
+        ShortcutKeys.command | ShortcutKeys.option,
+      ).validate(),
       returnsNormally,
     );
     expect(
       () => withTranslate(26, ShortcutKeys.command).validate(),
       returnsNormally,
     );
-    expect(withTranslate(23, ShortcutKeys.option).globalShortcutSlots, {
-      (modifiers: opt, digit: 5): '全局翻译',
-    });
+    expect(
+      withTranslate(
+        23,
+        ShortcutKeys.command | ShortcutKeys.option,
+      ).globalShortcutSlots,
+      {(modifiers: cmd | opt, digit: 5): '全局翻译'},
+    );
   });
 
   group('网格编辑器', () {
@@ -270,21 +374,21 @@ void main() {
       final saved = await pumpEditor(
         tester,
         ScreenshotToolbarPreferences(),
-        reserved: {(modifiers: opt, digit: 5): '全局翻译'},
+        reserved: {(modifiers: opt, digit: 6): '全局翻译'},
         systemSlots: {(modifiers: cmd, digit: 1)},
       );
       expect(find.text('已用于全局翻译'), findsOneWidget);
       await drag(
         tester,
         ScreenshotActions.close,
-        find.byKey(const ValueKey('toolbar-slot-2-4')),
+        find.byKey(const ValueKey('toolbar-slot-1-5')),
       );
-      expect(saved().shortcutLabel(ScreenshotActions.close), '⌥4');
+      expect(saved().shortcutLabel(ScreenshotActions.close), '⌥5');
       expect(
         tester
             .widget<Text>(
               find.byKey(
-                const ValueKey('toolbar-conflict-${ScreenshotActions.brush}'),
+                const ValueKey('toolbar-conflict-${ScreenshotActions.arrow}'),
               ),
             )
             .data,
@@ -292,7 +396,7 @@ void main() {
       );
       expect(
         find.byKey(
-          const ValueKey('toolbar-conflict-${ScreenshotActions.cursor}'),
+          const ValueKey('toolbar-conflict-${ScreenshotActions.text}'),
         ),
         findsNothing,
       );
@@ -305,19 +409,19 @@ void main() {
         'column-1',
         find.byKey(const ValueKey('toolbar-column-0')),
       );
-      expect(saved().columns.map((c) => c.modifiers), [cmd, 0, opt]);
-      expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '1');
+      expect(saved().columns.map((c) => c.modifiers), [opt, cmd]);
+      expect(saved().shortcutLabel(ScreenshotActions.beautify), '⌥1');
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌘1');
 
       await tester.tap(find.byKey(const ValueKey('drag-column-0')));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
-      expect(saved().columns.map((c) => c.modifiers), [cmd, 0, opt]);
+      expect(saved().columns.map((c) => c.modifiers), [opt, cmd]);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(saved().columns.map((c) => c.modifiers), [0, cmd, opt]);
-      expect(saved().shortcutLabel(ScreenshotActions.brush), '⌘1');
+      expect(saved().columns.map((c) => c.modifiers), [cmd, opt]);
+      expect(saved().shortcutLabel(ScreenshotActions.beautify), '⌥1');
     });
 
     testWidgets('表头标出 1–6；拖到有工具的格子交换，拖到空格留下原位空格', (tester) async {
@@ -336,19 +440,19 @@ void main() {
       );
       await drag(
         tester,
-        ScreenshotActions.cursor,
+        ScreenshotActions.arrow,
         find.byKey(const ValueKey('toolbar-slot-1-0')),
       );
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '⌘1');
-      expect(saved().shortcutLabel(ScreenshotActions.brush), '1');
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌥1');
+      expect(saved().shortcutLabel(ScreenshotActions.beautify), '⌘1');
 
       await drag(
         tester,
         ScreenshotActions.close,
-        find.byKey(const ValueKey('toolbar-slot-2-5')),
+        find.byKey(const ValueKey('toolbar-slot-1-5')),
       );
       expect(saved().shortcutLabel(ScreenshotActions.close), '⌥6');
-      expect(saved().columns[2].slots[3], isNull);
+      expect(saved().columns[1].slots[4], isNull);
     });
 
     testWidgets('添加组用第一个未使用的组合，只有空组可删除，组合下拉不含其他组已用的组合', (tester) async {
@@ -361,19 +465,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(saved().columns.last.modifiers, ctrl);
       final menu = tester.widget<NativeGlassMenuButton<int>>(
-        find.byKey(const ValueKey('toolbar-modifiers-3')),
+        find.byKey(const ValueKey('toolbar-modifiers-2')),
       );
       expect(menu.items.keys, isNot(contains(cmd)));
       expect(menu.items.keys, contains(ctrl));
-      await tester.tap(find.byKey(const ValueKey('toolbar-remove-column-3')));
+      await tester.tap(find.byKey(const ValueKey('toolbar-remove-column-2')));
       await tester.pumpAndSettle();
-      expect(saved().columns.length, 3);
+      expect(saved().columns.length, 2);
     });
 
     testWidgets('点按可承载子级的工具显示子级列表；格位工具拖入成为子级，子级拖出到格位成为一级', (tester) async {
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
       await tester.tap(
-        find.byKey(const ValueKey('toolbar-cell-${ScreenshotActions.crop}')),
+        find.byKey(
+          const ValueKey('toolbar-favorite-cell-${ScreenshotActions.crop}'),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.text('截图的子级'), findsOneWidget);
@@ -381,12 +487,13 @@ void main() {
         const ValueKey('toolbar-children-end-${ScreenshotActions.crop}'),
       );
       await tester.ensureVisible(end);
-      await drag(tester, ScreenshotActions.pin, end);
+      await drag(tester, 'favorite-${ScreenshotActions.pin}', end);
       expect(
         saved().children[ScreenshotActions.crop]!.last,
         ScreenshotActions.pin,
       );
       expect(saved().shortcutLabel(ScreenshotActions.pin), isNull);
+      expect(saved().favorites, isNot(contains(ScreenshotActions.pin)));
 
       await drag(tester, ScreenshotActions.beautify, end);
       expect(
@@ -397,45 +504,45 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('drag-${ScreenshotActions.record}')),
+        find.byKey(const ValueKey('drag-${ScreenshotActions.scrolling}')),
       );
       await drag(
         tester,
-        ScreenshotActions.record,
-        find.byKey(const ValueKey('toolbar-slot-2-4')),
+        ScreenshotActions.scrolling,
+        find.byKey(const ValueKey('toolbar-slot-1-5')),
       );
-      expect(saved().shortcutLabel(ScreenshotActions.record), '⌥5');
+      expect(saved().shortcutLabel(ScreenshotActions.scrolling), '⌥6');
       expect(
         saved().children[ScreenshotActions.crop],
-        isNot(contains(ScreenshotActions.record)),
+        isNot(contains(ScreenshotActions.scrolling)),
       );
     });
 
     testWidgets('隐藏保留格位与键位；方向键与相邻格交换', (tester) async {
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
       await tester.tap(
-        find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
+        find.byKey(const ValueKey('visibility-${ScreenshotActions.arrow}')),
       );
       await tester.pumpAndSettle();
-      expect(saved().hidden, {ScreenshotActions.cursor});
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '1');
+      expect(saved().hidden, {ScreenshotActions.arrow});
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌘1');
 
       await tester.tap(
-        find.byKey(const ValueKey('drag-${ScreenshotActions.cursor}')),
+        find.byKey(const ValueKey('drag-${ScreenshotActions.arrow}')),
       );
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '2');
-      expect(saved().shortcutLabel(ScreenshotActions.crop), '1');
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌘2');
+      expect(saved().shortcutLabel(ScreenshotActions.step), '⌘1');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '⌘2');
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌥2');
     });
 
     testWidgets('组头眼睛一次隐藏整组，全部隐藏时一次全部显示；格子按内容宽等分不横向滚动', (tester) async {
       final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
-      final column = ScreenshotToolbarPreferences().columns[2];
+      final column = ScreenshotToolbarPreferences().columns[1];
       final ids = column.slots.nonNulls.toSet();
       final first = ids.first;
       final label = ScreenshotToolbarPreferences().shortcutLabel(first);
@@ -443,11 +550,11 @@ void main() {
         await tester.tap(find.byKey(ValueKey('visibility-$first')));
         await tester.pumpAndSettle();
       }
-      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-2')));
+      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-1')));
       await tester.pumpAndSettle();
       expect(saved().hidden.containsAll(ids), isTrue);
       expect(saved().shortcutLabel(first), label);
-      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-2')));
+      await tester.tap(find.byKey(const ValueKey('toolbar-hide-column-1')));
       await tester.pumpAndSettle();
       expect(saved().hidden.intersection(ids), isEmpty);
 
@@ -472,26 +579,25 @@ void main() {
     testWidgets('方向键移动与修改组组合在冲突全局快捷键时拒绝保存并展示横幅（#144）', (tester) async {
       final base = ScreenshotToolbarPreferences();
       final customColumns = [
-        ToolbarColumn(0, [
-          ScreenshotActions.cursor,
+        ToolbarColumn(cmd, [
+          ScreenshotActions.arrow,
           null,
           ...base.columns[0].slots.skip(2),
         ]),
-        base.columns[1],
-        base.columns[2].withSlot(4, ScreenshotActions.crop),
+        base.columns[1].withSlot(5, ScreenshotActions.step),
       ];
       final custom = base.copyWith(columns: customColumns);
       final saved = await pumpEditor(
         tester,
         custom,
         reserved: {
-          (modifiers: 0, digit: 2): '全局截图',
+          (modifiers: cmd, digit: 2): '全局截图',
           (modifiers: ctrl, digit: 1): '全局翻译',
         },
       );
 
       await tester.tap(
-        find.byKey(const ValueKey('drag-${ScreenshotActions.cursor}')),
+        find.byKey(const ValueKey('drag-${ScreenshotActions.arrow}')),
       );
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -504,7 +610,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(saved().shortcutLabel(ScreenshotActions.cursor), '1');
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '⌘1');
 
       await tester.tap(find.byKey(const ValueKey('toolbar-modifiers-0')));
       await tester.pumpAndSettle();
@@ -517,7 +623,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(saved().columns.first.modifiers, 0);
+      expect(saved().columns.first.modifiers, cmd);
     });
 
     testWidgets('Enter/Space 展开子级面板、键盘按钮移出与移入子级工作正常（#144）', (tester) async {
@@ -525,7 +631,9 @@ void main() {
 
       Focus.of(
         tester.element(
-          find.byKey(const ValueKey('drag-${ScreenshotActions.crop}')),
+          find.byKey(
+            const ValueKey('toolbar-favorite-cell-${ScreenshotActions.crop}'),
+          ),
         ),
       ).requestFocus();
       await tester.pump();
@@ -543,16 +651,20 @@ void main() {
       expect(find.text('截图的子级'), findsOneWidget);
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('promote-child-${ScreenshotActions.record}')),
+        find.byKey(
+          const ValueKey('promote-child-${ScreenshotActions.scrolling}'),
+        ),
       );
       await tester.tap(
-        find.byKey(const ValueKey('promote-child-${ScreenshotActions.record}')),
+        find.byKey(
+          const ValueKey('promote-child-${ScreenshotActions.scrolling}'),
+        ),
       );
       await tester.pumpAndSettle();
-      expect(saved().shortcutLabel(ScreenshotActions.record), '⌥5');
+      expect(saved().shortcutLabel(ScreenshotActions.scrolling), '⌘5');
       expect(
         saved().children[ScreenshotActions.crop],
-        isNot(contains(ScreenshotActions.record)),
+        isNot(contains(ScreenshotActions.scrolling)),
       );
 
       await tester.ensureVisible(
@@ -573,6 +685,7 @@ void main() {
         contains(ScreenshotActions.pin),
       );
       expect(saved().shortcutLabel(ScreenshotActions.pin), isNull);
+      expect(saved().favorites, isNot(contains(ScreenshotActions.pin)));
     });
 
     testWidgets('恢复默认空闲时禁用，编辑后需确认且恢复出厂排布（#144）', (tester) async {
@@ -583,7 +696,7 @@ void main() {
       expect(resetButton().onPressed, isNull);
 
       await tester.tap(
-        find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
+        find.byKey(const ValueKey('visibility-${ScreenshotActions.arrow}')),
       );
       await tester.pumpAndSettle();
       expect(resetButton().onPressed, isNotNull);
@@ -592,7 +705,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
-      expect(saved().hidden, {ScreenshotActions.cursor});
+      expect(saved().hidden, {ScreenshotActions.arrow});
 
       await tester.tap(find.byKey(const ValueKey('toolbar-reset-default')));
       await tester.pumpAndSettle();
@@ -609,18 +722,88 @@ void main() {
         systemSlots: {(modifiers: cmd, digit: 1)},
       );
       final eyeSize = tester.getSize(
-        find.byKey(const ValueKey('visibility-${ScreenshotActions.cursor}')),
+        find.byKey(const ValueKey('visibility-${ScreenshotActions.arrow}')),
       );
       expect(eyeSize.width, greaterThanOrEqualTo(24));
       expect(eyeSize.height, greaterThanOrEqualTo(24));
 
       final conflictText = find.byKey(
-        const ValueKey('toolbar-conflict-${ScreenshotActions.brush}'),
+        const ValueKey('toolbar-conflict-${ScreenshotActions.arrow}'),
       );
       final element = tester.element(conflictText);
       expect(
         tester.widget<Text>(conflictText).style!.color,
         ScreenshotToolbarEditor.conflictColor(element),
+      );
+    });
+    testWidgets('常用组：表头 1–6，与网格之间拖动为移动且工具只占一个键位，常用之间交换，拖到别处不变，方向键调整顺序（#1）', (
+      tester,
+    ) async {
+      final saved = await pumpEditor(tester, ScreenshotToolbarPreferences());
+      final digits = find.descendant(
+        of: find.byKey(const ValueKey('toolbar-favorite-digits')),
+        matching: find.byType(Text),
+      );
+      expect(
+        [for (final text in tester.widgetList<Text>(digits)) text.data],
+        ['1', '2', '3', '4', '5', '6'],
+      );
+      for (final (index, id) in ScreenshotActions.defaultFavorites.indexed) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey('toolbar-favorite-$index')),
+            matching: find.byKey(ValueKey('toolbar-favorite-cell-$id')),
+          ),
+          findsOneWidget,
+        );
+      }
+
+      await drag(
+        tester,
+        ScreenshotActions.arrow,
+        find.byKey(const ValueKey('toolbar-favorite-5')),
+      );
+      expect(saved().favorites.last, ScreenshotActions.arrow);
+      expect(saved().shortcutLabel(ScreenshotActions.arrow), '6');
+      expect(saved().shortcutLabel(ScreenshotActions.pin), '⌘1');
+
+      await drag(
+        tester,
+        'favorite-${ScreenshotActions.arrow}',
+        find.byKey(const ValueKey('toolbar-favorite-0')),
+      );
+      expect(saved().favorites.first, ScreenshotActions.arrow);
+      expect(saved().favorites.last, ScreenshotActions.crop);
+
+      await drag(
+        tester,
+        'favorite-${ScreenshotActions.record}',
+        find.byKey(const ValueKey('toolbar-slot-1-5')),
+      );
+      expect(saved().favorites, isNot(contains(ScreenshotActions.record)));
+      expect(saved().shortcutLabel(ScreenshotActions.record), '⌥6');
+      final afterMove = saved().favorites;
+
+      await drag(
+        tester,
+        'favorite-${ScreenshotActions.ocrCopy}',
+        find.byKey(const ValueKey('toolbar-favorite-digits')),
+      );
+      expect(saved().favorites, afterMove);
+
+      Focus.of(
+        tester.element(
+          find.byKey(
+            const ValueKey('toolbar-favorite-cell-${ScreenshotActions.crop}'),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(
+        saved().favorites.indexOf(ScreenshotActions.crop),
+        afterMove.indexOf(ScreenshotActions.crop) - 1,
       );
     });
   });

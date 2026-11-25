@@ -300,19 +300,17 @@ private final class PinHoverRootView: NSView {
     }
 }
 
-private final class PinHoverCloseButton: NSButton {
+final class PinHoverCloseButton: NSButton {
+    private var hovering = false {
+        didSet { needsDisplay = true }
+    }
+    private var trackingArea: NSTrackingArea?
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         isBordered = false
         title = ""
-        wantsLayer = true
-        layer?.cornerRadius = AppConstants.pinCloseButtonSize / 2
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
-        if let symbol = NSImage(systemSymbolName: "xmark", accessibilityDescription: "关闭贴图") {
-            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
-            image = symbol.withSymbolConfiguration(config)
-        }
-        contentTintColor = .white
+        image = nil
         toolTip = "关闭贴图（Esc / 双击）"
         setAccessibilityLabel("关闭贴图")
     }
@@ -323,4 +321,44 @@ private final class PinHoverCloseButton: NSButton {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override var isHighlighted: Bool {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let side = min(bounds.width, bounds.height)
+        let scale = isHighlighted ? AppConstants.pinCloseButtonPressedScale : 1
+        let diameter = side * scale
+        let disc = NSRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2, width: diameter, height: diameter)
+        NSColor.black.withAlphaComponent(hovering || isHighlighted ? AppConstants.pinCloseButtonHoverAlpha : AppConstants.pinCloseButtonAlpha).setFill()
+        NSBezierPath(ovalIn: disc).fill()
+        let edgeWidth = AppConstants.pinCloseButtonEdgeWidth
+        let edge = NSBezierPath(ovalIn: disc.insetBy(dx: edgeWidth / 2, dy: edgeWidth / 2))
+        edge.lineWidth = edgeWidth
+        NSColor.white.withAlphaComponent(AppConstants.pinCloseButtonEdgeAlpha).setStroke()
+        edge.stroke()
+        let arm = AppConstants.pinCloseGlyphSize / 2 * scale
+        let cross = NSBezierPath()
+        cross.move(to: NSPoint(x: disc.midX - arm, y: disc.midY - arm))
+        cross.line(to: NSPoint(x: disc.midX + arm, y: disc.midY + arm))
+        cross.move(to: NSPoint(x: disc.midX - arm, y: disc.midY + arm))
+        cross.line(to: NSPoint(x: disc.midX + arm, y: disc.midY - arm))
+        cross.lineWidth = AppConstants.pinCloseGlyphStroke
+        cross.lineCapStyle = .round
+        NSColor.white.setStroke()
+        cross.stroke()
+    }
 }

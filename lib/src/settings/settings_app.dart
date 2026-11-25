@@ -25,6 +25,7 @@ import '../common/widgets/window_drag_area.dart';
 import '../common/widgets/native_glass.dart';
 
 import 'app_settings.dart';
+import 'click_effect_player.dart';
 import 'prompt_editor.dart';
 import 'sticker_upload_dialog.dart';
 import '../screenshot/drawing_controls.dart';
@@ -171,8 +172,7 @@ class _SettingsPageState extends State<_SettingsPage>
         'title': title,
       });
     } on MissingPluginException catch (_) {
-    } on PlatformException catch (_) {
-    }
+    } on PlatformException catch (_) {}
   }
 
   Set<({int modifiers, int digit})> _systemShortcutSlots = const {};
@@ -554,7 +554,7 @@ class _SettingsPageState extends State<_SettingsPage>
       _settings!.services.remove(service);
       _credentials[service.id] = null;
       if (_settings!.defaultServiceId == service.id) {
-        _settings!.defaultServiceId = ServiceConfig.builtinId;
+        _settings!.defaultServiceId = ServiceConfig.systemId;
       }
     });
   }
@@ -1063,6 +1063,25 @@ class _SettingsPageState extends State<_SettingsPage>
                                   ),
                                 ],
                               ),
+                              NativeGlassGroup(
+                                title: '录制点击特效',
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: GlassMetrics.space4,
+                                    ),
+                                    child: Center(
+                                      child: ClickEffectPlayer(
+                                        effect: settings.recordingClickEffect,
+                                        onChanged: (v) => _edit(
+                                          () =>
+                                              settings.recordingClickEffect = v,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ] else if (_page == SettingsPage.languages) ...[
                               NativeGlassGroup(
                                 dividerIndent: 0,
@@ -1137,10 +1156,10 @@ class _SettingsPageState extends State<_SettingsPage>
                                     ),
                                     value: settings.defaultServiceId,
                                     items: {
-                                      ServiceConfig.builtinId:
-                                          ServiceConfig.builtinName,
                                       ServiceConfig.systemId:
                                           ServiceConfig.systemName,
+                                      ServiceConfig.builtinId:
+                                          ServiceConfig.builtinName,
                                       for (final service in settings.services)
                                         service.id: service.displayName,
                                     },
@@ -1486,36 +1505,17 @@ class _SettingsPageState extends State<_SettingsPage>
                                           settings.screenshotIncludesCursor = v,
                                     ),
                                   ),
-                                  NativeGlassDropdown<RecordingClickEffect>(
-                                    label: '录制点击特效',
+                                  NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.hand,
                                     ),
-                                    value: settings.recordingClickEffect,
-                                    items: {
-                                      for (final effect
-                                          in RecordingClickEffect.values)
-                                        effect: effect.label,
-                                    },
+                                    title: '录制包含点击特效',
+                                    value: settings.recordingClickEffectEnabled,
                                     onChanged: (v) => _edit(
-                                      () => settings.recordingClickEffect = v,
+                                      () =>
+                                          settings.recordingClickEffectEnabled =
+                                              v,
                                     ),
-                                  ),
-                                  NativeGlassSwitchTile(
-                                    leading: const NativeGlassRowIcon(
-                                      icon: LucideIcons.penTool,
-                                    ),
-                                    title: '区分右键与拖动轨迹',
-                                    value: settings.recordingClickRightDistinct,
-                                    onChanged:
-                                        settings.recordingClickEffect ==
-                                            RecordingClickEffect.off
-                                        ? null
-                                        : (v) => _edit(
-                                            () =>
-                                                settings.recordingClickRightDistinct =
-                                                    v,
-                                          ),
                                   ),
                                 ],
                               ),

@@ -9,7 +9,6 @@ abstract final class ToolbarModifiers {
   static const command = 8;
 
   static const allowed = [
-    0,
     command,
     option,
     control,
@@ -43,6 +42,9 @@ abstract final class ToolbarGrid {
   static const blockGap = 8.0;
   static const hintExtent = 24.0;
   static const hintFont = 11.0;
+  static const tabKeycapFont = 8.0;
+  static const tabKeycapBorder = 1.2;
+  static const tabKeycapRadius = 3.0;
   static const blockThickness = 32 + blockPadding * 2;
 
   static const trayPadding = 2.0;
@@ -58,10 +60,10 @@ abstract final class ToolbarGrid {
   static const lineGap = 4.0;
 
   static const defaultModifiers = [
-    0,
     ToolbarModifiers.command,
     ToolbarModifiers.option,
   ];
+
 
   static const carbonKeyCodes = [18, 19, 20, 21, 23, 22];
 

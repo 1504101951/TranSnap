@@ -279,7 +279,7 @@ class _CaptureAppState extends State<CaptureApp> {
               ConstrainedBox(
                 constraints: const BoxConstraints(
                   minWidth: GlassMetrics.buttonMinWidth,
-                  maxWidth: 188,
+                  maxWidth: 268,
                   minHeight: GlassMetrics.hitSize,
                 ),
                 child: Padding(
@@ -331,7 +331,7 @@ class _CaptureAppState extends State<CaptureApp> {
         action(
           2,
           '结束',
-          LucideIcons.squareStop,
+          LucideIcons.square,
           editable ? () => _invoke(MethodNames.stopCapture) : null,
           busy: _pending && _pendingMethod == MethodNames.stopCapture,
         ),

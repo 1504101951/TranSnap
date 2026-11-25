@@ -875,7 +875,7 @@ void main() {
     ]);
   });
 
-  test('内置服务：菜单先列谷歌翻译与 Apple 系统翻译，Apple 对应本机 Provider 且不是模型服务', () {
+  test('内置服务：菜单先列 Apple 系统翻译与谷歌翻译，Apple 对应本机 Provider 且不是模型服务', () {
     const openai = ServiceConfig(
       id: 'saved',
       kind: 'openai',
@@ -891,16 +891,16 @@ void main() {
     final platform = _SecretPlatform();
     expect(serviceChoices(settings), [
       (
-        id: ServiceConfig.builtinId,
-        name: '谷歌翻译',
-        isModel: false,
-        isDefault: false,
-      ),
-      (
         id: ServiceConfig.systemId,
         name: 'Apple 系统翻译',
         isModel: false,
         isDefault: true,
+      ),
+      (
+        id: ServiceConfig.builtinId,
+        name: '谷歌翻译',
+        isModel: false,
+        isDefault: false,
       ),
       (id: 'saved', name: 'OpenAI', isModel: true, isDefault: false),
     ]);

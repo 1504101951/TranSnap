@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../common/constants/selection_gesture_types.dart';
 import '../common/constants/text_mode.dart';
+import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
 import '../history/translation_history.dart';
 import '../history/vocabulary.dart';
@@ -354,6 +355,7 @@ class _TranSnapAppState extends State<TranSnapApp> {
 
   void _dismiss() {
     Tooltip.dismissAllToolTips();
+    unawaited(widget.overlay.hideOverlayTooltip());
     final id = widget.session.sessionId;
     _resetSpeech(rebuild: false);
     widget.session.dismiss();
@@ -366,21 +368,39 @@ class _TranSnapAppState extends State<TranSnapApp> {
   Widget build(BuildContext context) {
     return NativeGlassApp(
       title: 'TranSnap',
-      home: TranslationOverlay(
-        session: widget.session,
-        speakingSource: _speakingSource,
-        onActivate: _activate,
-        onDismiss: _dismiss,
-        onMode: (mode) => unawaited(_switchMode(mode)),
-        onService: (serviceId) => unawaited(_switchService(serviceId)),
-        onLanguages: (source, target) =>
-            unawaited(_switchLanguages(source, target)),
-        onSpeak: (source) => unawaited(_speak(source)),
-        onAddVocabulary: _addVocabulary,
-        onDrag: () {
+      home: AppTooltipScope(
+        onShow: (message, anchor, preferAbove) {
           final id = widget.session.sessionId;
-          if (id != null) widget.overlay.dragOverlay(sessionId: id);
+          if (id == null) return;
+          unawaited(
+            widget.overlay.showOverlayTooltip(
+              sessionId: id,
+              message: message,
+              x: anchor.left,
+              y: anchor.top,
+              width: anchor.width,
+              height: anchor.height,
+              preferAbove: preferAbove,
+            ),
+          );
         },
+        onHide: () => unawaited(widget.overlay.hideOverlayTooltip()),
+        child: TranslationOverlay(
+          session: widget.session,
+          speakingSource: _speakingSource,
+          onActivate: _activate,
+          onDismiss: _dismiss,
+          onMode: (mode) => unawaited(_switchMode(mode)),
+          onService: (serviceId) => unawaited(_switchService(serviceId)),
+          onLanguages: (source, target) =>
+              unawaited(_switchLanguages(source, target)),
+          onSpeak: (source) => unawaited(_speak(source)),
+          onAddVocabulary: _addVocabulary,
+          onDrag: () {
+            final id = widget.session.sessionId;
+            if (id != null) widget.overlay.dragOverlay(sessionId: id);
+          },
+        ),
       ),
     );
   }

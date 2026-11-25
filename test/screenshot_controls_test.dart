@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:transnap/src/common/constants/screenshot_actions.dart';
+import 'package:transnap/src/common/widgets/line_icon.dart';
 import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:transnap/src/common/constants/toolbar_grid.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:transnap/src/common/utils/geometry.dart';
 import 'package:transnap/src/common/constants/screenshot_enums.dart';
 import 'package:transnap/src/screenshot/drawing_controls.dart';
@@ -23,7 +23,7 @@ import 'package:transnap/src/common/widgets/native_resize_cursor.dart';
 import 'package:transnap/src/screenshot/screenshot_editor_layout.dart';
 
 import 'support/capture_pixels.dart';
-import 'package:transnap/src/common/widgets/line_icon.dart';
+
 
 void main() {
   test('工具栏依次使用下、上、右、左侧空白，完整位于窗口且不与选区相交', () {
@@ -343,6 +343,7 @@ void main() {
 
   testWidgets('方向键移动选区 1 像素、⇧ 10 像素，⌥ 调整大小，限制在截图内且最小边长 8', (tester) async {
     final calls = (await _pumpSelectedCrop(tester, 'test/crop-nudge')).calls;
+    await showFullToolbar(tester);
     final label = find.byKey(const Key('crop-size-label'));
     expect(find.text('400 × 300'), findsOneWidget);
     expect(tester.getRect(label).bottom, 176);
@@ -427,6 +428,7 @@ void main() {
 
   testWidgets('原生转发的方向键微调当前选区，⇧ 10 像素、⌥ 调整大小，过期捕获忽略（#106）', (tester) async {
     final pumped = await _pumpSelectedCrop(tester, 'test/crop-native-nudge');
+    await showFullToolbar(tester);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     Future<void> nudge(
@@ -469,6 +471,7 @@ void main() {
       tester,
       'test/crop-nudge-ignore',
     )).calls;
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key('screenshot-tool-text')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('screenshot-canvas')));
@@ -486,7 +489,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(250, 250), const Offset(100, 80));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('screenshot-tool-cursor')));
+    await tester.tap(find.byKey(const Key('screenshot-tool-rect')));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(350, 300));
     await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
@@ -510,6 +513,7 @@ void main() {
 
   testWidgets('锁定比例后新框选、控制点与 ⌥ 方向键保持比例；自由与新截图解除', (tester) async {
     final pumped = await _pumpSelectedCrop(tester, 'test/crop-ratio');
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.ratio)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ratio-row')), findsOneWidget);
@@ -613,7 +617,9 @@ void main() {
     await tester.pumpWidget(ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(400, 300));
     await tester.pump(kDoubleTapTimeout);
@@ -648,7 +654,7 @@ void main() {
       fontSize: ScreenshotDefaults.fontSize,
       width: 200,
     );
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.text)));
     await tester.pumpAndSettle();
     await tester.dragFrom(
       Offset(400, 260 + lineHeight / 2),
@@ -721,8 +727,8 @@ void main() {
     final defaults = ScreenshotToolbarPreferences();
     final preferences = defaults.copyWith(
       hidden: {
-        defaults.columns[1].slots[1]!,
-        ...defaults.columns[2].slots.whereType<String>(),
+        defaults.columns[0].slots[1]!,
+        ...defaults.columns[1].slots.whereType<String>(),
       },
     );
     const channel = MethodChannel('test/toolbar-grid');
@@ -748,15 +754,16 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    final first = defaults.columns[1].slots[0]!;
-    final third = defaults.columns[1].slots[2]!;
+    await showFullToolbar(tester);
+    final first = defaults.columns[0].slots[0]!;
+    final third = defaults.columns[0].slots[2]!;
     expect(
       tester.getTopLeft(find.byKey(Key(third))).dx -
           tester.getTopLeft(find.byKey(Key(first))).dx,
       72,
     );
-    expect(find.byKey(const Key('screenshot-grid-group-1')), findsOneWidget);
-    expect(find.byKey(const Key('screenshot-grid-group-2')), findsNothing);
+    expect(find.byKey(const Key('screenshot-grid-group-0')), findsOneWidget);
+    expect(find.byKey(const Key('screenshot-grid-group-1')), findsNothing);
     expect(
       find.byKey(const Key('toolbar-group-label-screenshot-grid-group-0')),
       findsNothing,
@@ -766,14 +773,14 @@ void main() {
         of: find.byKey(const Key('screenshot-grid-group-0')),
         matching: find.text('1'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
-        of: find.byKey(const Key('screenshot-grid-group-1')),
+        of: find.byKey(const Key('screenshot-favorites-group')),
         matching: find.text('1'),
       ),
-      findsNothing,
+      findsOneWidget,
     );
     expect(find.byKey(Key('toolbar-badge-$third')), findsNothing);
   });
@@ -807,15 +814,17 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
     Rect rect(String key) => tester.getRect(find.byKey(Key(key)));
     final toolbar = rect('screenshot-toolbar');
+    final favorites = rect('screenshot-favorites-group');
     final group0 = rect('screenshot-grid-group-0');
     final group1 = rect('screenshot-grid-group-1');
-    final group2 = rect('screenshot-grid-group-2');
-    expect(group1.top, group0.top);
-    expect(group1.right, toolbar.right - ToolbarGrid.blockPadding);
+    expect(group0.top, favorites.top);
+    expect(group0.right, toolbar.right - ToolbarGrid.blockPadding);
     expect(
-      group1.left - group0.right,
+      group0.left - favorites.right,
       ToolbarGrid.blockPadding * 2 +
           ToolbarGrid.blockGap +
           ToolbarGrid.hintExtent +
@@ -824,33 +833,33 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(const Key('toolbar-hint-screenshot-grid-group-1')),
+            find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
           )
           .data,
       '⌘',
     );
     expect(
-      rect('toolbar-hint-screenshot-grid-group-1').right,
-      lessThan(group1.left),
+      rect('toolbar-hint-screenshot-grid-group-0').right,
+      lessThan(group0.left),
     );
     expect(
       tester
-          .widget<LineIcon>(
-            find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
+          .widget<Text>(
+            find.byKey(const Key('toolbar-hint-screenshot-grid-group-1')),
           )
-          .icon,
-      LucideIcons.keyboard,
+          .data,
+      '⌥',
     );
-    expect(group2.top, greaterThan(group0.top));
-    expect(group2.left, group0.left);
+    expect(group1.top, greaterThan(favorites.top));
+    expect(group1.left, favorites.left);
     final children = rect('screenshot-children-group-0');
-    expect(children.top, greaterThan(group0.top));
-    expect(children.top, lessThan(group2.top));
+    expect(children.top, greaterThan(favorites.top));
+    expect(children.top, lessThan(group1.top));
 
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pumpAndSettle();
     final targets = rect('recording-targets-row');
-    expect(targets.top, greaterThan(rect('screenshot-children-group-0').top));
+    expect(targets.top, greaterThan(favorites.bottom));
     expect(targets.height, ToolbarGrid.trayButton);
     expect(
       targets.left + ToolbarGrid.trayButton / 2,
@@ -863,15 +872,15 @@ void main() {
       ),
       findsNothing,
     );
-    expect(targets.top, lessThan(rect('screenshot-grid-group-2').top));
+    expect(targets.top, lessThan(rect('screenshot-grid-group-1').top));
 
     tester.view.physicalSize = const Size(400, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpAndSettle();
-    final narrow0 = rect('screenshot-grid-group-0');
-    final narrow1 = rect('screenshot-grid-group-1');
+    final narrow0 = rect('screenshot-favorites-group');
+    final narrow1 = rect('screenshot-grid-group-0');
     expect(narrow1.top, greaterThan(narrow0.top));
     expect(narrow1.left, narrow0.left);
   });
@@ -903,10 +912,12 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    final record = find.byKey(const Key(ScreenshotActions.record));
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
+    final record = find.byKey(const Key(ScreenshotActions.scrolling));
     final settled = tester.getCenter(record);
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
     await tester.pumpAndSettle();
@@ -954,10 +965,12 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
     expect(
       find.descendant(
         of: find.byKey(const Key('screenshot-children-group-0')),
-        matching: find.byKey(const Key(ScreenshotActions.record)),
+        matching: find.byKey(const Key(ScreenshotActions.scrolling)),
       ),
       findsOneWidget,
     );
@@ -965,7 +978,7 @@ void main() {
     await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
-    expect(find.byKey(const Key(ScreenshotActions.record)), findsNothing);
+    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
     final children = find.byKey(const Key('screenshot-children-group-0'));
     expect(
       find.descendant(
@@ -1027,8 +1040,9 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await revealToolbarChildren(tester);
 
-    final record = find.byKey(const Key(ScreenshotActions.record));
+    final record = find.byKey(const Key(ScreenshotActions.scrolling));
     final crop = find.byKey(const Key(ScreenshotActions.crop));
     final settledDelta = tester.getCenter(record) - tester.getCenter(crop);
 
@@ -1077,8 +1091,10 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 48));
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
@@ -1139,8 +1155,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pump();
     expect(
@@ -1181,12 +1195,14 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
 
-    final record = find.byKey(const Key(ScreenshotActions.record));
+    final record = find.byKey(const Key(ScreenshotActions.scrolling));
     final crop = find.byKey(const Key(ScreenshotActions.crop));
     final settledOffset = tester.getCenter(record) - tester.getCenter(crop);
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pumpAndSettle();
 
     await tester.tap(crop);
@@ -1198,7 +1214,7 @@ void main() {
     expect(midDistance, greaterThan(2.0));
     expect(midDistance, lessThan(settledOffset.distance - 2.0));
 
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
     expect(
@@ -1210,7 +1226,7 @@ void main() {
 
     await tester.tap(crop);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 32));
     await tester.tap(crop);
@@ -1248,6 +1264,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
 
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
@@ -1315,6 +1332,7 @@ void main() {
     );
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
     await tester.pumpAndSettle();
     final childRect = tester.getRect(
@@ -1349,22 +1367,24 @@ void main() {
     ];
     final preferences = ScreenshotToolbarPreferences(
       columns: [
-        ToolbarColumn(0, [ScreenshotActions.text, ...rest.sublist(0, 5)]),
         ToolbarColumn(ToolbarModifiers.command, [
+          ScreenshotActions.text,
+          ...rest.sublist(0, 5),
+        ]),
+        ToolbarColumn(ToolbarModifiers.option, [
           rest[5],
           ScreenshotActions.crop,
           ...rest.sublist(6, 10),
         ]),
-        ToolbarColumn(ToolbarModifiers.option, rest.sublist(10, 16)),
-        ToolbarColumn(ToolbarModifiers.control, [
+        ToolbarColumn(ToolbarModifiers.control, rest.sublist(10, 16)),
+        ToolbarColumn(ToolbarModifiers.command | ToolbarModifiers.option, [
           ...rest.sublist(16),
-          null,
-          null,
-          null,
+          ...List<String?>.filled(ToolbarGrid.slots - (rest.length - 16), null),
         ]),
       ],
       children: const {},
       hidden: {ScreenshotActions.text},
+      favorites: const [],
     );
     const channel = MethodChannel('test/toolbar-config');
     final messenger =
@@ -1385,6 +1405,7 @@ void main() {
     await tester.pumpWidget(ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
     final close = tester.getTopLeft(
       find.byKey(const Key(ScreenshotActions.close)),
@@ -1426,23 +1447,25 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await nativeSlot('stale', 0, 1);
+    await nativeSlot('stale', ToolbarModifiers.command, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
-    await nativeSlot('tool-test', 0, 1);
+    await nativeSlot('tool-test', ToolbarModifiers.command, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
-    await nativeSlot('tool-test', ToolbarModifiers.command, 2);
+    await nativeSlot('tool-test', ToolbarModifiers.option, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
     await tester.tapAt(canvas.center);
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
-    await nativeSlot('tool-test', ToolbarModifiers.command, 2);
+    await nativeSlot('tool-test', ToolbarModifiers.option, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
@@ -1565,6 +1588,7 @@ void main() {
     );
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key('screenshot-tool-text')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('screenshot-canvas')));
@@ -1651,6 +1675,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     for (final x in [0, 160]) {
       await messenger.handlePlatformMessage(
         channel.name,
@@ -1661,6 +1686,7 @@ void main() {
       );
       await awaitCaptureSource(tester);
       await tester.pumpAndSettle();
+      await showFullToolbar(tester);
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
       final crop = mapRectToFitted(
         Rect.fromLTWH(x.toDouble(), 0, 160, 240),
@@ -1745,6 +1771,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     final feedback = find.byKey(const Key('toolbar-feedback-bubble'));
     final copyButton = find.byKey(const Key('screenshot-copy'));
 
@@ -1800,6 +1827,8 @@ void main() {
       (_) {},
     );
     await awaitCaptureSource(tester);
+    await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await copy();
     final toastRect = tester.getRect(feedback);
     expect(
@@ -1972,6 +2001,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
 
     final copyButton = find.byKey(const Key(ScreenshotActions.copy));
     final feedback = find.byKey(const Key('toolbar-feedback-bubble'));
@@ -2087,7 +2117,322 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('拖动第一个修饰键提示区域可临时整体移动截图工具栏，调整选区后重置位置', (tester) async {
+    await _pumpSelectedCrop(tester, 'test/toolbar-drag-handle');
+    await showFullToolbar(tester);
+    final handle = find.byKey(const Key('toolbar-drag-handle'));
+    expect(handle, findsOneWidget);
+
+    final group0 = find.byKey(const Key('screenshot-grid-group-0'));
+    final group1 = find.byKey(const Key('screenshot-grid-group-1'));
+    final rect0Before = tester.getRect(group0);
+    final rect1Before = tester.getRect(group1);
+
+    await tester.drag(handle, const Offset(60, 40));
+    await tester.pumpAndSettle();
+
+    final rect0After = tester.getRect(group0);
+    final rect1After = tester.getRect(group1);
+    expect(rect0After.topLeft - rect0Before.topLeft, const Offset(60, 40));
+    expect(rect1After.topLeft - rect1Before.topLeft, const Offset(60, 40));
+
+    await _arrow(tester, LogicalKeyboardKey.arrowRight);
+    final rect0Reset = tester.getRect(group0);
+    expect(rect0Reset.top, rect0Before.top);
+  });
+
+  testWidgets('新截图时「截图」保持选中但子级托盘不展开，调整选区不展开，按工具键位后展开（#1）', (tester) async {
+    await _pumpSelectedCrop(tester, 'test/toolbar-first-open');
+    expect(
+      tester
+          .widget<Semantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key(ScreenshotActions.crop)),
+                  matching: find.byType(Semantics),
+                )
+                .first,
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
+
+    await _arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('screenshot-children-group-0')),
+        matching: find.byKey(const Key(ScreenshotActions.scrolling)),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('唤起时只显示常用工具栏，展开后常用块仍在首位接修饰键分组，双击拖动区域或连按两次 Tab 切换，带修饰键的键位直接展开（#1、#67）', (
+    tester,
+  ) async {
+    final channel = (await _pumpSelectedCrop(
+      tester,
+      'test/toolbar-favorites',
+    )).channel;
+    final favorites = find.byKey(const Key('screenshot-favorites-group'));
+    final fullGroup = find.byKey(const Key('screenshot-grid-group-0'));
+    expect(favorites, findsOneWidget);
+    expect(fullGroup, findsNothing);
+    for (final id in ScreenshotActions.defaultFavorites) {
+      expect(
+        find.descendant(of: favorites, matching: find.byKey(Key(id))),
+        findsOneWidget,
+      );
+    }
+    expect(find.byKey(const Key(ScreenshotActions.arrow)), findsNothing);
+    expect(find.byTooltip('拖动移动工具栏，双击图标或连按两次 Tab 展开完整工具栏'), findsOneWidget);
+
+    final handle = find.byKey(const Key('toolbar-drag-handle'));
+    expect(find.byKey(const Key('toolbar-drag-grip')), findsNothing);
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(handle));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('toolbar-drag-grip')), findsOneWidget);
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('toolbar-drag-grip')), findsNothing);
+    await mouse.removePointer();
+
+    final collapsedFavorites = tester.getRect(favorites);
+    await showFullToolbar(tester);
+    expect(favorites, findsOneWidget);
+    expect(fullGroup, findsOneWidget);
+    expect(tester.getRect(favorites).top, collapsedFavorites.top);
+    expect(tester.getRect(favorites).right, lessThan(tester.getRect(fullGroup).left));
+    expect(find.byKey(const Key(ScreenshotActions.arrow)), findsOneWidget);
+    expect(find.byTooltip('拖动移动工具栏，双击图标或连按两次 Tab 收起为常用工具栏'), findsOneWidget);
+
+    Future<void> nativeTab() => tester.binding.defaultBinaryMessenger
+        .handlePlatformMessage(
+          channel.name,
+          channel.codec.encodeMethodCall(
+            const MethodCall(MethodNames.screenshotToolbarTab, {'id': 'crop'}),
+          ),
+          (_) {},
+        );
+    await nativeTab();
+    await tester.pumpAndSettle();
+    expect(fullGroup, findsOneWidget);
+    await nativeTab();
+    await tester.pumpAndSettle();
+    expect(favorites, findsOneWidget);
+    expect(fullGroup, findsNothing);
+
+    await _arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(favorites, findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(favorites, findsOneWidget);
+    expect(fullGroup, findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key(ScreenshotActions.arrow)),
+                  matching: find.byType(Semantics),
+                )
+                .first,
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('再点已选工具或再按它的键位回到光标；新截图时第一次点「截图」只展开子菜单，之后再点才回到光标；工具栏不再有光标按钮（#1）', (
+    tester,
+  ) async {
+    await _pumpSelectedCrop(tester, 'test/toolbar-toggle-cursor');
+    bool selected(String id) =>
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(
+                    of: find.byKey(Key(id)),
+                    matching: find.byType(Semantics),
+                  )
+                  .first,
+            )
+            .properties
+            .selected ??
+        false;
+    final crop = find.byKey(const Key(ScreenshotActions.crop));
+    final scrolling = find.byKey(const Key(ScreenshotActions.scrolling));
+    expect(find.byKey(const Key(ScreenshotActions.cursor)), findsNothing);
+    expect(selected(ScreenshotActions.crop), isTrue);
+
+    await tester.tap(crop);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.crop), isTrue);
+    expect(scrolling, findsOneWidget);
+
+    await tester.tap(crop);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.crop), isFalse);
+    expect(scrolling, findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.crop), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.crop), isFalse);
+
+    await showFullToolbar(tester);
+    expect(find.byKey(const Key(ScreenshotActions.cursor)), findsNothing);
+    final arrow = find.byKey(const Key(ScreenshotActions.arrow));
+    await tester.tap(arrow);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.arrow), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(selected(ScreenshotActions.arrow), isFalse);
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(
+                const Key('toolbar-hint-screenshot-favorites-group'),
+              ),
+              matching: find.byType(Text),
+            ),
+          )
+          .data,
+      'tab',
+    );
+  });
+
+  testWidgets('液态分裂：展开时分区块从常用块位置分裂出来并带透明度过渡，结束落位；收起时常用块滑回居中与分组残影汇合同时进行；重新排版不重播（#67）', (
+    tester,
+  ) async {
+    await _pumpSelectedCrop(tester, 'test/toolbar-liquid-split');
+    final favorites = find.byKey(const Key('screenshot-favorites-group'));
+    final group = find.byKey(const Key('screenshot-grid-group-0'));
+    double opacity() => tester
+        .widget<Opacity>(
+          find.ancestor(of: group, matching: find.byType(Opacity)).first,
+        )
+        .opacity;
+    final handle = find.byKey(const Key('toolbar-drag-handle'));
+
+    await tester.tap(handle);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(handle);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final start = tester.getRect(group);
+    final origin = tester.getRect(favorites);
+    expect(opacity(), lessThan(0.5));
+    expect((start.center.dx - origin.center.dx).abs(), lessThan(40));
+    await tester.pumpAndSettle();
+    final settled = tester.getRect(group);
+    expect(opacity(), 1.0);
+    expect(settled.left, greaterThan(tester.getRect(favorites).right));
+
+    tester.view.physicalSize = const Size(700, 740);
+    await tester.pump();
+    expect(opacity(), 1.0);
+    tester.view.physicalSize = const Size(960, 740);
+    await tester.pumpAndSettle();
+
+    final toolbar = find.byKey(const Key('screenshot-toolbar'));
+    final expandedToolbar = tester.getSize(toolbar);
+    await tester.tap(handle);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(handle);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    final midToolbar = tester.getSize(toolbar);
+    expect(group, findsOneWidget);
+    expect(opacity(), lessThan(1.0));
+    expect(
+      tester.widget<IgnorePointer>(
+        find.ancestor(of: group, matching: find.byType(IgnorePointer)).first,
+      ).ignoring,
+      isTrue,
+    );
+    await tester.pumpAndSettle();
+    expect(group, findsNothing);
+    expect(midToolbar, tester.getSize(toolbar));
+    expect(midToolbar, isNot(expandedToolbar));
+  });
+
+  testWidgets('液态分裂：减少动态效果时直接切换，无分裂过程（#67）', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await _pumpSelectedCrop(tester, 'test/toolbar-liquid-reduced');
+    final handle = find.byKey(const Key('toolbar-drag-handle'));
+    final group = find.byKey(const Key('screenshot-grid-group-0'));
+    await tester.tap(handle);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(handle);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      tester
+          .widget<Opacity>(
+            find.ancestor(of: group, matching: find.byType(Opacity)).first,
+          )
+          .opacity,
+      1.0,
+    );
+    final first = tester.getRect(group);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getRect(group), first);
+    await tester.tap(handle);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(handle);
+    await tester.pump();
+    expect(group, findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('图形工具的两个纯色填充样式使用实心图标，线框样式仍为线性图标', (tester) async {
+    await _pumpSelectedCrop(tester, 'test/toolbar-filled-shapes');
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
+    await tester.pumpAndSettle();
+    for (final (variant, circle) in [
+      ('filledRectangle', false),
+      ('filledCircle', true),
+    ]) {
+      final glyph = find.descendant(
+        of: find.byKey(Key('${ScreenshotActions.shapePrefix}$variant')),
+        matching: find.byType(ShapeFillIcon),
+      );
+      expect(glyph, findsOneWidget);
+      expect(tester.widget<ShapeFillIcon>(glyph).circle, circle);
+    }
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('${ScreenshotActions.shapePrefix}rectangle')),
+        matching: find.byType(ShapeFillIcon),
+      ),
+      findsNothing,
+    );
+  });
 }
+
 
 Future<Uint8List> _image({int width = 320, int height = 240}) async {
   final recorder = ui.PictureRecorder();

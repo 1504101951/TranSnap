@@ -169,6 +169,34 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
             overlay.drag(sessionId: sessionId)
             result(nil)
+        case AppConstants.showOverlayTooltipMethod:
+            guard let sessionId = args["sessionId"] as? String,
+                  let message = args["message"] as? String,
+                  let x = args["x"] as? Double,
+                  let y = args["y"] as? Double,
+                  let width = args["width"] as? Double,
+                  let height = args["height"] as? Double
+            else {
+                result(Self.badArguments("showOverlayTooltip 需要 sessionId/message/x/y/width/height"))
+                return
+            }
+            guard width.isFinite, height.isFinite, width > 0, height > 0,
+                  x.isFinite, y.isFinite
+            else {
+                result(Self.badArguments("Overlay Tooltip 坐标与尺寸必须有限且有效"))
+                return
+            }
+            let preferAbove = args["preferAbove"] as? Bool ?? true
+            overlay.showTooltip(
+                sessionId: sessionId,
+                message: message,
+                anchor: NSRect(x: x, y: y, width: width, height: height),
+                preferAbove: preferAbove
+            )
+            result(nil)
+        case AppConstants.hideOverlayTooltipMethod:
+            overlay.hideTooltip()
+            result(nil)
         case AppConstants.readSelectionForTranslationMethod:
             guard let sessionId = args["sessionId"] as? String else {
                 result(Self.badArguments("读取选区需要 sessionId")); return

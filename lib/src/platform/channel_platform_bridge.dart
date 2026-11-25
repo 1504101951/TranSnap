@@ -97,6 +97,29 @@ class ChannelPlatformBridge
   }
 
   @override
+  Future<void> showOverlayTooltip({
+    required String sessionId,
+    required String message,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    bool preferAbove = true,
+  }) => _methods.invokeMethod<void>(MethodNames.showOverlayTooltip, {
+    'sessionId': sessionId,
+    'message': message,
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+    'preferAbove': preferAbove,
+  });
+
+  @override
+  Future<void> hideOverlayTooltip() =>
+      _methods.invokeMethod<void>(MethodNames.hideOverlayTooltip);
+
+  @override
   Future<String?> readSelectionForTranslation({required String sessionId}) {
     return _methods.invokeMethod<String>(
       MethodNames.readSelectionForTranslation,

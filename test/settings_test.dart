@@ -333,20 +333,21 @@ void main() {
     expect(restored.direction.resolve('ja').targetLanguage, 'en');
   });
 
-  test('录屏点击特效默认关闭且区分右键默认开启，7种枚举可往返保存，未知样式拒绝（#143）', () {
+  test('录屏点击特效默认关闭、样式默认光学涟漪，6 种样式与开关可往返保存，未知样式拒绝（#143）', () {
     final defaults = AppSettings.fromMap({'primaryLanguage': 'zh-CN'});
-    expect(defaults.recordingClickEffect, RecordingClickEffect.off);
-    expect(defaults.recordingClickRightDistinct, isTrue);
+    expect(defaults.recordingClickEffectEnabled, isFalse);
+    expect(defaults.recordingClickEffect, RecordingClickEffect.optical);
+    expect(RecordingClickEffect.values, hasLength(6));
 
     for (final effect in RecordingClickEffect.values) {
       final settings = AppSettings(
         primaryLanguage: 'zh-CN',
+        recordingClickEffectEnabled: true,
         recordingClickEffect: effect,
-        recordingClickRightDistinct: false,
       );
       final restored = AppSettings.fromMap(settings.toMap());
       expect(restored.recordingClickEffect, effect);
-      expect(restored.recordingClickRightDistinct, isFalse);
+      expect(restored.recordingClickEffectEnabled, isTrue);
     }
 
     expect(

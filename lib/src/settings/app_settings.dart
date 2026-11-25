@@ -32,8 +32,8 @@ class AppSettings {
     this.gifFramesPerSecond = 10,
     this.liveRecording = false,
     this.screenshotIncludesCursor = false,
-    this.recordingClickEffect = RecordingClickEffect.off,
-    this.recordingClickRightDistinct = true,
+    this.recordingClickEffectEnabled = false,
+    this.recordingClickEffect = RecordingClickEffect.optical,
     this.recordingDelay = 0,
     this.screenshotConfirmAction = ScreenshotConfirmAction.copy,
     this.scrollCaptureMode = ScrollCaptureMode.manual,
@@ -50,12 +50,11 @@ class AppSettings {
     Map<TextMode, String>? prompts,
     Map<TextMode, bool>? thinking,
     List<StickerEntry>? stickers,
-    this.defaultServiceId = ServiceConfig.builtinId,
+    this.defaultServiceId = ServiceConfig.systemId,
     List<ServiceConfig>? services,
     ScreenshotToolbarPreferences? screenshotToolbar,
     DrawingPreferences? drawing,
-  }) :
-       inputPrimaryLanguage = inputPrimaryLanguage ?? primaryLanguage,
+  }) : inputPrimaryLanguage = inputPrimaryLanguage ?? primaryLanguage,
        inputSecondaryLanguage = inputPrimaryLanguage == null
            ? secondaryLanguage
            : inputSecondaryLanguage,
@@ -99,8 +98,8 @@ class AppSettings {
 
   bool screenshotIncludesCursor;
 
+  bool recordingClickEffectEnabled;
   RecordingClickEffect recordingClickEffect;
-  bool recordingClickRightDistinct;
 
   int recordingDelay;
 
@@ -170,7 +169,7 @@ class AppSettings {
       automatic: map[PreferenceKeys.automatic] as bool? ?? true,
       defaultServiceId:
           map[PreferenceKeys.defaultServiceId] as String? ??
-          ServiceConfig.builtinId,
+          ServiceConfig.systemId,
       services: (map[PreferenceKeys.services] as List? ?? [])
           .map(
             (e) => ServiceConfig.fromMap(Map<Object?, Object?>.from(e as Map)),
@@ -197,11 +196,11 @@ class AppSettings {
       liveRecording: map[PreferenceKeys.liveRecording] as bool? ?? false,
       screenshotIncludesCursor:
           map[PreferenceKeys.screenshotIncludesCursor] as bool? ?? false,
+      recordingClickEffectEnabled:
+          map[PreferenceKeys.recordingClickEffectEnabled] as bool? ?? false,
       recordingClickEffect: RecordingClickEffect.parse(
         map[PreferenceKeys.recordingClickEffect] as String?,
       ),
-      recordingClickRightDistinct:
-          map[PreferenceKeys.recordingClickRightDistinct] as bool? ?? true,
       recordingDelay: map[PreferenceKeys.recordingDelay] as int? ?? 0,
       screenshotConfirmAction: ScreenshotConfirmAction.parse(
         map[PreferenceKeys.screenshotConfirmAction] as String?,
@@ -371,8 +370,8 @@ class AppSettings {
     PreferenceKeys.gifFramesPerSecond: gifFramesPerSecond,
     PreferenceKeys.liveRecording: liveRecording,
     PreferenceKeys.screenshotIncludesCursor: screenshotIncludesCursor,
+    PreferenceKeys.recordingClickEffectEnabled: recordingClickEffectEnabled,
     PreferenceKeys.recordingClickEffect: recordingClickEffect.name,
-    PreferenceKeys.recordingClickRightDistinct: recordingClickRightDistinct,
     PreferenceKeys.recordingDelay: recordingDelay,
     PreferenceKeys.screenshotConfirmAction: screenshotConfirmAction.name,
     PreferenceKeys.scrollCaptureMode: scrollCaptureMode.name,

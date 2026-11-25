@@ -125,12 +125,20 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   ScreenshotToolbarPreferences? _placeInSlot(String id, _Slot target) {
     final columns = [..._value.columns];
     final children = _childrenCopy();
+    final favorites = [..._value.favorites];
     final occupant = columns[target.column].slots[target.slot];
     if (occupant == id) return null;
     final from = _slotOf(id);
     final parent = _value.parentOf(id);
+    final favorite = favorites.indexOf(id);
     if (from != null) {
       columns[from.column] = columns[from.column].withSlot(from.slot, occupant);
+    } else if (favorite >= 0) {
+      if (occupant == null) {
+        favorites.removeAt(favorite);
+      } else {
+        favorites[favorite] = occupant;
+      }
     } else {
       final siblings = children[parent]!;
       final index = siblings.indexOf(id);
@@ -142,7 +150,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       if (siblings.isEmpty) children.remove(parent);
     }
     columns[target.column] = columns[target.column].withSlot(target.slot, id);
-    return _value.copyWith(columns: columns, children: children);
+    return _value.copyWith(
+      columns: columns,
+      children: children,
+      favorites: favorites,
+    );
   }
 
   ScreenshotToolbarPreferences? _placeAsChild(
@@ -153,10 +165,13 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     if (id == parent || !_canBeChild(id)) return null;
     final columns = [..._value.columns];
     final children = _childrenCopy();
+    final favorites = [..._value.favorites];
     final from = _slotOf(id);
     var position = index;
     if (from != null) {
       columns[from.column] = columns[from.column].withSlot(from.slot, null);
+    } else if (favorites.contains(id)) {
+      favorites.remove(id);
     } else {
       final siblings = children[_value.parentOf(id)]!;
       final old = siblings.indexOf(id);
@@ -166,7 +181,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     }
     final list = children[parent] ??= [];
     list.insert(position.clamp(0, list.length), id);
-    return _value.copyWith(columns: columns, children: children);
+    return _value.copyWith(
+      columns: columns,
+      children: children,
+      favorites: favorites,
+    );
   }
 
   void _moveByKey(String id, int dColumn, int dSlot) {
@@ -312,7 +331,264 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       }
     }
     return _value.hidden.length == defaults.hidden.length &&
-        _value.hidden.containsAll(defaults.hidden);
+        _value.hidden.containsAll(defaults.hidden) &&
+        _value.favorites.length == defaults.favorites.length &&
+        [
+          for (var i = 0; i < defaults.favorites.length; i++)
+            _value.favorites[i] == defaults.favorites[i],
+        ].every((same) => same);
+  }
+
+  ScreenshotToolbarPreferences? _placeFavorite(String id, int index) {
+    final favorites = [..._value.favorites];
+    final columns = [..._value.columns];
+    final children = _childrenCopy();
+    final occupant = favorites.elementAtOrNull(index);
+    if (occupant == id) return null;
+    final from = favorites.indexOf(id);
+    final slot = _slotOf(id);
+    final parent = _value.parentOf(id);
+    if (from >= 0) {
+      if (occupant == null) {
+        favorites
+          ..removeAt(from)
+          ..add(id);
+      } else {
+        favorites[from] = occupant;
+        favorites[index] = id;
+      }
+      return _value.copyWith(favorites: favorites);
+    }
+    if (slot != null) {
+      columns[slot.column] = columns[slot.column].withSlot(slot.slot, occupant);
+    } else if (parent != null) {
+      if (occupant != null) return null;
+      final siblings = children[parent]!..remove(id);
+      if (siblings.isEmpty) children.remove(parent);
+    }
+    if (occupant == null) {
+      favorites.add(id);
+    } else {
+      favorites[index] = id;
+    }
+    return _value.copyWith(
+      columns: columns,
+      children: children,
+      favorites: favorites,
+    );
+  }
+
+  void _moveFavorite(String id, int delta) {
+    final index = _value.favorites.indexOf(id) + delta;
+    if (index < 0 || index >= _value.favorites.length) return;
+    final next = _placeFavorite(id, index);
+    if (next != null) _submit(next);
+  }
+
+  Widget _digitsRow(BuildContext context, Key key) => Row(
+    key: key,
+    children: [
+      const SizedBox(
+        width:
+            ScreenshotToolbarEditor.headerWidth +
+            ScreenshotToolbarEditor.headerGap,
+      ),
+      Expanded(
+        child: Row(
+          spacing: ScreenshotToolbarEditor.cellGap,
+          children: [
+            for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
+              Expanded(
+                child: SizedBox(
+                  height: ScreenshotToolbarEditor.headerRowHeight,
+                  child: Center(
+                    child: Text(
+                      '$digit',
+                      style: TextStyle(
+                        fontSize: ScreenshotToolbarEditor.labelFont,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _favorites(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      key: const ValueKey('toolbar-favorites'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: ScreenshotToolbarEditor.rowGap,
+      children: [
+        _digitsRow(
+          context,
+          const ValueKey('toolbar-favorite-digits'),
+        ),
+        Row(
+          children: [
+            SizedBox(
+              width: ScreenshotToolbarEditor.headerWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '常用',
+                    style: TextStyle(
+                      fontSize: GlassMetrics.bodyFont,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '无修饰键',
+                    style: TextStyle(
+                      fontSize: ScreenshotToolbarEditor.noteFont,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: ScreenshotToolbarEditor.headerGap),
+            Expanded(
+              child: Row(
+                spacing: ScreenshotToolbarEditor.cellGap,
+                children: [
+                  for (var index = 0; index < ToolbarGrid.slots; index++)
+                    Expanded(
+                      child: _favoriteCell(
+                        context,
+                        index,
+                        _value.favorites.elementAtOrNull(index),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _favoriteCell(BuildContext context, int index, String? id) {
+    final colors = Theme.of(context).colorScheme;
+    final cellColors = ScreenshotToolbarEditor.cellColors(context);
+    return DragTarget<String>(
+      key: ValueKey('toolbar-favorite-$index'),
+      onWillAcceptWithDetails: (details) =>
+          _placeFavorite(details.data, index) != null,
+      onAcceptWithDetails: (details) {
+        final next = _placeFavorite(details.data, index);
+        if (next != null) _submit(next);
+      },
+      builder: (context, candidates, rejected) {
+        final side = candidates.isNotEmpty
+            ? BorderSide(
+                color: NativeGlassTheme.accentOf(context),
+                width: ScreenshotToolbarEditor.targetBorder,
+              )
+            : id == null
+            ? BorderSide.none
+            : id == _selected
+            ? BorderSide(
+                color: NativeGlassTheme.accentOf(context),
+                width: ScreenshotToolbarEditor.selectedBorder,
+              )
+            : BorderSide(
+                color: cellColors.line,
+                width: ScreenshotToolbarEditor.hairline,
+              );
+        final box = Container(
+          height: ScreenshotToolbarEditor.cellHeight,
+          decoration: ShapeDecoration(
+            color: id == null ? null : cellColors.fill,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+              side: side,
+            ),
+          ),
+          child: id == null
+              ? CustomPaint(
+                  painter: _DashedBorder(colors.outlineVariant),
+                  child: const SizedBox.expand(),
+                )
+              : Column(
+                  key: ValueKey('toolbar-favorite-cell-$id'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    LineIcon(
+                      ScreenshotActions.icons[id],
+                      size: GlassMetrics.icon,
+                    ),
+                    Text(
+                      ScreenshotActions.labels[id]!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: ScreenshotToolbarEditor.labelFont,
+                      ),
+                    ),
+                  ],
+                ),
+        );
+        if (id == null) return box;
+        final label = ScreenshotActions.labels[id]!;
+        final hostsChildren = ScreenshotActions.composable[id]!.hostsChildren;
+        void toggleChildren() =>
+            setState(() => _selected = _selected == id ? null : id);
+        return Semantics(
+          label: '常用 ${index + 1}：$label',
+          child: Focus(
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              final action = switch (event.logicalKey) {
+                LogicalKeyboardKey.arrowLeft => () => _moveFavorite(id, -1),
+                LogicalKeyboardKey.arrowRight => () => _moveFavorite(id, 1),
+                LogicalKeyboardKey.enter || LogicalKeyboardKey.space
+                    when hostsChildren =>
+                  toggleChildren,
+                _ => null,
+              };
+              if (action == null) return KeyEventResult.ignored;
+              action();
+              return KeyEventResult.handled;
+            },
+            child: Tooltip(
+              message: '拖到下方格位即移出常用并获得该格快捷键；聚焦后用左右方向键调整顺序',
+              child: MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: Draggable<String>(
+                  key: ValueKey('drag-favorite-$id'),
+                  data: id,
+                  feedback: Material(
+                    color: Colors.transparent,
+                    child: Opacity(
+                      opacity: ScreenshotToolbarEditor.draggingOpacity,
+                      child: LineIcon(ScreenshotActions.icons[id], size: 24),
+                    ),
+                  ),
+                  childWhenDragging: Opacity(
+                    opacity: ScreenshotToolbarEditor.draggingOpacity,
+                    child: box,
+                  ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: hostsChildren ? toggleChildren : null,
+                    child: box,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _confirmReset() async {
@@ -416,7 +692,10 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final selected = _selected != null && _slotOf(_selected!) != null
+    final selected =
+        _selected != null &&
+            (_slotOf(_selected!) != null ||
+                _value.favorites.contains(_selected))
         ? _selected
         : null;
     return Column(
@@ -429,6 +708,13 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             child: NativeGlassBanner(message: _error!, isError: true),
           ),
         ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: ScreenshotToolbarEditor.gridWidth,
+          ),
+          child: _favorites(context),
+        ),
+        const SizedBox(height: ScreenshotToolbarEditor.rowGap),
+        ConstrainedBox(
           key: const ValueKey('toolbar-grid'),
           constraints: const BoxConstraints(
             maxWidth: ScreenshotToolbarEditor.gridWidth,
@@ -437,41 +723,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: ScreenshotToolbarEditor.rowGap,
             children: [
-              Row(
-                key: const ValueKey('toolbar-digits'),
-                children: [
-                  const SizedBox(
-                    width:
-                        ScreenshotToolbarEditor.headerWidth +
-                        ScreenshotToolbarEditor.headerGap,
-                  ),
-                  Expanded(
-                    child: Row(
-                      spacing: ScreenshotToolbarEditor.cellGap,
-                      children: [
-                        for (var digit = 1; digit <= ToolbarGrid.slots; digit++)
-                          Expanded(
-                            child: SizedBox(
-                              height: ScreenshotToolbarEditor.headerRowHeight,
-                              child: Center(
-                                child: Text(
-                                  '$digit',
-                                  style: TextStyle(
-                                    fontSize: ScreenshotToolbarEditor.labelFont,
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              _digitsRow(context, const ValueKey('toolbar-digits')),
               for (final (index, column) in _value.columns.indexed)
                 _column(context, index, column),
             ],
@@ -515,9 +767,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         if (other != column) other.modifiers,
     };
     final empty = column.slots.every((slot) => slot == null);
-    final label = column.modifiers == 0
-        ? '无修饰组'
-        : '${ToolbarModifiers.label(column.modifiers)} 组';
+    final label = '${ToolbarModifiers.label(column.modifiers)} 组';
     return DragTarget<int>(
       key: ValueKey('toolbar-column-$index'),
       onWillAcceptWithDetails: (details) => details.data != index,
@@ -591,9 +841,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
               items: {
                 for (final modifiers in ToolbarModifiers.allowed)
                   if (!used.contains(modifiers))
-                    modifiers: modifiers == 0
-                        ? '无修饰'
-                        : ToolbarModifiers.label(modifiers),
+                    modifiers: ToolbarModifiers.label(modifiers),
               },
               onChanged: (modifiers) => _setModifiers(index, modifiers),
             ),
@@ -868,6 +1116,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     final children = _value.children[parent] ?? const <String>[];
     final title = '${ScreenshotActions.labels[parent]}的子级';
     final movable = <String>[
+      for (final id in _value.favorites)
+        if (id != parent && _canBeChild(id)) id,
       for (final column in _value.columns)
         for (final id in column.slots)
           if (id != null && id != parent && _canBeChild(id)) id,

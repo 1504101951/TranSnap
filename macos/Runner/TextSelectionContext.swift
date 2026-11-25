@@ -17,10 +17,29 @@ enum TextSelectionContext {
         return true
     }
 
-    static func shouldCopySelection(ancestorRoles: [String], hasAXText: Bool, allowCopy: Bool) -> Bool {
+    static func shouldCopySelection(
+        ancestorRoles: [String],
+        hasAXText: Bool,
+        allowCopy: Bool,
+        axText: String? = nil
+    ) -> Bool {
         guard allowCopy else { return false }
         guard !ancestorRoles.contains(where: { nonTextRoles.contains($0) }) else { return false }
-        return !hasAXText || ancestorRoles.contains("AXWebArea")
+        return !hasAXText || ancestorRoles.contains("AXWebArea") || (axText.map(hasInlineListMarker) ?? false)
+    }
+
+    private static func hasInlineListMarker(_ text: String) -> Bool {
+        var afterContent = false
+        for character in text {
+            if character == "\n" || character == "\r" {
+                afterContent = false
+            } else if afterContent && listMarkerCharacters.contains(character) {
+                return true
+            } else if !character.isWhitespace {
+                afterContent = true
+            }
+        }
+        return false
     }
 
     private static let invisibleCharacters: Set<Character> = [
@@ -30,6 +49,12 @@ enum TextSelectionContext {
     private static let listMarkerCharacters: Set<Character> = [
         "•", "◦", "▪", "▫", "‣", "⁃", "●", "○", "■", "□",
     ]
+
+    static func acceptsCopiedText(ancestorRoles: [String], axText: String?, copiedText: String) -> Bool {
+        guard copiedText.contains(where: { !$0.isWhitespace }) else { return false }
+        guard let axText, !ancestorRoles.contains("AXWebArea") else { return true }
+        return matchesCopiedSelection(axText: axText, copiedText: copiedText)
+    }
 
     static func matchesCopiedSelection(axText: String, copiedText: String) -> Bool {
         let strippedAX = axText.filter { !$0.isWhitespace && !invisibleCharacters.contains($0) }

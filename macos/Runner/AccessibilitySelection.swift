@@ -35,12 +35,13 @@ enum AccessibilitySelection {
         guard !Task.isCancelled,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID,
               !isSecure(focusedElement(from: app)) else { return (nil, nil) }
-        let copyRoles = focusedElement(from: app).map(ancestorRoles(of:)) ?? []
-        if TextSelectionContext.shouldCopySelection(ancestorRoles: copyRoles, hasAXText: isUsable(result.text), allowCopy: allowCopy),
+        let copyRoles = (result.element ?? focusedElement(from: app)).map(ancestorRoles(of:)) ?? []
+        if TextSelectionContext.shouldCopySelection(ancestorRoles: copyRoles, hasAXText: isUsable(result.text), allowCopy: allowCopy, axText: result.text),
            let copied = await readByCopyingSelection(pasteboard: .general, copy: postCopyKey, accepts: { copied in
                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID else { return false }
-               guard let original = result.text else { return true }
-               return TextSelectionContext.matchesCopiedSelection(axText: original, copiedText: copied)
+               return TextSelectionContext.acceptsCopiedText(
+                   ancestorRoles: copyRoles, axText: result.text, copiedText: copied
+               )
            }) {
             return (copied, result.element)
         }
@@ -190,7 +191,7 @@ enum AccessibilitySelection {
         var roles: [String] = []
         var current: AXUIElement? = element
         var steps = 0
-        while let node = current, steps < 64 {
+        while let node = current, steps < 128 {
             if let role = role(of: node) { roles.append(role) }
             current = axElement(attribute(node, kAXParentAttribute as CFString))
             steps += 1

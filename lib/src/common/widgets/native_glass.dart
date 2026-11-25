@@ -2458,10 +2458,18 @@ abstract final class NativeGlassTheme {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: colors.inverseSurface,
+          color: dark ? const Color(0xFFE5E5EA) : const Color(0xFF2C2C2E),
           borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
         ),
-        textStyle: TextStyle(color: colors.onInverseSurface),
+        textStyle: TextStyle(
+          fontSize: GlassMetrics.captionFont,
+          color: dark ? const Color(0xFF1C1C1E) : Colors.white,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: GlassMetrics.space8,
+          vertical: GlassMetrics.space4,
+        ),
+        waitDuration: const Duration(milliseconds: 200),
       ),
     );
   }

@@ -29,7 +29,11 @@ class ScreenshotToolbarPreferences {
     List<ToolbarColumn>? columns,
     Map<String, List<String>>? children,
     Set<String>? hidden,
+    List<String>? favorites,
   }) : columns = List.unmodifiable(columns ?? _defaultColumns),
+       favorites = List.unmodifiable(
+         favorites ?? ScreenshotActions.defaultFavorites,
+       ),
        children = Map.unmodifiable({
          for (final entry
              in (children ?? ScreenshotActions.defaultChildren).entries)
@@ -38,22 +42,13 @@ class ScreenshotToolbarPreferences {
        }),
        hidden = Set.unmodifiable(hidden ?? const {});
 
-  static List<ToolbarColumn> get _defaultColumns {
-    final nested = {
-      for (final list in ScreenshotActions.defaultChildren.values) ...list,
-    };
-    final topLevel = [
-      for (final id in ScreenshotActions.composable.keys)
-        if (!nested.contains(id)) id,
-    ];
-    return [
-      for (final (index, modifiers) in ToolbarGrid.defaultModifiers.indexed)
-        ToolbarColumn(modifiers, [
-          for (var slot = 0; slot < ToolbarGrid.slots; slot++)
-            topLevel.elementAtOrNull(index * ToolbarGrid.slots + slot),
-        ]),
-    ];
-  }
+  static List<ToolbarColumn> get _defaultColumns => [
+    for (final (index, modifiers) in ToolbarGrid.defaultModifiers.indexed)
+      ToolbarColumn(modifiers, [
+        for (var slot = 0; slot < ToolbarGrid.slots; slot++)
+          ScreenshotActions.defaultGroups[index].elementAtOrNull(slot),
+      ]),
+  ];
 
   final List<ToolbarColumn> columns;
 
@@ -61,7 +56,10 @@ class ScreenshotToolbarPreferences {
 
   final Set<String> hidden;
 
+  final List<String> favorites;
+
   List<String> get topLevel => [
+    ...favorites,
     for (final column in columns) ...column.slots.whereType<String>(),
   ];
 
@@ -73,6 +71,8 @@ class ScreenshotToolbarPreferences {
   }
 
   String? shortcutLabel(String id) {
+    final favorite = favorites.indexOf(id);
+    if (favorite >= 0) return '${favorite + 1}';
     for (final column in columns) {
       final index = column.slots.indexOf(id);
       if (index >= 0) {
@@ -83,6 +83,7 @@ class ScreenshotToolbarPreferences {
   }
 
   String? actionAt(int modifiers, int digit) {
+    if (modifiers == 0) return favorites.elementAtOrNull(digit - 1);
     final column = columns.where((c) => c.modifiers == modifiers).firstOrNull;
     return column?.slots[digit - 1];
   }
@@ -91,10 +92,12 @@ class ScreenshotToolbarPreferences {
     List<ToolbarColumn>? columns,
     Map<String, List<String>>? children,
     Set<String>? hidden,
+    List<String>? favorites,
   }) => ScreenshotToolbarPreferences(
     columns: columns ?? this.columns,
     children: children ?? this.children,
     hidden: hidden ?? this.hidden,
+    favorites: favorites ?? this.favorites,
   );
 
   factory ScreenshotToolbarPreferences.fromMap(Map<Object?, Object?> map) {
@@ -110,7 +113,11 @@ class ScreenshotToolbarPreferences {
               .entries)
         entry.key as String: (entry.value as List).cast<String>().toList(),
     };
+    final favorites = (map[PreferenceKeys.screenshotToolbarFavorites] as List?)
+        ?.cast<String>()
+        .toList();
     final placed = {
+      ...?favorites,
       for (final column in columns) ...column.slots.whereType<String>(),
       for (final list in children.values) ...list,
     };
@@ -121,6 +128,7 @@ class ScreenshotToolbarPreferences {
           .map((entry) => entry.key)
           .firstOrNull;
       final topLevel = {
+        ...?favorites,
         for (final column in columns) ...column.slots.whereType<String>(),
       };
       if (parent != null && topLevel.contains(parent)) {
@@ -136,6 +144,7 @@ class ScreenshotToolbarPreferences {
       hidden: (map[PreferenceKeys.screenshotToolbarHidden] as List?)
           ?.cast<String>()
           .toSet(),
+      favorites: favorites ?? const [],
     );
     result.validate();
     return result;
@@ -167,6 +176,7 @@ class ScreenshotToolbarPreferences {
       for (final column in columns) column.toMap(),
     ],
     PreferenceKeys.screenshotToolbarChildren: children,
+    PreferenceKeys.screenshotToolbarFavorites: favorites,
   };
 
   void validate() {
@@ -175,7 +185,7 @@ class ScreenshotToolbarPreferences {
     }
     final modifiers = [for (final column in columns) column.modifiers];
     if (modifiers.any((value) => !ToolbarModifiers.allowed.contains(value))) {
-      throw const FormatException('列的组合键只能是 ⌘、⌥、⌃ 的组合或无修饰，不能含 ⇧。');
+      throw const FormatException('每组的组合键必须是 ⌘、⌥、⌃ 的组合，不能无修饰或含 ⇧。');
     }
     if (modifiers.toSet().length != modifiers.length) {
       throw const FormatException('每一列的组合键不能重复。');
@@ -198,6 +208,9 @@ class ScreenshotToolbarPreferences {
     }
     if (hidden.any((id) => !ScreenshotActions.composable.containsKey(id))) {
       throw const FormatException('只能隐藏可拼接的截图功能。');
+    }
+    if (favorites.length > ToolbarGrid.slots) {
+      throw const FormatException('常用工具最多 6 个。');
     }
   }
 }

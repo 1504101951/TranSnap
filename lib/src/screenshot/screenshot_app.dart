@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -76,7 +77,7 @@ MouseCursor cursorForEditHandle(
   }
 }
 
-enum _ExpandedRow { recording, live, beautify, ratio }
+enum _ExpandedRow { recording, beautify, ratio }
 
 final _arrowDirections = <LogicalKeyboardKey, Offset>{
   LogicalKeyboardKey.arrowLeft: Offset(-1, 0),
@@ -97,12 +98,14 @@ class ScreenshotApp extends StatefulWidget {
   State<ScreenshotApp> createState() => _ScreenshotAppState();
 }
 
-class _ScreenshotAppState extends State<ScreenshotApp> {
+class _ScreenshotAppState extends State<ScreenshotApp>
+    with TickerProviderStateMixin {
   final EditDocument _document = EditDocument();
   final FocusNode _focusNode = FocusNode();
   _ExpandedRow? _expandedRow;
   bool get _recordingExpanded => _expandedRow == _ExpandedRow.recording;
-  bool get _liveExpanded => _expandedRow == _ExpandedRow.live;
+  bool _liveTranslation = false;
+  bool get _liveExpanded => _recordingExpanded && _liveTranslation;
   bool get _beautifyExpanded => _expandedRow == _ExpandedRow.beautify;
 
   double? _cropRatio;
@@ -116,7 +119,32 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   ({BoxHandle handle, BoxFrame start})? _stickerDrag;
 
   int _recordingDelay = 0;
-  RecordingClickEffect _recordingClickEffect = RecordingClickEffect.off;
+  bool _recordingClickEffectEnabled = false;
+  bool _childrenRevealed = false;
+  bool _toolbarExpanded = false;
+  bool _toolbarGridShown = false;
+  bool _toolbarSplitting = false;
+  final _favoritesKey = GlobalKey();
+  late final _toolbarGlide = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
+  Offset _toolbarShift = Offset.zero;
+  final _gridBlockKeys = <String, GlobalKey>{};
+  List<({_ToolbarCells group, Offset offset, Size size})> _ghosts = const [];
+  Size _ghostTarget = Size.zero;
+  late final _ghostMerge = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
+
+  Offset get _glideOffset => _toolbarShift * (1 - _toolbarGlide.value);
+  DateTime? _lastToolbarTab;
+  bool _toolbarHandleHovered = false;
+  bool _toolbarLifted = false;
+
+  static const _favoritesGroupKey = 'screenshot-favorites-group';
+  static const _toolbarTabInterval = Duration(milliseconds: 300);
   Map<Object?, Object?>? _recordingApplication;
   List<Map<Object?, Object?>> _recordingApplications = [];
   bool _loadingApplications = false;
@@ -268,9 +296,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   };
   bool _cropSelected = false;
 
-  String get _activeId => _liveExpanded
-      ? ScreenshotActions.live
-      : _recordingExpanded
+  String get _activeId => _recordingExpanded
       ? ScreenshotActions.record
       : _beautifyExpanded
       ? ScreenshotActions.beautify
@@ -281,7 +307,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   String? get _group {
     final id = _activeId;
     return _toolbar.parentOf(id) ??
-        (ScreenshotActions.composable[id]!.hostsChildren ? id : null);
+        (ScreenshotActions.composable[id]?.hostsChildren == true ? id : null);
   }
 
   List<String> _attributeIds(Map<String, VoidCallback?> actions) => actions.keys
@@ -324,8 +350,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _lastActiveId = active;
   }
 
-  List<String> get _visibleChildren => [
-    for (final id in _toolbar.children[_group] ?? const <String>[])
+  List<String> get _visibleChildren =>
+      _childrenRevealed ? _visibleChildrenOf(_group) : const [];
+
+  List<String> _visibleChildrenOf(String? parent) => [
+    for (final id in _toolbar.children[parent] ?? const <String>[])
       if (!_toolbar.hidden.contains(id)) id,
   ];
 
@@ -372,25 +401,37 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final groups = <_ToolbarCells>[];
     int? anchorGroup;
     int? closingGroup;
-    for (final (index, column) in _toolbar.columns.indexed) {
-      final cells = [
-        for (final id in column.slots)
-          id == null || _toolbar.hidden.contains(id) ? null : id,
-      ];
-      if (cells.every((id) => id == null)) continue;
-      if (anchorGroup == null && column.slots.contains(anchor)) {
+    final sources = [
+      (
+        key: _favoritesGroupKey,
+        cells: <String?>[..._toolbar.favorites],
+        modifiers: 0,
+      ),
+      if (_toolbarGridShown)
+        for (final (index, column) in _toolbar.columns.indexed)
+          (
+            key: 'screenshot-grid-group-$index',
+            cells: [
+              for (final id in column.slots)
+                id == null || _toolbar.hidden.contains(id) ? null : id,
+            ],
+            modifiers: column.modifiers,
+          ),
+    ];
+    for (final source in sources) {
+      if (source.key != _favoritesGroupKey &&
+          source.cells.every((id) => id == null)) {
+        continue;
+      }
+      if (anchorGroup == null && source.cells.contains(anchor)) {
         anchorGroup = groups.length;
       }
       if (closing != null &&
           closingGroup == null &&
-          column.slots.contains(closing.parent)) {
+          source.cells.contains(closing.parent)) {
         closingGroup = groups.length;
       }
-      groups.add((
-        key: 'screenshot-grid-group-$index',
-        cells: cells,
-        modifiers: column.modifiers,
-      ));
+      groups.add(source);
     }
     final shown = {
       for (final group in [...groups, ...inserted]) ...group.cells,
@@ -542,15 +583,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         anchor: ScreenshotActions.ratio,
         hosts: const {},
       ),
-    if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
+    if (_recordingExpanded && _tool == ScreenshotTool.crop)
       'recording-targets-row': (
-        count: 6,
-        anchor: _liveExpanded
-            ? ScreenshotActions.live
-            : ScreenshotActions.record,
+        count: 7,
+        anchor: ScreenshotActions.record,
         hosts: const {'recording-target-application': 1},
       ),
-      if ((_recordingExpanded || _liveExpanded) &&
+      if (_recordingExpanded &&
           _tool == ScreenshotTool.crop &&
           _recordingTarget == CaptureTarget.application)
         'recording-applications-row': (
@@ -650,9 +689,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               map[PreferenceKeys.screenshotConfirmAction] as String?,
             );
             _recordingDelay = map[PreferenceKeys.recordingDelay] as int? ?? 0;
-            _recordingClickEffect = RecordingClickEffect.parse(
-              map[PreferenceKeys.recordingClickEffect] as String?,
-            );
+            _recordingClickEffectEnabled =
+                map[PreferenceKeys.recordingClickEffectEnabled] as bool? ??
+                false;
             _readStickers(map);
           });
         }
@@ -680,11 +719,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             _textInputOpen) {
           return;
         }
-        final action = _toolbar.actionAt(
-          args['modifiers'] as int,
-          args['digit'] as int,
-        );
-        if (action != null) _toolbarActions()[action]?.call();
+        _runToolbarSlot(args['modifiers'] as int, args['digit'] as int);
+      } else if (call.method == MethodNames.screenshotToolbarTab) {
+        if (_capture['id'] == null ||
+            _capture['id'] != (call.arguments as Map)['id'] ||
+            _textInputOpen) {
+          return;
+        }
+        final now = DateTime.now();
+        final last = _lastToolbarTab;
+        if (last != null && now.difference(last) <= _toolbarTabInterval) {
+          _lastToolbarTab = null;
+          _toggleToolbarExpanded();
+        } else {
+          _lastToolbarTab = now;
+        }
       } else if (call.method == MethodNames.deleteScreenshotSelection) {
         final id = (call.arguments as Map)['id'];
         if (_capture['id'] == null || _capture['id'] != id || _textInputOpen) {
@@ -757,6 +806,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       (_) => unawaited(_perfMark('screenshot-dart-first-frame', firstFrame)),
     );
     _expandedRow = null;
+    _childrenRevealed = false;
+    _toolbarExpanded = false;
+    _toolbarGridShown = false;
+    _toolbarShift = Offset.zero;
+    _toolbarGlide.value = 1;
+    _ghosts = const [];
+    _ghostMerge.value = 1;
+    _lastToolbarTab = null;
+    _liveTranslation = false;
+    _toolbarHandleHovered = false;
+    _toolbarLifted = false;
     _beautify = null;
     _cropRatio = null;
     unawaited(_syncLivePreview());
@@ -780,9 +840,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         value[PreferenceKeys.screenshotConfirmAction] as String?,
       );
       _recordingDelay = value[PreferenceKeys.recordingDelay] as int? ?? 0;
-      _recordingClickEffect = RecordingClickEffect.parse(
-        value[PreferenceKeys.recordingClickEffect] as String?,
-      );
+      _recordingClickEffectEnabled =
+          value[PreferenceKeys.recordingClickEffectEnabled] as bool? ?? false;
       _readStickers(value);
       _drawing = DrawingPreferences.fromMap(
         value[PreferenceKeys.screenshotDrawing] as Map?,
@@ -1196,7 +1255,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         {
           'id': id,
           'kind':
-              (_recordingExpanded || _liveExpanded
+              (_recordingExpanded
                       ? _recordingTarget
                       : CaptureTarget.region)
                   .name,
@@ -1211,7 +1270,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   }
 
   List<Rect>? get _recordingWindows {
-    if ((!_recordingExpanded && !_liveExpanded) ||
+    if (!_recordingExpanded ||
         _recordingTarget != CaptureTarget.application ||
         _recordingApplication == null) {
       return null;
@@ -1292,8 +1351,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _busy = true;
       _busyId = scrolling
           ? ScreenshotActions.scrolling
-          : live
-          ? ScreenshotActions.live
           : ScreenshotActions.record;
     });
     try {
@@ -1325,7 +1382,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
 
   Future<void> _saveRecordingOptions({
     required int delay,
-    required RecordingClickEffect clickEffect,
+    required bool clickEffectEnabled,
   }) async {
     if (_busy) return;
     setState(() {
@@ -1337,13 +1394,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         MethodNames.saveRecordingOptions,
         {
           PreferenceKeys.recordingDelay: delay,
-          PreferenceKeys.recordingClickEffect: clickEffect.name,
+          PreferenceKeys.recordingClickEffectEnabled: clickEffectEnabled,
         },
       );
       if (!mounted) return;
       setState(() {
         _recordingDelay = delay;
-        _recordingClickEffect = clickEffect;
+        _recordingClickEffectEnabled = clickEffectEnabled;
       });
     } on PlatformException catch (error) {
       if (mounted) {
@@ -1361,7 +1418,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Future<void> _confirmScreenshot() async {
     if (_dialogOpen) return;
     if (_busy) return;
-    if (_recordingExpanded || _liveExpanded) {
+    if (_recordingExpanded) {
       if (_recordingTarget == CaptureTarget.application &&
           _recordingApplication == null) {
         return;
@@ -2558,6 +2615,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onModifierKey);
+    _toolbarGlide.dispose();
+    _ghostMerge.dispose();
     _feedbackTimer?.cancel();
     _picker.dispose();
     _toolbarRect.dispose();
@@ -2650,14 +2709,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             return KeyEventResult.handled;
           }
           final digit = ToolbarGrid.digits[event.physicalKey];
-          final action = digit == null
-              ? null
-              : _toolbar.actionAt(ToolbarModifiers.pressed(), digit);
-          if (action != null) {
-            _toolbarActions()[action]?.call();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
+          if (digit == null) return KeyEventResult.ignored;
+          return _runToolbarSlot(ToolbarModifiers.pressed(), digit)
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
         },
         child: Scaffold(
           backgroundColor: Colors.transparent,
@@ -2766,13 +2821,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   dragCurrent: _dragCurrent,
                   previewAnnotation: _previewAnnotation,
                   previewCrop:
-                      (_recordingExpanded || _liveExpanded) &&
+                      _recordingExpanded &&
                           _recordingTarget != CaptureTarget.region
                       ? Offset.zero & _document.imageSize
                       : _previewCrop,
                   recordingWindows: _recordingWindows,
                   recordingPreview:
-                      (_recordingExpanded || _liveExpanded) &&
+                      _recordingExpanded &&
                       _recordingTarget != CaptureTarget.region,
                   pixelRatio: _pixelRatio,
                   brushCursor: NativeBrushCursor(
@@ -2790,7 +2845,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   ),
                   busy:
                       _busy ||
-                      ((_recordingExpanded || _liveExpanded) &&
+                      (_recordingExpanded &&
                           _recordingTarget != CaptureTarget.region),
                   textInputOpen: _textInputOpen && !_dialogOpen,
                   sourceImage: _document.source,
@@ -2821,7 +2876,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   },
                   cropSelected:
                       _cropSelected &&
-                      !((_recordingExpanded || _liveExpanded) &&
+                      !(_recordingExpanded &&
                           _recordingTarget != CaptureTarget.region),
                   activeHandle: _resizeHandle,
                   onDoubleTapDown: (point) => _doubleTapPoint = point,
@@ -3080,6 +3135,91 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
+  void _toggleToolbarExpanded() =>
+      _setToolbarExpanded(!_toolbarExpanded);
+
+  Offset? _favoritesPosition() {
+    final box = _favoritesKey.currentContext?.findRenderObject();
+    return box is RenderBox && box.hasSize
+        ? box.localToGlobal(Offset.zero)
+        : null;
+  }
+
+  void _setToolbarExpanded(bool expand) {
+    if (expand == _toolbarExpanded) return;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    final before = _favoritesPosition();
+    final ghosts = expand || reduced || before == null
+        ? const <({_ToolbarCells group, Offset offset, Size size})>[]
+        : _departingGhosts(before);
+    final favorites = _favoritesKey.currentContext?.size ?? Size.zero;
+    _ghostMerge.stop();
+    setState(() {
+      _toolbarExpanded = expand;
+      _toolbarGridShown = expand;
+      _toolbarSplitting = expand;
+      _ghosts = ghosts;
+      _ghostTarget = favorites;
+    });
+    if (expand) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _toolbarSplitting = false,
+      );
+    } else if (ghosts.isNotEmpty) {
+      _ghostMerge.value = 0;
+      _ghostMerge
+          .animateWith(SpringSimulation(AppMotion.settleSpring, 0, 1, 0))
+          .then((_) {
+            if (mounted) setState(() => _ghosts = const []);
+          });
+    }
+    _glideFavoritesFrom(before);
+  }
+
+  List<({_ToolbarCells group, Offset offset, Size size})> _departingGhosts(
+    Offset favorites,
+  ) => [
+    for (final (index, column) in _toolbar.columns.indexed)
+      if (_gridBlockKeys['screenshot-grid-group-$index']?.currentContext
+          ?.findRenderObject()
+          case final RenderBox box when box.attached && box.hasSize)
+        (
+          group: (
+            key: 'screenshot-grid-group-$index',
+            cells: [
+              for (final id in column.slots)
+                id == null || _toolbar.hidden.contains(id) ? null : id,
+            ],
+            modifiers: column.modifiers,
+          ),
+          offset: box.localToGlobal(Offset.zero) - favorites,
+          size: box.size,
+        ),
+  ];
+
+  void _glideFavoritesFrom(Offset? before) {
+    if (before == null || MediaQuery.disableAnimationsOf(context)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final after = _favoritesPosition();
+      if (!mounted || after == null) return;
+      final shift = before - (after - _glideOffset);
+      if (shift.distance < 0.5) return;
+      _toolbarShift = shift;
+      _toolbarGlide.value = 0;
+      _toolbarGlide
+          .animateWith(SpringSimulation(AppMotion.bouncySpring, 0, 1, 0))
+          .then((_) => _toolbarGlide.value = 1);
+    });
+  }
+
+  bool _runToolbarSlot(int modifiers, int digit) {
+    final action = _toolbar.actionAt(modifiers, digit);
+    if (action == null) return false;
+    if (modifiers != 0 && !_toolbarExpanded) _setToolbarExpanded(true);
+    _toolbarActions()[action]?.call();
+    return true;
+  }
+
   Map<String, VoidCallback?> _toolbarActions() {
     final showDrawingAttributes = !_beautifyExpanded;
     final textControls =
@@ -3126,30 +3266,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           !(styleTool == ScreenshotTool.rect && _styleShape.filled))
         ScreenshotActions.width: () => _editDrawingStyle(color: false),
       for (final entry in _toolIds.entries)
-        entry.key: () => setState(() {
-          if (_textInputOpen) _commitText();
-          _tool = entry.value;
-          _expandedRow = null;
-          _ruler = null;
-          _picker.value = null;
-          unawaited(_syncRecordingPreview());
-          unawaited(_syncLivePreview());
-          _recordingApplication = null;
-          _selectedShapeId = null;
-          _selectedTextId = null;
-        }),
-      ScreenshotActions.live: _capture['canCaptureMedia'] == true
-          ? () {
-              setState(() {
-                _tool = ScreenshotTool.crop;
-                _expandedRow = _liveExpanded ? null : _ExpandedRow.live;
-                _selectedShapeId = null;
-                _selectedTextId = null;
-              });
-              unawaited(_syncRecordingPreview());
-              unawaited(_syncLivePreview());
-            }
-          : null,
+        if (entry.value != ScreenshotTool.cursor)
+          entry.key: () => setState(() {
+            if (_textInputOpen) _commitText();
+            _tool = _activeId == entry.key
+                ? ScreenshotTool.cursor
+                : entry.value;
+            _expandedRow = null;
+            _ruler = null;
+            _picker.value = null;
+            unawaited(_syncRecordingPreview());
+            unawaited(_syncLivePreview());
+            _recordingApplication = null;
+            _selectedShapeId = null;
+            _selectedTextId = null;
+          }),
       ScreenshotActions.beautify: _document.hasImage
           ? () {
               setState(() {
@@ -3192,7 +3323,21 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           {'path': _savedPath},
         ),
     };
-    return _busy ? actions.map((id, _) => MapEntry(id, null)) : actions;
+    if (_busy) return actions.map((id, _) => MapEntry(id, null));
+    if (_childrenRevealed) return actions;
+    return actions.map(
+      (id, action) => MapEntry(
+        id,
+        action == null
+            ? null
+            : () {
+                final revealOnly =
+                    _activeId == id && _visibleChildrenOf(id).isNotEmpty;
+                setState(() => _childrenRevealed = true);
+                if (!revealOnly) action();
+              },
+      ),
+    );
   }
 
   Widget _buildOpenedImageBar(
@@ -3204,13 +3349,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         _tool == ScreenshotTool.brush && brushMode == ShapeMode.mosaic;
     return ResultWindowBar(
       leading: [
-        ResultIconButton(
-          buttonKey: const Key(ScreenshotActions.cursor),
-          icon: LucideIcons.mousePointer,
-          tooltip: '光标',
-          selected: _tool == ScreenshotTool.cursor,
-          onPressed: actions[ScreenshotActions.cursor],
-        ),
         ResultIconButton(
           buttonKey: const Key(ScreenshotActions.rect),
           icon: LucideIcons.square,
@@ -3333,12 +3471,18 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final items = <Widget>[];
     var anchorIndex = -1;
 
-    void addItem(String id, IconData icon, {bool selected = false}) {
+    void addItem(
+      String id,
+      IconData? icon, {
+      bool selected = false,
+      Widget? glyph,
+    }) {
       if (items.isNotEmpty) items.add(const SizedBox(width: 4));
       items.add(
         ResultIconButton(
           buttonKey: Key(id),
           icon: icon,
+          glyph: glyph,
           tooltip: ScreenshotActions.labels[id] ?? id,
           compact: true,
           selected: selected,
@@ -3377,12 +3521,14 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         );
         addItem(
           '${ScreenshotActions.shapePrefix}filledRectangle',
-          LucideIcons.squareDot,
+          null,
+          glyph: const ShapeFillIcon(circle: false),
           selected: _styleShape == ShapeVariant.filledRectangle,
         );
         addItem(
           '${ScreenshotActions.shapePrefix}filledCircle',
-          LucideIcons.circleDot,
+          null,
+          glyph: const ShapeFillIcon(circle: true),
           selected: _styleShape == ShapeVariant.filledCircle,
         );
         addDivider();
@@ -3443,7 +3589,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     ];
   }
 
-  Widget _buildToolbar(BuildContext context, Axis axis, int perLine) {
+  Widget _buildToolbar(
+    BuildContext context,
+    Axis axis,
+    int perLine,
+    ValueChanged<Offset> onToolbarDrag,
+  ) {
+    var dragHandlePlaced = false;
     final actions = _toolbarActions();
     final cross = axis == Axis.horizontal ? Axis.vertical : Axis.horizontal;
     final colors = Theme.of(context).colorScheme;
@@ -3456,8 +3608,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ScreenshotActions.reveal: LucideIcons.folderOpen,
       '${ScreenshotActions.shapePrefix}rectangle': LucideIcons.square,
       '${ScreenshotActions.shapePrefix}circle': LucideIcons.circle,
-      '${ScreenshotActions.shapePrefix}filledRectangle': LucideIcons.squareDot,
-      '${ScreenshotActions.shapePrefix}filledCircle': LucideIcons.circleDot,
       '${ScreenshotActions.brushPrefix}solid': LucideIcons.brush,
       '${ScreenshotActions.brushPrefix}mosaic': LucideIcons.grid,
       '${ScreenshotActions.brushPrefix}highlighter': LucideIcons.highlighter,
@@ -3488,8 +3638,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           height: size,
           child: IconButton(
             key: Key(id),
-            tooltip:
-                '${ScreenshotActions.labels[id]}${_toolbar.shortcutLabel(id) == null ? '' : ' ${_toolbar.shortcutLabel(id)}'}',
+            tooltip: [
+              ScreenshotActions.labels[id]!,
+              ?_toolbar.shortcutLabel(id),
+            ].join(' '),
             onPressed: actions[id],
             style: ButtonStyle(
               padding: const WidgetStatePropertyAll(EdgeInsets.zero),
@@ -3503,7 +3655,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               ),
             ),
-            icon: LineIcon(icons[id] ?? LucideIcons.circleDot, size: compact ? 14 : 16),
+            icon: switch (id) {
+              '${ScreenshotActions.shapePrefix}filledRectangle' =>
+                ShapeFillIcon(circle: false, size: compact ? 14 : 16),
+              '${ScreenshotActions.shapePrefix}filledCircle' =>
+                ShapeFillIcon(circle: true, size: compact ? 14 : 16),
+              _ => LineIcon(
+                icons[id] ?? LucideIcons.circleDot,
+                size: compact ? 14 : 16,
+              ),
+            },
           ),
         ),
       );
@@ -3583,7 +3744,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final blockColor = dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC);
     final trayColor = dark ? const Color(0xFF1D1D1F) : const Color(0xFFECECED);
 
-    ShapeDecoration panel(Color color, double radius) => ShapeDecoration(
+    ShapeDecoration panel(Color color, double radius, double lift) =>
+        ShapeDecoration(
       color: color,
       shape: RoundedSuperellipseBorder(
         borderRadius: BorderRadius.circular(radius),
@@ -3594,24 +3756,51 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           width: 0.5,
         ),
       ),
-      shadows: const [
-        BoxShadow(
-          color: Color(0x33000000),
-          blurRadius: 12,
-          offset: Offset(0, 4),
-        ),
+      shadows: [
+        BoxShadow.lerp(
+          const BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+          const BoxShadow(
+            color: Color(0x4D000000),
+            blurRadius: 30,
+            offset: Offset(0, 12),
+          ),
+          lift,
+        )!,
       ],
     );
+    final liftDuration = reduced
+        ? Duration.zero
+        : MotionMetrics.iconSwitchDuration;
 
-    Widget block(Widget child) => DecoratedBox(
-      decoration: panel(blockColor, ToolbarGrid.blockRadius),
-      child: Padding(
+    Widget lifted(Color color, double radius, Widget child) =>
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: _toolbarLifted ? 1.0 : 0.0),
+          duration: liftDuration,
+          builder: (context, lift, child) => DecoratedBox(
+            decoration: panel(color, radius, lift),
+            child: child,
+          ),
+          child: child,
+        );
+
+    Widget block(Widget child) => lifted(
+      blockColor,
+      ToolbarGrid.blockRadius,
+      Padding(
         padding: const EdgeInsets.all(ToolbarGrid.blockPadding),
         child: child,
       ),
     );
 
-    Widget groupOf(_ToolbarCells group, {bool compact = false}) {
+    Widget groupOf(
+      _ToolbarCells group, {
+      bool compact = false,
+      bool ghost = false,
+    }) {
       final size = compact ? ToolbarGrid.trayButton : 32.0;
       final raised =
           group.modifiers != null && group.modifiers == _heldModifiers;
@@ -3684,11 +3873,32 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         height: axis == Axis.horizontal ? 32 : ToolbarGrid.hintExtent,
         child: label.isEmpty
             ? Center(
-                child: LineIcon(
-                  LucideIcons.keyboard,
+                child: DecoratedBox(
                   key: Key('toolbar-hint-${group.key}'),
-                  size: 14,
-                  color: colors.onSurfaceVariant,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: colors.onSurfaceVariant,
+                      width: ToolbarGrid.tabKeycapBorder,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      ToolbarGrid.tabKeycapRadius,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2.5,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      'tab',
+                      style: TextStyle(
+                        fontSize: ToolbarGrid.tabKeycapFont,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 ),
               )
             : Center(
@@ -3707,7 +3917,69 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               ),
       );
-      return block(
+      final handleActive = _toolbarHandleHovered || _toolbarLifted;
+      final hintControl = !dragHandlePlaced
+          ? Tooltip(
+              message: _toolbarExpanded
+                  ? '拖动移动工具栏，双击图标或连按两次 Tab 收起为常用工具栏'
+                  : '拖动移动工具栏，双击图标或连按两次 Tab 展开完整工具栏',
+              preferBelow: false,
+              child: MouseRegion(
+                cursor: _toolbarLifted
+                    ? SystemMouseCursors.grabbing
+                    : SystemMouseCursors.grab,
+                onEnter: (_) => setState(() => _toolbarHandleHovered = true),
+                onExit: (_) => setState(() => _toolbarHandleHovered = false),
+                child: GestureDetector(
+                  key: const Key('toolbar-drag-handle'),
+                  behavior: HitTestBehavior.opaque,
+                  dragStartBehavior: DragStartBehavior.down,
+                  onPanStart: (_) => setState(() => _toolbarLifted = true),
+                  onPanUpdate: (details) => onToolbarDrag(details.delta),
+                  onPanEnd: (_) => setState(() => _toolbarLifted = false),
+                  onPanCancel: () => setState(() => _toolbarLifted = false),
+                  onDoubleTap: _toggleToolbarExpanded,
+                  child: AnimatedContainer(
+                    duration: liftDuration,
+                    decoration: ShapeDecoration(
+                      color: handleActive
+                          ? colors.onSurface.withValues(alpha: 0.06)
+                          : Colors.transparent,
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: AppMotion.iconSwitcher(
+                      context,
+                      handleActive
+                          ? SizedBox(
+                              key: const Key('toolbar-drag-grip'),
+                              width: axis == Axis.horizontal
+                                  ? ToolbarGrid.hintExtent
+                                  : 32,
+                              height: axis == Axis.horizontal
+                                  ? 32
+                                  : ToolbarGrid.hintExtent,
+                              child: Center(
+                                child: LineIcon(
+                                  LucideIcons.gripVertical,
+                                  size: 14,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ),
+                            )
+                          : KeyedSubtree(
+                              key: const ValueKey('toolbar-drag-hint'),
+                              child: hint,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : hint;
+      dragHandlePlaced = true;
+      final framed = block(
         AnimatedOpacity(
           opacity: _heldModifiers != 0 && !raised ? 0.4 : 1,
           duration: reduced ? Duration.zero : GlassMetrics.transition,
@@ -3715,8 +3987,22 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             direction: axis,
             mainAxisSize: MainAxisSize.min,
             spacing: 4,
-            children: [hint, row],
+            children: [hintControl, row],
           ),
+        ),
+      );
+      if (ghost) return framed;
+      if (group.key == _favoritesGroupKey) {
+        return KeyedSubtree(key: _favoritesKey, child: framed);
+      }
+      return LiquidBlockSplit(
+        key: ValueKey('split-${group.key}'),
+        origin: _favoritesKey,
+        order: int.tryParse(group.key.split('-').last) ?? 0,
+        entering: _toolbarSplitting,
+        child: KeyedSubtree(
+          key: _gridBlockKeys.putIfAbsent(group.key, GlobalKey.new),
+          child: framed,
         ),
       );
     }
@@ -3877,7 +4163,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               selected: _cropRatio == preset.ratio,
             ),
         ]),
-      if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
+      if (_recordingExpanded && _tool == ScreenshotTool.crop)
         'recording-targets-row': captureRow('recording-targets-row', [
           for (final target in const {
             CaptureTarget.region: ('当前选区', LucideIcons.crop),
@@ -3901,8 +4187,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                     )
                   : button;
             })(),
-          if (!_liveExpanded)
-            MenuAnchor(
+          MenuAnchor(
               style: NativeGlassMenuPanel.anchorStyle,
               menuChildren: [
                 NativeGlassMenuPanel(
@@ -3913,23 +4198,20 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                         checked: delay == _recordingDelay,
                         onPressed: () => _saveRecordingOptions(
                           delay: delay,
-                          clickEffect: _recordingClickEffect,
+                          clickEffectEnabled: _recordingClickEffectEnabled,
                         ),
                       ),
                     const Divider(height: 9, thickness: 1),
-                    for (final effect in RecordingClickEffect.values)
-                      NativeGlassMenuItem(
-                        label: effect == RecordingClickEffect.off
-                            ? '点击特效：关闭'
-                            : effect.label,
-                        checked: effect == _recordingClickEffect,
-                        onPressed: _recordingTarget == CaptureTarget.application
-                            ? null
-                            : () => _saveRecordingOptions(
-                                delay: _recordingDelay,
-                                clickEffect: effect,
-                              ),
-                      ),
+                    NativeGlassMenuItem(
+                      label: '包含点击特效',
+                      checked: _recordingClickEffectEnabled,
+                      onPressed: _recordingTarget == CaptureTarget.application
+                          ? null
+                          : () => _saveRecordingOptions(
+                              delay: _recordingDelay,
+                              clickEffectEnabled: !_recordingClickEffectEnabled,
+                            ),
+                    ),
                   ],
                 ),
               ],
@@ -3938,11 +4220,18 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 const LineIcon(LucideIcons.sliders, size: 14),
                 () =>
                     controller.isOpen ? controller.close() : controller.open(),
-                selected:
-                    _recordingDelay != 0 ||
-                    _recordingClickEffect != RecordingClickEffect.off,
+                selected: controller.isOpen,
               ),
             ),
+          captureButton(
+            '实时翻译',
+            const LineIcon(LucideIcons.captions, size: 14),
+            () {
+              setState(() => _liveTranslation = !_liveTranslation);
+              unawaited(_syncLivePreview());
+            },
+            selected: _liveTranslation,
+          ),
           captureButton(
             _liveExpanded ? '开始实时翻译' : '开始录制',
             const LineIcon(LucideIcons.circleDot, size: 14),
@@ -3963,7 +4252,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             }),
           ),
         ]),
-      if ((_recordingExpanded || _liveExpanded) &&
+      if (_recordingExpanded &&
           _tool == ScreenshotTool.crop &&
           _recordingTarget == CaptureTarget.application)
         'recording-applications-row': captureRow('recording-applications-row', [
@@ -4020,9 +4309,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         if (index > 0) children.add(separator());
         children.add(groupOf(group, compact: true));
       }
-      final body = DecoratedBox(
-        decoration: panel(trayColor, ToolbarGrid.trayRadius),
-        child: Padding(
+      final body = lifted(
+        trayColor,
+        ToolbarGrid.trayRadius,
+        Padding(
           padding: const EdgeInsets.all(ToolbarGrid.trayPadding),
           child: strip
               ? strips[row.strip]!
@@ -4065,7 +4355,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    return Flex(
+    final toolbar = Flex(
       key: const Key('screenshot-toolbar'),
       direction: cross,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4085,6 +4375,64 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   ),
           ),
       ],
+    );
+    final ghosts = [
+      for (final ghost in _ghosts)
+        (ghost: ghost, child: groupOf(ghost.group, ghost: true)),
+    ];
+    return AnimatedBuilder(
+      animation: _toolbarGlide,
+      builder: (context, child) =>
+          Transform.translate(offset: _glideOffset, child: child),
+      child: ghosts.isEmpty
+          ? toolbar
+          : Stack(
+              clipBehavior: Clip.none,
+              children: [
+                toolbar,
+                for (final (:ghost, :child) in ghosts)
+                  AnimatedBuilder(
+                    animation: _ghostMerge,
+                    child: IgnorePointer(child: ExcludeSemantics(child: child)),
+                    builder: (context, child) {
+                      final t = _ghostMerge.value;
+                      final target = Offset(
+                        (_ghostTarget.width - ghost.size.width) / 2,
+                        0,
+                      );
+                      final at = Offset.lerp(ghost.offset, target, t)!;
+                      final blur =
+                          MotionMetrics.blockSplitBlur * t.clamp(0.0, 1.0);
+                      return Positioned(
+                        key: ValueKey('ghost-${ghost.group.key}'),
+                        left: at.dx,
+                        top: at.dy,
+                        child: Opacity(
+                          opacity: (1 - t).clamp(0.0, 1.0),
+                          child: Transform(
+                            alignment: Alignment.topCenter,
+                            transform: Matrix4.diagonal3Values(
+                              1 +
+                                  (_ghostTarget.width / ghost.size.width - 1) *
+                                      t.clamp(0.0, 1.0),
+                              1,
+                              1,
+                            ),
+                            child: ImageFiltered(
+                              enabled: blur > 0.01,
+                              imageFilter: ui.ImageFilter.blur(
+                                sigmaX: blur,
+                                sigmaY: blur,
+                              ),
+                              child: child,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -4191,7 +4539,12 @@ class _EditorSurface extends StatefulWidget {
   final VoidCallback onDoubleTap;
   final ValueChanged<Offset> onDoubleTapDown;
 
-  final Widget Function(BuildContext context, Axis axis, int perLine)
+  final Widget Function(
+    BuildContext context,
+    Axis axis,
+    int perLine,
+    ValueChanged<Offset> onToolbarDrag,
+  )
   toolbarBuilder;
   final List<_OcrOverlay> ocrOverlays;
 
@@ -4202,6 +4555,22 @@ class _EditorSurface extends StatefulWidget {
 class _EditorSurfaceState extends State<_EditorSurface> {
   final _vertical = ScrollController();
   final _horizontal = ScrollController();
+  Offset _toolbarDragOffset = Offset.zero;
+  Rect? _lastCropRect;
+
+  void _onToolbarDrag(Offset delta, Rect baseRect, Rect safeBounds) {
+    final next = baseRect.shift(_toolbarDragOffset + delta);
+    final maxLeft = math.max(safeBounds.left, safeBounds.right - next.width);
+    final maxTop = math.max(safeBounds.top, safeBounds.bottom - next.height);
+    final clampedLeft = next.left.clamp(safeBounds.left, maxLeft).toDouble();
+    final clampedTop = next.top.clamp(safeBounds.top, maxTop).toDouble();
+    setState(() {
+      _toolbarDragOffset = Offset(
+        clampedLeft - baseRect.left,
+        clampedTop - baseRect.top,
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -4216,6 +4585,28 @@ class _EditorSurfaceState extends State<_EditorSurface> {
       animation: Listenable.merge([_vertical, _horizontal]),
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
+          final cropRect = widget.document.cropRect;
+          if (_lastCropRect != cropRect) {
+            _lastCropRect = cropRect;
+            _toolbarDragOffset = Offset.zero;
+          }
+          final safeBounds =
+              widget.toolbarSafeArea == null || widget.displaySize == null
+              ? (Offset.zero & constraints.biggest)
+              : Rect.fromLTRB(
+                  widget.toolbarSafeArea!.left *
+                      constraints.maxWidth /
+                      widget.displaySize!.width,
+                  widget.toolbarSafeArea!.top *
+                      constraints.maxHeight /
+                      widget.displaySize!.height,
+                  widget.toolbarSafeArea!.right *
+                      constraints.maxWidth /
+                      widget.displaySize!.width,
+                  widget.toolbarSafeArea!.bottom *
+                      constraints.maxHeight /
+                      widget.displaySize!.height,
+                );
           final imageSize = widget.document.imageSize;
           final imageScale = widget.imageScale;
           final resultSize = imageScale == null ? null : imageSize / imageScale;
@@ -4289,7 +4680,21 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             lines = widget.lines(perLine);
             layout = placeFor(lines);
           }
-          final toolbarRect = layout.toolbar;
+          final shiftedToolbar = layout.toolbar.shift(_toolbarDragOffset);
+          final maxToolbarLeft = math.max(
+            safeBounds.left,
+            safeBounds.right - shiftedToolbar.width,
+          );
+          final maxToolbarTop = math.max(
+            safeBounds.top,
+            safeBounds.bottom - shiftedToolbar.height,
+          );
+          final toolbarRect = Rect.fromLTWH(
+            shiftedToolbar.left.clamp(safeBounds.left, maxToolbarLeft).toDouble(),
+            shiftedToolbar.top.clamp(safeBounds.top, maxToolbarTop).toDouble(),
+            shiftedToolbar.width,
+            shiftedToolbar.height,
+          );
           if (widget.toolbarRect.value != toolbarRect) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && widget.toolbarRect.value != toolbarRect) {
@@ -4704,7 +5109,7 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   ),
                 if (!widget.openedImage && lines.lengths.isNotEmpty)
                   Positioned.fromRect(
-                    rect: layout.toolbar,
+                    rect: toolbarRect,
                     child: Visibility(
                       visible: widget.dragStart == null || widget.textInputOpen,
                       maintainState: true,
@@ -4713,6 +5118,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         context,
                         layout.axis,
                         perLine,
+                        (delta) =>
+                            _onToolbarDrag(delta, layout.toolbar, safeBounds),
                       ),
                     ),
                   ),

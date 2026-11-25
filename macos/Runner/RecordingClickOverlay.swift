@@ -7,8 +7,7 @@ final class RecordingClickOverlay {
     private var hostLayer: CALayer?
     private var windowFrame: NSRect = .zero
     private var backingScale: CGFloat = 2
-    private var effect: RecordingClickEffect = .off
-    private var rightDistinct = true
+    private var effect: RecordingClickEffect = .optical
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var activePressLayers: [Int: [CALayer]] = [:]
@@ -22,15 +21,15 @@ final class RecordingClickOverlay {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
     }
 
-    static func resolvedConfig(preferences: [String: Any]) -> (effect: RecordingClickEffect, rightDistinct: Bool) {
+    static func resolvedConfig(preferences: [String: Any]) -> (enabled: Bool, effect: RecordingClickEffect) {
         let raw = preferences[AppConstants.recordingClickEffectKey] as? String
-        let effect = raw.flatMap(RecordingClickEffect.init(rawValue:)) ?? .off
-        let rightDistinct = preferences[AppConstants.recordingClickRightDistinctKey] as? Bool ?? true
-        return (effect, rightDistinct)
+        let effect = raw.flatMap(RecordingClickEffect.init(rawValue:)) ?? .optical
+        let enabled = preferences[AppConstants.recordingClickEffectEnabledKey] as? Bool ?? false
+        return (enabled, effect)
     }
 
-    static func shouldRenderOverlay(effect: RecordingClickEffect, isApplicationTarget: Bool) -> Bool {
-        !isApplicationTarget && effect != .off && effect != .system
+    static func shouldRenderOverlay(enabled: Bool, effect: RecordingClickEffect, isApplicationTarget: Bool) -> Bool {
+        enabled && !isApplicationTarget && effect != .system
     }
 
     nonisolated static func shouldAcceptMonitorEvent(_ event: NSEvent) -> Bool {
@@ -50,11 +49,10 @@ final class RecordingClickOverlay {
         stop()
         let config = Self.resolvedConfig(preferences: preferences)
         guard let frame, !frame.isEmpty,
-              Self.shouldRenderOverlay(effect: config.effect, isApplicationTarget: isApplicationTarget) else {
+              Self.shouldRenderOverlay(enabled: config.enabled, effect: config.effect, isApplicationTarget: isApplicationTarget) else {
             return
         }
         effect = config.effect
-        rightDistinct = config.rightDistinct
         windowFrame = frame
 
         let overlay = NSPanel(
@@ -144,7 +142,6 @@ final class RecordingClickOverlay {
         backingScale = screenScale(for: globalPoint)
         let right = Self.isRightClick(type)
         let buttonKey = right ? 2 : 0
-        let distinctRight = right && rightDistinct
 
         switch type {
         case .leftMouseDown, .rightMouseDown:
@@ -152,7 +149,7 @@ final class RecordingClickOverlay {
             lastTrailPoints.removeValue(forKey: buttonKey)
             guard let point = Self.localPoint(globalPoint: globalPoint, in: windowFrame) else { return }
             lastTrailPoints[buttonKey] = point
-            activePressLayers[buttonKey] = makePressLayers(at: point, isRight: distinctRight, in: rootLayer)
+            activePressLayers[buttonKey] = makePressLayers(at: point, isRight: right, in: rootLayer)
 
         case .leftMouseDragged, .rightMouseDragged:
             guard let point = Self.localPoint(globalPoint: globalPoint, in: windowFrame) else { return }
@@ -162,12 +159,12 @@ final class RecordingClickOverlay {
                 for layer in layers { layer.position = point }
                 CATransaction.commit()
             }
-            if rightDistinct && !isReduceMotion() {
+            if !isReduceMotion() {
                 if let last = lastTrailPoints[buttonKey] {
                     let distance = hypot(point.x - last.x, point.y - last.y)
                     if distance >= AppConstants.clickEffectTrailMinDistance {
                         lastTrailPoints[buttonKey] = point
-                        emitTrailDot(at: point, isRight: distinctRight, in: rootLayer)
+                        emitTrailDot(at: point, isRight: right, in: rootLayer)
                     }
                 } else {
                     lastTrailPoints[buttonKey] = point
@@ -178,7 +175,7 @@ final class RecordingClickOverlay {
             clearPressLayers(for: buttonKey)
             lastTrailPoints.removeValue(forKey: buttonKey)
             guard let point = Self.localPoint(globalPoint: globalPoint, in: windowFrame) else { return }
-            emitReleaseEffect(at: point, isRight: distinctRight, in: rootLayer)
+            emitReleaseEffect(at: point, isRight: right, in: rootLayer)
 
         default:
             break
@@ -262,13 +259,13 @@ final class RecordingClickOverlay {
     }
 
     private func emitReleaseEffect(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
-        guard effect != .off, effect != .system else { return }
+        guard effect != .system else { return }
         if isReduceMotion() {
             emitReducedMotionRelease(at: point, isRight: isRight, in: rootLayer)
             return
         }
         switch effect {
-        case .off, .system:
+        case .system:
             break
         case .optical:
             emitOptical(at: point, isRight: isRight, in: rootLayer)

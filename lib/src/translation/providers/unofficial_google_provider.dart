@@ -61,9 +61,10 @@ class UnofficialGoogleProvider implements BatchTranslationProvider {
       if (!active) return;
       final status = response.statusCode;
       if (status < 200 || status >= 300) {
+        final location = response.headers.value(HttpHeaders.locationHeader) ?? '';
         emit(
           BatchFailure(
-            'Unofficial Google Provider 请求失败（HTTP $status）。',
+            _statusMessage(status, location),
             status == 429
                 ? TranslationFailureKind.rateLimited
                 : status >= 500
@@ -99,21 +100,21 @@ class UnofficialGoogleProvider implements BatchTranslationProvider {
       } on SocketException {
         emit(
           const BatchFailure(
-            'Unofficial Google Provider 无法连接，请检查网络。',
+            '谷歌翻译无法连接，请检查网络。',
             TranslationFailureKind.transient,
           ),
         );
       } on FormatException {
         emit(
           const BatchFailure(
-            'Unofficial Google Provider 返回了无法解析的响应。',
+            '谷歌翻译返回了无法解析的响应。',
             TranslationFailureKind.transient,
           ),
         );
       } catch (_) {
         emit(
           const BatchFailure(
-            'Unofficial Google Provider 请求失败。',
+            '谷歌翻译请求失败。',
             TranslationFailureKind.transient,
           ),
         );
@@ -154,6 +155,19 @@ class UnofficialGoogleProvider implements BatchTranslationProvider {
       ).query,
     );
     return connection;
+  }
+
+  static String _statusMessage(int status, String location) {
+    if (status >= 300 && status < 400) {
+      if (location.toLowerCase().contains('/sorry')) {
+        return '谷歌翻译触发风控验证（HTTP $status），请切换网络节点或改用其他翻译服务。';
+      }
+      return '谷歌翻译被重定向拦截（HTTP $status），可能触发了风控验证或网络跳转，请切换网络节点或改用其他翻译服务。';
+    }
+    if (status == 429) {
+      return '谷歌翻译请求过于频繁（HTTP 429），请稍后重试或改用其他翻译服务。';
+    }
+    return '谷歌翻译请求失败（HTTP $status）。';
   }
 
   static String parseTranslatedText(String raw) {

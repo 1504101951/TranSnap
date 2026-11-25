@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:transnap/src/common/constants/screenshot_actions.dart';
 
 Future<ui.Image> decodePng(Uint8List png) async {
   final codec = await ui.instantiateImageCodec(png);
@@ -39,4 +41,17 @@ Future<void> awaitCaptureSource(WidgetTester tester) async {
     );
     await tester.pump();
   }
+}
+
+Future<void> revealToolbarChildren(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key(ScreenshotActions.crop)));
+  await tester.pumpAndSettle();
+}
+
+Future<void> showFullToolbar(WidgetTester tester) async {
+  final handle = find.byKey(const Key('toolbar-drag-handle'));
+  await tester.tap(handle);
+  await tester.pump(const Duration(milliseconds: 50));
+  await tester.tap(handle);
+  await tester.pumpAndSettle();
 }

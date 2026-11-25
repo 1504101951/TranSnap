@@ -1048,6 +1048,18 @@ class RunnerTests: XCTestCase {
         }
         XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXStaticText", "AXWebArea"], hasAXText: true, allowCopy: true))
         XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXTextArea"], hasAXText: true, allowCopy: true))
+        XCTAssertTrue(TextSelectionContext.shouldCopySelection(
+            ancestorRoles: ["AXGroup"],
+            hasAXText: true,
+            allowCopy: true,
+            axText: "First item.• Second item."
+        ))
+        XCTAssertFalse(TextSelectionContext.shouldCopySelection(
+            ancestorRoles: ["AXGroup"],
+            hasAXText: true,
+            allowCopy: true,
+            axText: "• First item.\n  • Second item."
+        ))
 
         XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
             axText: "• First item.• Second item.",
@@ -1076,6 +1088,26 @@ class RunnerTests: XCTestCase {
         XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
             axText: "Adding tests.",
             copiedText: "Tests adding."
+        ))
+        XCTAssertTrue(TextSelectionContext.acceptsCopiedText(
+            ancestorRoles: ["AXStaticText", "AXGroup", "AXWebArea"],
+            axText: "Done.已运行 1 个命令已运行 1 个命令Next step.",
+            copiedText: "Done.\nRan 1 command\nNext step."
+        ))
+        XCTAssertFalse(TextSelectionContext.acceptsCopiedText(
+            ancestorRoles: ["AXStaticText", "AXWebArea"],
+            axText: "Done.",
+            copiedText: " \n "
+        ))
+        XCTAssertTrue(TextSelectionContext.acceptsCopiedText(
+            ancestorRoles: ["AXTextArea"],
+            axText: nil,
+            copiedText: "Line one\nLine two"
+        ))
+        XCTAssertFalse(TextSelectionContext.acceptsCopiedText(
+            ancestorRoles: ["AXTextArea"],
+            axText: "• First item.",
+            copiedText: "Unrelated clipboard text"
         ))
     }
 
@@ -1179,6 +1211,21 @@ class RunnerTests: XCTestCase {
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user), "en")
         XCTAssertNil(LanguageDetection.resolve(
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: ["en", "fr"]))
+        XCTAssertEqual(LanguageDetection.resolve(
+            hypotheses: [("en", 0.34), ("nl", 0.20), ("ro", 0.12)], text: "pot", preferred: ["zh-CN"]), "en")
+        XCTAssertEqual(LanguageDetection.resolve(
+            hypotheses: [("pt", 0.48), ("es", 0.30), ("it", 0.10)], text: "banco", preferred: ["zh-CN"]), "pt")
+        XCTAssertNil(LanguageDetection.resolve(
+            hypotheses: [("tr", 0.31), ("pl", 0.20), ("ro", 0.10)], text: "analyze", preferred: ["zh-CN", "fr", "de"]))
+    }
+
+    func testLanguageDetectionShortEnglishWithoutLatinUserLanguage() {
+        let user = ["zh-CN"]
+        for word in ["analyze", "ok", "API", "Hello", "Animation duration"] {
+            XCTAssertEqual(LanguageDetection.detect(word, preferred: user), "en", word)
+        }
+        XCTAssertEqual(LanguageDetection.detect("Bonjour", preferred: user), "fr")
+        XCTAssertEqual(LanguageDetection.detect("Danke schön", preferred: user), "de")
     }
 
     func testLanguageDetectionHintsFavorUserLanguages() {
@@ -1194,7 +1241,7 @@ class RunnerTests: XCTestCase {
         let hints = LanguageDetection.hints(preferred: ["zh-CN", "pt-BR", "xx"])
         XCTAssertEqual(hints[NLLanguage("zh-Hans")], AppConstants.languageDetectionUserWeight)
         XCTAssertEqual(hints[NLLanguage("pt")], AppConstants.languageDetectionUserWeight)
-        XCTAssertEqual(hints[NLLanguage("en")], AppConstants.languageDetectionPopularWeight)
+        XCTAssertEqual(hints[NLLanguage("en")], AppConstants.languageDetectionEnglishWeight)
         XCTAssertEqual(hints[NLLanguage("ro")], AppConstants.languageDetectionBaseWeight)
         XCTAssertNil(hints[NLLanguage("xx")])
         XCTAssertEqual(hints.count, AppConstants.languageDetectionAll.count)
@@ -1613,5 +1660,19 @@ final class WindowStartupTests: XCTestCase {
         let reopened = try await visibleWindow(title: title)
         let next = try XCTUnwrap(reopened.contentViewController?.children.first as? FlutterViewController)
         XCTAssertFalse(next.engine === flutter.engine)
+    }
+
+    func testOverlayTooltipBubbleFrame() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let size = NSSize(width: 44, height: 24)
+        let anchor = NSRect(x: 920, y: 700, width: 32, height: 32)
+        let above = OverlayTooltipBubble.frame(size: size, anchor: anchor, screen: screen, preferAbove: true)
+        XCTAssertEqual(above.minY, 738, accuracy: 0.5)
+        XCTAssertEqual(above.midX, 936, accuracy: 0.5)
+
+        let topAnchor = NSRect(x: 960, y: 760, width: 32, height: 32)
+        let clampedAndFlipped = OverlayTooltipBubble.frame(size: size, anchor: topAnchor, screen: screen, preferAbove: true)
+        XCTAssertEqual(clampedAndFlipped.maxY, 754, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(clampedAndFlipped.maxX, 994)
     }
 }

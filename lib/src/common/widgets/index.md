@@ -11,3 +11,4 @@
 7. [result_window.dart](result_window.dart)：提供录制、长截图与打开图片共用的结果窗口衬底、媒体框、52pt 底部操作栏、按钮与向上展开属性托盘。
 8. [window_drag_area.dart](window_drag_area.dart)：让通顶窗口标题栏带的空白处可以拖动原生窗口。
 9. [line_icon.dart](line_icon.dart)：按显示尺寸选用 Lucide 字重，使各尺寸图标的屏幕线宽接近 1.6pt。
+10. [app_tooltip.dart](app_tooltip.dart)：提供统一的悬浮气泡提示组件，支持在浮层窗口中经原生气泡突破窗口边界显示。

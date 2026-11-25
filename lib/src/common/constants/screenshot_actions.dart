@@ -36,7 +36,6 @@ abstract final class ScreenshotActions {
   static const colorPrefix = 'screenshot-text-color-';
 
   static const composable = <String, ({IconData icon, bool hostsChildren})>{
-    cursor: (icon: LucideIcons.mousePointer, hostsChildren: true),
     crop: (icon: LucideIcons.crop, hostsChildren: true),
     record: (icon: LucideIcons.video, hostsChildren: false),
     scrolling: (icon: LucideIcons.unfoldVertical, hostsChildren: false),
@@ -55,12 +54,25 @@ abstract final class ScreenshotActions {
     copy: (icon: LucideIcons.copy, hostsChildren: false),
     ocrCopy: (icon: LucideIcons.scanText, hostsChildren: false),
     ocrTranslate: (icon: LucideIcons.languages, hostsChildren: false),
-    live: (icon: LucideIcons.captions, hostsChildren: false),
     close: (icon: LucideIcons.x, hostsChildren: false),
   };
 
+  static const defaultFavorites = [
+    crop,
+    rect,
+    record,
+    ocrCopy,
+    ocrTranslate,
+    pin,
+  ];
+
+  static const defaultGroups = [
+    [arrow, step, text, brush],
+    [beautify, ratio, save, copy, close],
+  ];
+
   static const defaultChildren = <String, List<String>>{
-    crop: [record, scrolling, eyedropper, ruler],
+    crop: [scrolling, eyedropper, ruler],
     beautify: [sticker],
   };
 

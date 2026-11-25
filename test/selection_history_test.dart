@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:transnap/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:transnap/src/common/widgets/app_tooltip.dart';
 import 'package:transnap/src/overlay/translation_overlay.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:transnap/src/selection/selection_translation_app.dart'
@@ -318,7 +319,10 @@ void main() {
 
     await choose(TextMode.polish);
     expect(session.snapshot.translatedText, 'Hello.');
-    expect(find.text('复制润色'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) => w is AppTooltip && w.message == '复制润色'),
+      findsOneWidget,
+    );
     expect(history.page(), hasLength(1));
     await choose(TextMode.translate);
     expect(session.snapshot.translatedText, '你好');
@@ -395,9 +399,12 @@ void main() {
     expect(looked, ['serendipity']);
     expect(find.text('词典'), findsOneWidget);
     expect(find.text('serendipity | noun 机缘凑巧'), findsOneWidget);
-    await tester.tap(find.text('加入生词本'));
+    await tester.tap(find.byKey(const ValueKey('card-vocabulary')));
     await tester.pump();
-    expect(find.text('已加入生词本'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) => w is AppTooltip && w.message == '已加入生词本'),
+      findsOneWidget,
+    );
     expect(
       [for (final e in vocabulary.list()) (e.word, e.translation)],
       [('serendipity', '机缘凑巧')],
@@ -406,7 +413,7 @@ void main() {
     await translate('sentence', 'this is a long sentence');
     expect(looked, ['serendipity']);
     expect(find.text('词典'), findsNothing);
-    expect(find.text('加入生词本'), findsNothing);
+    expect(find.byKey(const ValueKey('card-vocabulary')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

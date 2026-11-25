@@ -2,11 +2,13 @@ import 'text_mode.dart';
 
 abstract final class PreferenceKeys {
   static const screenshotDrawing = 'screenshotDrawing';
-  static const screenshotToolbarHidden = 'screenshotToolbarHidden';
+  static const screenshotToolbarHidden = 'screenshotToolbarHiddenIds';
 
-  static const screenshotToolbarColumns = 'screenshotToolbarColumns';
+  static const screenshotToolbarColumns = 'screenshotToolbarGrid';
 
-  static const screenshotToolbarChildren = 'screenshotToolbarChildren';
+  static const screenshotToolbarChildren = 'screenshotToolbarNested';
+
+  static const screenshotToolbarFavorites = 'screenshotToolbarQuickTools';
 
   static const automatic = 'automatic';
 
@@ -17,7 +19,7 @@ abstract final class PreferenceKeys {
   static const screenshotIncludesCursor = 'screenshotIncludesCursor';
 
   static const recordingClickEffect = 'recordingClickEffect';
-  static const recordingClickRightDistinct = 'recordingClickRightDistinct';
+  static const recordingClickEffectEnabled = 'recordingClickEffectEnabled';
 
   static const recordingDelay = 'recordingDelay';
 

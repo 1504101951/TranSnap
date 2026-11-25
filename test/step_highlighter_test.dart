@@ -181,6 +181,7 @@ void main() {
 
   testWidgets('编号工具连续单击放置标记不触发双击复制，拖动在松开处放置，撤销移除最后一个', (tester) async {
     final channel = await _pumpEditor(tester, 'test/step-tool');
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.step)));
     await tester.pumpAndSettle();
     for (final x in [100.0, 160.0, 220.0]) {
@@ -211,6 +212,7 @@ void main() {
 
   testWidgets('画笔第二行选择荧光笔后按默认黄色 16pt 半透明绘制', (tester) async {
     final channel = await _pumpEditor(tester, 'test/highlighter');
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
     final mode = find.byKey(

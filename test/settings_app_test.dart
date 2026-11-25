@@ -249,7 +249,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(state[PreferenceKeys.services], isEmpty);
-    expect(state[PreferenceKeys.defaultServiceId], 'unofficial-google');
+    expect(state[PreferenceKeys.defaultServiceId], ServiceConfig.systemId);
   });
 
   testWidgets('侧边栏：点选二级行切换子页并显示标题，一级标签不切换，切换保留未保存草稿', (tester) async {
@@ -360,7 +360,7 @@ void main() {
     await openSettingsPage(tester, '工具栏');
     expect(find.byType(Dialog), findsNothing);
     expect(
-      find.byKey(const ValueKey('toolbar-cell-screenshot-tool-cursor')),
+      find.byKey(const ValueKey('toolbar-cell-screenshot-tool-arrow')),
       findsOneWidget,
     );
     expect(find.text('增大字号'), findsNothing);
@@ -837,7 +837,7 @@ void main() {
     expect(state[PreferenceKeys.scrollCaptureMode], 'automatic');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图录制页：指针开关默认关闭，点击特效下拉7项可选，右键与拖动区分默认开启并可自动保存（#105、#143）', (
+  testWidgets('截图录制页：指针开关默认关闭，「录制包含点击特效」默认关闭可自动保存；个性化页 6 种样式可选并保存（#105、#143）', (
     tester,
   ) async {
     const channel = MethodChannel(ChannelNames.settings);
@@ -882,121 +882,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(state[PreferenceKeys.screenshotIncludesCursor], isTrue);
 
-    final effectDropdown = find.byWidgetPredicate(
-      (w) => w is NativeGlassDropdown<RecordingClickEffect>,
+    final effectTile = find.byWidgetPredicate(
+      (w) => w is NativeGlassSwitchTile && w.title == '录制包含点击特效',
     );
     await tester.scrollUntilVisible(
-      effectDropdown,
+      effectTile,
       200,
       scrollable: settingsContentScrollable(),
     );
-    expect(
-      tester
-          .widget<NativeGlassDropdown<RecordingClickEffect>>(effectDropdown)
-          .value,
-      RecordingClickEffect.off,
-    );
+    expect(tester.widget<NativeGlassSwitchTile>(effectTile).value, isFalse);
+    expect(find.text('区分右键与拖动轨迹'), findsNothing);
     await tester.tap(
-      find.descendant(of: effectDropdown, matching: find.text('关闭')),
+      find.descendant(of: effectTile, matching: find.byType(NativeGlassSwitch)),
     );
     await tester.pumpAndSettle();
+    expect(state[PreferenceKeys.recordingClickEffectEnabled], isTrue);
+
+    await openSettingsPage(tester, '个性化');
+    expect(find.text('录制点击特效'), findsOneWidget);
+    expect(find.text('关闭'), findsNothing);
     for (final effect in RecordingClickEffect.values) {
-      expect(find.text(effect.label), findsWidgets);
+      expect(find.byKey(Key('click-effect-${effect.name}')), findsOneWidget);
     }
-    await tester.tap(find.text('光学涟漪').last);
+    await tester.tap(find.byKey(const Key('click-effect-liquid')));
     await tester.pumpAndSettle();
-    expect(state[PreferenceKeys.recordingClickEffect], 'optical');
-
-    final distinctTile = find.byWidgetPredicate(
-      (w) => w is NativeGlassSwitchTile && w.title == '区分右键与拖动轨迹',
-    );
-    await tester.scrollUntilVisible(
-      distinctTile,
-      200,
-      scrollable: settingsContentScrollable(),
-    );
-    expect(tester.widget<NativeGlassSwitchTile>(distinctTile).value, isTrue);
-    await tester.tap(
-      find.descendant(
-        of: distinctTile,
-        matching: find.byType(NativeGlassSwitch),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(state[PreferenceKeys.recordingClickRightDistinct], isFalse);
+    expect(state[PreferenceKeys.recordingClickEffect], 'liquid');
   });
 
-  testWidgets('默认翻译服务下拉固定先列谷歌翻译与 Apple 系统翻译，选中 Apple 保存内置 ID，服务列表不出现 Apple', (
-    tester,
-  ) async {
-    const channel = MethodChannel(ChannelNames.settings);
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    var state = <String, Object?>{
-      'revision': 0,
-      PreferenceKeys.services: [
-        const ServiceConfig(
-          id: 'saved',
-          kind: 'openai',
-          name: 'OpenAI',
-          baseUrl: 'https://api.openai.com',
-          model: 'gpt-test',
-        ).toMap(),
-      ],
-    };
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      switch (call.method) {
-        case MethodNames.checkSystemTranslation:
-          return languagePackInstalledStatus;
-        case MethodNames.systemStatus:
-          return {'accessibility': true};
-        case MethodNames.getSettings:
-          return {
-            ...state,
-            MethodNames.credentialIds: <String>['saved'],
-          };
-        case MethodNames.saveSettings:
-          final draft = Map<String, Object?>.from(call.arguments as Map)
-            ..remove('credentials');
-          state = {...draft, 'revision': (state['revision'] as int) + 1};
-          return {
-            ...state,
-            MethodNames.credentialIds: <String>['saved'],
-          };
-      }
-      return null;
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
-    await tester.pumpAndSettle();
+  testWidgets(
+    '默认翻译服务下拉固定先列 Apple 系统翻译与谷歌翻译，缺省为 Apple，切换可保存对应内置 ID，服务列表不出现 Apple',
+    (tester) async {
+      const channel = MethodChannel(ChannelNames.settings);
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var state = <String, Object?>{
+        'revision': 0,
+        PreferenceKeys.services: [
+          const ServiceConfig(
+            id: 'saved',
+            kind: 'openai',
+            name: 'OpenAI',
+            baseUrl: 'https://api.openai.com',
+            model: 'gpt-test',
+          ).toMap(),
+        ],
+      };
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        switch (call.method) {
+          case MethodNames.checkSystemTranslation:
+            return languagePackInstalledStatus;
+          case MethodNames.systemStatus:
+            return {'accessibility': true};
+          case MethodNames.getSettings:
+            return {
+              ...state,
+              MethodNames.credentialIds: <String>['saved'],
+            };
+          case MethodNames.saveSettings:
+            final draft = Map<String, Object?>.from(call.arguments as Map)
+              ..remove('credentials');
+            state = {...draft, 'revision': (state['revision'] as int) + 1};
+            return {
+              ...state,
+              MethodNames.credentialIds: <String>['saved'],
+            };
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      await tester.pumpWidget(const SettingsApp());
+      await tester.pumpAndSettle();
 
-    await openSettingsPage(tester, '语言与服务');
-    final selector = find.descendant(
-      of: find.byWidgetPredicate(
-        (w) => w is NativeGlassDropdown<String> && w.label == '默认翻译服务',
-      ),
-      matching: find.byType(TextButton),
-    );
-    await tester.tap(selector);
-    await tester.pumpAndSettle();
-    final items = find.byType(MenuItemButton);
-    expect(items, findsNWidgets(3));
-    double top(String label) =>
-        tester.getTopLeft(find.widgetWithText(MenuItemButton, label)).dy;
-    expect(top('谷歌翻译'), lessThan(top('Apple 系统翻译')));
-    expect(top('Apple 系统翻译'), lessThan(top('OpenAI')));
-    expect(find.widgetWithText(MenuItemButton, '谷歌翻译'), findsOneWidget);
-    expect(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'), findsOneWidget);
-    expect(find.widgetWithText(MenuItemButton, 'OpenAI'), findsOneWidget);
-    await tester.tap(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'));
-    await tester.pumpAndSettle();
-    expect(state[PreferenceKeys.defaultServiceId], ServiceConfig.systemId);
+      await openSettingsPage(tester, '语言与服务');
+      final selector = find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is NativeGlassDropdown<String> && w.label == '默认翻译服务',
+        ),
+        matching: find.byType(TextButton),
+      );
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      final items = find.byType(MenuItemButton);
+      expect(items, findsNWidgets(3));
+      double top(String label) =>
+          tester.getTopLeft(find.widgetWithText(MenuItemButton, label)).dy;
+      expect(top('Apple 系统翻译'), lessThan(top('谷歌翻译')));
+      expect(top('谷歌翻译'), lessThan(top('OpenAI')));
+      expect(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'), findsOneWidget);
+      expect(find.widgetWithText(MenuItemButton, '谷歌翻译'), findsOneWidget);
+      expect(find.widgetWithText(MenuItemButton, 'OpenAI'), findsOneWidget);
+      await tester.tap(find.widgetWithText(MenuItemButton, '谷歌翻译'));
+      await tester.pumpAndSettle();
+      expect(state[PreferenceKeys.defaultServiceId], ServiceConfig.builtinId);
 
-    await openSettingsPage(tester, '服务列表');
-    expect(find.byTooltip('编辑 OpenAI'), findsOneWidget);
-    expect(find.textContaining('Apple'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Apple 系统翻译'));
+      await tester.pumpAndSettle();
+      expect(state[PreferenceKeys.defaultServiceId], ServiceConfig.systemId);
+
+      await openSettingsPage(tester, '服务列表');
+      expect(find.byTooltip('编辑 OpenAI'), findsOneWidget);
+      expect(find.textContaining('Apple'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('通用子页显示语言包状态：查询中为检查中，成功显示说明，失败显示异常说明', (tester) async {
     const channel = MethodChannel(ChannelNames.settings);
@@ -1128,25 +1118,6 @@ void main() {
 
     await openSettingsPage(tester, '排除应用');
     expect(find.text('暂无排除应用；添加后在这些应用中不会自动触发选区翻译。'), findsOneWidget);
-
-    await openSettingsPage(tester, '录制');
-    NativeGlassSwitch distinctSwitch() => tester.widget<NativeGlassSwitch>(
-      find.descendant(
-        of: find.byWidgetPredicate(
-          (w) => w is NativeGlassSwitchTile && w.title == '区分右键与拖动轨迹',
-        ),
-        matching: find.byType(NativeGlassSwitch),
-      ),
-    );
-    expect(distinctSwitch().onChanged, isNull);
-
-    await tester.tap(find.text(RecordingClickEffect.off.label));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.widgetWithText(MenuItemButton, RecordingClickEffect.optical.label),
-    );
-    await tester.pumpAndSettle();
-    expect(distinctSwitch().onChanged, isNotNull);
 
     await openSettingsPage(tester, '保存与导出');
     final width = find.byKey(const Key('gif-maximum-width'));

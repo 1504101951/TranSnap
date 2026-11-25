@@ -172,16 +172,48 @@ enum ScreenCaptureService {
     static func prewarmTextRecognition() {
         Task.detached(priority: .utility) {
             let start = ContinuousClock.now
-            guard let context = CGContext(
-                data: nil, width: 160, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return }
-            context.setFillColor(.white)
-            context.fill(CGRect(x: 0, y: 0, width: 160, height: 100))
-            guard let image = context.makeImage() else { return }
-            _ = try? await paragraphRequest().perform(on: image)
+            guard let image = prewarmImage() else { return }
+            async let document = try? paragraphRequest().perform(on: image)
+            async let codes = try? DetectBarcodesRequest().perform(on: image)
+            _ = await (document, codes)
             PerformanceLog.record("ocr-prewarm", since: start)
         }
+    }
+
+    static func prewarmImage() -> CGImage? {
+        let width = 960, height = 760
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        let lines = ["# Heading 标题 標題", "• item one 第一项", "• item two 第二項", "Paragraph 段落 text."]
+        for (index, line) in lines.enumerated() {
+            (line as NSString).draw(
+                at: NSPoint(x: 20, y: height - 60 - index * 50),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 28), .foregroundColor: NSColor.black]
+            )
+        }
+        NSColor.black.setStroke()
+        for row in 0...4 {
+            NSBezierPath.strokeLine(from: NSPoint(x: 20, y: 300 - row * 50), to: NSPoint(x: 900, y: 300 - row * 50))
+        }
+        for column in 0...3 {
+            NSBezierPath.strokeLine(from: NSPoint(x: 20 + column * 293, y: 100), to: NSPoint(x: 20 + column * 293, y: 300))
+        }
+        for row in 0..<4 {
+            for column in 0..<3 {
+                ("Cell \(row)\(column) 单元" as NSString).draw(
+                    at: NSPoint(x: 30 + column * 293, y: 110 + row * 50),
+                    withAttributes: [.font: NSFont.systemFont(ofSize: 22), .foregroundColor: NSColor.black]
+                )
+            }
+        }
+        return bitmap.cgImage
     }
 
     static func recognizeText(image: CGImage) async throws -> String {

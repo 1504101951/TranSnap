@@ -231,6 +231,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
     expect(find.text('/tmp/screenshots'), findsNothing);
     expect(find.text('固定目录…'), findsNothing);
@@ -409,11 +410,11 @@ void main() {
       ScreenshotActions.record,
       ScreenshotActions.scrolling,
       ScreenshotActions.live,
+      ScreenshotActions.cursor,
     ]) {
       expect(find.byKey(Key(action)), findsNothing);
     }
     for (final key in [
-      const Key(ScreenshotActions.cursor),
       const Key(ScreenshotActions.rect),
       const Key(ScreenshotActions.arrow),
       const Key(ScreenshotActions.text),
@@ -542,7 +543,22 @@ void main() {
           ...capture!,
           'width': 8,
           'height': 8,
-          ...ScreenshotToolbarPreferences(hidden: hidden).toMap(),
+          ...(() {
+            final base = ScreenshotToolbarPreferences();
+            return base.copyWith(
+              hidden: hidden,
+              favorites: [
+                ScreenshotActions.crop,
+                ScreenshotActions.record,
+                ScreenshotActions.ocrTranslate,
+                ScreenshotActions.pin,
+              ],
+              columns: [
+                base.columns[0],
+                base.columns[1].withSlot(5, ScreenshotActions.ocrCopy),
+              ],
+            );
+          })().toMap(),
         };
       }
       if (call.method == MethodNames.recognizeText) return pending.future;
@@ -552,6 +568,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pump();
+    await showFullToolbar(tester);
     BusyRing ring() => tester.widget<BusyRing>(
       find
           .ancestor(
@@ -583,6 +600,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pump();
+    await showFullToolbar(tester);
     expect(find.byKey(const Key(ScreenshotActions.ocrCopy)), findsNothing);
     await messenger.handlePlatformMessage(
       channel.name,
@@ -590,7 +608,7 @@ void main() {
         MethodCall(MethodNames.screenshotToolbarSlot, {
           'id': 'shot-busy',
           'modifiers': ToolbarModifiers.option,
-          'digit': 1,
+          'digit': 6,
         }),
       ),
       (_) {},
@@ -1039,6 +1057,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-tool-text')));
     await tester.tap(find.byKey(const Key('screenshot-tool-text')));
     await tester.pump();
@@ -1123,6 +1142,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
@@ -1202,6 +1222,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
@@ -1250,6 +1271,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
@@ -1297,6 +1319,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
@@ -1365,6 +1388,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
@@ -1455,6 +1479,7 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key('screenshot-tool-brush')));
     await tester.pump();
     await tester.drag(
@@ -1547,6 +1572,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await _tapExport(tester, const Key('screenshot-copy'));
     expect(copied, isNotNull);
     final image = await tester.runAsync(() => _decode(copied!));
@@ -1584,8 +1610,9 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+    await showFullToolbar(tester);
     await tester.ensureVisible(find.byKey(const Key('screenshot-tool-text')));
-    expect(find.byKey(const Key('screenshot-tool-cursor')), findsOneWidget);
+    expect(find.byKey(const Key('screenshot-tool-cursor')), findsNothing);
     await tester.tap(find.byKey(const Key('screenshot-tool-text')));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-text-size-up')), findsOneWidget);

@@ -11,6 +11,7 @@ final class OverlayPanelController {
     private var dragStartEvent: NSEvent?
     private var capturedSessionId: String?
     private var captureHidden = false
+    private let tooltip = OverlayTooltipBubble()
 
     init() {
         panel = TranslationPanel(
@@ -27,6 +28,7 @@ final class OverlayPanelController {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false
+        panel.acceptsMouseMovedEvents = true
         panel.contentViewController = host
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
             guard let self else { return event }
@@ -45,6 +47,7 @@ final class OverlayPanelController {
 
     func attachFlutter(_ controller: FlutterViewController) {
         NativeGlassFactory.applyAppearance(to: panel)
+        controller.mouseTrackingMode = .always
         host.embed(controller)
     }
 
@@ -55,6 +58,7 @@ final class OverlayPanelController {
     }
 
     func show(at point: NSPoint, size: NSSize, sessionId: String) {
+        tooltip.hide()
         currentSessionId = sessionId
         dragStartEvent = nil
         NativeGlassFactory.applyAppearance(to: panel)
@@ -87,6 +91,7 @@ final class OverlayPanelController {
 
     func hide(sessionId: String) {
         guard currentSessionId == sessionId else { return }
+        tooltip.hide()
         currentSessionId = nil
         dragStartEvent = nil
         panel.alphaValue = 1
@@ -95,6 +100,7 @@ final class OverlayPanelController {
 
     func resize(sessionId: String, size: NSSize) {
         guard currentSessionId == sessionId, panel.frame.size != size else { return }
+        tooltip.hide()
         host.setCornerRadius(Self.cornerRadius(for: size))
         var frame = panel.frame
         frame.origin.y = frame.maxY - size.height
@@ -120,6 +126,7 @@ final class OverlayPanelController {
     func setCaptureHidden(_ hidden: Bool) {
         captureHidden = hidden
         if hidden {
+            tooltip.hide()
             capturedSessionId = panel.isVisible ? currentSessionId : nil
             panel.orderOut(nil)
         } else {
@@ -131,8 +138,107 @@ final class OverlayPanelController {
     func drag(sessionId: String) {
         guard currentSessionId == sessionId, let event = dragStartEvent,
               NSEvent.pressedMouseButtons & 1 != 0 else { return }
+        tooltip.hide()
         dragStartEvent = nil
         panel.performDrag(with: event)
+    }
+
+    func showTooltip(sessionId: String, message: String, anchor: NSRect, preferAbove: Bool) {
+        guard currentSessionId == sessionId, panel.isVisible else { return }
+        let screenAnchor = NSRect(
+            x: panel.frame.minX + anchor.origin.x,
+            y: panel.frame.maxY - anchor.origin.y - anchor.height,
+            width: anchor.width,
+            height: anchor.height
+        )
+        let screenRect = (panel.screen ?? NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main)?.visibleFrame
+            ?? screenAnchor
+        tooltip.show(message: message, anchor: screenAnchor, screen: screenRect, preferAbove: preferAbove)
+    }
+
+    func hideTooltip() {
+        tooltip.hide()
+    }
+}
+
+final class OverlayTooltipBubble {
+    private lazy var label: NSTextField = {
+        let label = NSTextField(labelWithString: "")
+        label.font = .systemFont(ofSize: 12)
+        label.lineBreakMode = .byClipping
+        return label
+    }()
+
+    private lazy var bubble: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 8
+        view.addSubview(label)
+        return view
+    }()
+
+    private lazy var panel: NSPanel = {
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: true
+        )
+        panel.isFloatingPanel = true
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
+        panel.contentView = bubble
+        return panel
+    }()
+
+    func show(message: String, anchor: NSRect, screen: NSRect, preferAbove: Bool) {
+        NativeGlassFactory.applyAppearance(to: panel)
+        let dark = panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        bubble.layer?.backgroundColor = (dark ? NSColor(srgbRed: 0.898, green: 0.898, blue: 0.918, alpha: 1) : NSColor(srgbRed: 0.173, green: 0.173, blue: 0.180, alpha: 1)).cgColor
+        label.textColor = dark ? NSColor(srgbRed: 0.110, green: 0.110, blue: 0.118, alpha: 1) : .white
+        label.stringValue = message
+        label.sizeToFit()
+        let size = NSSize(
+            width: (label.frame.width + 16).rounded(.up),
+            height: (label.frame.height + 8).rounded(.up)
+        )
+        label.frame.origin = NSPoint(
+            x: ((size.width - label.frame.width) / 2).rounded(),
+            y: ((size.height - label.frame.height) / 2).rounded()
+        )
+        panel.setFrame(Self.frame(size: size, anchor: anchor, screen: screen, preferAbove: preferAbove), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func hide() {
+        guard panel.isVisible else { return }
+        panel.orderOut(nil)
+    }
+
+    nonisolated static func frame(size: NSSize, anchor: NSRect, screen: NSRect, preferAbove: Bool) -> NSRect {
+        let area = screen.insetBy(dx: 6, dy: 6)
+        let gap: CGFloat = 6
+        let above = anchor.maxY + gap
+        let below = anchor.minY - gap - size.height
+        let y: CGFloat
+        if preferAbove {
+            y = above + size.height <= area.maxY
+                ? above
+                : max(area.minY, below)
+        } else {
+            y = below >= area.minY
+                ? below
+                : min(area.maxY - size.height, above)
+        }
+        let centeredX = anchor.midX - size.width / 2
+        let maxX = max(area.minX, area.maxX - size.width)
+        let x = min(max(centeredX, area.minX), maxX)
+        return NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
     }
 }
 

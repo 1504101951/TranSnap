@@ -97,10 +97,7 @@ void main() {
             )
             .toList()
             .timeout(const Duration(seconds: 5));
-    expect(
-      (events.single as TranslationFailure).message,
-      'Unofficial Google Provider 无法连接，请检查网络。',
-    );
+    expect((events.single as TranslationFailure).message, '谷歌翻译无法连接，请检查网络。');
   });
 
   test('parses single sentence fixture', () {
@@ -220,5 +217,38 @@ void main() {
     final failure = limited.single as BatchFailure;
     expect(failure.kind, TranslationFailureKind.rateLimited);
     expect(failure.retryAfter, const Duration(seconds: 5));
+  });
+
+  test('HTTP 302 重定向区分 Google 风控验证与普通拦截，且不再直接暴露英文 Provider 名', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var count = 0;
+    server.listen((incoming) async {
+      await incoming.drain<void>();
+      incoming.response.statusCode = 302;
+      incoming.response.headers.set(
+        HttpHeaders.locationHeader,
+        count++ == 0
+            ? 'https://www.google.com/sorry/index?continue=https://translate.googleapis.com'
+            : 'https://portal.example.com/login',
+      );
+      await incoming.response.close();
+    });
+    final provider = UnofficialGoogleProvider(
+      endpoint: 'http://127.0.0.1:${server.port}/translate',
+    );
+    const request = TranslationRequest(
+      sourceText: 'Hello',
+      detectedLanguage: 'en',
+      targetLanguage: 'zh-CN',
+    );
+
+    final sorryEvents = await provider.translate(request).toList();
+    final sorryFailure = sorryEvents.single as TranslationFailure;
+    expect(sorryFailure.message, contains('触发风控验证（HTTP 302）'));
+
+    final genericEvents = await provider.translate(request).toList();
+    final genericFailure = genericEvents.single as TranslationFailure;
+    expect(genericFailure.message, contains('被重定向拦截（HTTP 302）'));
   });
 }

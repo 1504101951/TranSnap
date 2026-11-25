@@ -426,7 +426,10 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
+    await showFullToolbar(tester);
+    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
+    await revealToolbarChildren(tester);
+    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
     expect(
@@ -485,6 +488,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await tap(ScreenshotActions.rect);
     await color('FF9500', 'FF9500');
     await tap(ScreenshotActions.width);
@@ -562,10 +566,11 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
     await tester.dragFrom(const Offset(100, 100), const Offset(160, 120));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
     await tester.tapAt(const Offset(100, 150));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsOneWidget);

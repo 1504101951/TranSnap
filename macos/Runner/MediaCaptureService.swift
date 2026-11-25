@@ -161,7 +161,7 @@ final class MediaCaptureService: NSObject, SCStreamDelegate, SCRecordingOutputDe
         config.minimumFrameInterval = CMTime(value: 1, timescale: AppConstants.recordingFramesPerSecond)
         config.showsCursor = video
         let clickConfig = RecordingClickOverlay.resolvedConfig(preferences: AppPreferences.current)
-        config.showMouseClicks = video && clickConfig.effect == .system
+        config.showMouseClicks = video && clickConfig.enabled && clickConfig.effect == .system
         config.capturesAudio = false
         config.captureMicrophone = false
         config.scalesToFit = false

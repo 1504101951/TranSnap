@@ -815,12 +815,15 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
     private func trim() async throws {
         let token = service.id
         _ = try service.recordingURL()
-        guard let playerView, let item = player?.currentItem, playerView.canBeginTrimming else {
+        guard let playerView, let item = player?.currentItem else {
             throw GIFExporter.ExportError(message: "播放器尚未就绪，请稍后再试。")
         }
         player?.pause()
         playerView.controlsStyle = .inline
         defer { playerView.controlsStyle = .none }
+        guard playerView.canBeginTrimming else {
+            throw GIFExporter.ExportError(message: "播放器尚未就绪，请稍后再试。")
+        }
         let result = await playerView.beginTrimming()
         guard token == service.id, result == .okButton else { return }
         let start = item.reversePlaybackEndTime.isValid ? item.reversePlaybackEndTime : .zero

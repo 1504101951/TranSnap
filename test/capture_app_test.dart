@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -11,7 +12,6 @@ import 'package:transnap/src/common/constants/glass_metrics.dart';
 import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
 import 'package:transnap/src/common/constants/screenshot_actions.dart';
-import 'package:transnap/src/common/constants/screenshot_enums.dart';
 import 'package:transnap/src/common/widgets/app_motion.dart';
 import 'package:transnap/src/screenshot/screenshot_app.dart';
 import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
@@ -66,6 +66,30 @@ void main() {
     messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
   });
 
+  testWidgets('实时翻译同时录制时状态气泡完整显示「录制：时长 · 识别状态」，不截断（#67）', (tester) async {
+    tester.view.physicalSize = const Size(400, 84);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    state = {
+      'id': 'live',
+      'kind': 'liveTranslation',
+      'phase': 'recording',
+      'recording': true,
+      'elapsed': 12.0,
+      'detail': '未识别到文字',
+    };
+    await tester.pumpWidget(const CaptureApp(channel: channel));
+    await tester.pumpAndSettle();
+    const label = '录制：0:12 · 未识别到文字';
+    expect(find.text(label), findsOneWidget);
+    expect(
+      tester.renderObject<RenderParagraph>(find.text(label)).didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('两种采集共用四个独立气泡，上方提示且暂停放弃保持契约', (tester) async {
     tester.view.physicalSize = const Size(320, 84);
     tester.view.devicePixelRatio = 1;
@@ -117,7 +141,7 @@ void main() {
       expect(find.text('正在完成采集…'), findsOneWidget);
       expect(
         tester
-            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.squareStop), matching: find.byType(IconButton)))
+            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.square), matching: find.byType(IconButton)))
             .onPressed,
         isNull,
       );
@@ -606,16 +630,18 @@ void main() {
       await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
       await awaitCaptureSource(tester);
       await tester.pumpAndSettle();
+      await showFullToolbar(tester);
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
       await tester.dragFrom(
         canvas.topLeft + Offset(canvas.width / 4, canvas.height / 4),
         Offset(canvas.width / 2, canvas.height / 2),
       );
       await tester.pumpAndSettle();
-      expect(find.byTooltip('截图 2'), findsOneWidget);
+      expect(find.byTooltip('截图 1'), findsOneWidget);
+      await revealToolbarChildren(tester);
       final children = find.byKey(const Key('screenshot-children-group-0'));
       expect(
-        find.descendant(of: children, matching: find.byTooltip('录制')),
+        find.descendant(of: children, matching: find.byTooltip('滚动长截图')),
         findsOneWidget,
       );
       final first = find.byKey(const Key('screenshot-grid-group-0'));
@@ -643,7 +669,7 @@ void main() {
         expect(targetRow, findsOneWidget);
         expect(
           find.descendant(of: targetRow, matching: find.byType(IconButton)),
-          findsNWidgets(6),
+          findsNWidgets(7),
         );
         expect(
           find.descendant(of: targetRow, matching: find.byType(AppKitView)),
@@ -726,10 +752,12 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: sourceChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
     final canvasBefore = tester.getRect(
       find.byKey(const Key('screenshot-canvas')),
     );
-    await tester.tap(find.byTooltip('录制'));
+    await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('窗口'));
     await tester.pumpAndSettle();
@@ -916,6 +944,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await revealToolbarChildren(tester);
     for (final action in [
       ScreenshotActions.record,
       ScreenshotActions.scrolling,
@@ -1003,8 +1032,7 @@ void main() {
             'canCaptureMedia': true,
             'cropActive': true,
             PreferenceKeys.recordingDelay: 0,
-            PreferenceKeys.recordingClickEffect:
-                RecordingClickEffect.optical.name,
+            PreferenceKeys.recordingClickEffectEnabled: false,
           };
         case MethodNames.saveRecordingOptions:
           saved = call.arguments as Map;
@@ -1021,27 +1049,28 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await revealToolbarChildren(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('录制选项'));
     await tester.pumpAndSettle();
     expect(find.text('不延时'), findsOneWidget);
     expect(find.text('延时 10 秒'), findsOneWidget);
-    expect(find.text('点击特效：关闭'), findsOneWidget);
+    expect(find.text('包含点击特效'), findsOneWidget);
     await tester.tap(find.text('延时 5 秒'));
     await tester.pumpAndSettle();
     expect(saved, {
       PreferenceKeys.recordingDelay: 5,
-      PreferenceKeys.recordingClickEffect: RecordingClickEffect.optical.name,
+      PreferenceKeys.recordingClickEffectEnabled: false,
     });
     expect(find.text('不延时'), findsNothing);
     await tester.tap(find.byTooltip('录制选项：延时 5 秒'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('液态弹波'));
+    await tester.tap(find.text('包含点击特效'));
     await tester.pumpAndSettle();
     expect(saved, {
       PreferenceKeys.recordingDelay: 5,
-      PreferenceKeys.recordingClickEffect: RecordingClickEffect.liquid.name,
+      PreferenceKeys.recordingClickEffectEnabled: true,
     });
     await tester.tap(find.byTooltip('开始录制'));
     await tester.pumpAndSettle();
@@ -1051,30 +1080,28 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('录制选项：延时 5 秒'));
     await tester.pumpAndSettle();
-    for (final effect in RecordingClickEffect.values) {
-      final label = effect == RecordingClickEffect.off
-          ? '点击特效：关闭'
-          : effect.label;
-      expect(
-        tester
-            .widget<MenuItemButton>(
-              find.ancestor(
-                of: find.text(label),
-                matching: find.byType(MenuItemButton),
-              ),
-            )
-            .onPressed,
-        isNull,
-      );
-    }
+    expect(
+      tester
+          .widget<MenuItemButton>(
+            find.ancestor(
+              of: find.text('包含点击特效'),
+              matching: find.byType(MenuItemButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('实时翻译是顶层工具，任意工具下点击都进入目标选择并可开始', (tester) async {
+  testWidgets('实时翻译是录制目标行的开关：打开后开始按钮改为开始实时翻译并提交 live，录制选项照常可用且只在展开时选中（#1、#67）', (
+    tester,
+  ) async {
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
-    const selectionChannel = MethodChannel('test/live-top-level');
+    const selectionChannel = MethodChannel('test/live-toggle');
     Map? started;
+    final previews = <String>[];
     messenger.setMockMethodCallHandler(selectionChannel, (call) async {
       if (call.method == MethodNames.getScreenshot) {
         return {
@@ -1084,7 +1111,13 @@ void main() {
           'height': 240,
           'canCaptureMedia': true,
           'cropActive': true,
+          PreferenceKeys.recordingDelay: 3,
+          PreferenceKeys.recordingClickEffectEnabled: true,
         };
+      }
+      if (call.method == MethodNames.previewLiveRegion ||
+          call.method == MethodNames.cancelLivePreview) {
+        previews.add(call.method);
       }
       if (call.method == MethodNames.prepareCapture) {
         started = call.arguments as Map;
@@ -1097,33 +1130,54 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('recording-targets-row')), findsNothing);
-    await tester.tap(find.byKey(const Key(ScreenshotActions.live)));
+    expect(find.byKey(const Key('screenshot-live')), findsNothing);
+    await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recording-targets-row')), findsOneWidget);
-    expect(find.byKey(const Key(ScreenshotActions.record)), findsNothing);
-    expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
-    Color? tint(String id) =>
-        (tester
-                    .widget<AnimatedContainer>(
-                      find
-                          .ancestor(
-                            of: find.byKey(Key(id)),
-                            matching: find.byType(AnimatedContainer),
-                          )
-                          .first,
-                    )
-                    .decoration!
-                as ShapeDecoration)
-            .color;
-    expect(tint(ScreenshotActions.live), isNot(tint(ScreenshotActions.rect)));
-    expect(tint(ScreenshotActions.crop), tint(ScreenshotActions.rect));
+    expect(find.byTooltip('开始录制'), findsOneWidget);
+    IconButton button(String tooltip) => tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip(tooltip),
+        matching: find.byType(IconButton),
+      ).first,
+    );
+    bool optionsSelected() => tester
+        .widget<Semantics>(
+          find
+              .ancestor(
+                of: find.byTooltip('录制选项：延时 3 秒'),
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Semantics &&
+                      widget.properties.label == '录制选项：延时 3 秒',
+                ),
+              )
+              .first,
+        )
+        .properties
+        .selected!;
+    expect(button('录制选项：延时 3 秒').onPressed, isNotNull);
+    expect(optionsSelected(), isFalse);
+    await tester.tap(find.byTooltip('录制选项：延时 3 秒'));
+    await tester.pumpAndSettle();
+    expect(find.text('不延时'), findsOneWidget);
+    expect(optionsSelected(), isTrue);
+    await tester.tap(find.byTooltip('录制选项：延时 3 秒'));
+    await tester.pumpAndSettle();
+    expect(find.text('不延时'), findsNothing);
+    expect(optionsSelected(), isFalse);
+
+    previews.clear();
+    await tester.tap(find.byTooltip('实时翻译'));
+    await tester.pumpAndSettle();
+    expect(previews, [MethodNames.previewLiveRegion]);
+    expect(find.byTooltip('开始录制'), findsNothing);
+    expect(find.byTooltip('取消实时翻译'), findsOneWidget);
+    expect(button('录制选项：延时 3 秒').onPressed, isNotNull);
     await tester.tap(find.byTooltip('开始实时翻译'));
     await tester.pumpAndSettle();
     expect(started, containsPair('live', true));
-    expect(started!.containsKey('record'), isFalse);
+    expect(started!.containsKey('delay'), isFalse);
   });
 
   testWidgets('工具栏按用户拼接的父子结构显示子级，一级的录制直接展开目标选择', (tester) async {
@@ -1146,6 +1200,7 @@ void main() {
       children: {
         ScreenshotActions.brush: [ScreenshotActions.scrolling],
       },
+      favorites: const [],
     );
     messenger.setMockMethodCallHandler(selectionChannel, (call) async {
       if (call.method == MethodNames.getScreenshot) {
@@ -1167,6 +1222,7 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
     expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
@@ -1224,6 +1280,8 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
+    await showFullToolbar(tester);
+    await revealToolbarChildren(tester);
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
     await tester.pumpAndSettle();
     final confirm = find.byTooltip('开始录制');
@@ -1231,7 +1289,7 @@ void main() {
     final targetRow = find.byKey(const Key('recording-targets-row'));
     expect(
       find.descendant(of: targetRow, matching: find.byType(IconButton)),
-      findsNWidgets(6),
+      findsNWidgets(7),
     );
     expect(
       find.descendant(of: targetRow, matching: find.byType(AppKitView)),

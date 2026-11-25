@@ -31,4 +31,40 @@ void main() {
     expect(await caretCenter(430), 430);
     expect(await caretCenter(600), 438);
   });
+
+  testWidgets('媒体外框的描边与阴影都画在内容背后、描边向外扩出不占布局，内容上方不留 Flutter 绘制（#145）', (
+    tester,
+  ) async {
+    const media = Key('media');
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: ResultMediaFrame(
+            child: SizedBox(key: media, width: 200, height: 100),
+          ),
+        ),
+      ),
+    );
+    final frame = find.byType(ResultMediaFrame);
+    expect(tester.getRect(frame), tester.getRect(find.byKey(media)));
+    expect(
+      tester.getRect(find.byKey(const Key('result-media-border'))),
+      tester
+          .getRect(find.byKey(media))
+          .inflate(ResultWindowColors.mediaBorderWidth),
+    );
+    final stack = tester.widget<Stack>(
+      find.descendant(of: frame, matching: find.byType(Stack)),
+    );
+    expect(stack.children.last, isA<SizedBox>());
+    final foreground = find.descendant(
+      of: frame,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.position == DecorationPosition.foreground,
+      ),
+    );
+    expect(foreground, findsNothing);
+  });
 }

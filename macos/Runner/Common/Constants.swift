@@ -36,7 +36,7 @@ enum AppConstants {
     static let liveRegionOcrMethod = "liveRegionOcr"
     static let publishLiveRegionMethod = "publishLiveRegion"
     static let captureVideoPreview = "transnap/capture_video_preview"
-    static let captureControlSize = NSSize(width: 320, height: 84)
+    static let captureControlSize = NSSize(width: 400, height: 84)
     static let captureShadeOpacity: CGFloat = 0.6
     static let captureControlGap: CGFloat = 8
     static let recordingFlowArc: CGFloat = 0.22
@@ -94,9 +94,11 @@ enum AppConstants {
     static let resizeNorthWestSouthEast = "nwse"
     static let resizeNorthEastSouthWest = "nesw"
     static let screenshotTextInputMethod = "screenshotTextInput"
-    static let screenshotToolbarHiddenKey = "screenshotToolbarHidden"
-    static let screenshotToolbarColumnsKey = "screenshotToolbarColumns"
-    static let screenshotToolbarChildrenKey = "screenshotToolbarChildren"
+    static let screenshotToolbarHiddenKey = "screenshotToolbarHiddenIds"
+    static let screenshotToolbarColumnsKey = "screenshotToolbarGrid"
+    static let screenshotToolbarChildrenKey = "screenshotToolbarNested"
+    static let screenshotToolbarFavoritesKey = "screenshotToolbarQuickTools"
+    static let screenshotToolbarTabMethod = "screenshotToolbarTab"
     static let screenshotToolbarSlotKeyCodes: [UInt16] = [18, 19, 20, 21, 23, 22]
     static let screenshotToolbarChangedMethod = "screenshotToolbarChanged"
     static let screenshotToolbarSlotMethod = "screenshotToolbarSlot"
@@ -121,6 +123,7 @@ enum AppConstants {
     static let languageDetectionCandidates = 3
     static let languageDetectionBaseWeight = 1.0
     static let languageDetectionPopularWeight = 3.0
+    static let languageDetectionEnglishWeight = 20.0
     static let languageDetectionUserWeight = 30.0
     static let languageDetectionPopular = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "fr", "de", "es", "pt", "ru", "it"]
     static let languageDetectionAll = [
@@ -130,7 +133,7 @@ enum AppConstants {
         "tr", "uk", "ur", "vi",
     ]
     static let recordingClickEffectKey = "recordingClickEffect"
-    static let recordingClickRightDistinctKey = "recordingClickRightDistinct"
+    static let recordingClickEffectEnabledKey = "recordingClickEffectEnabled"
     static let clickEffectLeftColor = NSColor(srgbRed: 0, green: 0x7A / 255.0, blue: 1, alpha: 1)
     static let clickEffectRightColor = NSColor(srgbRed: 1, green: 0x95 / 255.0, blue: 0, alpha: 1)
     static let clickEffectBaseRadius: CGFloat = 8
@@ -149,6 +152,7 @@ enum AppConstants {
     static let recordingDelays = [0, 3, 5, 10]
     static let gifMaximumWidthKey = "gifMaximumWidth"
     static let escapeKeyCode: UInt16 = 53
+    static let tabKeyCode: UInt16 = 48
     static let syntheticEventTag: Int64 = 0x5452_414E
     static let shortcutRequiredModifiers = UInt32(cmdKey | optionKey | controlKey)
     static let shortcutAllowedModifiers = shortcutRequiredModifiers | UInt32(shiftKey)
@@ -214,6 +218,7 @@ enum AppConstants {
     static let accentLightKey = "accentLight"
     static let accentDarkKey = "accentDark"
     static let hideOverlayMethod = "hideOverlay"
+    static let hideOverlayTooltipMethod = "hideOverlayTooltip"
     static let historyEntrypoint = "historyMain"
     static let keychainFailedError = "keychain_failed"
     static let credentialsKeychainService = "com.coolyang.transnap.credentials"
@@ -287,6 +292,7 @@ enum AppConstants {
     static let inputShortcutModifiersKey = "inputShortcutModifiers"
     static let shortcutInvalidError = "shortcut_invalid"
     static let showOverlayMethod = "showOverlay"
+    static let showOverlayTooltipMethod = "showOverlayTooltip"
     static let staleCaptureError = "stale_capture"
     static let systemStatusMethod = "systemStatus"
     static let recordScreenshotHistoryMethod = "recordScreenshotHistory"
@@ -338,6 +344,13 @@ enum AppConstants {
     static let overlayTriggerMaxHeight: CGFloat = 44
     static let pinCloseButtonSize: CGFloat = 24
     static let pinCloseButtonInset: CGFloat = 6
+    static let pinCloseButtonAlpha: CGFloat = 0.6
+    static let pinCloseButtonHoverAlpha: CGFloat = 0.78
+    static let pinCloseButtonPressedScale: CGFloat = 0.92
+    static let pinCloseButtonEdgeWidth: CGFloat = 0.5
+    static let pinCloseButtonEdgeAlpha: CGFloat = 0.22
+    static let pinCloseGlyphSize: CGFloat = 6
+    static let pinCloseGlyphStroke: CGFloat = 1.6
     static var applicationSupportURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(applicationSupportFolderName, isDirectory: true)
@@ -596,7 +609,6 @@ enum MCPDetail: String, Codable, CaseIterable {
 }
 
 enum RecordingClickEffect: String, CaseIterable {
-    case off
     case optical
     case liquid
     case spotlight
