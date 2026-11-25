@@ -120,7 +120,10 @@ class ResultWindowBar extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(mainAxisSize: MainAxisSize.min, children: _withGap(leading)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _withGap(leading),
+                  ),
                   const SizedBox(width: GlassMetrics.space12),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -242,7 +245,9 @@ class ResultTextButton extends StatelessWidget {
               overlayColor: WidgetStatePropertyAll(
                 primary
                     ? onAccent.withValues(alpha: 0.10)
-                    : colors.onSurface.withValues(alpha: GlassMetrics.hoverOpacity),
+                    : colors.onSurface.withValues(
+                        alpha: GlassMetrics.hoverOpacity,
+                      ),
               ),
               foregroundColor: WidgetStatePropertyAll(effectiveFg),
               shape: WidgetStatePropertyAll(

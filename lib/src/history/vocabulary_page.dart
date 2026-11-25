@@ -293,7 +293,10 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: IconButton(
                   tooltip: '刷新生词本',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(LucideIcons.refreshCw, size: GlassMetrics.icon),
+                  icon: const Icon(
+                    LucideIcons.refreshCw,
+                    size: GlassMetrics.icon,
+                  ),
                   visualDensity: VisualDensity.standard,
                 ),
               ),

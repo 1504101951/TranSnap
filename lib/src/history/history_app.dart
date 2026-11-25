@@ -722,7 +722,9 @@ class _HistoryAppState extends State<HistoryApp> {
               message: '移除$label筛选',
               child: InkWell(
                 onTap: onRemove,
-                borderRadius: BorderRadius.circular(GlassMetrics.menuItemRadius),
+                borderRadius: BorderRadius.circular(
+                  GlassMetrics.menuItemRadius,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(2),
                   child: Icon(
@@ -870,7 +872,8 @@ class _HistoryAppState extends State<HistoryApp> {
   /// items 为已加载的按时间倒序排列记录；按本地日历天顺序合并成日期分组。
   List<_DateRecordGroup> _groupByDate(List<TranslationRecord> items) {
     final now = DateTime.now();
-    final groups = <({String key, String label, List<TranslationRecord> items})>[];
+    final groups =
+        <({String key, String label, List<TranslationRecord> items})>[];
     for (final item in items) {
       final dt = DateTime.fromMillisecondsSinceEpoch(item.completedAt);
       final key = dateText(dt);

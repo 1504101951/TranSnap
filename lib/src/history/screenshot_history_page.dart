@@ -170,7 +170,8 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
       title: '删除截图',
-      message: '确定要删除 $timestamp（${record.width}×${record.height}）的截图吗？此操作不可撤销。',
+      message:
+          '确定要删除 $timestamp（${record.width}×${record.height}）的截图吗？此操作不可撤销。',
       confirmLabel: '删除',
       destructive: true,
     );
@@ -597,7 +598,10 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       if (record.exists) ...[
                         action(
                           '打开',
-                          const Icon(LucideIcons.externalLink, size: GlassMetrics.icon),
+                          const Icon(
+                            LucideIcons.externalLink,
+                            size: GlassMetrics.icon,
+                          ),
                           _busyAction == null
                               ? () => _run(MethodNames.openFile, path)
                               : null,
@@ -623,10 +627,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       ],
                       action(
                         '删除截图',
-                        const Icon(
-                          LucideIcons.trash2,
-                          size: GlassMetrics.icon,
-                        ),
+                        const Icon(LucideIcons.trash2, size: GlassMetrics.icon),
                         _busyAction == null
                             ? () => _deleteRecord(record)
                             : null,
