@@ -361,7 +361,13 @@ enum ScreenCaptureService {
 
     private static func textBlock(_ text: String, box: CGRect, width: Double, height: Double) -> [String: Any] {
         let rect = pixelRect(box, width: width, height: height)
-        return ["text": text, "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
+        return [
+            "text": text,
+            "x": Double(rect.minX),
+            "y": Double(rect.minY),
+            "width": Double(rect.width),
+            "height": Double(rect.height),
+        ]
     }
 
     static func recognizeBlocks(png: Data) async throws -> [[String: Any]] {
