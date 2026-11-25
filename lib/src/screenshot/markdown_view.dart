@@ -2,46 +2,36 @@ import 'package:flutter/material.dart';
 
 import '../common/constants/glass_metrics.dart';
 
-/// 识别结果 Markdown 中的一个块（#96「其他约定」4、#67「识别文字弹窗 Markdown 渲染（#96）」）。
-/// 只覆盖原生 OCR 生成的四种结构；其他内容按段落原样保留，不丢字。
 sealed class MarkdownBlock {
   const MarkdownBlock();
 }
 
-/// `# ` 开头的标题；text 不含井号。
 class MarkdownHeading extends MarkdownBlock {
   const MarkdownHeading(this.text);
   final String text;
 }
 
-/// 连续非空行组成的段落；text 保留行内换行。
 class MarkdownParagraph extends MarkdownBlock {
   const MarkdownParagraph(this.text);
   final String text;
 }
 
-/// 连续 `- ` 开头的行组成的列表；items 不含列表符号。
 class MarkdownList extends MarkdownBlock {
   const MarkdownList(this.items);
   final List<String> items;
 }
 
-/// 连续 `|` 开头的行组成的表格；rows 首行为表头，已去掉分隔行并还原 `\|`，各行补齐到相同列数。
 class MarkdownTable extends MarkdownBlock {
   const MarkdownTable(this.rows);
   final List<List<String>> rows;
 }
 
-/// 作用：把识别结果 Markdown 拆成块。
-/// 参数 source：原生 OCR 返回的 Markdown 原文。
-/// 返回：按原文顺序排列的块；空行分隔段落，其余无法识别的行并入段落。
 List<MarkdownBlock> parseMarkdownBlocks(String source) {
   final blocks = <MarkdownBlock>[];
   final paragraph = <String>[];
   final list = <String>[];
   final table = <String>[];
 
-  // 结束当前累积的结构；同一时刻最多一种结构在累积。
   void flush() {
     if (paragraph.isNotEmpty) {
       blocks.add(MarkdownParagraph(paragraph.join('\n')));
@@ -75,8 +65,6 @@ List<MarkdownBlock> parseMarkdownBlocks(String source) {
   return blocks;
 }
 
-/// 作用：解析表格行。参数 lines：`|` 开头的连续行。
-/// 返回：去掉 `| --- |` 分隔行后的单元格文字，`\|` 还原为 `|`，各行补齐到最大列数。
 List<List<String>> _tableRows(List<String> lines) {
   final separator = RegExp(r'^:?-{3,}:?$');
   final rows = <List<String>>[];
@@ -94,7 +82,6 @@ List<List<String>> _tableRows(List<String> lines) {
   ];
 }
 
-/// 作用：按未转义的 `|` 切分一行表格。参数 line：表格行。返回：去掉首尾竖线后、两端空白已裁剪的单元格。
 List<String> _tableCells(String line) {
   final cells = <String>[];
   final cell = StringBuffer();
@@ -111,7 +98,6 @@ List<String> _tableCells(String line) {
     }
   }
   cells.add(cell.toString().trim());
-  // 行首与行尾的竖线各产生一个空单元格，去掉后才是实际列。
   if (cells.isNotEmpty && cells.first.isEmpty) cells.removeAt(0);
   if (cells.isNotEmpty &&
       cells.last.isEmpty &&
@@ -121,19 +107,13 @@ List<String> _tableCells(String line) {
   return cells;
 }
 
-/// 把识别结果 Markdown 渲染为标题、段落、列表与表格（#67「识别文字弹窗 Markdown 渲染（#96）」）。
-/// 只负责展示；文字选中由外层 SelectionArea 提供，复制全部由调用方使用原文。
 class MarkdownView extends StatelessWidget {
-  /// source 为识别结果 Markdown 原文。
   const MarkdownView({super.key, required this.source});
 
   final String source;
 
-  /// 最近一次解析的原文与结果；识别结果弹窗同一时刻只显示一份。
   static (String, List<MarkdownBlock>)? _parsed;
 
-  /// 作用：返回两个相邻块之间的间距。参数 previous、next：相邻块。
-  /// 返回：标题之后 8、相邻段落之间 8、其他情况 12（#67 第 2、3、6 条）。
   static double gap(MarkdownBlock previous, MarkdownBlock next) {
     if (previous is MarkdownHeading) return 8;
     if (previous is MarkdownParagraph && next is MarkdownParagraph) return 8;
@@ -148,7 +128,6 @@ class MarkdownView extends StatelessWidget {
       height: GlassMetrics.bodyLine / GlassMetrics.bodyFont,
       color: colors.onSurface,
     );
-    // 截图页面重建时同一份识别结果只解析一次。
     if (_parsed?.$1 != source) _parsed = (source, parseMarkdownBlocks(source));
     final blocks = _parsed!.$2;
     return Column(
@@ -162,7 +141,6 @@ class MarkdownView extends StatelessWidget {
     );
   }
 
-  /// 作用：渲染一个块。参数 block：块；body：正文样式；colors：主题配色。返回：块控件。
   Widget _block(MarkdownBlock block, TextStyle body, ColorScheme colors) =>
       switch (block) {
         MarkdownHeading(:final text) => Text(
@@ -192,7 +170,6 @@ class MarkdownView extends StatelessWidget {
           ],
         ),
         MarkdownTable(:final rows) => SingleChildScrollView(
-          // 表格宽于正文区时在表格内横向滚动，不截断文字。
           scrollDirection: Axis.horizontal,
           child: Table(
             border: TableBorder.all(color: colors.outlineVariant, width: 1),

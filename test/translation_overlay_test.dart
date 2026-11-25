@@ -22,14 +22,12 @@ import 'package:transnap/src/overlay/translation_overlay.dart';
 import 'package:transnap/src/selection/selection_session.dart';
 import 'package:transnap/src/translation/translation_types.dart';
 
-/// 以固定译文驱动真实会话，避免界面回归测试依赖外部网络。
 class _Provider implements TranslationProvider {
   @override
   String get id => 'local-test';
   @override
   bool get usesSlidingContext => false;
 
-  /// request 为真实翻译请求；返回一个完整译文事件流。
   @override
   Stream<TranslationEvent> translate(TranslationRequest request) async* {
     yield const TranslationUpdate('你好');
@@ -37,10 +35,8 @@ class _Provider implements TranslationProvider {
   }
 }
 
-/// 无参数；注册紧凑按钮的拖动、翻译和关闭回归检查。
 void main() {
   testWidgets('加载与结果保留至显式关闭，自动新选区不替换，热键可替换', (tester) async {
-    // 使用真实事件编解码、App 和会话；只替代不可在 headless 测试中运行的原生窗口端。
     const methods = MethodChannel('test/retained-overlay/methods');
     const events = EventChannel('test/retained-overlay/events');
     const codec = StandardMethodCodec();
@@ -65,7 +61,6 @@ void main() {
         null,
       );
     });
-    // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
       TranSnapApp(
@@ -80,7 +75,6 @@ void main() {
     );
     await tester.pump();
 
-    /// payload 为原生事件字典；通过真实通道发给 App 并刷新一帧，无返回值。
     Future<void> send(Map<String, Object> payload) async {
       await messenger.handlePlatformMessage(
         events.name,
@@ -122,7 +116,6 @@ void main() {
     expect(session.snapshot.phase, TranslationPhase.completed);
     expect(find.text('Hello'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
-    // 真实App入口不经过Scaffold；验证最终文字样式，避免黄色诊断双下划线回归。
     for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
       expect(
         rich.text.style?.decoration?.contains(TextDecoration.underline) ??
@@ -159,7 +152,6 @@ void main() {
     expect(session.snapshot.phase, TranslationPhase.idle);
     expect(find.text('你好'), findsNothing);
 
-    // 空文本是热键读取失败的边界：显示可关闭的错误卡片，不能退回隐藏状态。
     await send({
       'type': BridgeEventTypes.selectionCaptured,
       'sessionId': 'empty-hotkey',
@@ -180,7 +172,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(session.snapshot.phase, TranslationPhase.idle);
 
-    // 原生说明焦点为密码框是空读取的另一边界：失败卡片说明不读取密码，而不是提示重新选择。
     await send({
       'type': BridgeEventTypes.selectionCaptured,
       'sessionId': 'secure-hotkey',
@@ -198,7 +189,6 @@ void main() {
   testWidgets(
     'compact trigger drags without translating and expands on click',
     (tester) async {
-      // 原生窗口84×32含透明命中边缘，视觉按钮84×30；拖动保留trigger。
       tester.view.physicalSize = TranslationOverlay.triggerWindowSize;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -238,13 +228,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(session.snapshot.phase, TranslationPhase.trigger);
 
-      // 点击位置仍在小按钮里；结果态使用真实结果窗口尺寸。
       await tester.tap(find.text('翻译'));
       tester.view.physicalSize = const Size(720, 420);
       await tester.pumpAndSettle();
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);
-      // 单栏布局译文在上、原文在下且左缘对齐（#134）；比较真实布局坐标，避免仅验证两个文本都存在。
       expect(
         tester.getTopLeft(find.text('你好')).dy,
         lessThan(tester.getTopLeft(find.text('Hello')).dy),
@@ -253,7 +241,6 @@ void main() {
         tester.getTopLeft(find.text('你好')).dx,
         tester.getTopLeft(find.text('Hello')).dx,
       );
-      // 译文的复制在底部左侧带文字；原文组在右侧，组名「原文」后为只有图标、悬停提示「复制原文」的按钮（#67）。
       expect(find.byKey(const ValueKey('card-copy-source')), findsOneWidget);
       expect(find.text('复制原文'), findsNothing);
       expect(find.byTooltip('复制原文'), findsOneWidget);
@@ -270,8 +257,6 @@ void main() {
           tester.getTopLeft(find.byKey(const ValueKey('card-copy-source'))).dx,
         ),
       );
-      // 标题下缘空白也能拖动；正文/关闭保持独立，拖动不改变结果内容或会话。
-      // 边界：标题区高 44pt（#134），在距顶 40pt 处起拖仍属拖动区。
       final dragArea = find.byKey(const ValueKey('result-drag-area'));
       expect(tester.getSize(dragArea).height, 44);
       await tester.dragFrom(
@@ -291,7 +276,6 @@ void main() {
   );
 
   testWidgets('底部操作行左侧「朗读译文」朗读译文、右侧原文组朗读图标朗读原文，空内容禁用（#101、#134、#67）', (tester) async {
-    // 边界：译文为空（翻译刚开始）时「朗读译文」禁用、原文组朗读图标可用；两者都有内容时各自回报 false（译文）与 true（原文）。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -323,7 +307,6 @@ void main() {
         matching: find.byWidgetPredicate((widget) => widget is TextButton),
       ),
     );
-    // sourceSpeak 为原文组朗读图标按钮。
     IconButton sourceSpeak() => tester.widget<IconButton>(
       find.descendant(
         of: find.byKey(const ValueKey('card-speak-source')),
@@ -347,9 +330,6 @@ void main() {
   testWidgets('卡片布局：单栏按内容定高，多段配对、词典或超过 420pt 改为 720×420 对照（#134）', (
     tester,
   ) async {
-    // 作用：验证 layoutFor 的单栏判定与高度，它同时决定卡片布局与原生窗口尺寸。
-    // 边界：一行译文 22 + 间距 8 + 一行原文 17 + 固定部分 100.5 = 147.5，向上取整为 148；
-    // 两组段落配对直接对照；单栏内容超过 420pt（长译文）改为对照；未到达的译文按两行骨架估算为 44。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -404,7 +384,6 @@ void main() {
   });
 
   testWidgets('已验证的语义段落按译文原文成对展示', (tester) async {
-    // 完整译文与分段译文不同，用最终可见文本证明使用了已校验配对。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -433,12 +412,10 @@ void main() {
         ),
       ),
     );
-    // 原文逐段滑入、译文逐字显影，入场结束后再比较位置（#142）。
     await tester.pumpAndSettle();
     expect(find.text('First.'), findsOneWidget);
     expect(find.text('第二段。'), findsOneWidget);
     expect(find.text('完整译文'), findsNothing);
-    // 两组边界同时验证译文在左、原文在右，悬停只高亮对应段落。
     for (final pair in [('第一段。', 'First.'), ('第二段。', 'Second.')]) {
       final translated = tester.getTopLeft(find.text(pair.$1));
       final source = tester.getTopLeft(find.text(pair.$2));
@@ -472,7 +449,6 @@ void main() {
     expect((source.decoration! as BoxDecoration).color, Colors.transparent);
   });
 
-  /// tester 为测试驱动，session 为已激活的会话；以 720×420 结果窗口装载卡片并等待翻译与查词完成，无返回值。
   Future<void> pumpCard(WidgetTester tester, SelectionSession session) async {
     tester.view.physicalSize = const Size(720, 420);
     tester.view.devicePixelRatio = 1;
@@ -499,8 +475,6 @@ void main() {
   testWidgets('查到词典：左 2/5 上译文下原文 15pt 半粗，右 3/5 词典；生词本在底部，复制词典在悬停词典时出现（#134）', (
     tester,
   ) async {
-    // 边界：720pt 宽卡片左栏占 288pt，词典栏从 x=288 起；译文在原文上方且同在左栏、字号 15 字重 w600；
-    // 「加入生词本」在底部操作行，「复制词典」为词典栏头 24pt 可见按钮。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -542,7 +516,6 @@ void main() {
   });
 
   testWidgets('原文已是目标语言时只显示原文一栏，没有译文栏（#134）', (tester) async {
-    // 边界：未设置次要语言且识别为主要语言时目标语言等于原文语言；卡片只保留「复制原文」。
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'zh-CN',
@@ -552,7 +525,6 @@ void main() {
     session.begin(sessionId: 'same', text: '今天天气很好');
     await pumpCard(tester, session);
     expect(session.sourceIsTarget, isTrue);
-    // 原文是唯一正文：底部只保留左侧「复制原文」「朗读原文」，右侧不出现原文组。
     expect(find.text('复制原文'), findsOneWidget);
     expect(find.text('复制译文'), findsNothing);
     expect(find.byKey(const ValueKey('card-copy-source')), findsNothing);
@@ -561,8 +533,6 @@ void main() {
   });
 
   testWidgets('卡片服务菜单：翻译模式列出全部服务，润色模式只列模型服务与当前服务（#100）', (tester) async {
-    // 边界：三项服务中只有 gpt 为模型服务；润色模式下当前为默认的谷歌翻译，菜单含谷歌翻译与 gpt，不含 Apple；
-    // 选择 gpt 时交回其 id。
     final session =
         SelectionSession(
             provider: _Provider(),
@@ -616,7 +586,6 @@ void main() {
   });
 
   testWidgets('已完成卡片的服务选项更新后移除已删服务并保留当前结果', (tester) async {
-    // 边界：A 已完成且 B 未被当前卡片使用；只更新服务选项，不能关闭会话或清空 A 的原文译文。
     final session =
         SelectionSession(
             provider: _Provider(),
@@ -636,7 +605,6 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
 
-    // 已提交选项由设置持有者赋值；通知应直接刷新现有卡片，无需重新装载窗口。
     session.serviceChoices = () => const [
       (id: 'local-test', name: '服务 A', isModel: false, isDefault: true),
     ];
@@ -652,8 +620,6 @@ void main() {
   });
 
   testWidgets('译文为空的失败卡片在正文展示 NativeGlassBanner 及单一重试入口（#144）', (tester) async {
-    // 作用：验证失败且无译文时错误原因显示在正文横向提示条并保留单一重试按钮。
-    // 边界：canRetry 为真时正文提示条展示原文案与「重试」且标题栏不重复出现第二个「重试」。
     tester.view.physicalSize = const Size(720, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -696,8 +662,6 @@ void main() {
   testWidgets('原文组朗读图标与「朗读译文」各自切换，并同步外部 speakingSource 状态（#101、#144、#67）', (
     tester,
   ) async {
-    // 作用：验证原文（含词典单词发音）与译文分别朗读、不发生状态反转，且支持外部 speakingSource 受控同步。
-    // 边界：词典布局点击原文组朗读图标后其提示变为「停止朗读」，译文按钮仍为「朗读译文」；外部 speakingSource=false 时译文按钮为「停止朗读」。
     tester.view.physicalSize = const Size(720, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -768,8 +732,6 @@ void main() {
   });
 
   testWidgets('词典释义词条采用 16pt 半粗标题并用纯文本间距替代 WidgetSpan（#144）', (tester) async {
-    // 作用：验证词条标题可读字号与连续选区复制安全性。
-    // 边界：headword Span 使用 16pt / w600 / 24pt 行高，RichText 子节点中无任何 WidgetSpan。
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -805,14 +767,12 @@ void main() {
   });
 }
 
-/// 每次翻译直接返回失败事件，用于验证失败提示条与重试状态。
 class _FailProvider implements TranslationProvider {
   @override
   String get id => 'local-fail';
   @override
   bool get usesSlidingContext => false;
 
-  /// request 为翻译请求；直接产出失败事件以触发 canRetry 状态。
   @override
   Stream<TranslationEvent> translate(TranslationRequest request) async* {
     yield const TranslationFailure('服务连接超时');

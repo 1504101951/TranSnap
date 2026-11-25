@@ -19,7 +19,6 @@ import 'package:transnap/src/screenshot/edit_document.dart';
 
 import 'support/capture_pixels.dart';
 
-/// 生成带逐列颜色差异的48px原图，用于区分真实马赛克与纯色覆盖。
 Future<Uint8List> fixture() async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -37,7 +36,6 @@ Future<Uint8List> fixture() async {
   return bytes!.buffer.asUint8List();
 }
 
-/// bytes为PNG；返回逐像素RGBA，调用者可以断言输出而非绘图调用次数。
 Future<Uint8List> rgba(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
   final frame = await codec.getNextFrame();
@@ -51,7 +49,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('所有具体图形与画笔模式在切换和持久化后仍独立', () {
-    // 两个画笔宽度取范围端点，四种图形取不同颜色，捕获共享槽覆盖。
     var prefs = DrawingPreferences();
     const colors = [Colors.red, Colors.blue, Colors.green, Colors.yellow];
     for (var i = 0; i < ShapeVariant.values.length; i++) {
@@ -103,7 +100,6 @@ void main() {
   });
 
   test('每工具样式独立持久化，模式与填充色不覆盖其他工具', () {
-    // 往返保存后保留箭头5pt、画笔12pt及真圆模式，覆盖非默认值与上边界。
     final saved = DrawingPreferences()
         .copyWith(
           tool: ScreenshotTool.arrow,
@@ -201,7 +197,6 @@ void main() {
     );
     final original = await rgba(source);
     final output = await rgba(await doc.renderPng());
-    // 同一格首尾保持一致，相邻格保留不同源图颜色，边界外保持原像素。
     List<int> pixel(Uint8List data, int x, int y) =>
         data.sublist((y * 48 + x) * 4, (y * 48 + x) * 4 + 4);
     expect(pixel(output, 12, 12), pixel(output, 23, 23));
@@ -216,8 +211,6 @@ void main() {
   });
 
   test('源图边长不是12的倍数时，右下边缘的不完整块取该块自身中心', () async {
-    // 作用：马赛克按整张源图栅格化一次后裁剪绘制（#68），边缘块必须与按区域栅格化时相同。
-    // 边界：50px 源图最后一块只有 48–49 两列，块中心为第 49 列；48 是整块边界，第 47 列仍属前一整块（中心第 42 列）。
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     for (var x = 0; x < 50; x++) {
@@ -247,8 +240,6 @@ void main() {
   });
 
   test('马赛克缓存跟随源图：同一区域换一张源图后按新图采样', () async {
-    // 作用：马赛克按区域栅格化后缓存（#68），换图后不能沿用上一张图的缓存。
-    // 边界：两张源图的马赛克区域完全相同，只有颜色不同；第二张图的输出必须等于第二张图块中心的颜色。
     const bounds = Rect.fromLTWH(12, 12, 24, 24);
     List<int> pixel(Uint8List data, int x, int y) =>
         data.sublist((y * 48 + x) * 4, (y * 48 + x) * 4 + 4);
@@ -262,7 +253,6 @@ void main() {
       ),
     );
     await first.renderPng();
-    // 第二张图整幅纯绿，与 fixture 的逐列蓝紫渐变任何一格都不同。
     final recorder = ui.PictureRecorder();
     Canvas(recorder).drawRect(
       const Rect.fromLTWH(0, 0, 48, 48),
@@ -286,8 +276,6 @@ void main() {
   });
 
   test('标注只读视图在文档未变更时复用同一对象，变更后换新并包含新标注', () async {
-    // 作用：画布按视图对象判断是否重绘（#68）；未变更时必须是同一对象，变更后必须换新，否则画布不会重绘。
-    // 边界：连续两次读取之间没有任何变更；随后加入一条标注。
     final doc = EditDocument()..loadCapture(await decodePng(await fixture()));
     final before = doc.annotations;
     expect(identical(doc.annotations, before), isTrue);
@@ -394,7 +382,6 @@ void main() {
     expect(result, 20);
   });
   testWidgets('工具属性在属性列独立记忆，并在重新打开编辑器后恢复', (tester) async {
-    // 用真实控件修改并重建编辑器；持久化只替换平台存储边界，避免仅测序列化。
     tester.view.physicalSize = const Size(640, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -437,14 +424,11 @@ void main() {
     }
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    // 默认截图组显示采集入口；绘图属性仅在切到对应绘图工具后出现。
     expect(find.byKey(const Key(ScreenshotActions.record)), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     await tap(ScreenshotActions.rect);
-    // 工具栏横放：图形在第 1 行，属性托盘作为一行紧跟其下（块内边距 4、行间距 4 加托盘内边距 2），挤开后续行（#141、#67）。
     expect(
       tester
           .getRect(find.byKey(const Key('screenshot-attributes-group-0')))
@@ -464,13 +448,11 @@ void main() {
     await tap(ScreenshotActions.arrow);
     await color('FF3B30', '007AFF');
     await tap(ScreenshotActions.brush);
-    // 两种画笔使用不同线宽；切回普通画笔不能继承马赛克设置。
     await tap(ScreenshotActions.width);
     await tester.tapAt(tester.getRect(slider).centerRight - const Offset(1, 0));
     await tester.pump();
     await tap('apply-stroke-width');
     await tap('${ScreenshotActions.brushPrefix}mosaic');
-    // 画笔模式按钮在属性托盘内，不再各带独立玻璃材料（#67）。
     expect(
       find.ancestor(
         of: find.byKey(Key('${ScreenshotActions.brushPrefix}mosaic')),
@@ -501,7 +483,6 @@ void main() {
     await tap('${ScreenshotActions.brushPrefix}mosaic');
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tap(ScreenshotActions.rect);
@@ -518,7 +499,6 @@ void main() {
     await color('007AFF', '007AFF');
     await tap(ScreenshotActions.text);
     await color('FF3B30', 'FF3B30');
-    // 编辑已有红字颜色不能覆盖后续文字的蓝色默认值。
     await tester.tapAt(const Offset(200, 120));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -530,7 +510,6 @@ void main() {
     await tap(ScreenshotActions.arrow);
     await tap(ScreenshotActions.text);
     await color('FF3B30', '007AFF');
-    // 文字工具下单击是选中，紧接着再次点击同一文字框才进入编辑。
     await tester.tapAt(const Offset(230, 130));
     await tester.tapAt(const Offset(230, 130));
     await tester.pumpAndSettle();
@@ -550,7 +529,6 @@ void main() {
   });
 
   testWidgets('编辑器选中矩形应用颜色和线宽后导出，撤销恢复原样', (tester) async {
-    // 480×400原图与1倍窗口一致，避免把屏幕和图像坐标混为一谈。
     tester.view.physicalSize = const Size(480, 400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -582,7 +560,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
@@ -609,7 +586,6 @@ void main() {
     await tester.tap(find.byKey(const Key('apply-stroke-width')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.copy)));
-    // PNG引擎编码需要真实异步区间，不能在fakeAsync里触发后只等待墙钟。
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key(ScreenshotActions.copy)));
       for (var i = 0; i < 100 && exported == null; i++) {
@@ -624,7 +600,6 @@ void main() {
       122,
       255,
     ]);
-    // 撤销只有系统快捷键 ⌘Z；连按两次撤回两步。
     for (var step = 0; step < 2; step++) {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
@@ -633,7 +608,6 @@ void main() {
     }
     exported = null;
     await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.copy)));
-    // PNG引擎编码需要真实异步区间，不能在fakeAsync里触发后只等待墙钟。
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key(ScreenshotActions.copy)));
       for (var i = 0; i < 100 && exported == null; i++) {
@@ -646,7 +620,6 @@ void main() {
       restored!.sublist((150 * 480 + 100) * 4, (150 * 480 + 100) * 4 + 3),
       [255, 59, 48],
     );
-    // 画笔第二行切换马赛克；隐藏颜色但保留轨迹粗细。
     await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
@@ -659,7 +632,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key(ScreenshotActions.palette)), findsNothing);
     expect(find.byKey(const Key(ScreenshotActions.width)), findsOneWidget);
-    // 编辑中的文字打开/取消调色盘不能消失，应用颜色仍保留输入焦点与草稿。
     await tester.ensureVisible(find.byKey(const Key(ScreenshotActions.text)));
     await tester.tap(find.byKey(const Key(ScreenshotActions.text)));
     await tester.pump();
@@ -683,8 +655,6 @@ void main() {
   });
 
   testWidgets('调色盘渐变页签：预设、编辑结束色与方向后应用带渐变的值，切回纯色应用不带渐变（#103）', (tester) async {
-    // 边界：选预设「海洋」后改结束色为 #112233、方向为 →，应用值的起始色为海洋起始色；
-    // 再切回「纯色」应用，渐变为 null。
     final results = <ColorFill>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -723,7 +693,6 @@ void main() {
   });
 
   test('渐变填充图形：左端为起始色、右端为结束色；绘图偏好往返保留渐变，缺失即纯色（#103）', () async {
-    // 边界：48px 宽的实心矩形，方向 →，红到蓝；第 1 列接近红、第 46 列接近蓝。
     final doc = EditDocument()..loadCapture(await decodePng(await fixture()));
     doc.addAnnotation(
       EditAnnotation(

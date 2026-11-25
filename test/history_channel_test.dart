@@ -9,10 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:transnap/main.dart' as app;
 import 'package:transnap/src/selection/selection_translation_app.dart';
 
-/// 无参数；验证截图翻译和设置提交等待期间，主引擎仍能读取历史和持久化记录开关。
 void main() {
   testWidgets('截图翻译与设置提交等待期间，历史分页和关闭记录可独立完成', (tester) async {
-    // 设备识别保持未完成；这是网络开始前即可稳定复现的异步边界。
     final detection = Completer<String?>();
     final started = Completer<void>();
     final saving = Completer<void>();
@@ -59,7 +57,6 @@ void main() {
       methods.setMethodCallHandler(null);
     });
 
-    /// name/arguments 为原生向主引擎发送的请求；返回解码后的真实通道响应。
     Future<Object?> request(
       String name, [
       Map<String, Object> arguments = const {},
@@ -81,7 +78,6 @@ void main() {
       return result.future;
     }
 
-    // 截图翻译会话在逐段识别语言期间保持未完成，作为挂起的跨引擎请求（#138）。
     final translating = request(MethodNames.translateScreenshotBlocks, {
       'id': 'closed-shot',
       'blocks': [
@@ -89,14 +85,12 @@ void main() {
       ],
     });
     await started.future;
-    // 同时挂起真实主引擎的设置提交；历史开关属于独立业务，不能排在设置队列后。
     holdSettings = true;
     final updating = request(MethodNames.toggleAutomatic);
     await saveStarted.future;
     await request(MethodNames.setHistoryRecording, {'enabled': false});
     expect(history.recordingEnabled, isFalse);
     expect(await request(MethodNames.historyPage, {'limit': 10}), isEmpty);
-    // 新的查询与管理协议同样不等待设置队列；验证实际筛选、计数和删除结果。
     await request(MethodNames.setHistoryRetention, {'days': 0});
     await request(MethodNames.setHistoryRecording, {'enabled': true});
     for (final stamp in [1, DateTime.now().millisecondsSinceEpoch]) {
@@ -142,7 +136,6 @@ void main() {
     expect(saving.isCompleted, isFalse);
     saving.complete();
     await updating;
-    // 截图关闭后结束会话；释放设备识别后批次已取消，不访问远程服务，截图翻译也不写历史。
     await request(MethodNames.cancelScreenshotTranslation, {
       'id': 'closed-shot',
     });

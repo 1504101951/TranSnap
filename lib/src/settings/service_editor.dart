@@ -11,7 +11,6 @@ import '../common/widgets/native_glass.dart';
 
 import 'service_config.dart';
 
-/// 编辑器只持有草稿；确定后父页自动提交完整服务事务与 Keychain 凭据。
 class ServiceEditor extends StatefulWidget {
   const ServiceEditor({
     super.key,
@@ -28,7 +27,6 @@ class ServiceEditor extends StatefulWidget {
   State<ServiceEditor> createState() => _ServiceEditorState();
 }
 
-/// 管理服务表单与连接测试草稿；仅在确定时返回完整配置和凭据变更。
 class _ServiceEditorState extends State<ServiceEditor> {
   final _name = TextEditingController();
   final _base = TextEditingController();
@@ -47,7 +45,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
   String? _message;
   bool _messageIsError = false;
 
-  /// 无参数；读取非敏感配置和本窗口草稿，不从 Keychain 取回密钥，无返回值。
   @override
   void initState() {
     super.initState();
@@ -65,7 +62,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
     _appId.text = widget.credentials['appId'] ?? '';
   }
 
-  /// 无参数；关闭窗口时释放包含凭据草稿的控制器，无返回值。
   @override
   void dispose() {
     for (final controller in [_name, _base, _model, _key, _appId, _tokens]) {
@@ -74,7 +70,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
     super.dispose();
   }
 
-  /// 无参数；验证表单，返回配置及非空凭据字段，空字段表示保留已保存值。
   ({ServiceConfig config, Map<String, String> credentials}) _draft() {
     final config = ServiceConfig(
       id: _id,
@@ -85,7 +80,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
       semanticPairs: _semantic,
       maxOutputTokens: int.tryParse(_tokens.text) ?? 0,
     );
-    // 配置校验在窗口中给出具体提示，网络测试不替代格式校验。
     config.validate();
     final credentials = <String, String>{
       if (_key.text.trim().isNotEmpty) 'apiKey': _key.text.trim(),
@@ -96,11 +90,9 @@ class _ServiceEditorState extends State<ServiceEditor> {
     return (config: config, credentials: credentials);
   }
 
-  /// test 决定测试草稿还是返回表单结果；测试只发送示例文本，不保存设置。
   Future<void> _submit({required bool test}) async {
     if (_testing) return;
     try {
-      // 收集经过验证的草稿，凭据始终与普通配置分开传递。
       final draft = _draft();
       if (!test) {
         Navigator.pop(context, draft);
@@ -138,7 +130,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
     }
   }
 
-  /// obscure/tooltip/onToggle 为显隐状态、提示与切换回调；生成密码框右侧可见性切换装饰。
   InputDecoration _secretDecoration({
     required bool obscure,
     required String tooltip,
@@ -159,7 +150,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
     ),
   );
 
-  /// context 为对话框上下文；返回服务字段、显隐切换、语义横幅与带忙碌态的测试连接入口。
   @override
   Widget build(BuildContext context) {
     final isModel = ServiceConfig.isModelKind(_kind);
@@ -183,7 +173,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
                     : (value) => setState(() {
                         final previousKind = _kind;
                         _kind = value;
-                        // 仅当名称或地址仍为默认模板或留空时跟随切换，保留用户手工填写的值（U-24）。
                         if (!_nameEdited ||
                             _name.text.trim().isEmpty ||
                             _name.text.trim() ==
@@ -254,7 +243,6 @@ class _ServiceEditorState extends State<ServiceEditor> {
                 ),
               NativeGlassField(
                 label: _kind == 'baidu' ? '百度密钥' : 'API Key',
-                // 模型服务的 API Key 可留空（#123）。
                 helper: widget.hasCredentials
                     ? '已保存，留空保留；凭据保存在 macOS 钥匙串。'
                     : isModel

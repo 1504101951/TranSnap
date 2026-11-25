@@ -19,7 +19,6 @@ import 'support/settings_pages.dart';
 import 'package:transnap/src/translation/glossary.dart';
 import 'package:transnap/src/translation/glossary_file.dart';
 
-/// tester 为测试界面，source 为 JSON 文件，existing 为当前条目，submit 保存完整列表；返回预览打开的 Future。
 Future<void> openPreview(
   WidgetTester tester, {
   required String source,
@@ -51,10 +50,8 @@ Future<void> openPreview(
   await tester.pumpAndSettle();
 }
 
-/// 无参数；验证导入预览的取消、整批校验、失败草稿与并发保存的真实结果。
 void main() {
   testWidgets('无效行禁用整批导入，取消保留已提交术语', (tester) async {
-    // 边界：同一批同时包含一条有效行与一条空术语；有效行不能单独写入。
     final settings = AppSettings(
       primaryLanguage: 'zh-CN',
       glossary: [
@@ -87,7 +84,6 @@ void main() {
   });
 
   testWidgets('预览保存真实校验失败保留草稿，修正配置后可重试成功', (tester) async {
-    // 边界：完整设置中的主次语言相同使真实 validate 失败；预览仍保留同一条术语及错误，修正后保存。
     var settings = AppSettings(primaryLanguage: 'en', secondaryLanguage: 'en');
     await openPreview(
       tester,
@@ -96,7 +92,6 @@ void main() {
       submit: (entries) async {
         final candidate = AppSettings.fromMap(settings.toMap());
         candidate.glossary.addAll(entries);
-        // validate 使用完整配置规则，测试不伪造保存异常。
         candidate.validate();
         settings = candidate;
       },
@@ -115,7 +110,6 @@ void main() {
   });
 
   testWidgets('默认保留已有值，选择覆盖后整批保存并等待实际完成', (tester) async {
-    // 边界：目标相同且大小写不同构成重复；提交挂起时不能取消或重复确认，成功后才关闭预览。
     var saved = [
       const GlossaryEntry(term: 'API', translation: '现有', language: 'en'),
     ];
@@ -151,7 +145,6 @@ void main() {
   });
 
   testWidgets('先前自动保存未结束时导入等待后续完整事务，两个改动均持久化', (tester) async {
-    // 边界：登录项事务已发出但尚未完成，此时确认导入必须等到包含术语的新修订保存成功。
     final gate = Completer<void>();
     var saved = <String, Object?>{
       ...AppSettings(primaryLanguage: 'zh-CN').toMap(),
@@ -221,7 +214,6 @@ void main() {
   });
 
   testWidgets('失败导入取消后不夹带术语，已有未保存设置仍可修正并提交', (tester) async {
-    // 边界：先留下真实语言校验失败的登录项草稿，再导入失败并取消；修正语言只保存原有草稿。
     var saved = <String, Object?>{
       ...AppSettings(
         primaryLanguage: 'en',
@@ -316,7 +308,6 @@ void main() {
   });
 
   testWidgets('导出操作保存可重新导入的 UTF-8 CSV 与 JSON 术语文件', (tester) async {
-    // 边界：实际临时文件包含逗号、引号、换行及空译法，输出仅含术语字段；不检查下游调用次数。
     final directory = Directory.systemTemp.createTempSync(
       'transnap-glossary.01a19b92-2e95-7c50-ba89-aed2fc78fad9.',
     );
@@ -380,8 +371,6 @@ void main() {
   });
 
   testWidgets('术语表导入与确认保存等待期间仅对应按钮显示进度环，完成后关闭（#142）', (tester) async {
-    // 作用：验证术语管理导入等待与预览确认保存等待各自激活对应按钮的进度环，不触发无关按钮。
-    // 边界：导入文件选择挂起期间「导入…」active=true、「导出…」active=false；确认保存期间「保存中…」active=true。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;

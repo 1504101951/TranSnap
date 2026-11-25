@@ -1,9 +1,6 @@
-/// Dart 使用的平台方法名协议值；Swift AppConstants 也定义的值字面量一致，改名须两端同步，跨引擎方法经原生通用转发，Swift 不需要字面量。
 abstract final class MethodNames {
-  /// 初始化绑定并提交附属窗口 widget 后确认入口已执行。
   static const windowReady = 'windowReady';
 
-  /// 媒体采集协议，与Swift AppConstants逐项对应。
   static const getCaptureState = 'getCaptureState';
   static const previewLiveRegion = 'previewLiveRegion';
   static const cancelLivePreview = 'cancelLivePreview';
@@ -19,61 +16,45 @@ abstract final class MethodNames {
   static const cancelCapture = 'cancelCapture';
   static const saveRecording = 'saveRecording';
 
-  /// 将当前录制结果（已裁剪时输出裁剪片段）复制到系统剪贴板。
   static const copyRecording = 'copyRecording';
 
-  /// 从裁剪起点播放到终点；未裁剪时播放完整视频。
   static const previewRecording = 'previewRecording';
 
-  /// 切换录制结果播放器播放/暂停状态。
   static const toggleRecordingPlayback = 'toggleRecordingPlayback';
 
-  /// 将录制结果播放器定位到指定秒数；参数 {id, seconds}。
   static const seekRecording = 'seekRecording';
 
   static const exportRecordingGIF = 'exportRecordingGIF';
 
-  /// 按 GIF 设置导出 APNG（#110）。
   static const exportRecordingAPNG = 'exportRecordingAPNG';
 
-  /// 按原分辨率与原帧时间导出 VP8 WebM（#110）。
   static const exportRecordingWebM = 'exportRecordingWebM';
 
-  /// 结果页播放器进入系统裁剪模式；用户点「裁剪」或「取消」后返回（#110）。
   static const trimRecording = 'trimRecording';
 
-  /// 取消正在进行的 MP4/GIF/APNG/WebM 转换。
   static const cancelRecordingExport = 'cancelRecordingExport';
 
-  /// 历史写入完成及窗口重开时通知历史引擎刷新。
   static const historyChanged = 'historyChanged';
 
-  /// 更新各工具独立的绘制偏好。
   static const saveDrawingPreferences = 'saveDrawingPreferences';
 
-  /// 截图工具栏「录制选项」保存录制延时与点击特效；参数 {recordingDelay, recordingClickEffect}（#129、#143）。
   static const saveRecordingOptions = 'saveRecordingOptions';
 
-  /// 激活截图引擎的原生对角拉伸光标。
   static const setResizeCursor = 'setResizeCursor';
   static const setBrushCursor = 'setBrushCursor';
   static const screenshotTextInput = 'screenshotTextInput';
   static const screenshotToolbarChanged = 'screenshotToolbarChanged';
 
-  /// 原生截图面板转来的格位快捷键：{id, modifiers, digit}，digit 为 1–6，由截图引擎按网格解析（#141）。
   static const screenshotToolbarSlot = 'screenshotToolbarSlot';
 
   static const appReady = 'appReady';
 
-  /// 主引擎初始化失败；参数 message 为错误文本，原生弹出提示后退出（#126）。
   static const appStartFailed = 'appStartFailed';
 
-  /// 阶段耗时；参数 stage 为固定阶段名、ms 为毫秒数，原生写入性能日志（#68「性能测量边界」）。
   static const perfMark = 'perfMark';
 
   static const appearanceChanged = 'appearanceChanged';
 
-  /// 设置页拖动透明度或调色时的外观预览；参数为 {glassOpacity?, accentColor?}，null 清除预览，原生只广播不写偏好（#144）。
   static const previewAppearance = 'previewAppearance';
 
   static const applicationSupportPath = 'applicationSupportPath';
@@ -82,7 +63,6 @@ abstract final class MethodNames {
 
   static const chooseExcludedApp = 'chooseExcludedApp';
 
-  /// 设置窗口读取已启用的系统快捷键：返回 [{keyCode, modifiers}]，modifiers 为 NSEvent 修饰键标志原始值（#141）。
   static const systemShortcuts = 'systemShortcuts';
 
   static const chooseScreenshotDirectory = 'chooseScreenshotDirectory';
@@ -93,7 +73,6 @@ abstract final class MethodNames {
 
   static const confirmScreenshot = 'confirmScreenshot';
 
-  /// 原生按键路由转发方向键微调截图选区；参数 id、dx、dy（单位方向）、shift、option（#106）。
   static const nudgeScreenshotCrop = 'nudgeScreenshotCrop';
 
   static const copyScreenshot = 'copyScreenshot';
@@ -120,7 +99,6 @@ abstract final class MethodNames {
 
   static const historyPage = 'historyPage';
 
-  /// 设置页读取 MCP helper 完整路径；与原生 AppConstants.mcpHelperPathMethod 一致。
   static const mcpHelperPath = 'mcpHelperPath';
 
   static const historyRecording = 'historyRecording';
@@ -131,22 +109,16 @@ abstract final class MethodNames {
 
   static const openLoginItems = 'openLoginItems';
 
-  /// 设置页打开「系统设置 → 通用 → 语言与地区」，用户在其中下载离线翻译语言（#98）。
   static const openTranslationLanguages = 'openTranslationLanguages';
 
-  /// 贴纸库（#103）：选择并规范化图片（返回 bytes、width、height，取消为 null）、
-  /// 写入贴纸文件（参数 id、bytes，返回文件路径）、删除贴纸文件（参数 id）。
   static const importStickerImage = 'importStickerImage';
   static const saveSticker = 'saveSticker';
   static const deleteSticker = 'deleteSticker';
 
-  /// 返回贴纸目录路径，文件为「目录/id.png」（#103）。
   static const stickerDirectory = 'stickerDirectory';
 
-  /// 截图贴纸面板「管理贴纸…」打开设置窗口（#103）。
   static const openStickerSettings = 'openStickerSettings';
 
-  /// 非激活截图面板的 Delete 键由原生转发，删除当前选中的标注；参数 id（#103）。
   static const deleteScreenshotSelection = 'deleteScreenshotSelection';
 
   static const permissionStatusChanged = 'permissionStatusChanged';
@@ -163,7 +135,6 @@ abstract final class MethodNames {
 
   static const recognizeText = 'recognizeText';
 
-  /// openLink 的稳定协议值；截图识别结果中的链接交给默认浏览器（#108），变更须同步两端。
   static const openLink = 'openLink';
 
   static const recordShortcut = 'recordShortcut';
@@ -176,10 +147,8 @@ abstract final class MethodNames {
 
   static const retainOverlay = 'retainOverlay';
 
-  /// 输入翻译完成后把译文粘贴回来源应用；参数含 sessionId 与 text，返回是否已替换。
   static const replaceSelection = 'replaceSelection';
 
-  /// 输入翻译失败时请求原生在选中区域附近显示失败气泡；参数 sessionId、message（#99）。
   static const showInputFailure = 'showInputFailure';
 
   static const revealFile = 'revealFile';
@@ -192,119 +161,84 @@ abstract final class MethodNames {
 
   static const setHistoryRecording = 'setHistoryRecording';
 
-  /// 返回翻译历史的来源名称列表，供筛选使用。
   static const historySources = 'historySources';
 
-  /// 返回保留天数、确认状态及过期数量；可选 days 用于预览期限清理。
   static const historyRetention = 'historyRetention';
 
-  /// 用户确认后设置保留天数并清理；参数 days，0 表示永久。
   static const setHistoryRetention = 'setHistoryRetention';
 
-  /// 删除指定翻译记录；参数 id，不影响生词本与截图历史。
   static const deleteHistory = 'deleteHistory';
 
-  /// 用户确认后清空全部翻译历史，不受当前筛选条件限制。
   static const clearHistory = 'clearHistory';
 
   static const setOverlaySize = 'setOverlaySize';
 
-  /// 设置当前附属窗口的原生窗口标题；参数 {'title': String}，由窗口所在引擎发给所属原生窗口控制器（#144）。
   static const setWindowTitle = 'setWindowTitle';
 
-  /// 通顶窗口的标题栏带空白处按下拖动时，请所属原生窗口执行 performDrag；无参数（#67）。
   static const startWindowDrag = 'startWindowDrag';
 
   static const showOverlay = 'showOverlay';
 
   static const systemStatus = 'systemStatus';
 
-  /// 原生在截图导出成功且开关开启时请求主引擎记录截图历史；参数 id、bytes、capturedAt（#29、#68）。
   static const recordScreenshotHistory = 'recordScreenshotHistory';
 
-  /// 历史窗口读取截图历史；返回按截图时间倒序的条目列表。
   static const screenshotHistoryList = 'screenshotHistoryList';
 
-  /// 历史窗口删除一条截图历史及其图片；参数 id。
   static const deleteScreenshotHistory = 'deleteScreenshotHistory';
 
-  /// 历史窗口清空截图历史及其图片。
   static const clearScreenshotHistory = 'clearScreenshotHistory';
 
-  /// 读取「记录截图历史」开关；历史窗口与原生截图导出共用。
   static const screenshotHistoryRecording = 'screenshotHistoryRecording';
 
-  /// 设置「记录截图历史」开关；参数 enabled。
   static const setScreenshotHistoryRecording = 'setScreenshotHistoryRecording';
 
-  /// 历史窗口把拼接或拆分结果加入截图历史；参数 images（PNG 字节列表，按列表从上到下的顺序）（#109）。
   static const addScreenshotHistory = 'addScreenshotHistory';
 
-  /// 按顺序拼接截图历史图片；参数 paths、vertical，返回 PNG 字节（#109）。
   static const stitchScreenshots = 'stitchScreenshots';
 
-  /// 按高度等分一张截图历史图片；参数 path、parts，返回自上而下的 PNG 字节列表（#109）。
   static const splitScreenshot = 'splitScreenshot';
 
-  /// 逐像素比较两张截图历史图片；参数 first、second，返回 {mask, different, total}（#109）。
   static const compareScreenshots = 'compareScreenshots';
 
-  /// 用系统默认应用打开文件；参数 path。
   static const openFile = 'openFile';
 
-  /// 把 PNG 文件复制到剪贴板；参数 path。
   static const copyImageFile = 'copyImageFile';
 
-  /// 查询 macOS 词典释义；参数 text 为单词或短语，返回释义全文或 null（#102）。
   static const lookupDefinition = 'lookupDefinition';
 
-  /// 历史窗口读取生词本；返回按加入时间倒序的条目列表。
   static const vocabularyList = 'vocabularyList';
 
-  /// 历史窗口删除一条生词；参数 word。
   static const deleteVocabulary = 'deleteVocabulary';
 
-  /// 历史窗口取得生词本 CSV 全文（UTF-8、无表头，列为单词、译文、释义）。
   static const vocabularyCsv = 'vocabularyCsv';
 
-  /// 经系统保存面板保存文本文件；参数 text 与 suggestedName，返回保存路径，取消为 null。
   static const saveTextFile = 'saveTextFile';
 
-  /// 系统面板读取术语 CSV/JSON；返回 name、format、text，取消为 null。
   static const openGlossaryFile = 'openGlossaryFile';
 
-  /// 朗读或停止朗读卡片一栏文字；参数含 text 与 language，返回调用后是否在朗读。
   static const toggleSpeech = 'toggleSpeech';
 
-  /// 停止当前朗读；关闭卡片、开始新翻译或切换模式时调用。
   static const stopSpeech = 'stopSpeech';
 
-  /// Apple 系统翻译一组段落；参数含 requestId、texts、source、target、strategy。
   static const systemTranslate = 'systemTranslate';
 
-  /// 按 requestId 取消进行中的 Apple 系统翻译。
   static const cancelSystemTranslation = 'cancelSystemTranslation';
 
-  /// 查询 Apple 系统翻译语言对的安装状态；参数 pairs 为 [源语言, 目标语言] 列表。
   static const systemTranslationStatus = 'systemTranslationStatus';
 
   static const testService = 'testService';
 
-  /// 设置窗口查询 Apple 系统翻译语言包状态；返回已安装说明，缺少或不支持时为测试失败错误（#1）。
   static const checkSystemTranslation = 'checkSystemTranslation';
 
   static const toggleAutomatic = 'toggleAutomatic';
 
-  /// 截图引擎把段落块交主引擎分块翻译；参数 id 为捕获身份，blocks 为 {text, x, y, width, height} 列表（#138）。
   static const translateScreenshotBlocks = 'translateScreenshotBlocks';
 
-  /// 截图引擎开始识别文字时请求主引擎预热默认翻译服务的连接；无参数（#68）。
   static const prewarmTranslation = 'prewarmTranslation';
 
-  /// 主引擎截图翻译快照，经原生转给截图引擎；参数为 id 加 LiveRegionView.toMap 的字段（#138）。
   static const publishScreenshotTranslation = 'publishScreenshotTranslation';
 
-  /// 原生截图关闭或替换时取消对应翻译；参数 id 为捕获身份。
   static const cancelScreenshotTranslation = 'cancelScreenshotTranslation';
 
   static const undoPressed = 'undoPressed';

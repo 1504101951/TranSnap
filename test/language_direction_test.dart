@@ -3,7 +3,6 @@ import 'package:transnap/src/translation/language_direction.dart';
 
 void main() {
   test('without secondary language every source targets the primary', () {
-    // 已识别主语言、其他语言、未知语言三个分支都必须有有效目标语言。
     const direction = LanguageDirection(primaryCode: 'zh-CN');
     for (final source in ['zh-Hans', 'en', null]) {
       expect(direction.resolve(source).targetLanguage, 'zh-CN');

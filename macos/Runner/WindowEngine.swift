@@ -1,14 +1,10 @@
 import AppKit
 import FlutterMacOS
 
-/// 附属窗口共用的 Flutter 引擎装配（#120）：设置、权限向导、历史、截图与采集窗口都经这里创建引擎。
 enum WindowEngine {
-    /// 已运行的附属窗口引擎、视图控制器与方法通道。
     typealias Started = (engine: FlutterEngine, flutter: FlutterViewController, channel: FlutterMethodChannel)
 
-    /// 单次启动拥有的资源与终态；Dart 确认后将资源所有权交给窗口，取消和失败负责清理。
     final class Startup {
-        /// waiting 是唯一可接受确认的状态；终态阻止迟到确认重新交付窗口。
         private enum State { case waiting, succeeded, failed, cancelled }
         private var state = State.waiting
         private var resources: Started?
@@ -16,8 +12,6 @@ enum WindowEngine {
         private var deadline: DispatchWorkItem?
         private var completion: ((Started?) -> Void)?
 
-        /// name/entrypoint/channel/handler 为引擎与业务协议；completion 接收就绪资源或失败 nil。
-        /// 返回尚未运行的启动对象，下一轮主队列才运行入口，让调用方先保存取消句柄。
         fileprivate init(name: String, entrypoint: String, channel: String,
                          handler: @escaping FlutterMethodCallHandler,
                          completion: @escaping (Started?) -> Void) {
@@ -31,20 +25,17 @@ enum WindowEngine {
             let acknowledgement = FlutterMethodChannel(
                 name: AppConstants.windowStartupChannel, binaryMessenger: engine.binaryMessenger)
             self.acknowledgement = acknowledgement
-            // 确认处理器先于 run 注册；每个引擎的 messenger 隔离本次启动身份。
             acknowledgement.setMethodCallHandler { [weak self] call, reply in
                 guard call.method == AppConstants.windowReadyMethod else {
                     reply(FlutterMethodNotImplemented)
                     return
                 }
                 reply(nil)
-                // 等当前 run 和插件注册完成再交付；不等待附着窗口后才可能出现的首帧。
                 DispatchQueue.main.async { [weak self] in self?.finish(succeeded: true) }
             }
             DispatchQueue.main.async { [weak self] in self?.run(entrypoint: entrypoint) }
         }
 
-        /// entrypoint 为 Dart 编译入口名；运行入口并注册插件，失败或五秒未确认时完成失败，无返回值。
         private func run(entrypoint: String) {
             guard state == .waiting, let resources else { return }
             let deadline = DispatchWorkItem { [weak self] in self?.finish(succeeded: false) }
@@ -55,11 +46,9 @@ enum WindowEngine {
                 return
             }
             RegisterGeneratedPlugins(registry: resources.flutter)
-            // 平台视图工厂按引擎注册，避免独立窗口缺少原生玻璃材料。
             NativeGlassFactory.register(with: resources.flutter)
         }
 
-        /// succeeded 表示收到 Dart 确认；仅 waiting 可交付或失败，终态清除确认通道与计时器，无返回值。
         private func finish(succeeded: Bool) {
             precondition(Thread.isMainThread)
             guard state == .waiting else { return }
@@ -76,7 +65,6 @@ enum WindowEngine {
             callback?(delivered)
         }
 
-        /// 无参数；撤销尚未交付的启动并释放资源，不触发失败提示回调，无返回值。
         func cancel() {
             precondition(Thread.isMainThread)
             guard state == .waiting else { return }
@@ -86,11 +74,9 @@ enum WindowEngine {
             acknowledgement?.setMethodCallHandler(nil)
             acknowledgement = nil
             completion = nil
-            // releaseResources 解除业务处理器并停止本次引擎。
             releaseResources()
         }
 
-        /// 无参数；释放本对象仍拥有的业务通道、控制器与引擎，无返回值。
         private func releaseResources() {
             resources?.channel.setMethodCallHandler(nil)
             resources?.engine.shutDownEngine()
@@ -100,26 +86,17 @@ enum WindowEngine {
         deinit { cancel() }
     }
 
-    /// name/entrypoint/channel/handler 指定引擎与业务协议；completion 在 Dart 确认后接收资源，失败接收 nil。
-    /// 返回可取消的启动句柄；调用方须保留到完成，取消不触发 completion。
     static func start(name: String, entrypoint: String, channel: String,
                       handler: @escaping FlutterMethodCallHandler,
                       completion: @escaping (Started?) -> Void) -> Startup {
         Startup(name: name, entrypoint: entrypoint, channel: channel, handler: handler, completion: completion)
     }
 
-    /// window 为通顶窗口；Flutter 在标题栏带空白处识别到拖动时调用，用当前鼠标事件交给 AppKit 拖动窗口，无返回值（#67）。
-    /// Flutter 视图覆盖了标题栏区域，系统不会自动拖动；消息经通道异步到达时 currentEvent 仍是同一次按下拖动中的鼠标事件。
     static func beginDrag(_ window: NSWindow?) {
         guard let window, let event = NSApp.currentEvent else { return }
         window.performDrag(with: event)
     }
 
-    /// flutter 为已运行引擎的视图控制器，title/size 为窗口标题与内容尺寸，minSize 为最小尺寸（为空不限制），
-    /// delegate 接收窗口事件，autosaveName 为可选的窗口位置与尺寸记忆键（首次无记录时居中），
-    /// fullSizeTitlebar 为真时隐藏系统标题栏文字并让 Flutter 内容通顶承载全高侧边栏（#67），
-    /// compactToolbar 为真时挂空工具栏并使用 unifiedCompact 样式，标题栏高 38pt、红黄绿按钮垂直居中，供 Flutter 在标题栏带内放置分段（#67）；
-    /// 返回关闭时不释放、透明承载原生玻璃内容但尚未显示的普通窗口（#126、#144）。
     static func makeWindow(flutter: FlutterViewController, title: String, size: NSSize, minSize: NSSize?,
                            delegate: NSWindowDelegate,
                            autosaveName: NSWindow.FrameAutosaveName? = nil,
@@ -135,18 +112,15 @@ enum WindowEngine {
         if fullSizeTitlebar {
             window.titleVisibility = .hidden
         }
-        // 空工具栏只用来撑高标题栏并让红黄绿按钮居中，工具栏内容由 Flutter 绘制。
         if compactToolbar {
             window.toolbar = NSToolbar()
             window.toolbarStyle = .unifiedCompact
         }
         if let minSize { window.minSize = minSize }
         window.isReleasedWhenClosed = false
-        // Flutter 控件绘制在原生玻璃材料上；窗口本身透明承载，保持普通层级。
         window.isOpaque = false
         window.backgroundColor = .clear
         NativeGlassFactory.installContent(flutter, in: window, edgeToEdgeTop: fullSizeTitlebar)
-        // Flutter 控制器初始视图可为零尺寸；绑定后先设定基准内容尺寸，再恢复用户调整过的几何位置。
         window.setContentSize(size)
         if let autosaveName {
             let restored = window.setFrameUsingName(autosaveName)
@@ -158,18 +132,12 @@ enum WindowEngine {
         return window
     }
 
-    /// window 为普通窗口（设置、历史、权限向导、打开的图片）；登记到 Dock 与 ⌘Tab（窗口关闭时由所属控制器撤销），
-    /// 先把它设为 key 并前置，再强制激活应用，无返回值。
-    /// 激活只把应用的 key/main 窗口带到前面：先前置本窗口，留在其他应用后面的设置等窗口不会跟着出现。
-    /// 使用 ignoringOtherApps：异步流程（如剪贴板图片解码后）里协作式 NSApp.activate() 会被系统拒绝，窗口会留在其他应用后面；
-    /// 系统不再接受该参数时需改用协作式激活并在用户操作的同步路径内调用。
     static func present(_ window: NSWindow) {
         DockPresence.enter(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// name 为窗口名；引擎启动失败时按当前应用外观弹出提示，提供超时信息与数据目录入口，无返回值（#126、#144）。
     static func reportStartFailure(_ name: String) {
         let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
         alert.alertStyle = .warning

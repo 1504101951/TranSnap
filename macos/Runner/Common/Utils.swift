@@ -6,35 +6,28 @@ import OSLog
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-/// App 在 Dock 与 ⌘Tab 中的显示登记（#1、#68），是激活策略的唯一写入方；只在主线程调用。
-/// 登记集合非空时为普通应用，清空后回到仅菜单栏图标；其他位置不直接调用 setActivationPolicy。
 enum DockPresence {
     private static var holders = Set<ObjectIdentifier>()
 
-    /// holder 为登记者（窗口、窗口控制器或临时令牌，须在撤销前保持存活）；登记后切为普通应用，重复登记不变，无返回值。
     static func enter(_ holder: AnyObject) {
         holders.insert(ObjectIdentifier(holder))
         apply()
     }
 
-    /// holder 为登记者；撤销后若已无登记者则回到菜单栏应用，未登记时不变，无返回值。
     static func leave(_ holder: AnyObject) {
         holders.remove(ObjectIdentifier(holder))
         apply()
     }
 
-    /// 无参数；按登记集合写入激活策略，与当前策略相同时不写，无返回值。
     private static func apply() {
         let policy: NSApplication.ActivationPolicy = holders.isEmpty ? .accessory : .regular
         if NSApp.activationPolicy() != policy { _ = NSApp.setActivationPolicy(policy) }
     }
 }
 
-/// 录制启动的本地耗时记录；只记录固定步骤与时长，不包含图像、窗口标题或输出路径。
 enum CaptureStartupLog {
     private static let logger = Logger(subsystem: "TranSnap", category: "CaptureStartup")
 
-    /// stage为固定步骤名，start为该步骤的单调时钟起点；向系统日志写入毫秒耗时，无返回值。
     static func record(_ stage: String, since start: ContinuousClock.Instant) {
         let duration = start.duration(to: .now).components
         let milliseconds = Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1_000_000_000_000_000
@@ -42,58 +35,46 @@ enum CaptureStartupLog {
     }
 }
 
-/// 启动、截图与导出的耗时日志（#68「性能测量边界」）；只写固定阶段名与毫秒数，不含图像、文字、标题或路径。
 enum PerformanceLog {
     private static let logger = Logger(subsystem: "TranSnap", category: "Performance")
 
-    /// stage 为固定阶段名，start 为该阶段的单调时钟起点；向系统日志写入毫秒耗时，无返回值。
     static func record(_ stage: String, since start: ContinuousClock.Instant) {
         let duration = start.duration(to: .now).components
         note(stage, milliseconds: Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1_000_000_000_000_000)
     }
 
-    /// stage 为固定阶段名，milliseconds 为已测得的耗时（Dart 经 perfMark 交来）；写入系统日志，无返回值。
     static func note(_ stage: String, milliseconds: Double) {
         logger.notice("stage=\(stage, privacy: .public) duration_ms=\(milliseconds, privacy: .public)")
     }
 }
 
-/// 实时翻译与截图翻译的排查日志（#138）。只写数量、耗时与状态，不写屏幕文字或译文。
 enum LiveRegionLog {
     private static let logger = Logger(subsystem: "TranSnap", category: "LiveRegion")
 
-    /// message 为“键=值”形式的一行数值字段；写入系统日志，无返回值。
     static func note(_ message: String) {
         logger.notice("\(message, privacy: .public)")
     }
 }
 
 extension NSScreen {
-    /// 无参数；返回该屏幕对应的 CoreGraphics 显示器编号，系统未提供编号时为 nil。
     var displayID: CGDirectDisplayID? {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 }
 
-/// 偏好字典的只读入口；写入由 MacPlatformBridge 负责。
 enum AppPreferences {
-    /// 无参数；返回 Flutter 侧保存的偏好字典，尚未保存时为空字典。
     static var current: [String: Any] {
         UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey) ?? [:]
     }
 }
 
-/// 设备语言识别：按用户语言与热门语言给先验，短文本置信度低时在前几名里取用户语言，中文按字形判断简繁（#1）。
 enum LanguageDetection {
-    /// text 为待识别原文，preferred 为用户语言码（如 zh-CN、en），默认取已保存的偏好；
-    /// 返回语言码（如 en、zh-Hans），无法判断时为 nil。
     static func detect(_ text: String, preferred: [String]? = nil) -> String? {
         let preferred = preferred ?? {
             let preferences = AppPreferences.current
             return AppConstants.userLanguageKeys.compactMap { preferences[$0] as? String }
         }()
         let recognizer = NLLanguageRecognizer()
-        // 先验让短文本（如 Animation duration）不被判成法语、罗马尼亚语等相近语言。
         recognizer.languageHints = hints(preferred: preferred)
         recognizer.processString(text)
         let hypotheses = recognizer.languageHypotheses(withMaximum: AppConstants.languageDetectionCandidates)
@@ -101,8 +82,6 @@ enum LanguageDetection {
         return resolve(hypotheses: hypotheses, text: text, preferred: preferred)
     }
 
-    /// preferred 为用户语言码（如 zh-CN、en）；返回识别器先验：全部可识别语言为基准权重，热门语言与用户语言依次加权。
-    /// 用户语言码按识别器写法换算（中文取 zh-Hans/zh-Hant，其余取语言部分），不在可识别表中的忽略。
     static func hints(preferred: [String]) -> [NLLanguage: Double] {
         var weights = Dictionary(uniqueKeysWithValues: AppConstants.languageDetectionAll.map {
             (NLLanguage(rawValue: $0), AppConstants.languageDetectionBaseWeight)
@@ -111,7 +90,6 @@ enum LanguageDetection {
             weights[NLLanguage(rawValue: code)] = AppConstants.languageDetectionPopularWeight
         }
         for code in preferred {
-            // chineseScript 给出中文的简繁字形；非中文取语言部分（pt-BR → pt）。
             let identifier = chineseScript(code).map { "zh-\($0)" } ?? Locale.Language(identifier: code).languageCode?.identifier
             guard let identifier, AppConstants.languageDetectionAll.contains(identifier) else { continue }
             weights[NLLanguage(rawValue: identifier)] = AppConstants.languageDetectionUserWeight
@@ -119,10 +97,6 @@ enum LanguageDetection {
         return weights
     }
 
-    /// hypotheses 为识别器的前几名（语言码与置信度），text 为原文，preferred 为用户设置的语言码（如 zh-CN、en）；
-    /// 返回语言码：首位置信度达标时取首位，否则取前几名中属于用户语言、置信度最高的一个；
-    /// 仍没有且原文为纯 ASCII、用户只有一种拉丁文字语言时取该语言（短词如 ok），否则为 nil；
-    /// 结果为中文且原文按用户的中文字形转换后不变时，改为用户的简繁写法。
     static func resolve(hypotheses: [(code: String, confidence: Double)], text: String, preferred: [String]) -> String? {
         let bases = Set(preferred.compactMap { Locale.Language(identifier: $0).languageCode?.identifier })
         let ranked = hypotheses.sorted { $0.confidence > $1.confidence }
@@ -132,13 +106,11 @@ enum LanguageDetection {
             : ranked.first { Locale.Language(identifier: $0.code).languageCode.map { bases.contains($0.identifier) } == true }?.code
                 ?? latinFallback(text: text, preferred: preferred)
         guard let chosen, Locale.Language(identifier: chosen).languageCode?.identifier == "zh" else { return chosen }
-        // 简繁共用的字形无法区分写法；原文转换到用户的写法后不变，说明没有另一写法独有的字。
         guard let script = preferred.lazy.compactMap(chineseScript).first else { return chosen }
         let transform = StringTransform(script == "Hans" ? "Hant-Hans" : "Hans-Hant")
         return text.applyingTransform(transform, reverse: false) == text ? "zh-\(script)" : chosen
     }
 
-    /// text 为原文，preferred 为用户语言码；原文只含 ASCII 且至少一个字母、用户恰有一种拉丁文字语言时返回该语言码，否则为 nil。
     private static func latinFallback(text: String, preferred: [String]) -> String? {
         guard text.unicodeScalars.allSatisfy(\.isASCII), text.contains(where: \.isLetter) else { return nil }
         let latin = Set(preferred.compactMap { code -> String? in
@@ -148,28 +120,21 @@ enum LanguageDetection {
         return latin.count == 1 ? latin.first : nil
     }
 
-    /// code 为用户语言码；返回中文对应的字形（Hans 或 Hant），非中文为 nil。
     private static func chineseScript(_ code: String) -> String? {
         let language = Locale.Language(identifier: code)
         guard language.languageCode?.identifier == "zh" else { return nil }
-        // zh-TW、zh-HK 等地区码补全后为繁体。
         return language.maximalIdentifier.contains("Hant") ? "Hant" : "Hans"
     }
 }
 
-/// PNG 编码的统一入口；录制冻结帧、长截图、拼接与 MCP 图片共用。
 enum PNGEncoding {
-    /// 编码失败时抛出的用户可读错误。
     static let failure = GIFExporter.ExportError(message: "无法编码图片。")
 
-    /// image 为待编码位图；scale 非空时为点到物理像素比，按 72×max(scale,1) 写入 DPI 以免贴图按 72DPI 放大发糊，
-    /// 为空时不写 DPI。返回 PNG 字节，编码失败时抛出 `failure`。
     static func data(_ image: CGImage, scale: CGFloat? = nil) throws -> Data {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
             throw failure
         }
-        // 只有调用方给出倍率时才写 DPI。
         let properties = scale.map { scale -> CFDictionary in
             let dpi = 72.0 * Double(max(scale, 1))
             return [kCGImagePropertyDPIWidth: dpi, kCGImagePropertyDPIHeight: dpi] as CFDictionary
@@ -180,14 +145,11 @@ enum PNGEncoding {
     }
 }
 
-/// 显示器采集共用的来源解析与校验（#125）：录制、长截图与实时翻译使用同一套规则与错误文案。
 enum DisplayCapture {
-    /// 无参数；屏幕录制未授权时抛出用户可读错误，无返回值。
     static func requireAuthorization() throws {
         guard ScreenCaptureService.isAuthorized() else { throw GIFExporter.ExportError(message: AppConstants.screenRecordingRequiredMessage) }
     }
 
-    /// displayID 为目标显示器（区域取选区所在屏，可为空），content 为当前可共享内容；返回该显示器，不可用时抛错。
     static func display(_ displayID: CGDirectDisplayID?, in content: SCShareableContent) throws -> SCDisplay {
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
             throw GIFExporter.ExportError(message: "捕获目标已不可用，请重新选择。")
@@ -195,9 +157,6 @@ enum DisplayCapture {
         return display
     }
 
-    /// content 为当前可共享内容；返回本应用，供显示器采集排除控制、译文与编辑窗口，找不到时抛错。
-    /// 无参数；返回本应用带采集控制标记、已在窗口服务器登记的窗口（含当前隐藏的），录屏只排除这些窗口（#68）；
-    /// 系统枚举缺少其中任何一个时抛错，不录制可能带控制窗口的画面。
     @MainActor
     static func controlWindows() async throws -> [SCWindow] {
         let ids = Set(NSApp.windows
@@ -215,8 +174,6 @@ enum DisplayCapture {
         return own
     }
 
-    /// region 为已确认的像素选区，filter 为所在显示器的过滤器；倍率未变时返回点坐标裁剪框，
-    /// 倍率改变或越出显示器时抛错。
     static func crop(_ region: MediaCaptureService.Region, in filter: SCContentFilter) throws -> CGRect {
         guard abs(CGFloat(filter.pointPixelScale) - region.scale) < 0.01 else {
             throw GIFExporter.ExportError(message: "显示器缩放已改变，请重新框选。")
@@ -229,15 +186,12 @@ enum DisplayCapture {
         return crop
     }
 
-    /// width/height 为输出像素；小于 32×64 时抛错，无返回值。
     static func requireMinimumSize(width: Int, height: Int) throws {
         guard width >= 32, height >= 64 else { throw GIFExporter.ExportError(message: "选区至少需要32×64像素。") }
     }
 }
 
-/// PNG 写入系统剪贴板；截图、长截图与历史图片的复制共用。
 enum PNGPasteboard {
-    /// png 为图片数据，pasteboard 为目标剪贴板；清空后写入，返回是否成功。
     static func write(_ png: Data, to pasteboard: NSPasteboard = .general) -> Bool {
         let item = NSPasteboardItem()
         item.setData(png, forType: .png)
@@ -246,28 +200,21 @@ enum PNGPasteboard {
     }
 }
 
-/// 窗口列表与显示器坐标换算；截图默认选区用。
-/// 本应用合成的键鼠事件标记（#140）：写入 eventSourceUserData，监听方读取后忽略，
-/// 避免本应用发出的复制、全选、粘贴与 MCP 操控事件被当作用户手势。
 enum SyntheticEvent {
-    /// event 为即将发送的合成事件；写入本应用标记，无返回值。
     static func mark(_ event: CGEvent) {
         event.setIntegerValueField(.eventSourceUserData, value: AppConstants.syntheticEventTag)
     }
 
-    /// event 为监听收到的事件；返回是否带本应用标记。
     static func isMarked(_ event: NSEvent) -> Bool {
         event.cgEvent?.getIntegerValueField(.eventSourceUserData) == AppConstants.syntheticEventTag
     }
 }
 
 enum CaptureGeometry {
-    /// 无参数；返回坐标原点在 (0,0) 的主显示器，找不到时退回 NSScreen.main，坐标换算以其高度为基准。
     private static var primaryScreen: NSScreen? {
         NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.main
     }
 
-    /// cgBounds 为 CGWindow 顶左原点矩形；返回 AppKit 底左原点矩形。
     static func appKitRect(fromCGWindowBounds cgBounds: CGRect) -> NSRect {
         let top = primaryScreen?.frame.maxY ?? cgBounds.maxY
         return NSRect(
@@ -278,13 +225,10 @@ enum CaptureGeometry {
         )
     }
 
-    /// point 为 AppKit 底左原点的屏幕点；返回 CG 顶左原点的全局点，辅助功能命中测试使用（#112）。
     static func cgPoint(fromAppKitPoint point: NSPoint) -> CGPoint {
         return CGPoint(x: point.x, y: (primaryScreen?.frame.maxY ?? point.y) - point.y)
     }
 
-    /// window 为 AppKit 窗口矩形，displayFrame 为当前屏，pixelWidth/Height 为冻结帧像素。
-    /// 返回相对图像左上原点的裁剪矩形；不相交时为 nil。
     static func pixelCrop(
         window: NSRect,
         displayFrame: NSRect,
@@ -303,8 +247,6 @@ enum CaptureGeometry {
         )
     }
 
-    /// displayFrame 为冻结帧所在屏，pixelWidth/Height 为图像像素。
-    /// 返回前台普通窗口映射到图像像素的裁剪框；找不到则 nil。
     static func frontmostWindowPixelCrop(displayFrame: NSRect, pixelWidth: Int, pixelHeight: Int) -> NSRect? {
         guard let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]] else { return nil }
@@ -335,21 +277,17 @@ enum CaptureGeometry {
     }
 }
 
-/// 贴纸导入：读取图片首帧，长边超过上限时按原比例缩小（#103）。
 enum StickerImage {
-    /// 无法读取图片时的用户可读错误。
     struct Unreadable: LocalizedError {
         var errorDescription: String? { "无法读取这张图片，请换一张 png、jpg、gif、heic 或 webp 图片。" }
     }
 
-    /// url 为用户选择的图片文件；返回首帧（GIF 取第一帧），长边不超过 AppConstants.stickerMaxPixels，读取失败抛 Unreadable。
     static func normalized(url: URL) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw Unreadable() }
         return try downscaled(image, maxPixels: AppConstants.stickerMaxPixels)
     }
 
-    /// image 为原图，maxPixels 为长边上限；长边不超过上限时原样返回，否则按比例缩小，绘制失败抛 Unreadable。
     static func downscaled(_ image: CGImage, maxPixels: Int) throws -> CGImage {
         let long = max(image.width, image.height)
         guard long > maxPixels else { return image }

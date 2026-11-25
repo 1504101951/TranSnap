@@ -1,4 +1,3 @@
-/// 可保存的翻译服务配置；凭据以 id 为账户存入 Keychain，不进入此模型。
 class ServiceConfig {
   const ServiceConfig({
     required this.id,
@@ -11,17 +10,13 @@ class ServiceConfig {
   });
   static const builtinId = 'unofficial-google';
 
-  /// 内置谷歌翻译的接口地址；翻译请求与连接预热共用（#68）。
   static const builtinEndpoint =
       'https://translate.googleapis.com/translate_a/single';
 
-  /// 内置谷歌翻译在设置页与卡片服务菜单中的名称（#100）。
   static const builtinName = '谷歌翻译';
 
-  /// 内置 Apple 系统翻译的服务 ID；本机翻译无端点、无凭据，不进入服务列表（#1）。
   static const systemId = 'apple-system';
 
-  /// 内置 Apple 系统翻译在设置页与卡片服务菜单中的名称。
   static const systemName = 'Apple 系统翻译';
   static const kinds = {
     'baidu': '百度翻译',
@@ -31,14 +26,11 @@ class ServiceConfig {
     'anthropic': 'Anthropic',
   };
 
-  /// 新建服务展示的四类；既有协议ID仍用于原请求与凭据账户，不迁移用户配置。
-  /// 显示名取自 kinds，此处只决定展示顺序（#131）。
   static final selectableKinds = {
     for (final kind in ['google', 'baidu', 'openai', 'anthropic'])
       kind: kinds[kind]!,
   };
 
-  /// 无参数；系统默认名使用当前产品名称，用户自定义配置名保持原样。
   String get displayName => switch (name) {
     'OpenAI-compatible' => 'OpenAI',
     'Google Cloud' => '谷歌翻译',
@@ -60,11 +52,9 @@ class ServiceConfig {
   final int maxOutputTokens;
   bool get isModel => isModelKind(kind);
 
-  /// kind 为服务协议 ID；返回是否为模型服务（OpenAI、DeepSeek、Anthropic 协议）（#131）。
   static bool isModelKind(String kind) =>
       kind == 'openai' || kind == 'deepseek' || kind == 'anthropic';
 
-  /// map 为无凭据的设置字典；返回一个翻译服务配置。
   factory ServiceConfig.fromMap(Map<Object?, Object?> map) => ServiceConfig(
     id: map['id'] as String,
     kind: map['kind'] as String,
@@ -75,7 +65,6 @@ class ServiceConfig {
     maxOutputTokens: map['maxOutputTokens'] as int? ?? 4096,
   );
 
-  /// 无参数；返回可保存至普通偏好的配置字典，绝不包含 API Key/App ID。
   Map<String, Object> toMap() => {
     'id': id,
     'kind': kind,
@@ -86,7 +75,6 @@ class ServiceConfig {
     'maxOutputTokens': maxOutputTokens,
   };
 
-  /// 无参数；验证配置及凭据发送目的地，非法时抛可供界面显示的 FormatException。
   void validate() {
     if (id.isEmpty || name.trim().isEmpty || !kinds.containsKey(kind)) {
       throw const FormatException('请选择服务类型并填写名称。');
@@ -112,10 +100,7 @@ class ServiceConfig {
     }
   }
 
-  /// credentials 为从钥匙串读取的凭据字典；缺少协议必需字段时抛用户可读错误。
-  /// 模型服务的 API Key 可留空（本机服务等不校验密钥），Google 与百度仍须填写（#123）。
   void validateCredentials(Map<String, String> credentials) {
-    // 模型服务留空时请求不带认证头。
     if (isModel) return;
     if ((credentials['apiKey'] ?? '').trim().isEmpty ||
         kind == 'baidu' && (credentials['appId'] ?? '').trim().isEmpty) {
@@ -124,7 +109,6 @@ class ServiceConfig {
   }
 }
 
-/// previous/current 为保存前后服务，drafts 为凭据变更；仅补读必要账户，返回原生事务所需的新增、修改和删除项。
 Future<Map<String, Map<String, String>?>> prepareCredentialChanges({
   required List<ServiceConfig> previous,
   required List<ServiceConfig> current,
@@ -136,11 +120,9 @@ Future<Map<String, Map<String, String>?>> prepareCredentialChanges({
   for (final config in current) {
     final draft = drafts[config.id];
     final saved = old[config.id];
-    // 不允许复用另一种服务的密钥；更换协议时应创建独立配置。
     if (saved != null && saved.kind != config.kind) {
       throw const FormatException('更换服务类型请新增配置。');
     }
-    // 普通偏好或端点/模型修改不需要解锁密钥；凭据校验留在实际变更与翻译请求时。
     if ((draft == null || draft.isEmpty) && saved != null) {
       continue;
     }

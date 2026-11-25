@@ -15,10 +15,8 @@ import 'package:transnap/src/translation/language_direction.dart';
 
 import 'selection_session_test.dart' show RecordingProvider;
 
-/// 无参数；验证设置约束和异步语言识别跨越会话边界时的业务输出。
 void main() {
   test('普通设置不读取密钥，凭据修改只合并对应服务，删除保留删除标记', () async {
-    // 已有服务仅修改普通偏好时 reader 不可访问；只有用户提交密钥才触及钥匙串。
     const saved = ServiceConfig(
       id: 'saved',
       kind: 'baidu',
@@ -32,7 +30,6 @@ void main() {
       readCredentials: (_) async => throw StateError('普通设置不应读取密钥'),
     );
     expect(untouched, isEmpty);
-    // 同一 ID 不可更换协议并沿用旧密钥，拒绝前也不应触发钥匙串读取。
     await expectLater(
       prepareCredentialChanges(
         previous: [saved],
@@ -68,7 +65,6 @@ void main() {
       readCredentials: (_) async => throw StateError('删除不应在 Dart 读取密钥'),
     );
     expect(removed, {'saved': null});
-    // 新服务无任何密钥必须失败，不能绕过协议必填项检查。
     await expectLater(
       prepareCredentialChanges(
         previous: [],
@@ -81,7 +77,6 @@ void main() {
   });
 
   test('secondary language can be cleared and remains absent after saving', () {
-    // 用户已有次要语言，再主动清空；完整偏好往返后不能悄悄恢复默认值。
     final settings = AppSettings(
       primaryLanguage: 'zh-CN',
       secondaryLanguage: 'en',
@@ -141,8 +136,6 @@ void main() {
   });
 
   test('输入翻译语言：未设置时复制全局两项，设置后与全局隔离，次要语言「不设置」可往返（#99）', () {
-    // 边界：旧偏好没有输入翻译键时取全局 zh-CN/en；保存后改全局次要语言不影响输入翻译；
-    // 输入翻译次要语言设为 null 往返后仍为 null，不回落到全局；输入翻译两项相同时校验失败。
     final legacy = AppSettings.fromMap({
       'primaryLanguage': 'zh-CN',
       'secondaryLanguage': 'en',
@@ -162,8 +155,6 @@ void main() {
   });
 
   test('提示词缺省为默认值、思考缺省全部关闭，修改后可往返保存，空提示词被拒绝', () {
-    // 边界：未保存过时四种模式提示词都等于默认值、思考全为 false；只改翻译提示词与润色思考后往返仍保持，
-    // 其余模式不变；润色提示词改为空白时校验失败。
     final settings = AppSettings(primaryLanguage: 'zh-CN');
     expect(settings.prompts, defaultPrompts);
     expect(settings.prompts.keys, containsAll(TextMode.values));
@@ -192,7 +183,6 @@ void main() {
   });
 
   test('输入翻译快捷键默认 ⌃⌥R 可往返保存，三个全局快捷键任意两个相同都被拒绝', () {
-    // 边界：默认组合与另外两个默认值都不同；把输入翻译分别改成与翻译、截图相同，各自必须失败。
     final settings = AppSettings(primaryLanguage: 'zh-CN');
     expect(settings.validate, returnsNormally);
     final restored = AppSettings.fromMap(settings.toMap());
@@ -219,8 +209,6 @@ void main() {
   });
 
   test('Apple 系统翻译是内置默认服务：可作默认并往返，未知 ID 与 apple 类型的配置服务被拒绝', () {
-    // 边界：systemId 无需出现在 services 中即为合法默认服务；不在内置与已配置之列的 ID 被拒绝；
-    // 'apple' 不再是可配置的服务类型，即使地址与名称合法也被拒绝；空地址的远程服务仍被拒绝。
     final settings = AppSettings(
       primaryLanguage: 'zh-CN',
       defaultServiceId: ServiceConfig.systemId,
@@ -254,7 +242,6 @@ void main() {
   });
 
   test('模型服务允许 API Key 留空，Google 与百度仍须填写（#123）', () {
-    // 边界：三种模型协议的空凭据都通过；Google 空凭据、百度缺 App ID 仍被拒绝。
     for (final kind in ['openai', 'deepseek', 'anthropic']) {
       final model = ServiceConfig(
         id: kind,
@@ -283,7 +270,6 @@ void main() {
   });
 
   test('主次语言方向支持多语言、繁体中文以及无法识别的文本', () {
-    // nil 必须译向主要语言；BCP-47 同语言不同地区不能误切方向。
     const direction = LanguageDirection(primaryCode: 'fr', secondaryCode: 'en');
     expect(direction.resolve('fr-CA').targetLanguage, 'en');
     expect(direction.resolve('ja').targetLanguage, 'fr');
@@ -295,8 +281,6 @@ void main() {
   });
 
   test('相同语言与无系统修饰键的快捷键不能保存', () {
-    // en 与 en-US 等价；Shift+A 是普通输入，不允许注册为全局翻译热键。
-    // 输入翻译语言在构造时复制全局两项，与全局隔离，因此两组都要改为有效语言（#99）。
     final settings = AppSettings(
       primaryLanguage: 'en',
       secondaryLanguage: 'en-US',
@@ -332,7 +316,6 @@ void main() {
   });
 
   test('关闭自动按钮及排除应用可以随同快捷键一起保存和恢复', () {
-    // 使用一次完整序列化往返，覆盖实际传输的嵌套排除项与自定义组合。
     final settings = AppSettings(
       primaryLanguage: 'ja',
       secondaryLanguage: 'en',
@@ -351,7 +334,6 @@ void main() {
   });
 
   test('录屏点击特效默认关闭且区分右键默认开启，7种枚举可往返保存，未知样式拒绝（#143）', () {
-    // 边界：缺省配置下特效为 off、右键区分为 true；所有枚举往返一致，非法协议值抛出 FormatException。
     final defaults = AppSettings.fromMap({'primaryLanguage': 'zh-CN'});
     expect(defaults.recordingClickEffect, RecordingClickEffect.off);
     expect(defaults.recordingClickRightDistinct, isTrue);
@@ -377,8 +359,6 @@ void main() {
   });
 
   test('强调色偏好默认跟随系统，支持全部 6 种经典色往返保存，未知值拒绝（#144）', () {
-    // 作用：验证 AppSettings.accentColor 协议枚举往返序列化与边界校验。
-    // 边界：缺失字段默认 AccentColors.system；全部 AccentColors.values 通过校验；非法值抛 FormatException。
     final defaults = AppSettings.fromMap({'primaryLanguage': 'zh-CN'});
     expect(defaults.accentColor, AccentColors.system);
 
@@ -400,8 +380,6 @@ void main() {
   });
 
   test('前景色偏好默认自动，接受自动、白色、黑色与大写 #RRGGBB，其余拒绝（#144）', () {
-    // 作用：验证 AppSettings.accentForeground 往返序列化与校验。
-    // 边界：缺失字段为 auto；auto/white/black/#00FF00 通过；小写 HEX 与 'gray' 拒绝。
     expect(
       AppSettings.fromMap({'primaryLanguage': 'zh-CN'}).accentForeground,
       AccentForegrounds.auto,
@@ -424,8 +402,6 @@ void main() {
   });
 
   test('自定义强调色只接受大写 #RRGGBB，并推导浅、深两套颜色（#144）', () {
-    // 作用：验证自定义强调色的偏好校验与浅/深色推导（深色由浅色向白混合 35%）。
-    // 边界：#2EA3D6 合法；小写、5 位、缺 # 均拒绝；#000000 深色为 89/255 灰，#FFFFFF 深色仍为白；预设名返回预设色，system 返回 null。
     for (final value in ['#2EA3D6', '#000000', '#FFFFFF']) {
       final settings = AppSettings(
         primaryLanguage: 'zh-CN',

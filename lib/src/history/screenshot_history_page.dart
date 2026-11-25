@@ -14,13 +14,9 @@ import 'history_empty_state.dart';
 import 'screenshot_compose_dialogs.dart';
 import 'screenshot_history.dart';
 
-/// 截图历史操作失败且主引擎没有给出原因时的提示（#131）。
 const _operationFailed = '操作失败，请重试。';
 
-/// 历史窗口的截图分段；数据以主引擎为准，文件操作交给原生（#29）。
 class ScreenshotHistoryPage extends StatefulWidget {
-  /// channel 为历史窗口通道，version 递增时重新读取（主引擎通知变更后由窗口传入），
-  /// screenshotShortcutTokens 为当前区域截图快捷键键帽序列。
   const ScreenshotHistoryPage({
     super.key,
     required this.channel,
@@ -31,16 +27,13 @@ class ScreenshotHistoryPage extends StatefulWidget {
   final int version;
   final List<String> screenshotShortcutTokens;
 
-  /// 缩略图宽度与最高高度，单位为点，对应样式Spec #67。
   static const thumbnailWidth = 240.0;
   static const thumbnailMaxHeight = 180.0;
 
-  /// 无参数；返回维护截图列表与开关的界面状态。
   @override
   State<ScreenshotHistoryPage> createState() => _ScreenshotHistoryPageState();
 }
 
-/// 持有最近一次读取的截图记录、开关、勾选与操作反馈；不在窗口内另存数据。
 class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   List<ScreenshotRecord>? _records;
   bool? _recording;
@@ -49,13 +42,10 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
   bool _loading = true;
   String? _busyAction;
 
-  /// 勾选的记录 id，用于拼接、拆分与比较（#109）；只在本页保存。
   Set<int> _selected = {};
 
-  /// 每条截图记录的复制按钮触发计数，用于驱动 CopyConfirmIcon 反馈动效。
   final Map<int, int> _copyTriggers = {};
 
-  /// 无参数；返回勾选的记录，按截图时间先后（同一时刻按 id）排列。
   List<ScreenshotRecord> get _chosen =>
       [
         for (final record in _records ?? const <ScreenshotRecord>[])
@@ -66,21 +56,18 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
             : a.id.compareTo(b.id),
       );
 
-  /// 无参数；首次读取列表与开关，无返回值。
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  /// old 为上一版组件；主引擎通知变更（version 变化）时重新读取，无返回值。
   @override
   void didUpdateWidget(ScreenshotHistoryPage old) {
     super.didUpdateWidget(old);
     if (old.version != widget.version) _load();
   }
 
-  /// 无参数；读取截图记录与「记录截图历史」开关，首次失败展示可重试错误，刷新失败以横幅提示。
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -100,7 +87,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         _recording = recording ?? false;
         _loading = false;
         _loadError = null;
-        // 只保留仍存在且图片未缺失的勾选。
         _selected = {
           for (final record in records)
             if (record.exists && _selected.contains(record.id)) record.id,
@@ -120,7 +106,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     }
   }
 
-  /// method/arguments 为原生调用参数，reload 控制完成后是否重读列表，busyKey 为忙碌锁键；返回是否执行成功。
   Future<bool> _run(
     String method, [
     Map<String, Object>? arguments,
@@ -148,7 +133,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     }
   }
 
-  /// 无参数；经确认弹窗后清空全部截图历史与磁盘文件，防止误触清空。
   Future<void> _clearAll() async {
     if (_busyAction != null) return;
     final confirmed = await NativeGlassDialog.confirm(
@@ -162,7 +146,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     await _run(MethodNames.clearScreenshotHistory, null, true, 'clear');
   }
 
-  /// record 为待删截图记录；经确认弹窗后删除记录与文件，防止误删。
   Future<void> _deleteRecord(ScreenshotRecord record) async {
     if (_busyAction != null) return;
     final timestamp = dateTimeText(
@@ -185,7 +168,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
   }
 
-  /// record 为目标截图记录；复制图片到剪贴板并触发图标确认动效。
   Future<void> _copyImage(ScreenshotRecord record) async {
     final copied = await _run(MethodNames.copyImageFile, {'path': record.path});
     if (!copied || !mounted) return;
@@ -194,8 +176,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     });
   }
 
-  /// action 为操作标识（'stitch' / 'split'），produce 调用原生生成结果图片；
-  /// 把结果加入截图历史、清空勾选并重新读取，失败显示错误横幅（#109）。
   Future<void> _compose(
     String action,
     Future<List<Uint8List>> Function() produce,
@@ -224,11 +204,9 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     }
   }
 
-  /// 无参数；选择方向后按时间先后拼接勾选的截图，返回结束的 Future。
   Future<void> _stitch() async {
     final chosen = _chosen;
     if (_busyAction != null || chosen.length < 2) return;
-    // StitchDialog 返回纵向（true）或横向（false），取消为 null。
     final vertical = await showDialog<bool>(
       context: context,
       builder: (_) => StitchDialog(count: chosen.length),
@@ -252,13 +230,11 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     });
   }
 
-  /// 无参数；选择段数后按高度等分勾选的截图，返回结束的 Future。
   Future<void> _split() async {
     final chosen = _chosen;
     if (_busyAction != null || chosen.length != 1) return;
     final record = chosen.single;
     if (record.height < 2) return;
-    // SplitDialog 返回 2–10 的段数，取消为 null。
     final parts = await showDialog<int>(
       context: context,
       builder: (_) => SplitDialog(height: record.height),
@@ -279,7 +255,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     });
   }
 
-  /// 无参数；原生逐像素比较勾选的两张截图后打开并排比较弹窗，失败显示原因，返回结束的 Future。
   Future<void> _compare() async {
     final chosen = _chosen;
     if (_busyAction != null || chosen.length != 2) return;
@@ -315,7 +290,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
   }
 
-  /// context 提供主题；返回开关栏、批量合成工具条、状态横幅与截图卡片列表。
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -395,7 +369,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
             ),
           ),
         ),
-        // 勾选后的拼接（≥2 张）、拆分（1 张且高度≥2px）与比较（2 张）（#109）。
         if (records != null && records.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -499,12 +472,10 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     );
   }
 
-  /// theme 为当前主题，record 为一条截图历史；返回缩略图、时间、尺寸与操作按钮组成的卡片。
   Widget _card(ThemeData theme, ScreenshotRecord record) {
     final timestamp = dateTimeText(
       DateTime.fromMillisecondsSinceEpoch(record.capturedAt),
     );
-    // 缩略图按原图比例缩放到 240pt 宽，过高时限制在 180pt。
     final height = record.width == 0
         ? ScreenshotHistoryPage.thumbnailMaxHeight
         : (ScreenshotHistoryPage.thumbnailWidth * record.height / record.width)
@@ -512,7 +483,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
     final path = {'path': record.path};
     final deleting = _busyAction == 'delete-${record.id}';
 
-    /// tooltip/icon/onPressed 为按钮提示、图标与回调；返回统一样式的玻璃图标按钮。
     Widget action(
       String tooltip,
       Widget icon,
@@ -543,7 +513,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 图片缺失的记录不可勾选（#109）。
             Checkbox(
               value: _selected.contains(record.id),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -595,7 +564,6 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                     spacing: GlassMetrics.actionGap,
                     runSpacing: GlassMetrics.actionGap,
                     children: [
-                      // 文件缺失时只保留删除。
                       if (record.exists) ...[
                         action(
                           '打开',

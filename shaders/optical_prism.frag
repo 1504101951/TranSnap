@@ -1,6 +1,5 @@
 #include <flutter/runtime_effect.glsl>
 
-// 光学棱镜玻璃倒角高光与斜向扫光（#142）
 uniform vec2 uSize;
 uniform float uAngle;
 uniform float uSweep;
@@ -26,7 +25,6 @@ void main() {
   float r = min(uRadius, min(halfSize.x, halfSize.y));
   float dist = roundedBoxSDF(centered, halfSize - vec2(uStroke * 0.5), r);
 
-  // 1.25pt 极细圆角倒角高光掩码，内部完全保留通透以不干扰文字阅读。
   float edgeMask = 1.0 - smoothstep(0.0, max(0.6, uStroke), abs(dist));
 
   vec2 normPos = normalize(centered + vec2(0.0001));
@@ -35,7 +33,6 @@ void main() {
   float primaryHighlight = pow(clamp(aligned * 0.5 + 0.5, 0.0, 1.0), 3.2);
   float oppHighlight = pow(clamp(-aligned * 0.5 + 0.5, 0.0, 1.0), 4.5) * 0.28;
 
-  // 主高光两侧微弱冷暖光学色散。
   vec2 coolDir = vec2(cos(uAngle + 0.42), sin(uAngle + 0.42));
   vec2 warmDir = vec2(cos(uAngle - 0.42), sin(uAngle - 0.42));
   float coolFactor = pow(clamp(dot(normPos, coolDir) * 0.5 + 0.5, 0.0, 1.0), 4.0);
@@ -49,7 +46,6 @@ void main() {
   vec3 color = whiteSpec * rimSpecAlpha + uCoolTint * coolAlpha + uWarmTint * warmAlpha;
   float alpha = clamp(rimSpecAlpha + (coolAlpha + warmAlpha) * 0.55, 0.0, 0.92);
 
-  // 完成态斜向镜面扫光（仅在圆角内部生效）。
   if (uSweep > 0.001 && uSweep < 0.999 && dist <= 0.0) {
     float diag = (pos.x / max(uSize.x, 1.0)) * 0.72 + (pos.y / max(uSize.y, 1.0)) * 0.28;
     float center = mix(-0.25, 1.25, uSweep);
@@ -60,7 +56,6 @@ void main() {
     alpha = clamp(alpha + sweepAlpha, 0.0, 0.92);
   }
 
-  // Impeller FragmentShader 需要预乘 Alpha。
   color = clamp(color, vec3(0.0), vec3(alpha));
   fragColor = vec4(color, alpha);
 }

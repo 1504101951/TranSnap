@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:transnap/src/history/screenshot_history.dart';
 
-/// width/height 为像素尺寸；返回只含 PNG 签名与 IHDR 宽高的最小字节，足够存储层解析尺寸。
 Uint8List fakePng(int width, int height) {
   final data = ByteData(33);
   for (final (index, byte) in [137, 80, 78, 71, 13, 10, 26, 10].indexed) {
@@ -17,7 +16,6 @@ Uint8List fakePng(int width, int height) {
   return data.buffer.asUint8List();
 }
 
-/// 无参数；用内存 SQLite 与临时目录验证截图历史的开关、覆盖、清理与缺失文件（#29）。
 void main() {
   late Directory directory;
   late ScreenshotHistoryStore store;
@@ -34,7 +32,6 @@ void main() {
   tearDown(() => directory.deleteSync(recursive: true));
 
   test('默认不记录；开启后写入图片与尺寸，同一截图再次导出只保留最后一次', () async {
-    // 边界：开关默认值为关闭；同一 captureId 的第二次导出尺寸不同，必须覆盖而不是新增。
     await store.record(
       captureId: 'a',
       png: fakePng(10, 20),
@@ -63,8 +60,6 @@ void main() {
   });
 
   test('同一截图连续导出不等待前一次写完时，按到达顺序串行，保留最后一次', () async {
-    // 作用：文件写入为异步，变更必须按请求到达顺序执行（#68）。
-    // 边界：第一次写入尚未完成就发起第二次，第二次尺寸不同，结果只能是第二次的尺寸与图片。
     store.recordingEnabled = true;
     final first = store.record(
       captureId: 'a',
@@ -86,7 +81,6 @@ void main() {
   });
 
   test('超过 100 条删除最早的记录及图片，超过 30 天的记录在下次写入时删除', () async {
-    // 边界：第 101 条触发按条数清理；恰好 30 天内保留，30 天外一毫秒删除。
     store.recordingEnabled = true;
     await store.record(
       captureId: 'old',
@@ -125,7 +119,6 @@ void main() {
   });
 
   test('图片被移走时标记缺失仍可删除；清空删除全部历史图片', () async {
-    // 边界：文件缺失是外部操作导致的唯一不一致状态，列表不能因此失败。
     store.recordingEnabled = true;
     await store.record(captureId: 'a', png: fakePng(1, 1), capturedAt: now, now: now);
     await store.record(
@@ -145,8 +138,6 @@ void main() {
   });
 
   test('拼接与拆分结果不受记录开关限制，按给定顺序从上到下排列且身份不重复', () async {
-    // 边界：开关保持默认关闭仍要写入；同一时刻生成的三段需按列表顺序显示，第二次生成不覆盖第一次；
-    // 已有 99 条时再加 3 条，按 100 条上限删除最早的 2 条。
     await store.add([fakePng(1, 10), fakePng(2, 10), fakePng(3, 10)], now);
     expect([for (final record in store.list()) record.width], [1, 2, 3]);
     await store.add([fakePng(4, 10)], now);

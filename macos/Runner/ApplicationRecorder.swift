@@ -3,9 +3,7 @@ import AVFoundation
 import CoreImage
 import ScreenCaptureKit
 
-/// 应用录制的固定桌面画布；显示器点坐标统一映射到最高倍率，空隙保留黑色。
 struct ApplicationCaptureCanvas: Equatable {
-    /// id是显示器身份，frame是全局CG点坐标，scale是该显示器实际像素倍率。
     struct Display: Equatable {
         let id: CGDirectDisplayID
         let frame: CGRect
@@ -16,7 +14,6 @@ struct ApplicationCaptureCanvas: Equatable {
     let scale: CGFloat
     let size: CGSize
 
-    /// displays为完整显示器拓扑；返回固定画布，拒绝无效几何，不裁掉任何显示器。
     init(displays: [Display]) throws {
         guard !displays.isEmpty, Set(displays.map(\.id)).count == displays.count,
               displays.allSatisfy({ $0.scale.isFinite && $0.scale > 0 &&
@@ -27,12 +24,10 @@ struct ApplicationCaptureCanvas: Equatable {
         self.displays = displays.sorted { $0.id < $1.id }
         bounds = displays.dropFirst().reduce(displays[0].frame) { $0.union($1.frame) }
         scale = displays.map(\.scale).max()!
-        // H264需要偶数尺寸；向外补黑边，不截去显示器末端像素。
         size = CGSize(width: ceil(bounds.width * scale / 2) * 2,
                       height: ceil(bounds.height * scale / 2) * 2)
     }
 
-    /// frames为每屏最新完整图像；返回联合画布CI图像，转换CG顶部原点为CI底部原点。
     func composite(_ frames: [CGDirectDisplayID: CIImage]) -> CIImage {
         let extent = CGRect(origin: .zero, size: size)
         var image = CIImage(color: .black).cropped(to: extent)
@@ -41,7 +36,6 @@ struct ApplicationCaptureCanvas: Equatable {
             let rect = CGRect(x: (display.frame.minX - bounds.minX) * scale,
                 y: size.height - (display.frame.maxY - bounds.minY) * scale,
                 width: display.frame.width * scale, height: display.frame.height * scale)
-            // 放大时延伸边缘像素供插值采样，映射后再裁剪，防止透明边缘污染显示器及黑色空区。
             let content = frame.clampedToExtent()
                 .transformed(by: CGAffineTransform(translationX: -frame.extent.minX, y: -frame.extent.minY))
                 .transformed(by: CGAffineTransform(scaleX: rect.width / frame.extent.width, y: rect.height / frame.extent.height))
@@ -53,9 +47,7 @@ struct ApplicationCaptureCanvas: Equatable {
     }
 }
 
-/// 串行处理每屏最新帧与视频编码；所有可变字段仅在queue读写，内存不积累历史帧。
 final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendable {
-    // 写入轨道与帧时间量化共用刻度，避免两处精度不同造成时间折叠。
     private static let mediaTimeScale: CMTimeScale = 600
     let queue = DispatchQueue(label: "TranSnap.application-video")
     let canvas: ApplicationCaptureCanvas
@@ -65,25 +57,20 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var streams: [ObjectIdentifier: CGDirectDisplayID] = [:]
     private var frames: [CGDirectDisplayID: CIImage] = [:]
-    /// 上一次合成的画布；写入后不再修改，没有新帧时原样再次追加。
     private var composed: CVPixelBuffer?
-    /// 上次合成后是否有显示器送来新帧；画面不变时 SCStream 只发空闲状态，不会置位（#68）。
     private var changed = false
     private var timer: DispatchSourceTimer?
     private var epoch: CMTime?
-    // 有效时间只代表成功写入的帧，启动会话与编码背压都不能提前进入可保留状态。
     private var lastTime = CMTime.invalid
     private var ready: CheckedContinuation<Void, Error>?
     private var failure: Error?
     private var finishing = false
     private let onFailure: @Sendable (Error) -> Void
 
-    /// canvas为固定画布，url为本段MP4，onFailure报告实际编码错误；初始化时验证编码器是否支持尺寸。
     init(canvas: ApplicationCaptureCanvas, url: URL, onFailure: @escaping @Sendable (Error) -> Void) throws {
         self.canvas = canvas
         self.onFailure = onFailure
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
-        // 合成像素为sRGB；明确编码色度矩阵与传递函数，避免播放器按分辨率猜测颜色。
         let settings: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: Int(canvas.size.width), AVVideoHeightKey: Int(canvas.size.height),
             AVVideoColorPropertiesKey: [AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
@@ -95,7 +82,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         }
         input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         input.expectsMediaDataInRealTime = true
-        // 轨道与帧时间使用同一刻度，保留30fps及主机时钟延迟的真实间隔。
         input.mediaTimeScale = Self.mediaTimeScale
         adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,
             sourcePixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
@@ -108,14 +94,11 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         guard writer.startWriting() else { throw writer.error ?? GIFExporter.ExportError(message: "无法启动应用录制编码器。") }
     }
 
-    /// identities将每个流映射到显示器；启动前注册，无返回值。
     func register(_ identities: [ObjectIdentifier: CGDirectDisplayID]) { queue.sync { streams = identities } }
 
-    /// 无参数；等待全部显示器的合成首帧实际写入，成功无返回数据，超时明确失败。
     func waitUntilReady() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
-                // 启动与放弃可交错入队；结束后不得注册永远收不到首帧的等待者。
                 guard !self.finishing else { continuation.resume(throwing: CancellationError()); return }
                 if let failure = self.failure { continuation.resume(throwing: failure); return }
                 if self.lastTime.isValid { continuation.resume(); return }
@@ -128,7 +111,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         }
     }
 
-    /// stream为已注册屏幕流，sampleBuffer为系统帧；只接收完整图像，静止帧保持已有内容。
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard !finishing, failure == nil, type == .screen,
               let display = streams[ObjectIdentifier(stream)],
@@ -139,11 +121,9 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
             report(GIFExporter.ExportError(message: "显示器画面已中断，已停止应用录制。"))
             return
         }
-        // receive统一接收已校验的屏幕图像；帧合成与系统采集回调保持独立职责。
         receive(CIImage(cvPixelBuffer: buffer), display: display)
     }
 
-    /// image为某屏完整图像，display为画布中的显示器身份；必须在queue调用，返回前只保留最新帧。
     func receive(_ image: CIImage, display: CGDirectDisplayID) {
         dispatchPrecondition(condition: .onQueue(queue))
         guard !finishing, failure == nil, canvas.displays.contains(where: { $0.id == display }) else { return }
@@ -157,19 +137,15 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         timer.setEventHandler { [weak self] in self?.appendFrame() }
         self.timer = timer
         timer.resume()
-        // appendFrame在首帧真实写入后解除准备状态；背压时由定时器继续尝试。
         appendFrame()
     }
 
-    /// 无参数/返回值；有新帧时合成当前每屏帧，否则沿用上一张合成画布，按固定帧率追加；
-    /// 首帧从零开始，后续时间量化到轨道刻度且严格递增。
     private func appendFrame() {
         guard !finishing, failure == nil, let epoch else { return }
         guard input.isReadyForMoreMediaData else {
             if writer.status == .failed { report(writer.error ?? GIFExporter.ExportError(message: "应用录制编码失败。")) }
             return
         }
-        // 画面不变时不重新合成与渲染，仍按固定帧率追加同一画布，时间轴与段长不变（#68）。
         let buffer: CVPixelBuffer
         if let composed, !changed {
             buffer = composed
@@ -178,14 +154,12 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
             guard let pool = adaptor.pixelBufferPool,
                   CVPixelBufferPoolCreatePixelBuffer(nil, pool, &created) == kCVReturnSuccess,
                   let created else { report(GIFExporter.ExportError(message: "联合画布无法分配像素缓冲，请缩小显示器布局。")); return }
-            // composite唯一负责桌面坐标映射；输出始终覆盖完整黑色底画布。
             context.render(canvas.composite(frames), to: created, bounds: CGRect(origin: .zero, size: canvas.size),
                            colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
             composed = created
             changed = false
             buffer = created
         }
-        // 首帧固定为零；后续保留主机经过时间，略过量化后不能推进轨道时间的紧邻回调。
         let elapsed = CMTimeSubtract(CMClockGetTime(CMClockGetHostTimeClock()), epoch)
         let time = lastTime.isValid ? CMTimeConvertScale(elapsed, timescale: Self.mediaTimeScale, method: .roundTowardZero) : .zero
         guard !lastTime.isValid || CMTimeCompare(time, lastTime) > 0 else { return }
@@ -197,7 +171,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         ready = nil
     }
 
-    /// error为实际失败；仅报告一次，完成首帧等待并停止产生新输出，已有可解码内容由finish交付。
     private func report(_ error: Error) {
         guard failure == nil, !finishing else { return }
         failure = error
@@ -208,7 +181,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
         onFailure(error)
     }
 
-    /// discard为明确放弃；成功无返回数据，保留时必须有实际写入帧并等待MP4尾部完成，否则抛错。
     func finish(discard: Bool) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
@@ -219,7 +191,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
                 self.ready = nil
                 self.frames = [:]
                 self.composed = nil
-                // 放弃及无有效帧都取消写入，不向AVAssetWriter提交无效的结束时间。
                 if discard || !self.lastTime.isValid {
                     self.writer.cancelWriting()
                     if discard { continuation.resume() }
@@ -237,7 +208,6 @@ final class ApplicationVideoEncoder: NSObject, SCStreamOutput, @unchecked Sendab
     }
 }
 
-/// 应用录制的逐屏流生命周期；主执行器管理系统资源，编码帧交给独立串行队列。
 @MainActor
 final class ApplicationRecorder: NSObject, SCStreamDelegate {
     let canvas: ApplicationCaptureCanvas
@@ -249,8 +219,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
     private var finishTask: Task<Void, Error>?
     private let onFailure: @MainActor (Error) -> Void
 
-    /// content为当前授权来源，applicationID为用户选择的Bundle ID，expected为暂停前拓扑，url为本段文件；
-    /// 画面包含所选应用与本应用，只排除采集控制窗口（#68）。
     init(content: SCShareableContent, applicationID: String, expected: ApplicationCaptureCanvas?, url: URL,
          onFailure: @escaping @MainActor (Error) -> Void) async throws {
         let apps = content.applications.filter { $0.bundleIdentifier == applicationID }
@@ -260,7 +228,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
         }
         self.applicationID = applicationID
         self.onFailure = onFailure
-        // 本应用与所选应用一起进入画面（翻译卡片、实时翻译盖层等），只排除采集控制窗口。
         let own = try DisplayCapture.ownApplications(in: content)
         let included = apps + own
         let excepted = try await DisplayCapture.controlWindows()
@@ -273,7 +240,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
         guard expected == nil || expected == canvas else {
             throw GIFExporter.ExportError(message: "显示器布局或倍率已改变，请结束并保存当前录制后重新开始。")
         }
-        // 编码器尺寸探测与硬件初始化是同步系统调用；在后台完成，准备期间主执行器仍可处理取消和绘制。
         let encodingCanvas = canvas
         encoder = try await Task.detached(priority: .userInitiated) {
             try ApplicationVideoEncoder(canvas: encodingCanvas, url: url) { error in
@@ -300,11 +266,9 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
             streams.append(stream)
             identities[ObjectIdentifier(stream)] = display.displayID
         }
-        // 编码器只接受本段流身份，后续回调不能串入其他会话。
         encoder.register(identities)
     }
 
-    /// 无参数；启动所有显示器流并等待完整首帧，任何失败均由调用方统一结束本段资源。
     func start() async throws {
         for stream in streams {
             guard !ended else { throw CancellationError() }
@@ -314,7 +278,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
         try await encoder.waitUntilReady()
     }
 
-    /// 无参数；核对应用存活、可见窗口及完整显示器拓扑，变化时明确失败，不选择其他应用。
     func validate() async throws {
         try DisplayCapture.requireAuthorization()
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
@@ -328,7 +291,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
         guard current == canvas else { throw GIFExporter.ExportError(message: "显示器布局或倍率已改变，已停止并保留录制内容。") }
     }
 
-    /// discard为明确放弃；等待所有流停止和编码完成，仅调用一次，无返回数据。
     func finish(discard: Bool) async throws {
         if let finishTask { return try await finishTask.value }
         ended = true
@@ -342,7 +304,6 @@ final class ApplicationRecorder: NSObject, SCStreamDelegate {
         try await task.value
     }
 
-    /// stopped为中断流；系统错误回到主执行器，由会话协调器结束并保留可解码片段。
     nonisolated func stream(_ stopped: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
             guard !ended, streams.contains(where: { $0 === stopped }) else { return }

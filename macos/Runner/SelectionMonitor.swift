@@ -2,11 +2,9 @@ import AppKit
 import Carbon
 import ApplicationServices
 
-/// 将鼠标、键盘和来源应用变化映射为选区事件；不处理翻译业务。
 final class SelectionMonitor {
     private(set) var automatic = false
     private var excludedApps: Set<String> = []
-    /// 已注册的全局热键；键为用途，值为系统热键 ID、组合与注册引用，按用途查找避免多组平行变量。
     private var hotKeys: [GlobalHotKey: RegisteredHotKey] = [:]
     private var nextHotKeyId: UInt32 = 1
     var isCapturingScreenshot = false
@@ -24,26 +22,21 @@ final class SelectionMonitor {
     private var ignoreMouseGesture = false
     private var pendingKeySelection: (keyCode: UInt16, gesture: SelectionGesture)?
 
-    /// 一个已注册的全局热键；id 为系统回调中的热键标识，binding 为组合，reference 为注销用的系统引用。
     struct RegisteredHotKey {
         let id: UInt32
         let binding: HotKeyBinding
         let reference: EventHotKeyRef
     }
 
-    /// 一个快捷键组合；keyCode 为硬件键码，modifiers 为 Carbon 修饰键位。
     struct HotKeyBinding: Hashable {
         let keyCode: UInt32
         let modifiers: UInt32
     }
 
-    /// automatic/excludedApps 为选区采集配置，shortcuts 为三种用途各自的组合，均来自 Dart。
-    /// 全部新组合注册成功后才替换旧配置；组合非法、重复或被占用时抛出错误并保留原注册。
     func configure(automatic: Bool, excludedApps: Set<String>, shortcuts: [GlobalHotKey: HotKeyBinding]) throws {
         guard Set(GlobalHotKey.allCases) == Set(shortcuts.keys) else {
             throw NSError(domain: AppConstants.errorDomain, code: 4, userInfo: [NSLocalizedDescriptionKey: "全局快捷键配置不完整。"])
         }
-        // 已保存的组合不符合规则时说明是哪一个用途。
         for purpose in GlobalHotKey.allCases {
             let binding = shortcuts[purpose]!
             do {
@@ -59,7 +52,6 @@ final class SelectionMonitor {
         }
         if hotKeyHandler == nil {
             var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            // 必须挂在 dispatcher：Application 目标只在本 App 前台时收热键。
             let status = InstallEventHandler(GetEventDispatcherTarget(), { _, event, context in
                 guard let event, let context else { return OSStatus(eventNotHandledErr) }
                 var identifier = EventHotKeyID()
@@ -68,7 +60,6 @@ final class SelectionMonitor {
                 let monitor = Unmanaged<SelectionMonitor>.fromOpaque(context).takeUnretainedValue()
                 Task { @MainActor in
                     guard let entry = monitor.hotKeys.first(where: { $0.value.id == identifier.id }) else { return }
-                    // 录制快捷键时，已注册组合被系统吞掉，直接把组合交给录制方。
                     if let recorder = MacPlatformBridge.Shared.instance?.shortcutRecorder {
                         recorder(entry.value.binding.keyCode, entry.value.binding.modifiers)
                         return
@@ -77,10 +68,8 @@ final class SelectionMonitor {
                     case .screenshot:
                         MacPlatformBridge.Shared.instance?.screenshot.capture()
                     case .translate:
-                        // 翻译热键复用选区读取，不激活 TranSnap。
                         monitor.capture(gesture: .hotkey)
                     case .input:
-                        // 输入翻译读取当前输入，完成后由 Dart 请求替换原文。
                         monitor.capture(gesture: .inputHotkey)
                     }
                 }
@@ -91,7 +80,6 @@ final class SelectionMonitor {
         var replacements: [GlobalHotKey: RegisteredHotKey] = [:]
         var created: [EventHotKeyRef] = []
         do {
-            // 已注册的组合可直接换用途：交换任意两个快捷键无需释放系统占用。
             for purpose in GlobalHotKey.allCases {
                 let binding = shortcuts[purpose]!
                 if let existing = hotKeys.values.first(where: { $0.binding == binding }) {
@@ -103,7 +91,6 @@ final class SelectionMonitor {
                 nextHotKeyId += 1
                 let status = RegisterEventHotKey(binding.keyCode, binding.modifiers, EventHotKeyID(signature: 0x5452414E, id: id), GetEventDispatcherTarget(), OptionBits(kEventHotKeyExclusive), &reference)
                 guard status == noErr, let reference else {
-                    // 说明被占用的是哪一个用途，用户无需逐个排查。
                     throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [NSLocalizedDescriptionKey: "「\(purpose.title)」已被其他应用占用，请换一个组合。"])
                 }
                 created.append(reference)
@@ -113,7 +100,6 @@ final class SelectionMonitor {
             for reference in created { UnregisterEventHotKey(reference) }
             throw error
         }
-        // 新配置不再使用的旧组合才注销，复用的组合保留系统占用。
         for old in hotKeys.values where !replacements.values.contains(where: { $0.id == old.id }) {
             UnregisterEventHotKey(old.reference)
         }
@@ -127,7 +113,6 @@ final class SelectionMonitor {
         MacPlatformBridge.Shared.instance?.invalidateSelection()
     }
 
-    /// keyCode/modifiers 为待注册组合；拒绝普通输入、文本编辑组合与已启用的系统保留键，成功无返回值。
     static func validateShortcut(keyCode: UInt32, modifiers: UInt32) throws {
         guard keyCode <= 127, keyCode != UInt32(AppConstants.escapeKeyCode),
               modifiers & AppConstants.shortcutRequiredModifiers != 0,
@@ -136,7 +121,6 @@ final class SelectionMonitor {
                 NSLocalizedDescriptionKey: "快捷键至少需要 Control、Option 或 Command，并搭配一个非 Esc 按键。",
             ])
         }
-        // 仅 Command 或 Command+Shift 搭配编辑主键时是全选、撤销、剪切、复制、粘贴，独占注册会让所有应用失去这些操作。
         let commandOnly = modifiers & ~UInt32(shiftKey) == UInt32(cmdKey)
         guard !(commandOnly && AppConstants.textEditingKeyCodes.contains(keyCode)) else {
             throw NSError(domain: AppConstants.errorDomain, code: 5, userInfo: [
@@ -157,21 +141,16 @@ final class SelectionMonitor {
         }
     }
 
-    /// 无参数；设置辅助功能调用超时并安装不吞掉原应用输入的全局监听，无返回值。
     func start() {
-        // 系统级元素上设置的超时作用于本进程全部辅助功能调用：来源应用无响应时单次调用最多等待该时长（#68）。
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), AppConstants.axMessagingTimeout)
         let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
-        // 三个监听都先忽略本应用合成的事件（SyntheticEvent），MCP 操控与自身按键不触发选区手势（#140）。
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseMask) { [weak self] event in
             guard !SyntheticEvent.isMarked(event) else { return event }
             let type = event.type
-            // 仅使用快捷键时拖动与抬起只服务自动划词，直接放行原事件，不切到主线程处理（#68）。
             guard self?.automatic == true || type == .leftMouseDown else { return event }
             let clickCount = event.clickCount
             let location = NSEvent.mouseLocation
             Task { @MainActor in
-                // 同一路径处理本地浮层与外部应用的鼠标事件。
                 self?.consumeMouse(type: type, clickCount: clickCount, location: location)
             }
             return event
@@ -191,10 +170,8 @@ final class SelectionMonitor {
             let type = event.type
             let keyCode = event.keyCode
             let modifiers = event.modifierFlags
-            // 仅使用快捷键时按下只需处理 Escape，其余按下只服务键盘扩选（#68）。
             guard self?.automatic == true || type == .keyUp || keyCode == AppConstants.escapeKeyCode else { return }
             Task { @MainActor in
-                // keyUp 时来源应用已经完成选区更新，监听不消费键盘事件。
                 self?.consumeKey(type: type, keyCode: keyCode, modifiers: modifiers)
             }
         }
@@ -206,13 +183,11 @@ final class SelectionMonitor {
                 self?.captureTask?.cancel()
                 self?.pendingKeySelection = nil
                 self?.stopObservingSelection()
-                // 比较来源 PID，不把非激活浮层的显示当作应用切换。
                 MacPlatformBridge.Shared.instance?.sourceApplicationChanged(to: app?.processIdentifier)
             }
         }
     }
 
-    /// 无参数；释放事件监听和待完成读取，防止残留回调。
     deinit {
         for registered in hotKeys.values { UnregisterEventHotKey(registered.reference) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
@@ -229,14 +204,12 @@ final class SelectionMonitor {
         }
     }
 
-    /// type/clickCount 为鼠标事件，location 为屏幕坐标；识别选区或结束旧会话，无返回值。
     @MainActor
     private func consumeMouse(type: NSEvent.EventType, clickCount: Int, location: NSPoint) {
         guard !isCapturingScreenshot else { return }
         let bridge = MacPlatformBridge.Shared.instance
         if type == .leftMouseDown {
             pendingKeySelection = nil
-            // 浮层内发起的整次拖动都忽略，即使指针随后离开了浮层。
             ignoreMouseGesture = bridge?.overlayContains(location) == true
                 || NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
         }
@@ -254,12 +227,10 @@ final class SelectionMonitor {
         }
         guard automatic else { return }
         let pointer = MousePointerEvent(kind: kind, clickCount: clickCount, x: location.x, y: location.y)
-        // 检测器仅在拖选、双击或三击完成时产出手势。
         guard let gesture = detector.handle(pointer) else { return }
         capture(gesture: gesture)
     }
 
-    /// type/keyCode/modifiers 为原始键盘事件；处理 Escape 和选择手势，无返回值。
     @MainActor
     private func consumeKey(type: NSEvent.EventType, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         guard !isCapturingScreenshot else { return }
@@ -272,7 +243,6 @@ final class SelectionMonitor {
             return
         }
         if automatic, type == .keyDown {
-            // 修饰键可能先于方向键释放，因此在按下时记住手势，不保存输入字符。
             if let gesture = SelectionGesture.keyboardGesture(keyCode: keyCode, modifiers: modifiers) {
                 pendingKeySelection = (keyCode, gesture)
             }
@@ -281,32 +251,25 @@ final class SelectionMonitor {
         guard type == .keyUp else { return }
         if let pending = pendingKeySelection, pending.keyCode == keyCode {
             pendingKeySelection = nil
-            // 非激活浮层不接收键盘焦点，鼠标悬停位置不能屏蔽来源应用的扩选。
             capture(gesture: pending.gesture)
             return
         }
         if bridge?.hasSelection == true, observedPID != nil {
-            // 不支持 AX 通知的应用仍可在普通输入清空选区时结束会话。
             validateSelection()
         }
     }
 
-    /// gesture 为选区手势；去抖读取文本，在上报时获取当前鼠标位置，无返回值。
     @MainActor
     private func capture(gesture: SelectionGesture) {
         guard !isCapturingScreenshot else { return }
-        // 保留的译文框不消费新的被动选区；全局热键仍可明确发起下一次翻译。
         guard gesture.isExplicit || MacPlatformBridge.Shared.instance?.retainsResult != true else { return }
         captureTask?.cancel()
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.processIdentifier != getpid(),
               !excludedApps.contains(app.bundleIdentifier ?? "") else { return }
         let pid = app.processIdentifier
-        // 在原文采集开始时冻结来源名称，不在异步完成后重新按PID查询。
         let sourceAppName = app.localizedName
         if gesture == .hotkey {
-            // 全局翻译快捷键先即时唤起处于读取/翻译状态的面板，选区读取由 Dart 经 readSelectionForTranslation 异步完成，
-            // 避免被 80ms 去抖或网页模拟复制的轮询等待卡住面板弹出。
             stopObservingSelection()
             let anchor = NSEvent.mouseLocation
             MacPlatformBridge.Shared.instance?.emitSelectionCaptured(
@@ -315,16 +278,12 @@ final class SelectionMonitor {
             )
             return
         }
-        // 仅输入翻译记录“读取原文”阶段耗时：从开始采集到选区事件发出。
         let inputReadStart: ContinuousClock.Instant? = gesture == .inputHotkey ? ContinuousClock.now : nil
         captureTask = Task { @MainActor [weak self] in
-            // 明确输入翻译快捷键不等待被动选区 80ms 去抖。
             if !gesture.isExplicit {
                 do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
             }
-            // 读取绑定手势来源，切换应用或新手势会取消本次读取。
             var selection = await AccessibilitySelection.readFrontmostSelection(sourcePID: pid, allowCopy: gesture.isExplicit)
-            // 输入翻译读不到选区时，在非安全文本输入框内全选后再读，替换整个输入框。
             if gesture == .inputHotkey, (selection.text ?? "").isEmpty, !Task.isCancelled,
                await AccessibilitySelection.selectAllInFocusedTextInput(sourcePID: pid) {
                 do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
@@ -333,22 +292,18 @@ final class SelectionMonitor {
             guard self?.isCapturingScreenshot != true, !Task.isCancelled, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
                   gesture.isExplicit || MacPlatformBridge.Shared.instance?.retainsResult != true else { return }
             let text = selection.text ?? ""
-            // 明确热键读不到文字时说明原因：焦点为密码框时失败提示据此说明不读取密码（#1）。
             var readFailure: SelectionReadFailure?
             if gesture.isExplicit, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                await AccessibilitySelection.focusIsSecure(sourcePID: pid) {
                 readFailure = .secureField
             }
-            // permitsKeyboardTrigger 在后台读取焦点节点，返回后重新确认本次读取仍有效。
             let keyboardCandidate = gesture == .selectAll || gesture == .keyboard
                 ? await AccessibilitySelection.permitsKeyboardTrigger(sourcePID: pid) : false
             guard !Task.isCancelled else { return }
-            // 明确热键即使读不到文字也要展示失败卡片，不能静默丢弃用户操作。
             guard gesture.isExplicit || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || keyboardCandidate else {
                 MacPlatformBridge.Shared.instance?.invalidateSelection()
                 return
             }
-            // 异步读取完成后以最新鼠标位置定位新会话；输入翻译另按持有选区的节点取锚点（含来源窗口矩形）作为浮标与失败气泡定位依据（#99）。
             let anchor = NSEvent.mouseLocation
             MacPlatformBridge.Shared.instance?.emitSelectionCaptured(
                 text: text, gesture: gesture.rawValue, readFailure: readFailure, x: anchor.x, y: anchor.y, sourcePID: pid, sourceAppName: sourceAppName,
@@ -356,12 +311,10 @@ final class SelectionMonitor {
                 inputSelection: gesture == .inputHotkey ? selection.element : nil
             )
             if let inputReadStart { PerformanceLog.record("input-read", since: inputReadStart) }
-            // 选区通知覆盖程序清空与控件焦点变化，不需要轮询剪贴板。
             self?.watchSelection(sourcePID: pid, selectionElement: selection.element)
         }
     }
 
-    /// sourcePID 为来源，selectionElement 为实际文字节点；注册焦点和选区通知，无返回值。
     @MainActor
     private func watchSelection(sourcePID: pid_t, selectionElement: AXUIElement?) {
         stopObservingSelection()
@@ -376,7 +329,6 @@ final class SelectionMonitor {
             Task { @MainActor in
                 guard let active = monitor.selectionObserver, CFEqual(active, observer),
                       monitor.observedPID != nil else { return }
-                // Chrome 会重复发送焦点通知；通知名本身不能证明选区失效。
                 monitor.validateSelection()
             }
         }, &observer)
@@ -388,17 +340,13 @@ final class SelectionMonitor {
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
     }
 
-    /// 无参数；合并 AX/键盘通知，以实际文字节点确认清空；焦点容器变化本身不结束会话。
     @MainActor
     private func validateSelection() {
         validationTask?.cancel()
         guard let pid = observedPID else { return }
         validationTask = Task { @MainActor [weak self] in
-            // AX 通知可能先于浏览器选区树更新到达；与捕获使用同一个 80ms 稳定窗口。
             do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
             guard let self, self.observedPID == pid else { return }
-            // 焦点可能在同一浏览器文本树内迁移；不可读保持未知，不能由节点身份变化推断清空。
-            // hasReadableSelection 在后台读取选区；返回后来源或监听已变化时不处理旧结果。
             let readable = await AccessibilitySelection.hasReadableSelection(sourcePID: pid, selectionElement: self.selectionElement)
             guard !Task.isCancelled, self.observedPID == pid else { return }
             if readable == false {
@@ -408,7 +356,6 @@ final class SelectionMonitor {
         }
     }
 
-    /// 无参数；移除旧来源的 AX 监听，防止旧应用通知关闭新会话，无返回值。
     private func stopObservingSelection() {
         validationTask?.cancel()
         validationTask = nil

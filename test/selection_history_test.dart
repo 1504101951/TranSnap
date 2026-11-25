@@ -18,20 +18,16 @@ import 'package:transnap/src/selection/selection_session.dart';
 import 'package:transnap/src/translation/language_direction.dart';
 import 'package:transnap/src/translation/translation_types.dart';
 
-/// 以显式业务事件驱动实际会话；不模拟历史写入。
 class _Provider extends TranslationProvider {
-  /// id 是服务身份，events 是业务事件流，用于冻结配置和完成边界核验。
   _Provider(this.id, this.events);
   @override
   final String id;
   final Stream<TranslationEvent> events;
 
-  /// request 为真实会话输入；返回测试场景的事件流。
   @override
   Stream<TranslationEvent> translate(TranslationRequest request) => events;
 }
 
-/// 无参数；通过真实 App 和事件编解码验证最终数据库状态。
 void main() {
   testWidgets('选区历史保留来源和激活配置，失败、未完成与关闭不写记录', (tester) async {
     const methods = MethodChannel('test/selection-history/methods');
@@ -67,7 +63,6 @@ void main() {
       messenger.setMockMethodCallHandler(methods, null);
       messenger.setMockMethodCallHandler(MethodChannel(events.name), null);
     });
-    // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
       TranSnapApp(
@@ -82,7 +77,6 @@ void main() {
     );
     await tester.pump();
 
-    /// payload 为原生选区/关闭事件；刷新 App 后返回，不检查内部方法调用。
     Future<void> send(Map<String, Object> payload) async {
       await messenger.handlePlatformMessage(
         events.name,
@@ -102,7 +96,6 @@ void main() {
       'y': 0,
     });
     expect(session.snapshot.phase, TranslationPhase.translating);
-    // 检测期间修改设置，结果仍须记录激活时的服务及次要目标语言。
     session.provider = _Provider('changed', const Stream.empty());
     session.language = const LanguageDirection(primaryCode: 'fr');
     detection.complete('zh-Hans');
@@ -119,7 +112,6 @@ void main() {
     expect(row.providerId, 'original');
     expect(row.translatedText, 'Hello');
     for (final ending in ['failed', 'incomplete', 'cancelled']) {
-      // 只发送增量后失败、断流或关闭，均不构成完整成功的第二条记录。
       final stream = StreamController<TranslationEvent>();
       session.provider = _Provider(ending, stream.stream);
       await send({
@@ -136,7 +128,6 @@ void main() {
       if (ending == 'cancelled') {
         await send({'type': MethodNames.escapePressed, 'sessionId': ending});
       }
-      // 关闭事件需由 Flutter 的测试队列投递；先安排关闭，再推进队列。
       unawaited(stream.close());
       await tester.pumpAndSettle();
       expect(
@@ -154,7 +145,6 @@ void main() {
     const codec = StandardMethodCodec();
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    // 原生替换结果：null 为已替换，字符串为未替换原因（如来源应用已切换）。
     String? replaceFailure;
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(methods, (call) async {
@@ -189,7 +179,6 @@ void main() {
       messenger.setMockMethodCallHandler(methods, null);
       messenger.setMockMethodCallHandler(MethodChannel(events.name), null);
     });
-    // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
       TranSnapApp(
@@ -204,7 +193,6 @@ void main() {
     );
     await tester.pump();
 
-    /// sessionId 标识本次输入翻译；发送输入翻译快捷键的选区事件并等待翻译与替换结束。
     Future<void> sendInput(String sessionId) async {
       await messenger.handlePlatformMessage(
         events.name,
@@ -222,11 +210,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// 返回本次通道调用中出现过的方法名集合。
     Set<String> methodNames() => calls.map((call) => call.method).toSet();
 
     await sendInput('replaced');
-    // 边界：替换成功时会话结束、写入历史，且从未请求显示或缩放浮层，也没有失败气泡。
     expect(session.snapshot.phase, TranslationPhase.idle);
     expect(history.page(), hasLength(1));
     expect(
@@ -243,7 +229,6 @@ void main() {
     calls.clear();
     replaceFailure = '来源应用已切换，未替换原文。';
     await sendInput('kept');
-    // 边界：替换被拒时同样不显示卡片，原因原样交给失败气泡，会话结束；翻译成功仍记入历史。
     expect(session.snapshot.phase, TranslationPhase.idle);
     expect(history.page(), hasLength(2));
     expect(methodNames(), isNot(contains(MethodNames.showOverlay)));
@@ -294,7 +279,6 @@ void main() {
       messenger.setMockMethodCallHandler(methods, null);
       messenger.setMockMethodCallHandler(MethodChannel(events.name), null);
     });
-    // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
       TranSnapApp(
@@ -324,13 +308,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(history.page(), hasLength(1));
 
-    /// mode 为目标模式；点击卡片标题区对应的模式标签，等待处理结束。
     Future<void> choose(TextMode mode) async {
       await tester.tap(find.byKey(ValueKey('mode-tab-${mode.name}')));
       await tester.pumpAndSettle();
     }
 
-    // 边界：润色完整成功也不属于翻译历史；底部复制按钮随模式显示「复制润色」。
     await choose(TextMode.polish);
     expect(session.snapshot.translatedText, 'Hello.');
     expect(find.text('复制润色'), findsOneWidget);
@@ -375,7 +357,6 @@ void main() {
       messenger.setMockMethodCallHandler(methods, null);
       messenger.setMockMethodCallHandler(MethodChannel(events.name), null);
     });
-    // 同一个通道适配器实现选区应用所需的全部端口。
     final bridge = ChannelPlatformBridge(methods: methods, events: events);
     await tester.pumpWidget(
       TranSnapApp(
@@ -390,7 +371,6 @@ void main() {
     );
     await tester.pump();
 
-    /// text 为快捷键读取到的原文；发送全局翻译快捷键事件并等待翻译与查词结束。
     Future<void> translate(String sessionId, String text) async {
       await messenger.handlePlatformMessage(
         events.name,
@@ -408,7 +388,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // 边界一：单词带首尾空白，查词使用去空白后的原文，右栏改为词典。
     await translate('word', ' serendipity ');
     expect(looked, ['serendipity']);
     expect(find.text('词典'), findsOneWidget);
@@ -421,7 +400,6 @@ void main() {
       [('serendipity', '机缘凑巧')],
     );
 
-    // 边界二：超过三个词的句子不查词典，卡片为单栏译文与原文，没有词典栏，也没有加入按钮。
     await translate('sentence', 'this is a long sentence');
     expect(looked, ['serendipity']);
     expect(find.text('词典'), findsNothing);

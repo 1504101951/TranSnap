@@ -20,7 +20,6 @@ import 'package:transnap/src/common/constants/toolbar_grid.dart';
 import 'support/capture_pixels.dart';
 import 'support/line_icons.dart';
 
-/// 无参数；验证工具状态、实际选区与媒体结果中的输入输出和边界。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('test/capture');
@@ -28,7 +27,6 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Map<String, Object?> state;
 
-  /// next为原生已发生的状态；模拟平台边界通知并渲染当前帧，无返回值。
   Future<void> notify(WidgetTester tester, Map<String, Object?> next) async {
     state = next;
     await messenger.handlePlatformMessage(
@@ -57,7 +55,6 @@ void main() {
       }
       return state;
     });
-    // Widget测试只替换系统平台视图边界；媒体生命周期由原生测试覆盖。
     messenger.setMockMethodCallHandler(
       SystemChannels.platform_views,
       (_) async => null,
@@ -70,7 +67,6 @@ void main() {
   });
 
   testWidgets('两种采集共用四个独立气泡，上方提示且暂停放弃保持契约', (tester) async {
-    // 320×84包含36pt上方提示空间；验证四个独立材料及两种内容的暂停、放弃、结束边界。
     tester.view.physicalSize = const Size(320, 84);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -93,7 +89,6 @@ void main() {
         expect(tooltip.preferBelow, isFalse);
       }
       expect(find.text(label), findsOneWidget);
-      // 84pt高面板只保留36pt提示区；长错误文字必须限制在气泡外，首击操作始终可命中。
       await notify(tester, {
         ...state,
         'error': '相邻画面缺少稳定的重叠内容，请减小单次滚动幅度或避开动态内容。已保留确认部分。',
@@ -106,7 +101,6 @@ void main() {
         expect(button.hitTestable(), findsOneWidget);
         expect(feedbackRect.overlaps(tester.getRect(button)), isFalse);
       }
-      // 错误提示保留 2 秒供用户阅读，1 秒时尚在界面上，满 2 秒后关闭（#144）。
       await tester.pump(const Duration(seconds: 1));
       expect(feedback, findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
@@ -141,8 +135,6 @@ void main() {
   });
 
   testWidgets('视频结果等比显示源逻辑尺寸，采用中性衬底与52pt底部操作栏骨架', (tester) async {
-    // 1706×868源像素来自2倍屏，1200×900视口足以按853×434逻辑尺寸完整显示，
-    // 四周24pt中性衬底，底部52pt实底操作栏含左侧放弃/播放条/裁剪与右侧复制/导出▾/保存（#67、#145）。
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -200,7 +192,6 @@ void main() {
     expect(find.text('保存'), findsOneWidget);
     expect(find.text('0:02'), findsOneWidget);
     expect(find.text('0:09'), findsOneWidget);
-    // 左组从放弃到裁剪，右组从复制到保存，依次排开且放弃在最左。
     expect(
       tester.getRect(find.byKey(const Key('result-discard'))).right,
       lessThan(tester.getRect(find.byKey(const Key('result-play-toggle'))).left),
@@ -236,7 +227,6 @@ void main() {
   });
 
   testWidgets('受限视频窗口为四周24pt衬底与52pt底部栏保留外边距且不裁剪媒体', (tester) async {
-    // 媒体区四周留白24pt、底部操作栏高52pt；超大视频应等比缩小，不与操作栏重叠。
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -277,7 +267,6 @@ void main() {
   });
 
   testWidgets('关闭与Escape单击放弃，转换中仍能关闭', (tester) async {
-    // 关闭即丢弃会话；覆盖转换中关闭以及录制结果最小尺寸 600×200pt（#67、#145）。
     tester.view.physicalSize = const Size(600, 200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -297,7 +286,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('result-window-bar')), findsNothing);
     expect(tester.takeException(), isNull);
-    // 新结果按一次Escape即可清理；不要求第二次键盘或确认输入。
     await notify(tester, resultState);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -319,8 +307,6 @@ void main() {
   });
 
   testWidgets('MP4后台保存只显示保存状态，防重复且保留取消与关闭入口', (tester) async {
-    // 边界：完整 MP4 的复制没有编码进度；忙碌快照缺少 progress，不能显示 0% 或其他虚构百分比。
-    // 返回结果页后可再次保存；取消保存保留源视频，关闭保存中的结果结束当前会话。
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -349,7 +335,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('result-save')));
     await tester.pump();
-    // 正在保存时仅「取消保存」按钮外圈进度环激活，其余操作禁用且保留放弃按钮（#142、#145）。
     BusyRing ringOf(Key key) => tester.widget<BusyRing>(
       find.ancestor(of: find.byKey(key), matching: find.byType(BusyRing)).first,
     );
@@ -391,7 +376,6 @@ void main() {
   });
 
   testWidgets('GIF从导出菜单发起，取消和保存反馈在工具栏外停留对应时长', (tester) async {
-    // 非整数源时长由原生元数据决定；结果页不要求用户输入尺寸，导出收进「导出 ▾」菜单（#67、#145）。
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -445,7 +429,6 @@ void main() {
           .overlaps(tester.getRect(find.byKey(const Key('result-window-bar')))),
       isFalse,
     );
-    // 取消回调通过 state['error'] 呈现，沿用 2000ms 错误停读；随后保存成功反馈沿用 1000ms（#144）。
     await tester.pump(const Duration(milliseconds: 1999));
     expect(bubble, findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1));
@@ -466,8 +449,6 @@ void main() {
   });
 
   testWidgets('裁剪期间全部操作等待；APNG/WebM 转换将导出按钮变为取消，完成后提示对应保存结果', (tester) async {
-    // 边界：裁剪调用在用户点系统「裁剪」或「取消」前不返回，期间其余操作都不可用（#110）；
-    // exporting 为 apng/webm 时导出区变为取消且进度环激活，保存禁用，放弃仍可用。
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -585,7 +566,6 @@ void main() {
   });
 
   testWidgets('截图组动态目标行沿用裁剪区域，取消准备保留编辑', (tester) async {
-    // 从320×240中框选中央160×120；录制确认与长截图直启均保留当前区域。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/toolbar-capture');
@@ -605,7 +585,6 @@ void main() {
         return null;
       }
       if (call.method == MethodNames.closeScreenshot) {
-        // 模拟真实关闭后的空快照，防止菜单取消意外销毁编辑画面却被测试忽略。
         await messenger.handlePlatformMessage(
           selectionChannel.name,
           const StandardMethodCodec().encodeMethodCall(
@@ -625,7 +604,6 @@ void main() {
     for (final scrolling in [false, true]) {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-      // 源图异步建好后文档才有图。
       await awaitCaptureSource(tester);
       await tester.pumpAndSettle();
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
@@ -634,10 +612,7 @@ void main() {
         Offset(canvas.width / 2, canvas.height / 2),
       );
       await tester.pumpAndSettle();
-      // 默认网格中截图在裸数字第 2 格，提示为「名称 + 键位」（#141）。
       expect(find.byTooltip('截图 2'), findsOneWidget);
-      // 截图的子级托盘紧跟截图所在的第 1 组，挤开后续组：横放时在下一行，竖放时在右一列；
-      // 托盘内按钮距分区块按钮为块内边距 4＋行间距 4＋托盘内边距 2（#141、#67）。
       final children = find.byKey(const Key('screenshot-children-group-0'));
       expect(
         find.descendant(of: children, matching: find.byTooltip('录制')),
@@ -674,7 +649,6 @@ void main() {
           find.descendant(of: targetRow, matching: find.byType(AppKitView)),
           findsNothing,
         );
-        // 原生Esc收起目标行后保留冻结帧和裁剪；再次展开仍可启动同一个选区。
         await messenger.handlePlatformMessage(
           selectionChannel.name,
           const StandardMethodCodec().encodeMethodCall(
@@ -696,7 +670,6 @@ void main() {
       expect(selected!['y'], closeTo(60, 1));
       expect(selected!['width'], closeTo(160, 1));
       expect(selected!['height'], closeTo(120, 1));
-      // 录制携带缺省的不延时，长截图不携带延时（#129）。
       expect(selected!['delay'], scrolling ? isNull : 0);
       expect(find.byTooltip('开始长截图'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -704,7 +677,6 @@ void main() {
   });
 
   testWidgets('窗口目标增加应用图标行，切换清空选择且长列表可滚动访问', (tester) async {
-    // 320pt窄屏与25个应用超过可见行宽；验证真实控件选择、命中与提交目标，不检查下游调用次数。
     tester.view.physicalSize = const Size(320, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -752,7 +724,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(sourceChannel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: sourceChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final canvasBefore = tester.getRect(
@@ -771,7 +742,6 @@ void main() {
       findsOneWidget,
     );
 
-    /// 无参数；返回当前开始按钮，用真实启用状态验证目标选择边界。
     IconButton startButton() => tester.widget<IconButton>(
       find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == '开始录制',
@@ -782,7 +752,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(startButton().onPressed, isNotNull);
     expect(tester.getSemantics(find.byTooltip('当前应用')).label, contains('当前应用'));
-    // 负坐标显示器上的应用窗口仍映射到当前显示画布；整个画布为实际录制区域。
     final preview =
         tester
                 .widgetList<CustomPaint>(find.byType(CustomPaint))
@@ -843,8 +812,6 @@ void main() {
   });
 
   testWidgets('长图结果保留来源逻辑宽度并支持适合宽度与实际大小切换，底部栏提供放弃缩放复制保存', (tester) async {
-    // 1600×2400像素来自2x屏幕，逻辑宽800、高1200；在700×600视口中，
-    // 默认「适合宽度」按可用宽 700-48=652 缩为 652×978；切到「实际大小」恢复 800×1200 且保留24pt衬底（#67、#145）。
     tester.view.physicalSize = const Size(700, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -885,7 +852,6 @@ void main() {
     expect(fitSize.height, closeTo(978, 0.01));
     expect(find.textContaining('相邻画面缺少稳定的重叠内容'), findsOneWidget);
     expect(find.byKey(const Key('screenshot-canvas')), findsNothing);
-    // 切到「实际大小」后恢复源逻辑尺寸 800×1200 并纵向滚动验证 24pt 顶部衬底（24 - 400 = -376）。
     await tester.tap(find.byKey(const Key('result-zoom-menu')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('实际大小'));
@@ -929,7 +895,6 @@ void main() {
   });
 
   testWidgets('媒体结果图片不能作为屏幕选区启动采集', (tester) async {
-    // 没有冻结帧身份的图片仍可留在编辑器里，但两个采集入口必须保持禁用。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/image-capture-boundary');
@@ -949,7 +914,6 @@ void main() {
       () => messenger.setMockMethodCallHandler(selectionChannel, null),
     );
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     for (final action in [
@@ -965,8 +929,6 @@ void main() {
   });
 
   testWidgets('实时翻译同步录制时控制条在翻译状态前显示录制时长', (tester) async {
-    // 作用：同一个控制条同时表达录制与翻译两种状态。
-    // 边界：recording 为真时显示“录制：1:05 · 状态”（65 秒）；为假时只显示翻译状态，不出现录制时长。
     tester.view.physicalSize = const Size(320, 84);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -989,8 +951,6 @@ void main() {
   });
 
   testWidgets('录制倒计时期间状态气泡显示剩余秒数，只能放弃（#129）', (tester) async {
-    // 边界：preparing 且 countdown 为 3 时显示「3 秒后开始」，暂停与结束禁用、放弃可用；
-    // 没有 countdown 的 preparing 仍显示通用准备文案。
     tester.view.physicalSize = const Size(320, 84);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1027,8 +987,6 @@ void main() {
   testWidgets('录制选项：选择延时与点击特效即保存，开始录制携带所选延时，窗口目标禁用点击特效（#129、#143）', (
     tester,
   ) async {
-    // 边界：快照延时 0、点击特效 optical 时选「延时 5 秒」保留 optical；选「液态弹波」保存 liquid；
-    // 开始录制的 delay 为 5；切到窗口目标后全部 7 项点击特效菜单均不可用。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/recording-options');
@@ -1061,7 +1019,6 @@ void main() {
       () => messenger.setMockMethodCallHandler(selectionChannel, null),
     );
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
@@ -1114,8 +1071,6 @@ void main() {
   });
 
   testWidgets('实时翻译是顶层工具，任意工具下点击都进入目标选择并可开始', (tester) async {
-    // 作用：实时翻译不依赖先选中截图工具。
-    // 边界：当前工具为画笔时点击实时翻译，直接出现目标选择行；开始请求带 live 且不再携带录制参数。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/live-top-level');
@@ -1140,7 +1095,6 @@ void main() {
       () => messenger.setMockMethodCallHandler(selectionChannel, null),
     );
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
@@ -1149,10 +1103,8 @@ void main() {
     await tester.tap(find.byKey(const Key(ScreenshotActions.live)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recording-targets-row')), findsOneWidget);
-    // 展开后不出现截图工具的录制与长截图；高亮的是实时翻译，不是截图工具。
     expect(find.byKey(const Key(ScreenshotActions.record)), findsNothing);
     expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
-    // 选中的工具用强调色实底表示（画在按钮底面上）；矩形工具此时未选中，作为对照。
     Color? tint(String id) =>
         (tester
                     .widget<AnimatedContainer>(
@@ -1175,13 +1127,9 @@ void main() {
   });
 
   testWidgets('工具栏按用户拼接的父子结构显示子级，一级的录制直接展开目标选择', (tester) async {
-    // 作用：父子关系来自配置而不是写死在截图工具下。
-    // 边界：滚动长截图拼到画笔之下、录制为一级；选中画笔时第二行出现滚动长截图，选中截图时不出现；
-    // 点击一级的录制后出现目标选择行，高亮的是录制而不是它借用的截图工具。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/toolbar-tree');
-    // 除滚动长截图外全部为一级，按注册表顺序每列 6 格填入无、⌘、⌥、⌃ 四列（#141）。
     final topLevel = [
       for (final id in ScreenshotActions.composable.keys)
         if (id != ScreenshotActions.scrolling) id,
@@ -1217,10 +1165,8 @@ void main() {
       () => messenger.setMockMethodCallHandler(selectionChannel, null),
     );
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    // 初始工具是截图：它没有子级，第二行没有滚动长截图。
     expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
@@ -1229,7 +1175,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recording-targets-row')), findsOneWidget);
     expect(find.byKey(const Key(ScreenshotActions.scrolling)), findsNothing);
-    // 选中的工具用强调色实底表示（画在按钮底面上）；矩形工具此时未选中，作为对照。
     Color? tint(String id) =>
         (tester
                     .widget<AnimatedContainer>(
@@ -1248,7 +1193,6 @@ void main() {
   });
 
   testWidgets('全屏选区准备按钮使用独立材料且保持可点，开始提交源像素并防重复', (tester) async {
-    // 320×240冻结画面置于更大视口；输出仍是源图像素，异步确认不可重复提交。
     final png = await tester.runAsync(_selectionImage);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const selectionChannel = MethodChannel('test/capture-selection');
@@ -1278,7 +1222,6 @@ void main() {
       () => messenger.setMockMethodCallHandler(selectionChannel, null),
     );
     await tester.pumpWidget(const ScreenshotApp(channel: selectionChannel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.record)));
@@ -1286,7 +1229,6 @@ void main() {
     final confirm = find.byTooltip('开始录制');
     expect(confirm, findsOneWidget);
     final targetRow = find.byKey(const Key('recording-targets-row'));
-    // 三个目标、录制选项、开始与取消共用三级实底托盘且不逐按钮使用玻璃材料（#67）。
     expect(
       find.descendant(of: targetRow, matching: find.byType(IconButton)),
       findsNWidgets(6),
@@ -1326,7 +1268,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // 验证录制结果按钮与 ⌘C 复制视频交互：等待态防重入、成功展示「已复制视频」、转换中禁用以及原生错误直接展示（#142）。
   testWidgets('录制结果支持点击复制与⌘C，等待及转换中不可重复触发并展示失败原因（#142）', (tester) async {
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
@@ -1358,7 +1299,6 @@ void main() {
     await tester.pumpWidget(const CaptureApp(channel: channel));
     await tester.pumpAndSettle();
 
-    // 1. 点击复制并挂起原生调用：验证按钮与 ⌘C 均禁用、外圈等待进度环激活。
     pendingCopy = Completer<void>();
     await tester.tap(find.byKey(const Key('result-copy')));
     await tester.pump();
@@ -1382,7 +1322,6 @@ void main() {
     await tester.pump();
     expect(copyCalls, 1);
 
-    // 完成后进度环停转，出现「已复制视频」且不覆盖底部操作栏，1 秒后消失。
     pendingCopy.complete();
     pendingCopy = null;
     await tester.pumpAndSettle();
@@ -1397,7 +1336,6 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(bubble, findsNothing);
 
-    // 2. 空闲状态按 ⌘C 触发复制并反馈成功。
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
@@ -1406,7 +1344,6 @@ void main() {
     expect(find.text('已复制视频'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
 
-    // 3. 转换中「复制」不可点且 ⌘C 不触发调用。
     await notify(tester, {
       ...state,
       'phase': 'converting',
@@ -1423,7 +1360,6 @@ void main() {
     await tester.pump();
     expect(copyCalls, 2);
 
-    // 4. 恢复就绪后若原生失败，展示原生返回的错误信息而非成功反馈。
     await notify(tester, {...state, 'phase': 'videoReady', 'exporting': null});
     copyError = '录制文件不存在，无法复制。';
     await tester.tap(find.byKey(const Key('result-copy')));
@@ -1435,8 +1371,6 @@ void main() {
   });
 
   testWidgets('采集错误气泡悬停 2 秒暂停并在移开后重计，点击关闭按钮立即消失（#144）', (tester) async {
-    // 作用：验证 CaptureApp 错误提示遵循 2000ms 自动关闭、悬停停读与手动关闭交互。
-    // 边界：悬停期间超过 3s 仍停留；移出鼠标 1999ms 仍存在，满 2000ms 关闭；点击关闭按钮立即清空。
     tester.view.physicalSize = const Size(380, 120);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1475,8 +1409,6 @@ void main() {
   });
 
   testWidgets('采集请求进行中阻止并发重入，failed 阶段仍展示错误气泡（#144）', (tester) async {
-    // 作用：验证同一帧并发点击只发出首个请求，以及失败阶段不会退回隐藏空白页。
-    // 边界：保存请求挂起期间同帧点击导出不发出第二个原生调用；phase=failed 且带 error 时保留错误气泡。
     tester.view.physicalSize = const Size(640, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1503,7 +1435,6 @@ void main() {
     await tester.pumpAndSettle();
     invoked.clear();
 
-    // 同帧尚未重绘禁用态前连续点击两个操作：第二个调用被 _pending 守卫拦截。
     await tester.tap(find.byKey(const Key('result-save')));
     await tester.tap(find.byKey(const Key('result-copy')));
     expect(invoked, [MethodNames.saveRecording]);
@@ -1524,7 +1455,6 @@ void main() {
   });
 }
 
-/// width/height为源像素尺寸；返回真实PNG，供冻结画面和长图结果验证。
 Future<Uint8List> _selectionImage({int width = 320, int height = 240}) async {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);

@@ -4,7 +4,6 @@ import '../common/constants/screenshot_enums.dart';
 import '../common/constants/drawing_metrics.dart';
 import 'drawing_style.dart';
 
-/// 每个工具的下一笔参数；共享控件只编辑值，不共享可变状态。
 class DrawingPreferences {
   DrawingPreferences({
     Map<ScreenshotTool, DrawingStyle>? styles,
@@ -31,7 +30,6 @@ class DrawingPreferences {
   final ShapeMode brushMode;
   final double fontSize;
 
-  /// tool为顶层工具，shape/brushMode可指定具体子模式；返回该子工具独立样式。
   DrawingStyle styleFor(
     ScreenshotTool tool, {
     ShapeVariant? shape,
@@ -45,11 +43,9 @@ class DrawingPreferences {
     if (variant != null && variants.containsKey(variant)) {
       return variants[variant]!;
     }
-    // 基础快照为未调整的子模式提供初值；修改只写自己的覆盖项。
     if (tool == ScreenshotTool.rect && (shape ?? this.shape).filled) {
       return DrawingStyle(color: fillColor);
     }
-    // 荧光笔未调整前使用黄色宽笔，不继承普通画笔的红色细线（#107）。
     if (tool == ScreenshotTool.brush &&
         (brushMode ?? this.brushMode) == ShapeMode.highlighter) {
       return const DrawingStyle(
@@ -60,7 +56,6 @@ class DrawingPreferences {
     return styles[tool] ?? const DrawingStyle();
   }
 
-  /// 将图形/画笔的子类型转为持久化键；其他工具返回null并使用独立工具槽。
   static String? _variantKey(
     ScreenshotTool tool,
     ShapeVariant shape,
@@ -71,7 +66,6 @@ class DrawingPreferences {
     return null;
   }
 
-  /// raw为UserDefaults中的绘图子字典；缺省使用初始值，非法值明确拒绝。
   factory DrawingPreferences.fromMap(Map<Object?, Object?>? raw) {
     if (raw == null) return DrawingPreferences();
     final defaults = DrawingPreferences();
@@ -147,14 +141,12 @@ class DrawingPreferences {
     );
   }
 
-  /// value 为单个工具或子模式的样式字典；返回其中可选的渐变，缺失即纯色（#103）。
   static FillGradient? _gradient(Map<Object?, Object?> value) =>
       switch (value['gradient']) {
         final Map<Object?, Object?> gradient => FillGradient.fromMap(gradient),
         _ => null,
       };
 
-  /// 返回可跨引擎传递的独立字典；线宽/字号保持逻辑pt，渐变只在存在时写入。
   Map<String, Object> toMap() => {
     'tools': styles.map(
       (tool, style) => MapEntry(tool.name, {
@@ -176,7 +168,6 @@ class DrawingPreferences {
     'fontSize': fontSize,
   };
 
-  /// 仅替换指定工具或模式，返回新快照，已有标注不受影响。
   DrawingPreferences copyWith({
     ScreenshotTool? tool,
     DrawingStyle? style,
@@ -185,7 +176,6 @@ class DrawingPreferences {
     ShapeMode? brushMode,
     double? fontSize,
   }) => DrawingPreferences(
-    // 图形和画笔仅写子模式；基础槽不变，其他子模式不会继承本次修改。
     styles: {
       ...styles,
       if (tool != null &&

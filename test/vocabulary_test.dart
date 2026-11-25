@@ -5,10 +5,8 @@ import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/history/vocabulary.dart';
 import 'package:transnap/src/selection/selection_session.dart';
 
-/// 无参数；用内存 SQLite 验证生词本的增改删、排序与 CSV 输出，以及查词判定的边界。
 void main() {
   test('同一单词不区分大小写只保留一条并更新内容，列表按加入时间倒序，删除后消失', () {
-    // 边界：大小写不同的同一单词视为重复；时间更晚者排在前面。
     final store = VocabularyStore(sqlite3.openInMemory());
     store.add(
       const VocabularyEntry(
@@ -46,7 +44,6 @@ void main() {
   });
 
   test('CSV 每列加引号并转义引号，释义内的逗号与换行不串列', () {
-    // 边界：同一字段同时含逗号、双引号与换行，是 CSV 最容易串列的组合。
     final store = VocabularyStore(sqlite3.openInMemory());
     store.add(
       const VocabularyEntry(
@@ -60,7 +57,6 @@ void main() {
   });
 
   test('查词判定：1–3 个拉丁字母词且不超过 40 字符，或 1–4 个汉字', () {
-    // 边界：3 个词与 4 个词、40 与 41 字符、4 与 5 个汉字，以及标点与空文本。
     for (final term in [
       'serendipity',
       ' take off ',

@@ -10,10 +10,7 @@ import '../translation/glossary.dart';
 import '../translation/glossary_file.dart';
 import 'app_settings.dart';
 
-/// 术语表管理弹窗：维护全部术语并导入导出文件，单条改动自动保存，整批导入等待设置事务。
 class GlossaryManager extends StatefulWidget {
-  /// glossary 为当前列表，defaultLanguage 为新增目标语言，channel 负责系统文件面板；
-  /// onChanged 接收单条改动，onImport 等待完整列表真实保存，失败抛出错误并保留导入草稿。
   const GlossaryManager({
     super.key,
     required this.glossary,
@@ -29,12 +26,10 @@ class GlossaryManager extends StatefulWidget {
   final MethodChannel channel;
   final Future<void> Function(List<GlossaryEntry>) onImport;
 
-  /// 无参数；返回持有弹窗内术语列表的状态。
   @override
   State<GlossaryManager> createState() => _GlossaryManagerState();
 }
 
-/// 持有弹窗内展示的术语列表；设置页保存的是每次改动后交回的完整副本。
 class _GlossaryManagerState extends State<GlossaryManager> {
   late final List<GlossaryEntry> _entries = [...widget.glossary];
   String? _workingAction;
@@ -43,7 +38,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
 
   bool get _working => _workingAction != null;
 
-  /// 无参数；经系统面板选取文件并打开预览，取消不改动列表，返回操作结束的 Future。
   Future<void> _import() async {
     if (_working) return;
     setState(() {
@@ -56,9 +50,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
         MethodNames.openGlossaryFile,
       );
       if (file == null || !mounted) return;
-      // parseGlossaryFile 一次校验整份文件，预览确认前不写设置草稿。
       final draft = parseGlossaryFile(file['text']!, format: file['format']!);
-      // 文件已读入并解析完成，进入交互预览前结束「导入…」的等待进度环。
       setState(() => _workingAction = null);
       await showDialog<void>(
         context: context,
@@ -68,7 +60,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
           draft: draft,
           existing: [..._entries],
           onSubmit: (entries) async {
-            // onImport 等待主引擎事务，只有真实保存成功后才更新管理列表。
             await widget.onImport(entries);
             if (!mounted) return;
             setState(() {
@@ -91,7 +82,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     }
   }
 
-  /// 无参数；选择 CSV/JSON 后用系统面板保存当前术语，取消不产生文件，返回操作结束的 Future。
   Future<void> _export() async {
     if (_working) return;
     final format = await showDialog<String>(
@@ -123,7 +113,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
       _messageIsError = false;
     });
     try {
-      // exportGlossaryFile 只序列化术语字段，不读取服务设置或凭据。
       final text = exportGlossaryFile(_entries, format: format);
       final path = await widget.channel.invokeMethod<String>(
         MethodNames.saveTextFile,
@@ -147,13 +136,11 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     }
   }
 
-  /// change 修改弹窗内列表；刷新界面后把完整副本交给设置页，无返回值。
   void _change(VoidCallback change) {
     setState(change);
     widget.onChanged([..._entries]);
   }
 
-  /// index 为待删除术语的下标；经破坏性确认后删除条目，避免误删。
   Future<void> _confirmDelete(int index) async {
     final entry = _entries[index];
     final confirmed = await NativeGlassDialog.confirm(
@@ -167,12 +154,10 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     _change(() => _entries.removeAt(index));
   }
 
-  /// index 为待编辑术语的下标，新增时为空；确定后更新列表，取消不改变，返回编辑结束的 Future。
   Future<void> _edit([int? index]) async {
     final entry = await showDialog<GlossaryEntry>(
       context: context,
       barrierDismissible: false,
-      // GlossaryEditor 只返回不与其余条目重复的术语草稿。
       builder: (_) => GlossaryEditor(
         entry: index == null ? null : _entries[index],
         others: [
@@ -192,7 +177,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
     });
   }
 
-  /// context 为弹窗上下文；返回生效范围说明、状态横幅、术语列表与添加/完成操作。
   @override
   Widget build(BuildContext context) => NativeGlassDialog(
     title: const Text('术语表'),
@@ -219,7 +203,6 @@ class _GlossaryManagerState extends State<GlossaryManager> {
             child: Text('暂无术语'),
           )
         else
-          // 条目多时只在弹窗内滚动，标题与操作保持可见。
           Flexible(
             child: ListView(
               shrinkWrap: true,
@@ -309,9 +292,7 @@ class _GlossaryManagerState extends State<GlossaryManager> {
   );
 }
 
-/// CSV/JSON 导入预览；只在无错误并经确认后提交一次完整设置，保存失败保留草稿。
 class GlossaryImportPreview extends StatefulWidget {
-  /// name 为文件名，draft 为完整校验结果，existing 为当前列表；onSubmit 保存合并列表，失败抛出错误。
   const GlossaryImportPreview({
     super.key,
     required this.name,
@@ -325,25 +306,21 @@ class GlossaryImportPreview extends StatefulWidget {
   final List<GlossaryEntry> existing;
   final Future<void> Function(List<GlossaryEntry>) onSubmit;
 
-  /// 无参数；返回持有重复处理策略与提交反馈的预览状态。
   @override
   State<GlossaryImportPreview> createState() => _GlossaryImportPreviewState();
 }
 
-/// 维护本次导入的处理策略、保存中状态和错误，不修改解析草稿。
 class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
   bool _overwrite = false;
   bool _saving = false;
   String? _error;
 
-  /// 无参数；合并全部有效行并等待事务成功，失败保留弹窗与策略，返回提交结束的 Future。
   Future<void> _submit() async {
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      // merge 使用当前重复策略；onSubmit 在主引擎真实保存成功后完成。
       final entries = widget.draft.merge(
         widget.existing,
         overwrite: _overwrite,
@@ -364,11 +341,9 @@ class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
     }
   }
 
-  /// context 提供主题；返回受统一对话框宽限约束的预览与内部滚动列表，错误存在时禁用确认。
   @override
   Widget build(BuildContext context) {
     final draft = widget.draft;
-    // duplicatePositions 与 addedCount 基于同一个当前列表和输入顺序计算预览计数。
     final duplicates = draft.duplicatePositions(widget.existing);
     final added = draft.addedCount(widget.existing);
     return PopScope(
@@ -456,9 +431,7 @@ class _GlossaryImportPreviewState extends State<GlossaryImportPreview> {
   }
 }
 
-/// 添加或编辑一条术语的弹窗；只持有草稿，确定后返回条目，由设置页自动保存（#104）。
 class GlossaryEditor extends StatefulWidget {
-  /// entry 为待编辑条目（新增时为空），others 为其余条目用于查重，defaultLanguage 为新增时的目标语言。
   const GlossaryEditor({
     super.key,
     this.entry,
@@ -470,19 +443,16 @@ class GlossaryEditor extends StatefulWidget {
   final List<GlossaryEntry> others;
   final String defaultLanguage;
 
-  /// 无参数；返回维护术语草稿的弹窗状态。
   @override
   State<GlossaryEditor> createState() => _GlossaryEditorState();
 }
 
-/// 持有原文术语、译法与目标语言草稿及重复提示；取消时不返回任何条目。
 class _GlossaryEditorState extends State<GlossaryEditor> {
   final _term = TextEditingController();
   final _translation = TextEditingController();
   late String _language;
   bool _duplicate = false;
 
-  /// 无参数；编辑时载入原条目，新增时目标语言取主要语言，无返回值。
   @override
   void initState() {
     super.initState();
@@ -491,7 +461,6 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
     _language = widget.entry?.language ?? widget.defaultLanguage;
   }
 
-  /// 无参数；释放输入控制器，无返回值。
   @override
   void dispose() {
     _term.dispose();
@@ -499,7 +468,6 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
     super.dispose();
   }
 
-  /// 无参数；去掉首尾空白后查重，重复时留在弹窗内提示，否则关闭并返回条目，无返回值。
   void _submit() {
     final entry = GlossaryEntry(
       term: _term.text.trim(),
@@ -513,7 +481,6 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
     Navigator.pop(context, entry);
   }
 
-  /// context 为弹窗上下文；返回可滚动的术语字段、目标语言下拉与取消/确定操作。
   @override
   Widget build(BuildContext context) => NativeGlassDialog(
     title: Text(widget.entry == null ? '添加术语' : '编辑术语'),
@@ -522,14 +489,12 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 重复术语错误直接关联到原文输入框，提供报错边框与错误图标（U-13）。
           NativeGlassField(
             label: '原文术语',
             errorText: _duplicate ? '该目标语言下已有此术语。' : null,
             child: TextField(
               key: const ValueKey('原文术语'),
               controller: _term,
-              // 修改术语后重新判断「确定」是否可用，并清除旧的重复提示。
               onChanged: (_) => setState(() => _duplicate = false),
               decoration: const InputDecoration(),
             ),
@@ -546,7 +511,6 @@ class _GlossaryEditorState extends State<GlossaryEditor> {
           NativeGlassDropdown<String>(
             label: '目标语言',
             value: _language,
-            // 主要语言可能是列表外的系统语言，保留当前值作为选项。
             items: {
               ...AppSettings.languages,
               if (!AppSettings.languages.containsKey(_language))

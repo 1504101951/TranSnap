@@ -8,10 +8,8 @@ import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 import 'markdown_view.dart';
 
-/// 识别到的一个二维码或条码；symbology 为 Vision 类型名（如 qr、ean13），payload 为码的文字内容（#108）。
 typedef RecognizedCode = ({String symbology, String payload});
 
-/// payload 为码内容原文；返回它是否为可打开的 http/https 链接（需带主机名），规则与原生 openLink 校验一致。
 bool isOpenableLink(String payload) {
   final uri = Uri.tryParse(payload);
   return uri != null &&
@@ -21,13 +19,7 @@ bool isOpenableLink(String payload) {
       uri.host.isNotEmpty;
 }
 
-/// 截图里“识别文字”结果的弹窗；外观与尺寸沿用翻译弹窗，正文先列出二维码与条码，再渲染识别文字 Markdown。
-///
-/// 打开弹窗不写剪贴板：用户可以选中部分文字自行复制，或点“复制全部”复制 Markdown 原文。弹窗不自动关闭。
 class RecognizedTextPanel extends StatefulWidget {
-  /// text 为识别结果 Markdown 原文（可为空），codes 为按位置排序的码；onCopyAll 复制原文；
-  /// onCopyCode 复制一个码的内容，onOpenLink 打开链接内容；onClose 关闭弹窗；
-  /// onDrag 接收标题区拖动的位移，由调用方移动弹窗。
   const RecognizedTextPanel({
     super.key,
     required this.text,
@@ -39,7 +31,6 @@ class RecognizedTextPanel extends StatefulWidget {
     required this.onDrag,
   });
 
-  /// 与翻译结果弹窗相同的尺寸。
   static const size = Size(720, 420);
   final String text;
   final List<RecognizedCode> codes;
@@ -57,7 +48,6 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
   int _copyAllTrigger = 0;
   final Map<int, int> _codeCopyTriggers = <int, int>{};
 
-  /// context 为识别弹窗构建上下文；返回弹性进场与光学棱镜镶边的玻璃结果面板。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -71,7 +61,6 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 整块 44pt 标题区可拖动，悬停切换移动光标；按钮与正文保留各自手势。
                 SizedBox(
                   height: 44,
                   child: Row(
@@ -101,7 +90,6 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
                           ),
                         ),
                       ),
-                      // 只有码没有文字时，码各自复制，不显示复制全部。
                       if (widget.text.trim().isNotEmpty) ...[
                         NativeGlassSurface(
                           material: true,
@@ -147,10 +135,8 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
                     ),
                     child: SizedBox.expand(
                       child: SingleChildScrollView(
-                        // 外层弹窗不共享页面主滚动控制器，避免触发 PrimaryScrollController 冲突（#144）。
                         primary: false,
                         padding: const EdgeInsets.all(8),
-                        // MarkdownView 只在显示时渲染识别结果；SelectionArea 让码内容、标题、段落、列表与表格内文字都可选中复制。
                         child: SelectionArea(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -191,9 +177,7 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
   }
 }
 
-/// 识别结果中的一条码：类型、完整内容与复制、打开链接操作（#108）。
 class _CodeRow extends StatelessWidget {
-  /// code 为码，copyTrigger 递增时播放复制确认，onCopy 复制内容，onOpen 打开链接（内容不是可打开链接时为 null，不显示按钮）。
   const _CodeRow({
     required this.code,
     this.copyTrigger = 0,
@@ -206,11 +190,9 @@ class _CodeRow extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback? onOpen;
 
-  /// context 为构建上下文；返回类型标签、完整内容与操作按钮组成的一行。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    // QR 码显示「二维码」，其余显示 Vision 类型名。
     final kind = code.symbology == 'qr'
         ? '二维码'
         : '条码 · ${code.symbology.toUpperCase()}';
@@ -235,7 +217,6 @@ class _CodeRow extends StatelessWidget {
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                // 链接完整显示，用户打开前能看到真实地址。
                 Text(
                   code.payload,
                   style: const TextStyle(fontSize: GlassMetrics.bodyFont),

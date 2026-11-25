@@ -11,8 +11,6 @@ import XCTest
 @testable import TranSnap
 
 class RunnerTests: XCTestCase {
-    /// 无参数；真实 PNG 保留透明 BGRA 和尺寸、动图只解首帧、方向元数据归正、损坏字节拒绝，无返回值。
-    /// 3×2 非方形输入验证旋转尺寸，半透明红色验证预乘 alpha 不丢失。
     @MainActor
     func testImportedImageDecodePreservesPixelsOrientationAndFirstFrame() throws {
         let transparent = try captureImageFixture(width: 3, height: 2, color: NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 0.5))
@@ -53,7 +51,6 @@ class RunnerTests: XCTestCase {
         XCTAssertThrowsError(try ScreenshotWindowController.decodeImage(Data("invalid".utf8)))
     }
 
-    /// 无参数；独立剪贴板图片进入普通编辑器并拒绝屏幕采集，关闭后身份失效；取消解码不能迟到开窗。
     @MainActor
     func testClipboardImageCreatesIndependentEditorAndCancelsPendingDecode() async throws {
         let pasteboard = NSPasteboard.withUniqueName()
@@ -65,7 +62,6 @@ class RunnerTests: XCTestCase {
         let cancelled = expectation(description: "图片取消后结束解码")
         controller.onCapturingChanged = { if !$0 { cancelled.fulfill() } }
         controller.openClipboardImage()
-        // cancelCapture 立即撤销尚未解码完成的图片，后台完成不得创建编辑会话。
         controller.cancelCapture()
         await fulfillment(of: [cancelled], timeout: 10)
         controller.onCapturingChanged = nil
@@ -93,7 +89,6 @@ class RunnerTests: XCTestCase {
         window.close()
         XCTAssertFalse(controller.isCurrentCapture(id))
     }
-    /// 尺寸和颜色为测试输入；返回实际像素明确的 PNG，避免动态颜色在离屏上下文中失效。
     @MainActor
     private func screenshotFixture(width: Int, height: Int, color: NSColor) throws -> Data {
         let image = try XCTUnwrap(NSBitmapImageRep(
@@ -105,7 +100,6 @@ class RunnerTests: XCTestCase {
         return try XCTUnwrap(image.representation(using: .png, properties: [:]))
     }
 
-    /// 尺寸和颜色为测试输入；返回与 ScreenCaptureKit 冻结帧同格式的 BGRA（sRGB、alpha 在前、小端）纯色图像。
     private func captureImageFixture(width: Int, height: Int, color: NSColor) throws -> CGImage {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -117,7 +111,6 @@ class RunnerTests: XCTestCase {
         return try XCTUnwrap(context.makeImage())
     }
 
-    /// 无参数；等待正式截图引擎入口确认并显示编辑器，返回可见窗口；六秒覆盖五秒启动预算。
     @MainActor
     private func waitForScreenshotEditor() async throws -> NSWindow {
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -127,7 +120,6 @@ class RunnerTests: XCTestCase {
         return try XCTUnwrap(NSApp.windows.first { $0 is ScreenshotPanel && $0.isVisible })
     }
 
-    /// 无参数；真实标题材料和内容安全区随外观、透明度及窗口尺寸同步，测试后恢复偏好。
     @MainActor
     func testGlassTitlebarAppearanceAndContentLayout() throws {
         let previous = UserDefaults.standard.object(forKey: AppConstants.preferencesKey)
@@ -144,7 +136,6 @@ class RunnerTests: XCTestCase {
         defer { window.close() }
         NativeGlassFactory.installContent(flutter, in: window)
         let content = try XCTUnwrap(window.contentViewController as? NativeGlassWindowContent)
-        // 三种模式覆盖手动外观和恢复系统继承；端点0.2/1覆盖材料而非前景的透明度。
         for (mode, opacity) in [("dark", 0.2), ("light", 1.0), ("system", 0.8)] {
             UserDefaults.standard.set([AppConstants.glassAppearanceKey: mode, AppConstants.glassOpacityKey: opacity], forKey: AppConstants.preferencesKey)
             NativeGlassFactory.applyAppearance(to: window)
@@ -158,7 +149,6 @@ class RunnerTests: XCTestCase {
             XCTAssertEqual(flutter.view.alphaValue, 1)
             window.setContentSize(NSSize(width: 620, height: 540))
             content.view.layoutSubtreeIfNeeded()
-            // 窗口缩放后背景仍铺满整窗，Flutter内容紧贴标题安全边界且无第二层圆角。
             XCTAssertEqual(content.windowCanvas.frame, content.view.bounds)
             XCTAssertEqual(flutter.view.frame.maxY, window.contentLayoutRect.maxY, accuracy: 0.5)
             XCTAssertNil(content.windowCanvas.hitTest(.zero))
@@ -166,8 +156,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；确认前取消或转入采集均清空旧草稿，随后只展示最新截图；无返回值。
-    /// 同一主队列内取消覆盖 run 尚未执行的边界，六秒窗口等待覆盖正常重新启动。
     @MainActor
     func testScreenshotPendingStartupCancellationKeepsOnlyLatestDraft() async throws {
         let controller = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
@@ -180,7 +168,6 @@ class RunnerTests: XCTestCase {
             XCTAssertFalse(controller.isCurrentCapture(id))
         }
         controller.seedCaptureForTesting(image: image, id: "latest", width: 80, height: 60, showEditor: true)
-        // waitForScreenshotEditor 只等待正式入口确认后的真实窗口。
         _ = try await waitForScreenshotEditor()
         var state: [String: Any]?
         controller.handle(FlutterMethodCall(methodName: AppConstants.getScreenshotMethod, arguments: nil)) {
@@ -192,7 +179,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(NSApp.windows.filter { $0 is ScreenshotPanel && $0.isVisible }.count, 1)
     }
 
-    /// 无参数；采集界面预热尚未确认时退出，不能迟到创建面板，媒体保持空闲；无返回值。
     @MainActor
     func testCaptureShutdownCancelsPendingWarmup() async {
         let screenshot = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
@@ -200,7 +186,6 @@ class RunnerTests: XCTestCase {
         let before = Set(NSApp.windows.filter { $0 is NSPanel && $0.styleMask.contains(.nonactivatingPanel) }.map(\.windowNumber))
         capture.prepareControls()
         capture.prepareControls()
-        // shutdown 在等待真实媒体清理前同步取消窗口启动。
         await capture.shutdown()
         await Task.yield()
         let after = Set(NSApp.windows.filter { $0 is NSPanel && $0.styleMask.contains(.nonactivatingPanel) }.map(\.windowNumber))
@@ -209,16 +194,13 @@ class RunnerTests: XCTestCase {
         screenshot.shutdown()
     }
 
-    /// 无参数；从真实截图方法入口验证两类对角原生光标，拒绝未知值并恢复关闭后的箭头。
     @MainActor
     func testScreenshotDiagonalCursorUsesNativeFrameResize() async throws {
         let controller = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
         defer { controller.shutdown(); NSCursor.arrow.set() }
         let image = try captureImageFixture(width: 80, height: 60, color: .white)
         controller.seedCaptureForTesting(image: image, id: "diagonal", width: 80, height: 60, showEditor: true)
-        // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
         _ = try await waitForScreenshotEditor()
-        // 两个双向轴覆盖四角：左上/右下与右上/左下。检查真实NSCursor状态而非下游调用次数。
         for (direction, position) in [(AppConstants.resizeNorthWestSouthEast, NSCursor.FrameResizePosition.topLeft), (AppConstants.resizeNorthEastSouthWest, .topRight)] {
             NSCursor.arrow.set()
             var response: Any?
@@ -234,13 +216,10 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(invalid is FlutterError)
         controller.handle(FlutterMethodCall(methodName: AppConstants.closeScreenshotMethod, arguments: nil)) { _ in }
         XCTAssertEqual(NSCursor.current.image.tiffRepresentation, NSCursor.arrow.image.tiffRepresentation)
-        // 已关闭编辑器的迟到请求不能重新设置桌面光标。
         controller.handle(FlutterMethodCall(methodName: AppConstants.setResizeCursorMethod, arguments: ["direction": AppConstants.resizeNorthWestSouthEast])) { _ in }
         XCTAssertEqual(NSCursor.current.image.tiffRepresentation, NSCursor.arrow.image.tiffRepresentation)
     }
 
-    /// 作用：非激活截图的格位按键（数字行 1–6 加 ⌘⌥⌃）在原生入口被消费，文本输入、带 ⇧ 与关闭后原样放行（#141）。
-    /// 边界依据：格位只有数字 1–6，7 不属于工具栏；⇧ 组合不属于工具栏；解析为功能由 Dart 按网格完成。
     @MainActor
     func testScreenshotConfiguredShortcutConsumesOnlyItsScope() async throws {
         let previous = UserDefaults.standard.object(forKey: AppConstants.preferencesKey)
@@ -253,9 +232,7 @@ class RunnerTests: XCTestCase {
         defer { controller.shutdown() }
         let image = try captureImageFixture(width: 80, height: 60, color: .white)
         controller.seedCaptureForTesting(image: image, id: "shortcut", width: 80, height: 60, showEditor: true)
-        // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
         _ = try await waitForScreenshotEditor()
-        // 实际UserDefaults到截图快照必须携带工具参数，否则重新截图后用户选择会丢失。
         var preferences = UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey)!
         let drawing: [String: Any] = ["shape": "filledCircle", "brushMode": "mosaic", "tools": ["arrow": ["color": 0xFF007AFF, "width": 5]]]
         preferences[AppConstants.screenshotDrawingKey] = drawing
@@ -264,7 +241,6 @@ class RunnerTests: XCTestCase {
         controller.handle(FlutterMethodCall(methodName: AppConstants.getScreenshotMethod, arguments: nil)) { snapshot = $0 as? [String: Any] }
         XCTAssertEqual(snapshot?[AppConstants.screenshotDrawingKey] as? NSDictionary, drawing as NSDictionary)
 
-        // 18/19 是 ANSI 物理键 1/2，26 是 7；真实 event tap 路径不直接给 Flutter 注入键。
         let one = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 18, keyDown: true))
         let two = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 19, keyDown: true))
         two.flags = .maskCommand
@@ -284,14 +260,12 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(controller.filterScreenshotEvent(one) === one)
     }
 
-    /// 无参数；普通键和文本编辑命令原样放行，合法长按不去重；关闭后也无残留消费。
     @MainActor
     func testScreenshotKeysPreserveTypingAndTextEditing() async throws {
         let controller = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
         defer { controller.shutdown() }
         let image = try captureImageFixture(width: 80, height: 60, color: .white)
         controller.seedCaptureForTesting(image: image, id: "typing", width: 80, height: 60, showEditor: true)
-        // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
         _ = try await waitForScreenshotEditor()
         for repeated in [false, true] {
             let typed = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true))
@@ -308,7 +282,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(controller.filterScreenshotEvent(enter) === enter)
     }
 
-    /// 无参数；长图留在采集结果窗，首次及复用引擎都可见、可复制、可保存，红按钮关闭后文件仍在。
     @MainActor
     func testLongScreenshotResultWindowShowsAndSavesAfterCapture() async throws {
         let screenshot = ScreenshotWindowController(pasteboard: NSPasteboard.withUniqueName())
@@ -325,17 +298,14 @@ class RunnerTests: XCTestCase {
             if NSApp.activationPolicy() != oldPolicy { _ = NSApp.setActivationPolicy(oldPolicy) }
             try? FileManager.default.removeItem(at: root)
         }
-        // 测试宿主可能已经是 accessory，重复设置会返回 false；只要求展示前确实是菜单栏策略。
         _ = NSApp.setActivationPolicy(.accessory)
         XCTAssertEqual(NSApp.activationPolicy(), .accessory)
         let png = try screenshotFixture(width: 200, height: 2000, color: .white)
         for _ in 0...1 {
             let token = controller.service.id
             let editorsBefore = NSApp.windows.filter { $0 is ScreenshotPanel && $0.isVisible }.count
-            // 拼接失败后的交付入口就是这个结果，不能再打开截图编辑器。
             controller.service.publishFinishedScroll(png: png, width: 200, height: 2000, frames: 3,
                 failure: "相邻画面缺少稳定的重叠内容，请减小单次滚动幅度或避开动态内容。已保留确认部分。", token: token)
-            // 结果发布可以发生在引擎确认前，等待当前状态真正呈现。
             let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 NSApp.windows.contains { $0.title == "长截图结果" && $0.isVisible }
             }, object: nil)
@@ -382,7 +352,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；冷启动立即 Esc、首帧后失焦 Esc、引擎复用 Esc 都须关闭且保留剪贴板。
     @MainActor
     func testScreenshotEscapeClosesColdWarmAndReusedEditor() async throws {
         let board = NSPasteboard.withUniqueName()
@@ -393,9 +362,7 @@ class RunnerTests: XCTestCase {
             board.clearContents()
             board.setString("unchanged", forType: .string)
             controller.seedCaptureForTesting(image: image, id: phase, width: 80, height: 60, showEditor: true)
-            // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
             _ = try await waitForScreenshotEditor()
-            // cold 在入口确认后立即发 Esc；warm 另等待首帧，reused 覆盖同一引擎重开。
             if phase == "warm" { try await Task.sleep(nanoseconds: 500_000_000) }
             let panel = try XCTUnwrap(NSApp.windows.first { $0 is ScreenshotPanel && $0.isVisible })
             panel.makeFirstResponder(nil)
@@ -415,24 +382,19 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；以真实 Flutter 截图引擎复现原生键路由丢失 Return，断言图片像素与生命周期。
     @MainActor
     func testScreenshotReturnCopiesImageAndClosesFromNativeRoute() async throws {
         let board = NSPasteboard.withUniqueName()
         let controller = ScreenshotWindowController(pasteboard: board)
         defer { controller.shutdown(); board.releaseGlobally() }
         let image = try captureImageFixture(width: 80, height: 60, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1))
-        // 两个硬件键码分别覆盖主 Return 与小键盘 Enter；每次捕获均经过生产 show 初始化。
         for keyCode: UInt16 in [36, 76] {
             let id = "return-\(keyCode)"
             board.clearContents()
             controller.seedCaptureForTesting(image: image, id: id, width: 80, height: 60, showEditor: true)
-            // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
             _ = try await waitForScreenshotEditor()
-            // 等待真实 Flutter 引擎首帧；这里不以纯 Dart widget 键事件替代原生入口。
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let panel = try XCTUnwrap(NSApp.windows.first { $0 is ScreenshotPanel && $0.isVisible })
-            // 检查实际引擎装配出的材料，不用 mock 背景声称通过原生玻璃验证。
             var descendants = [try XCTUnwrap(panel.contentView)]
             var glassViews: [NativeGlassView] = []
             while let view = descendants.popLast() {
@@ -441,7 +403,6 @@ class RunnerTests: XCTestCase {
             }
             XCTAssertFalse(glassViews.isEmpty)
             XCTAssertTrue(glassViews.allSatisfy { $0.bounds.width > 0 && $0.bounds.height > 0 })
-            // 明确丢开原生键盘焦点，验证非激活截图仍能通过消费式事件路由确认。
             panel.makeFirstResponder(nil)
             panel.resignKey()
             let event = try XCTUnwrap(NSEvent.keyEvent(
@@ -449,7 +410,6 @@ class RunnerTests: XCTestCase {
                 windowNumber: panel.windowNumber, context: nil, characters: "\r",
                 charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: keyCode
             ))
-            // nil 是系统不再向来源应用派发该键的实际过滤结果，防止顺带提交聊天或表单。
             XCTAssertNil(controller.filterScreenshotEvent(try XCTUnwrap(event.cgEvent)))
             let completed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 board.data(forType: .png) != nil && !controller.isCurrentCapture(id) && !panel.isVisible
@@ -465,7 +425,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 验证配置快捷键经真实 Flutter 引擎贴图后保留像素、结束截图且不复制或保存；无参数、无返回值。
     @MainActor
     func testScreenshotPinShortcutPreservesImageAndClosesWithoutCopyOrSave() async throws {
         let defaults = UserDefaults.standard
@@ -477,7 +436,6 @@ class RunnerTests: XCTestCase {
         let board = NSPasteboard.withUniqueName()
         let controller = ScreenshotWindowController(pasteboard: board)
         defer {
-            // 释放真实截图引擎与独立贴图，恢复偏好并清理本用例的隔离资源。
             controller.shutdown()
             board.releaseGlobally()
             if let previousPreferences { defaults.set(previousPreferences, forKey: AppConstants.preferencesKey) }
@@ -487,7 +445,6 @@ class RunnerTests: XCTestCase {
             try? FileManager.default.removeItem(at: root)
         }
         var preferences = previousPreferences as? [String: Any] ?? [:]
-        // 去掉已保存的网格，使用默认网格：贴图在 ⌘ 列第 4 格，即 ⌘4（#141）。
         preferences[AppConstants.screenshotToolbarColumnsKey] = nil
         defaults.set(preferences, forKey: AppConstants.preferencesKey)
         defaults.set(root.path, forKey: AppConstants.screenshotSaveDirectoryKey)
@@ -502,13 +459,10 @@ class RunnerTests: XCTestCase {
         let clipboardChangeCount = board.changeCount
         let image = try captureImageFixture(width: 80, height: 60, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1))
         let id = "pin-shortcut"
-        // seedCaptureForTesting 启动生产截图编辑窗与真实 Dart 引擎，不直接调用贴图或关闭方法。
         controller.seedCaptureForTesting(image: image, id: id, width: 80, height: 60, showEditor: true)
-        // waitForScreenshotEditor 等待入口确认，后续事件针对真实可见窗口。
         _ = try await waitForScreenshotEditor()
         try await Task.sleep(nanoseconds: 1_000_000_000)
         let panel = try XCTUnwrap(NSApp.windows.first { $0 is ScreenshotPanel && $0.isVisible })
-        // isCurrentCapture 确认快捷键前会话有效，贴图必须由本次操作创建。
         XCTAssertTrue(controller.isCurrentCapture(id))
         XCTAssertEqual(controller.pins.count, 0)
         panel.makeFirstResponder(nil)
@@ -518,9 +472,7 @@ class RunnerTests: XCTestCase {
             windowNumber: panel.windowNumber, context: nil, characters: "4",
             charactersIgnoringModifiers: "4", isARepeat: false, keyCode: 21
         ))
-        // filterScreenshotEvent 消费原生配置键，再由 Dart 完成合成、贴图及关闭会话。
         XCTAssertNil(controller.filterScreenshotEvent(try XCTUnwrap(event.cgEvent)))
-        // isCurrentCapture 检查身份已失效；仅隐藏编辑窗或仅创建贴图都不足以完成此操作。
         let completed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             controller.pins.count == 1 && !controller.isCurrentCapture(id) && !panel.isVisible
         }, object: nil)
@@ -528,15 +480,11 @@ class RunnerTests: XCTestCase {
         let pin = try XCTUnwrap(controller.pins.firstPanel)
         XCTAssertTrue(pin.isVisible)
         let decoded = try XCTUnwrap(pin.imageViewForTesting.image?.representations.first as? NSBitmapImageRep)
-        // 非正方形尺寸检测裁切与宽高交换；四角及中心检测边界丢失、空白或颜色变化。
         XCTAssertEqual(decoded.pixelsWide, 80)
         XCTAssertEqual(decoded.pixelsHigh, 60)
-        // 冻结帧为 sRGB BGRA；贴图 PNG 的色彩配置应与源图一致。
         let original = NSBitmapImageRep(cgImage: image)
         XCTAssertEqual(try XCTUnwrap(decoded.colorSpace.iccProfileData),
                        try XCTUnwrap(original.colorSpace.iccProfileData))
-        // PNG 色彩配置保持一致后逐点读取原始通道，避免 NSColor 转换改变采样数值。
-        // 原生解码按实际采样位深表示满量程；纯红和全不透明必须精确到该位深的最大值。
         let fullChannel = (1 << decoded.bitsPerSample) - 1
         for (x, y) in [(0, 0), (79, 0), (0, 59), (79, 59), (40, 30)] {
             var samples = [Int](repeating: 0, count: decoded.samplesPerPixel)
@@ -544,7 +492,6 @@ class RunnerTests: XCTestCase {
             XCTAssertEqual(samples, [fullChannel, 0, 0, fullChannel])
         }
         XCTAssertFalse(panel.isVisible)
-        // isCurrentCapture 核对最终身份，不能用测试主动关闭编辑窗来制造通过条件。
         XCTAssertFalse(controller.isCurrentCapture(id))
         XCTAssertEqual(board.changeCount, clipboardChangeCount)
         XCTAssertEqual(board.data(forType: .png), clipboardImage)
@@ -554,8 +501,6 @@ class RunnerTests: XCTestCase {
     }
 
 
-    /// 无参数；成功读取保留段落并恢复原内容；取消先于新写入、读取期间用户写入时保留用户的新内容；
-    /// 复制结果不属于选区时剪贴板仍是本次复制的结果，还原为复制前的内容（#117）。
     @MainActor
     func testCopyReadPreservesClipboardAfterCancellation() async {
         let board = NSPasteboard.withUniqueName()
@@ -576,7 +521,6 @@ class RunnerTests: XCTestCase {
             )
         }
         await fulfillment(of: [requested], timeout: 1)
-        // 取消先于新剪贴板写入，确保旧任务的恢复操作不能覆盖新的用户结果。
         pending.cancel()
         board.clearContents()
         board.setString("new user clipboard", forType: .string)
@@ -584,7 +528,6 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(cancelled)
         XCTAssertEqual(board.string(forType: .string), "new user clipboard")
 
-        // 复制结果不属于选区：不采用，剪贴板还原为复制前的内容（#117）。
         let unrelated = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {
             board.clearContents()
             board.setString("not the selection", forType: .string)
@@ -592,7 +535,6 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(unrelated)
         XCTAssertEqual(board.string(forType: .string), "new user clipboard")
 
-        // 边界：读取期间（确认文本时）用户又复制了新内容，changeCount 再变，不还原也不采用。
         let overtaken = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {
             board.clearContents()
             board.setString(selection, forType: .string)
@@ -605,8 +547,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(board.string(forType: .string), "copied while reading")
     }
 
-    /// 无参数；来源的置顶窗口重新置前时，触发态与结果态都不能被覆盖，且不取得焦点（#19）。
-    /// 边界：来源窗口分别位于 floating、status-bar、pop-up 三个层级，后两个是 Warp 等置顶窗口可能使用的层级。
     @MainActor
     func testOverlayStaysAboveReorderedFloatingSource() throws {
         let source = NSPanel(contentRect: NSRect(x: 200, y: 200, width: 600, height: 400),
@@ -620,7 +560,6 @@ class RunnerTests: XCTestCase {
             source.level = level
             for size in [NSSize(width: 84, height: 36), NSSize(width: 380, height: 360)] {
                 overlay.show(at: NSPoint(x: 250, y: 450), size: size, sessionId: "stacking")
-                // 模拟来源 App 在点击、重绘后重新置前；检查窗口服务器真实前后顺序。
                 source.orderFrontRegardless()
                 let windows = try XCTUnwrap(NSWindow.windowNumbers(options: .allApplications))
                 let overlayIndex = try XCTUnwrap(windows.firstIndex(of: NSNumber(value: panel.windowNumber)))
@@ -633,11 +572,8 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；附属窗口请求先交本地处理，本地未实现的方法转到主引擎并返回主引擎的结果（#120）。
-    /// 边界：vocabularyList 只在主引擎处理，得到假主引擎的回复；systemStatus 由本地返回权限状态，不得到主引擎回复。
     @MainActor
     func testWindowRequestsRouteLocalFirstThenToApplication() throws {
-        /// 假主引擎：对每次方法调用回复字符串 "from-main"。
         final class Messenger: NSObject, FlutterBinaryMessenger {
             func send(onChannel channel: String, message: Data?) {}
             func send(onChannel channel: String, message: Data?, binaryReply callback: FlutterBinaryReply?) {
@@ -664,7 +600,6 @@ class RunnerTests: XCTestCase {
     }
 
 
-    /// 无参数；真实 Keychain 往返与失败回滚，UUID 隔离用户凭据，空字典与不存在是两个边界。
     @MainActor
     func testCredentialsRoundTripAndSettingsRollback() throws {
         let id = "test-\(UUID().uuidString)"
@@ -684,7 +619,6 @@ class RunnerTests: XCTestCase {
             AppConstants.excludedAppsKey: [String: String](),
             AppConstants.launchAtLoginKey: [.enabled, .requiresApproval].contains(SMAppService.mainApp.status),
         ]
-        // 无效 keyCode 在系统配置步骤失败，验证已写凭据会恢复，而非只检查方法调用。
         for prior in [["apiKey": "original"], [:]] {
             try MacPlatformBridge.storeCredentials(id: id, value: prior)
             var response: Any?
@@ -704,7 +638,6 @@ class RunnerTests: XCTestCase {
     }
 
 
-    /// 无参数；另一进程独占 Carbon 组合时，保存必须失败且保留旧设置；普通注册不在系统可检测范围。
     @MainActor
     func testHotKeyConflictAcrossProcesses() throws {
         let child = Process()
@@ -737,29 +670,24 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(monitor.automatic)
     }
 
-    /// 无参数；真实 Carbon 注册冲突必须保留旧热键及自动按钮状态，无返回值。
     @MainActor
     func testHotKeyConflictPreservesPreviousConfiguration() throws {
         let first = SelectionMonitor()
         let second = SelectionMonitor()
         let probe = SelectionMonitor()
-        // 四个修饰键用于避免占用用户常用组合；同一组合是系统冲突边界。
         try first.configure(automatic: false, excludedApps: [], shortcuts: hotKeys(7, 6, 3))
         try first.configure(automatic: true, excludedApps: [], shortcuts: hotKeys(7, 6, 3))
         XCTAssertTrue(first.automatic)
-        // 三种用途轮换不是系统冲突，已有注册应被复用且返回成功。
         try first.configure(automatic: true, excludedApps: [], shortcuts: hotKeys(3, 7, 6))
         try second.configure(automatic: true, excludedApps: [], shortcuts: hotKeys(16, 13, 4))
         XCTAssertThrowsError(try second.configure(automatic: false, excludedApps: [], shortcuts: hotKeys(7, 13, 4)))
         XCTAssertTrue(second.automatic)
         XCTAssertThrowsError(try probe.configure(automatic: false, excludedApps: [], shortcuts: hotKeys(16, 14, 5)))
-        // 同一配置内两种用途相同在注册前即被拒绝，原配置保持不变。
         XCTAssertThrowsError(try second.configure(automatic: false, excludedApps: [], shortcuts: hotKeys(17, 17, 4)))
         XCTAssertTrue(second.automatic)
         withExtendedLifetime((first, second, probe)) {}
     }
 
-    /// translate/input/screenshot 为三种用途的键码，修饰键统一为四个修饰键以避开用户常用组合（键码 12 即 ⌃⌥⇧⌘Q 为系统快捷键，不可用）；返回 configure 所需的组合表。
     private func hotKeys(_ translate: UInt32, _ input: UInt32, _ screenshot: UInt32) -> [GlobalHotKey: SelectionMonitor.HotKeyBinding] {
         [
             .translate: SelectionMonitor.HotKeyBinding(keyCode: translate, modifiers: 6912),
@@ -768,14 +696,12 @@ class RunnerTests: XCTestCase {
         ]
     }
 
-    /// 无参数；输入翻译粘贴后还原原剪贴板，用户在等待期间新复制的内容不被覆盖，无返回值。
     @MainActor
     func testPasteReplacingSelectionRestoresClipboard() async throws {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("transnap-paste-\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
         pasteboard.clearContents()
         pasteboard.setString("原剪贴板", forType: .string)
-        // 边界一：来源应用读取到的是译文，等待结束后剪贴板回到原内容。
         var pasted: String?
         let sent = await AccessibilitySelection.pasteReplacingSelection("译文", pasteboard: pasteboard) {
             pasted = pasteboard.string(forType: .string)
@@ -783,7 +709,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(sent)
         XCTAssertEqual(pasted, "译文")
         XCTAssertEqual(pasteboard.string(forType: .string), "原剪贴板")
-        // 边界二：等待期间剪贴板被用户改写，不能用旧快照覆盖用户的新内容。
         _ = await AccessibilitySelection.pasteReplacingSelection("译文", pasteboard: pasteboard) {
             pasteboard.clearContents()
             pasteboard.setString("用户新复制", forType: .string)
@@ -791,12 +716,10 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "用户新复制")
     }
 
-    /// 无参数；词典查询与保存文本文件缺少参数时直接返回参数错误，不打开保存面板，无返回值。
     @MainActor
     func testDictionaryAndSaveFileRejectMissingArguments() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
         var codes: [String?] = []
-        // 边界：查词缺 text；保存缺 suggestedName。
         bridge.handle(FlutterMethodCall(methodName: AppConstants.lookupDefinitionMethod, arguments: [:])) {
             codes.append(($0 as? FlutterError)?.code)
         }
@@ -806,12 +729,10 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(codes, [AppConstants.badArgsError, AppConstants.badArgsError])
     }
 
-    /// 无参数；截图历史的文件操作缺路径时返回参数错误，图片不可读时返回复制失败且不改剪贴板，无返回值（#29）。
     @MainActor
     func testScreenshotHistoryFileActionsRejectMissingOrUnreadableFiles() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
         var codes: [String?] = []
-        // 边界：三种文件操作都缺 path；复制指向已不存在的文件（图片被用户移走后的状态）。
         for method in [AppConstants.openFileMethod, AppConstants.revealFileMethod, AppConstants.copyImageFileMethod] {
             bridge.handle(FlutterMethodCall(methodName: method, arguments: [:])) {
                 codes.append(($0 as? FlutterError)?.code)
@@ -826,7 +747,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.changeCount, changeCount)
     }
 
-    /// 无参数；两种冻结目标给出的初始选区：指针屏为前台窗口建议且不选中，指定显示器为整屏并选中，无返回值（#105）。
     func testScreenshotTargetInitialSelection() throws {
         let frame = ScreenCaptureService.FreezeFrame(
             displayID: 7, scale: 2, image: try captureImageFixture(width: 200, height: 100, color: .white),
@@ -844,15 +764,12 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(ScreenshotTarget.pointerDisplay.displayID)
     }
 
-    /// 无参数；朗读声音按语言的默认地区补全，系统没有该地区声音时退回语言本身，无返回值。
     func testSpeechVoiceUsesDefaultRegion() {
-        // 边界：只给语言码（en）应补全为美式发音；带地区的繁体中文保持地区；阿拉伯语默认地区无声音时仍能取到声音。
         XCTAssertEqual(SpeechService.voice(for: "en")?.language, "en-US")
         XCTAssertEqual(SpeechService.voice(for: "zh-TW")?.language, "zh-TW")
         XCTAssertEqual(SpeechService.voice(for: "ar")?.language.hasPrefix("ar"), true)
     }
 
-    /// 无参数；朗读请求缺少文字或语言时直接返回参数错误，不开始朗读，无返回值。
     @MainActor
     func testToggleSpeechRejectsMissingArguments() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
@@ -861,82 +778,64 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual((response as? FlutterError)?.code, AppConstants.badArgsError)
     }
 
-    /// 无参数；没有对应会话时替换请求返回未替换原因，不向任何应用粘贴，无返回值（#99）。
     @MainActor
     func testReplaceSelectionRejectsStaleSession() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
         var response: Any?
-        // 边界：会话已结束（从未创建）是替换前必须拒绝的状态。
         bridge.handle(FlutterMethodCall(methodName: AppConstants.replaceSelectionMethod, arguments: [
             "sessionId": "stale", "text": "译文",
         ])) { response = $0 }
         XCTAssertEqual(response as? String, "输入已结束，未替换原文。")
     }
 
-    /// 无参数；贴纸导入时长边超过 1024 像素按原比例缩小，不超过时原样返回，无返回值（#103）。
     func testStickerImageDownscalesLongSide() throws {
-        // makeImage 生成指定尺寸的透明位图。
         func makeImage(_ width: Int, _ height: Int) throws -> CGImage {
             let context = try XCTUnwrap(CGContext(
                 data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
             return try XCTUnwrap(context.makeImage())
         }
-        // 边界：2048×1024 缩为 1024×512；正好 1024 的长边与更小的图不变。
         let wide = try StickerImage.downscaled(makeImage(2048, 1024), maxPixels: 1024)
         XCTAssertEqual([wide.width, wide.height], [1024, 512])
         let exact = try StickerImage.downscaled(makeImage(600, 1024), maxPixels: 1024)
         XCTAssertEqual([exact.width, exact.height], [600, 1024])
     }
 
-    /// 无参数；浮标与失败气泡放在锚点下方 8pt，下方放不下放上方 8pt，上下都放不下贴可用区域底部，左对齐并限制在可用区域水平范围内，无返回值（#99）。
     func testInputStatusBubbleFrameAvoidsAnchor() {
         let visible = NSRect(x: 0, y: 0, width: 400, height: 300)
         let size = NSSize(width: 120, height: 28)
-        // 边界：下方剩余 100pt 足够，紧贴锚点下方 8pt 且与锚点左对齐。
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 50, y: 100, width: 80, height: 20), area: visible),
                        NSRect(x: 50, y: 64, width: 120, height: 28))
-        // 边界：锚点底部距可用区底 20pt，放不下 8+28，改放上方 8pt，不压住锚点。
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 50, y: 20, width: 80, height: 20), area: visible),
                        NSRect(x: 50, y: 48, width: 120, height: 28))
-        // 边界：锚点靠右，左对齐会越出右边，水平收回到 400-120=280。
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 350, y: 100, width: 30, height: 20), area: visible),
                        NSRect(x: 280, y: 64, width: 120, height: 28))
-        // 边界：区域高 40pt，锚点居中 y=10..30，下方（10-8-28<0）与上方（30+8+28>40）都放不下，贴区域底部 y=0。
         let short = NSRect(x: 0, y: 0, width: 400, height: 40)
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 50, y: 10, width: 80, height: 20), area: short),
                        NSRect(x: 50, y: 0, width: 120, height: 28))
-        // 边界：区域高度小于气泡（20<28）时 y 取 maxY-height=-8，保证不超出区域顶部。
         let tiny = NSRect(x: 0, y: 0, width: 400, height: 20)
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 50, y: 5, width: 80, height: 10), area: tiny),
                        NSRect(x: 50, y: -8, width: 120, height: 28))
     }
 
-    /// 无参数；可用区域为屏幕可见区与来源窗口的交集，窗口使气泡水平夹在窗口内，无窗口或交集为空时用可见区，无返回值（#99）。
     func testInputStatusBubbleAvailableAreaClipsToWindow() {
         let visible = NSRect(x: 0, y: 0, width: 400, height: 300)
         let size = NSSize(width: 120, height: 28)
-        // 边界：窗口 x=100..300，锚点 x=280 左对齐会越出窗口右边，夹到 300-120=180；锚点 x=20 在窗口左侧，夹到 100。
         let window = NSRect(x: 100, y: 50, width: 200, height: 200)
         let area = InputStatusBubble.availableArea(visible: visible, window: window)
         XCTAssertEqual(area, window)
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 280, y: 150, width: 10, height: 20), area: area).minX, 180)
         XCTAssertEqual(InputStatusBubble.frame(size: size, anchor: NSRect(x: 20, y: 150, width: 10, height: 20), area: area).minX, 100)
-        // 边界：窗口部分伸出可见区时取交集（x=350..400）。
         XCTAssertEqual(InputStatusBubble.availableArea(visible: visible, window: NSRect(x: 350, y: 0, width: 200, height: 100)),
                        NSRect(x: 350, y: 0, width: 50, height: 100))
-        // 边界：无窗口、或窗口与可见区完全不相交，都用可见区。
         XCTAssertEqual(InputStatusBubble.availableArea(visible: visible, window: nil), visible)
         XCTAssertEqual(InputStatusBubble.availableArea(visible: visible, window: NSRect(x: 900, y: 0, width: 50, height: 50)), visible)
     }
 
-    /// 无参数；进行中浮标高固定 24pt，宽为 10+12+6+文字宽+10 并向上取整，无返回值（#67）。
     func testInputProgressSizeWrapsText() {
-        // 边界：文字宽 39.4pt 时内容 77.4pt，向上取整为 78pt；高度不随文字变化。
         XCTAssertEqual(InputStatusBubble.progressSize(textWidth: 39.4), NSSize(width: 78, height: 24))
     }
 
-    /// 无参数；从实际应用PID生成并编解码原生事件，验证来源不是Dart测试手工补入的值。
     @MainActor
     func testSelectionSourceSurvivesNativeEventEncoding() throws {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
@@ -954,7 +853,6 @@ class RunnerTests: XCTestCase {
             let encoded = try XCTUnwrap(codec.encode(event))
             let decoded = try XCTUnwrap(codec.decode(encoded) as? [String: Any])
             XCTAssertEqual(decoded["sourceAppName"] as? String, expected)
-            // 捕获后来源进程消失，仍保留采集时的真实应用名，不从已失效PID重查。
             bridge.emitSelectionCaptured(text: "fixture", gesture: SelectionGesture.hotkey.rawValue,
                                          x: 0, y: 0, sourcePID: -1, sourceAppName: expected)
             XCTAssertEqual(payload?["sourceAppName"] as? String, expected)
@@ -962,8 +860,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；外观快照携带浅、深两份不透明的系统强调色 ARGB，且固定强调色偏好优先于系统色（#142、#144）。
-    /// 边界：系统默认态两份都存在且 alpha 为 0xFF；写入 purple 后返回经典紫色浅/深 ARGB 整数。
     func testAppearanceSnapshotCarriesOpaqueAccentColors() {
         let original = UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey)
         defer {
@@ -986,7 +882,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(custom[AppConstants.accentDarkKey] as? Int, 0xFFA5_50A7)
     }
 
-    /// 无参数；使用真实设备语言识别，确保法语不会被当成英语，无返回值。
     @MainActor
     func testDeviceLanguageDetection() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
@@ -997,9 +892,7 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；验证系统翻译错误映射：未安装与语言对不支持各有专用错误码，其余错误为一般翻译失败。
     func testSystemTranslationErrorCodes() {
-        // 边界：三种「不支持」都归为同一错误码；框架内部错误与本服务的不完整响应都可重试。
         XCTAssertEqual(SystemTranslationService.errorCode(for: TranslationError.notInstalled),
                        AppConstants.translationNotInstalledError)
         for unsupported in [TranslationError.unsupportedSourceLanguage,
@@ -1014,12 +907,10 @@ class RunnerTests: XCTestCase {
                        AppConstants.translateFailedError)
     }
 
-    /// 无参数；参数缺失或语言对格式错误时平台桥直接返回参数错误，不进入系统翻译。
     @MainActor
     func testSystemTranslationRejectsMalformedArguments() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
         var codes: [String?] = []
-        // 边界：翻译缺 texts、状态查询的语言对只有一个元素、取消缺 requestId。
         bridge.handle(FlutterMethodCall(methodName: AppConstants.systemTranslateMethod, arguments: [
             "requestId": "r1", "source": "en", "target": "zh-CN", "strategy": AppConstants.systemTranslationHighFidelity,
         ])) { codes.append(($0 as? FlutterError)?.code) }
@@ -1031,7 +922,6 @@ class RunnerTests: XCTestCase {
         }
         XCTAssertEqual(codes, Array(repeating: AppConstants.badArgsError, count: 3))
     }
-    /// 无参数；验证非激活面板不能成为 key/main，避免点击浮层抢走键盘焦点。
     @MainActor
     func testOverlayPanelDoesNotBecomeKeyOrMain() {
         let panel = TranslationPanel(
@@ -1043,7 +933,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
     }
 
-    /// 无参数；以实际触发/结果尺寸检查空白顶栏、展开位置和过期窗口指令。
     @MainActor
     func testOverlayContentSizePositionAndStaleCommands() throws {
         let screen = try XCTUnwrap(NSScreen.main)
@@ -1055,7 +944,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(overlay.isPanelVisible)
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, sourcePID)
 
-        // 框选期间迟到的显示请求也必须保持隐藏，结束后恢复仍有效的会话。
         overlay.setCaptureHidden(true)
         overlay.show(at: anchor, size: NSSize(width: 84, height: 36), sessionId: "s1")
         XCTAssertFalse(overlay.isPanelVisible)
@@ -1073,7 +961,6 @@ class RunnerTests: XCTestCase {
         XCTAssertFalse(overlay.isPanelVisible)
     }
 
-    /// 无参数；被动失效仅关闭按钮，展开结果保持会话/位置，Escape 后迟到命令不能复活。
     @MainActor
     func testPassiveInvalidationOnlyClosesTriggerAndEscapeClosesResult() {
         for retained in [false, true] {
@@ -1110,7 +997,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；验证旧会话关闭消息不能关闭新会话，Escape 只结束当前会话。
     @MainActor
     func testReplacementAndEscapeKeepSessionIdentity() {
         let overlay = OverlayPanelController()
@@ -1133,7 +1019,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(events.last?["sessionId"] as? String, newId)
     }
 
-    /// 无参数；键码边界为 A=0、左箭头=123、Home=115，普通输入和复制不能创建选区。
     func testKeyboardSelectionGestures() {
         XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 0, modifiers: .command), .selectAll)
         XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: .shift), .keyboard)
@@ -1144,9 +1029,7 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: []))
     }
 
-    /// 无参数；文件树叶子不能绕过父级排除，文本域、网页和聊天列表属于有效文本上下文。
     func testTextSelectionContexts() {
-        // 自动手势即使没有 AX 文字也不得复制；否则源应用的多选可能被消费。
         for roles in [["AXStaticText", "AXList"], ["AXWebArea"], ["AXTextArea"], []] {
             for hasAXText in [false, true] {
                 XCTAssertFalse(TextSelectionContext.shouldCopySelection(
@@ -1163,12 +1046,9 @@ class RunnerTests: XCTestCase {
             XCTAssertTrue(TextSelectionContext.shouldReadSelectedText(ancestorRoles: roles))
             XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: roles, hasAXText: false, allowCopy: true))
         }
-        // 网页已有 AX 文字也需保留段落；原生文本框的完整 AX 文字不额外动剪贴板。
         XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXStaticText", "AXWebArea"], hasAXText: true, allowCopy: true))
         XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXTextArea"], hasAXText: true, allowCopy: true))
 
-        // 作用：验证网页无序列表在 AX 含 • 粘连而浏览器复制含换行不含 • 时仍判定同一选区，无关剪贴板拒绝。
-        // 边界：覆盖多条列表项目符号粘连、纯文本换行一致，以及内容不匹配或空串。
         XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
             axText: "• First item.• Second item.",
             copiedText: "First item.\nSecond item."
@@ -1187,7 +1067,6 @@ class RunnerTests: XCTestCase {
         ))
     }
 
-    /// 无参数；在位图上绘制文字后 OCR Markdown 必须读出该词，空图返回空串。
     @MainActor
     func testScreenCaptureOcrReadsDrawnText() async throws {
         let image = NSImage(size: NSSize(width: 200, height: 60))
@@ -1205,7 +1084,6 @@ class RunnerTests: XCTestCase {
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         let recognized = try await ScreenCaptureService.recognizeText(image: ScreenCaptureService.decodeImage(png: png))
         XCTAssertTrue(recognized.contains("HelloOCR"), recognized)
-        // recognizeBlocks 按段落识别，结构与实时翻译的段落块相同（#138）。
         let blocks = try await ScreenCaptureService.recognizeBlocks(png: png)
         XCTAssertFalse(blocks.isEmpty)
         XCTAssertTrue((blocks[0]["text"] as? String)?.contains("HelloOCR") == true, String(describing: blocks))
@@ -1223,7 +1101,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(empty.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
-    /// name 为 CoreImage 码生成器名，message 为码内容，scale 为放大倍数；返回逐像素放大的码位图。
     private func generatedCode(_ name: String, message: String, scale: CGFloat) throws -> CGImage {
         let filter = try XCTUnwrap(CIFilter(name: name))
         filter.setValue(Data(message.utf8), forKey: "inputMessage")
@@ -1231,7 +1108,6 @@ class RunnerTests: XCTestCase {
         return try XCTUnwrap(CIContext().createCGImage(output, from: output.extent))
     }
 
-    /// 无参数；生成的二维码与 Code128 条码读出原内容并按自上而下排序，并排的相同二维码只保留一个，空白图返回空数组（#108）。
     @MainActor
     func testDetectCodesReadsQRAndBarcodeInPositionOrder() async throws {
         let link = "https://example.com/a?b=1"
@@ -1245,7 +1121,6 @@ class RunnerTests: XCTestCase {
         context.setFillColor(NSColor.white.cgColor)
         context.fill(CGRect(x: 0, y: 0, width: 640, height: 520))
         context.interpolationQuality = .none
-        // CG 原点在左下：两个二维码在上半部并排，条码在下方。
         for x in [40, 360] {
             context.draw(qr, in: CGRect(x: x, y: 260, width: qr.width, height: qr.height))
         }
@@ -1262,9 +1137,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(none, [])
     }
 
-    /// 无参数；全局快捷键不能绑定全选、撤销、剪切、复制、粘贴组合（#1）。
-    /// 边界：⌘C 与 ⇧⌘V 分别为仅 Command、Command+Shift 搭配编辑主键，均拒绝；⌥⌘C 多了 Option，不是编辑组合，
-    /// 不因本规则拒绝（是否被系统快捷键占用取决于本机设置，只断言错误不是编辑组合错误）。
     func testShortcutRejectsTextEditingCombinations() {
         let command: UInt32 = 256, shift: UInt32 = 512, option: UInt32 = 2048
         let editingMessage = "这个组合是全选、撤销、剪切、复制或粘贴快捷键，请换一个组合。"
@@ -1281,9 +1153,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// 无参数；语言识别低置信度时取用户语言，中文按字形取用户的简繁写法（#1）。
-    /// 边界：hello 首位 en 仅 0.13 但在前 3 名且为用户语言；ok 前 3 名都不是用户语言，按唯一的拉丁文字语言 en；
-    /// 你好被识别为繁体 0.80，转换为简体不变，按用户简体；含繁体独有字的句子保持繁体；首位达 0.5 直接采用。
     func testLanguageDetectionPrefersUserLanguages() {
         let user = ["zh-CN", "en"]
         XCTAssertEqual(LanguageDetection.resolve(
@@ -1294,16 +1163,12 @@ class RunnerTests: XCTestCase {
             hypotheses: [("zh-Hant", 0.99)], text: "這是繁體中文", preferred: user), "zh-Hant")
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("fr", 0.90)], text: "Bonjour", preferred: user), "fr")
-        // 纯 ASCII 文本且用户只有一种拉丁文字语言时按该语言；用户有两种拉丁文字语言时无法取舍，仍为 nil。
         XCTAssertEqual(LanguageDetection.resolve(
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user), "en")
         XCTAssertNil(LanguageDetection.resolve(
             hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: ["en", "fr"]))
     }
 
-    /// 无参数；用真实识别器验证先验（#1）：短英文不再被判成相近语言，特征明确的外语仍按原语言。
-    /// 边界：Animation duration 无先验时法语 0.54 已达直接采用阈值；Control center 无先验时罗马尼亚语排第二；
-    /// 罗马尼亚语、意大利语、日语短句来自热门层内外两侧，确认先验不会把它们拉成用户语言。
     func testLanguageDetectionHintsFavorUserLanguages() {
         let user = ["zh-CN", "en"]
         XCTAssertEqual(LanguageDetection.detect("Animation duration", preferred: user), "en")
@@ -1313,8 +1178,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(LanguageDetection.detect("設定を開く", preferred: user), "ja")
     }
 
-    /// 无参数；验证先验权重的分层与用户语言码换算（#1）。
-    /// 边界：zh-CN 换算为 zh-Hans、pt-BR 换算为 pt；未登记的 xx 被忽略；表外语言没有权重。
     func testLanguageDetectionHintWeights() {
         let hints = LanguageDetection.hints(preferred: ["zh-CN", "pt-BR", "xx"])
         XCTAssertEqual(hints[NLLanguage("zh-Hans")], AppConstants.languageDetectionUserWeight)
@@ -1325,7 +1188,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(hints.count, AppConstants.languageDetectionAll.count)
     }
 
-    /// 无参数；只有带主机名的 http/https 内容可交给浏览器，协议大小写不敏感，其他协议与无协议文字返回 nil（#108）。
     func testScreenshotLinkAcceptsOnlyHttpLinksWithHost() {
         XCTAssertEqual(ScreenshotLink.url(from: "https://example.com/a")?.absoluteString, "https://example.com/a")
         XCTAssertNotNil(ScreenshotLink.url(from: "HTTP://EXAMPLE.COM"))
@@ -1334,7 +1196,6 @@ class RunnerTests: XCTestCase {
         }
     }
 
-    /// directory 为临时目录，name 为文件名，width/height/color 为纯色 PNG 参数；写入文件并返回路径（#109）。
     @MainActor
     private func composerFixture(_ directory: URL, _ name: String, width: Int, height: Int, color: NSColor) throws -> String {
         let url = directory.appendingPathComponent(name)
@@ -1342,7 +1203,6 @@ class RunnerTests: XCTestCase {
         return url.path
     }
 
-    /// png 为图片字节，x/y 为左上原点的像素坐标；返回文件中存储的原始 RGBA 样本（不做色彩空间转换）。
     private func composedPixel(_ png: Data, _ x: Int, _ y: Int) throws -> [Int] {
         let rep = try XCTUnwrap(NSBitmapImageRep(data: png))
         var samples = [Int](repeating: 0, count: rep.samplesPerPixel)
@@ -1350,7 +1210,6 @@ class RunnerTests: XCTestCase {
         return samples
     }
 
-    /// 无参数；拼接保持原始像素、短边居中且空白透明，拆分余数并入最后一段、高度之和不变，比较计入尺寸差（#109）。
     @MainActor
     func testScreenshotComposerStitchSplitAndCompare() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -1361,7 +1220,6 @@ class RunnerTests: XCTestCase {
         let wide = try composerFixture(directory, "wide.png", width: 40, height: 20, color: red)
         let small = try composerFixture(directory, "small.png", width: 20, height: 10, color: blue)
 
-        // 边界：纵向 40×30，蓝图在 x 10–29、y 20–29；两侧空白透明。
         let vertical = try ScreenshotComposer.stitch(paths: [wide, small], vertical: true)
         let verticalRep = try XCTUnwrap(NSBitmapImageRep(data: vertical))
         XCTAssertEqual([verticalRep.pixelsWide, verticalRep.pixelsHigh], [40, 30])
@@ -1370,7 +1228,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(try composedPixel(vertical, 29, 29), [0, 0, 255, 255])
         XCTAssertEqual(try composedPixel(vertical, 9, 25)[3], 0)
         XCTAssertEqual(try composedPixel(vertical, 30, 25)[3], 0)
-        // 边界：横向 60×20，蓝图在 x 40–59、y 5–14。
         let horizontal = try ScreenshotComposer.stitch(paths: [wide, small], vertical: false)
         let horizontalRep = try XCTUnwrap(NSBitmapImageRep(data: horizontal))
         XCTAssertEqual([horizontalRep.pixelsWide, horizontalRep.pixelsHigh], [60, 20])
@@ -1379,7 +1236,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(try composedPixel(horizontal, 45, 4)[3], 0)
         XCTAssertEqual(try composedPixel(horizontal, 45, 15)[3], 0)
 
-        // 边界：20×50（上 20 行红、下 30 行蓝）分 3 段为 16、16、18；第二段第 4 行起变蓝。
         let tall = try composerFixture(directory, "tall-top.png", width: 20, height: 20, color: red)
         let tallBottom = try composerFixture(directory, "tall-bottom.png", width: 20, height: 30, color: blue)
         let column = directory.appendingPathComponent("column.png")
@@ -1394,7 +1250,6 @@ class RunnerTests: XCTestCase {
         XCTAssertThrowsError(try ScreenshotComposer.split(path: column.path, parts: 11))
         XCTAssertThrowsError(try ScreenshotComposer.stitch(paths: [wide, directory.appendingPathComponent("missing.png").path], vertical: true))
 
-        // 边界：同图差异 0；40×20 红与 40×30 红只差多出的 10 行；红与蓝全部不同；蒙版在差异处为 60% 红色。
         let same = try ScreenshotComposer.compare(first: wide, second: wide)
         XCTAssertEqual([same.different, same.total], [0, 800])
         let taller = try composerFixture(directory, "taller.png", width: 40, height: 30, color: red)
@@ -1406,7 +1261,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(try ScreenshotComposer.compare(first: wide, second: recolored).different, 800)
     }
 
-    /// 无参数；本进程已有录屏授权时 requestAccess 必须立刻 true，不再走申请框。
     @MainActor
     func testRequestAccessReusesExistingGrant() async throws {
         guard ScreenCaptureService.isAuthorized() else {
@@ -1416,7 +1270,6 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(granted)
     }
 
-    /// 无参数；快照暴露 screenAccess；无捕获时 requestScreenAccess 仍返回该键，不进入编辑图像。
     @MainActor
     func testScreenshotSnapshotReportsScreenAccessWithoutCaptureBytes() throws {
         let controller = ScreenshotWindowController()
@@ -1434,7 +1287,6 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(body["id"])
     }
 
-    /// 无参数；贴图置顶、不可成为 key/main，关闭不影响其他贴图，且与选区浮层互不销毁。
     @MainActor
     func testPinOverlayStaysIndependentOfSelectionSession() throws {
         let existing = Set(NSApp.windows.map { ObjectIdentifier($0) })
@@ -1445,7 +1297,6 @@ class RunnerTests: XCTestCase {
             overlay.hide(sessionId: "pin-lifecycle")
         }
 
-        // 2×2 的 PNG
         let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -1459,28 +1310,23 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(panel.level, .statusBar)
         XCTAssertTrue(pins.isVisible(pinId: pinId))
 
-        // 无效字节流创建贴图失败返回 nil，不能触发崩溃（#144 U-29）。
         XCTAssertNil(pins.pin(png: Data([0, 1, 2, 3]), origin: NSPoint(x: 120, y: 180)))
 
         overlay.show(at: NSPoint(x: 250, y: 450), size: NSSize(width: 84, height: 36), sessionId: "pin-lifecycle")
-        // 选区浮层隐藏不应关闭贴图。
         overlay.hide(sessionId: "pin-lifecycle")
         XCTAssertTrue(pins.isVisible(pinId: pinId))
         XCTAssertEqual(pins.count, 1)
 
         let second = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 200, y: 220)))
         XCTAssertEqual(pins.count, 2)
-        // 关闭贴图窗口本身即用户关闭路径，只移除这一张贴图。
         panel.close()
         XCTAssertFalse(pins.isVisible(pinId: pinId))
         XCTAssertTrue(pins.isVisible(pinId: second))
         XCTAssertEqual(pins.count, 1)
 
-        // 新贴图窗应出现在 NSApp.windows 中。
         let created = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) && $0 is PinPanel }
         XCTAssertFalse(created.isEmpty)
 
-        // 图片层接收首次拖动；静息态关闭按钮保持隐藏，Escape只关闭当前贴图（#144 U-29）。
         let remaining = try XCTUnwrap(pins.firstPanel)
         let image = remaining.imageViewForTesting
         let beforeDrag = image.dragBeginCountForTesting
@@ -1509,7 +1355,6 @@ class RunnerTests: XCTestCase {
         XCTAssertFalse(pins.isVisible(pinId: second))
     }
 
-    /// 无参数；走真实 handle(pinScreenshot)：合成 bytes 建贴图，过期 id 拒绝，用户关闭生效。
     @MainActor
     func testScreenshotPinExportUsesPayloadBytesAndRejectsStaleId() throws {
         let controller = ScreenshotWindowController()
@@ -1529,7 +1374,6 @@ class RunnerTests: XCTestCase {
             return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
         }
 
-        // 原图 8×8；合成图 64×16。断言贴图 NSImage 像素尺寸，不依赖窗口 clamp 后的 frame。
         let original = try captureImageFixture(width: 8, height: 8, color: .red)
         controller.seedCaptureForTesting(image: original, id: "capture-1", width: 8, height: 8)
         let editedPng = try png(width: 64, height: 16, color: .blue)
@@ -1577,13 +1421,11 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(staleError.code, AppConstants.staleCaptureError)
         XCTAssertEqual(controller.pins.count, 1)
 
-        // 用户关闭入口销毁贴图，不经由 shutdown。
         panel.closeFromUserAction()
         XCTAssertEqual(controller.pins.count, 0)
         XCTAssertFalse(controller.pins.isVisible(pinId: pinId))
     }
 
-    /// 无参数；选中贴图后 Esc（keyCode 53）只关这一张，另一张仍在。
     @MainActor
     func testSelectedPinClosesOnEscape() throws {
         let pins = PinOverlayController()
@@ -1599,7 +1441,6 @@ class RunnerTests: XCTestCase {
         let secondId = try XCTUnwrap(pins.pin(png: png, origin: NSPoint(x: 160, y: 160)))
         XCTAssertEqual(pins.count, 2)
         XCTAssertTrue(firstPanel.canBecomeKey)
-        // 尚未激活的贴图也必须接收第一次点击，不能先丢弃鼠标以激活应用。
         XCTAssertTrue(firstPanel.imageViewForTesting.acceptsFirstMouse(for: nil))
 
         let esc = try XCTUnwrap(
@@ -1622,7 +1463,6 @@ class RunnerTests: XCTestCase {
         XCTAssertEqual(pins.count, 1)
     }
 
-    /// 无参数；窗口矩形映射到冻结帧像素，不相交时返回 nil。
     func testFrontmostWindowPixelCropMapsAppKitRectIntoImagePixels() {
         let display = NSRect(x: 0, y: 0, width: 100, height: 80)
         let window = NSRect(x: 10, y: 10, width: 40, height: 40)
@@ -1648,9 +1488,7 @@ class RunnerTests: XCTestCase {
 
 }
 
-/// 用真实 Dart 入口验证启动终态和窗口生命周期，不依赖 engine.run 的布尔值。
 final class WindowStartupTests: XCTestCase {
-    /// entrypoint 为编译后的窗口入口；返回回调交付的资源或启动失败 nil，句柄保留到回调完成。
     @MainActor
     private func start(_ entrypoint: String) async -> WindowEngine.Started? {
         var pending: WindowEngine.Startup?
@@ -1664,13 +1502,11 @@ final class WindowStartupTests: XCTestCase {
         return resources
     }
 
-    /// 无参数；五个正式入口都必须确认就绪，绑定控制器但不创建窗口，证明确认不依赖首帧；无返回值。
     @MainActor
     func testAllWindowEntrypointsAcknowledgeWithoutAWindow() async throws {
         for entrypoint in [AppConstants.settingsEntrypoint, AppConstants.permissionWizardEntrypoint,
                            AppConstants.historyEntrypoint, AppConstants.screenshotEntrypoint,
                            AppConstants.captureEntrypoint] {
-            // start 使用真实入口和二进制消息通道；计时包含创建、排队及确认，不等待首帧。
             let begin = ContinuousClock.now
             let outcome = await start(entrypoint)
             let elapsed = (ContinuousClock.now - begin).components
@@ -1683,7 +1519,6 @@ final class WindowStartupTests: XCTestCase {
         }
     }
 
-    /// 无参数；不存在的入口在五秒预算后失败，同一进程随后能运行合法入口；无返回值。
     @MainActor
     func testMissingEntrypointFailsAndNextStartupSucceeds() async throws {
         let clock = ContinuousClock.now
@@ -1696,7 +1531,6 @@ final class WindowStartupTests: XCTestCase {
         retry.engine.shutDownEngine()
     }
 
-    /// 无参数；排队前取消和运行后取消均不能交付，等待超过确认预算覆盖迟到终态；无返回值。
     @MainActor
     func testCancellationBeforeRunAndDuringStartupDoesNotDeliver() async throws {
         let cancelled = expectation(description: "取消后不得交付资源或失败")
@@ -1706,7 +1540,6 @@ final class WindowStartupTests: XCTestCase {
         beforeRun.cancel()
         let duringRun = WindowEngine.start(name: "cancel-during-run", entrypoint: "missingWindowStartupTestEntrypoint",
             channel: AppConstants.settingsChannel, handler: { _, reply in reply(nil) }) { _ in cancelled.fulfill() }
-        // 主队列先运行入口，再撤销仍在等待确认的启动。
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { duringRun.cancel(); continuation.resume() }
         }
@@ -1714,7 +1547,6 @@ final class WindowStartupTests: XCTestCase {
         withExtendedLifetime((beforeRun, duringRun)) {}
     }
 
-    /// title 为本次窗口标题；等待可见窗口，返回该窗口；六秒覆盖五秒启动预算，失败由 XCTest 报告。
     @MainActor
     private func visibleWindow(title: String) async throws -> NSWindow {
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -1724,12 +1556,10 @@ final class WindowStartupTests: XCTestCase {
         return try XCTUnwrap(NSApp.windows.first { $0.title == title && $0.isVisible })
     }
 
-    /// 无参数；设置重复打开只显示一个窗口，关闭后复用同一引擎和窗口；无返回值。
     @MainActor
     func testSettingsMergesPendingOpenAndReusesClosedWindow() async throws {
         let settings = SettingsWindowController()
         settings.show()
-        // shutdown 撤销待启动窗口，后续显式打开才创建新的启动。
         settings.shutdown()
         await Task.yield()
         XCTAssertFalse(NSApp.windows.contains { $0.title == "权限与启动" && $0.isVisible })
@@ -1748,7 +1578,6 @@ final class WindowStartupTests: XCTestCase {
         withExtendedLifetime(settings) {}
     }
 
-    /// 无参数；附属窗关闭待启动时不迟到显示，重开可成功，已显示窗口关闭后重建引擎；无返回值。
     @MainActor
     func testAuxiliaryCloseCancelsPendingAndReopensWithNewEngine() async throws {
         let title = "startup-lifecycle-test"
@@ -1758,7 +1587,6 @@ final class WindowStartupTests: XCTestCase {
         controller.show()
         controller.show()
         controller.close()
-        // 下一轮主队列之后，已取消的启动也不能交付窗口。
         await Task.yield()
         XCTAssertFalse(NSApp.windows.contains { $0.title == title && $0.isVisible })
         controller.show()

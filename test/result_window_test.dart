@@ -4,9 +4,6 @@ import 'package:transnap/src/common/widgets/result_window.dart';
 
 void main() {
   testWidgets('上弹托盘三角在托盘实际宽度内对准锚点中心，超出时贴近末端（#67）', (tester) async {
-    // 作用：验证三角位置由托盘实际宽度夹紧，而不是固定上限 400。
-    // 边界：托盘内 16 个 28pt 方块加内边距 2×2 宽 452；锚点中心 430 时三角中心为 430（超过旧上限 406）；
-    // 锚点中心 600 超出托盘时三角左缘夹到 452 − 8 − 12 = 432，中心 438。
     Future<double> caretCenter(double anchor) async {
       await tester.pumpWidget(
         MaterialApp(

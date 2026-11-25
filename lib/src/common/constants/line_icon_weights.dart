@@ -1,11 +1,7 @@
-// 由 scripts/generate-line-icon-weights.py 生成，请勿手改；新增或改用图标后重新运行该脚本。
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons_weights.dart';
 
-/// 用到的 Lucide 图标在 200/300/500/600 字重下的常量（键为常规字重码位，#67）；
-/// 字重对应 24 单位线宽 1/1.55/2.5/3，由 LineIcon 按显示尺寸选用。
 abstract final class LineIconWeights {
-  /// 字重到「码位 → 该字重图标」的表。
   static const byWeight = <int, Map<int, IconData>>{
     200: {
       58757: LucideIcons200.aArrowDown,

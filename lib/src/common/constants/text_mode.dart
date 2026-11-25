@@ -1,19 +1,13 @@
-/// 选区卡片的文本处理模式；翻译之外的模式只由模型服务处理，各模式的提示词与思考开关见 AppSettings（#100）。
 enum TextMode {
-  /// 翻译为目标语言。
   translate,
 
-  /// 润色：保持原文语言与原意，改进表达。
   polish,
 
-  /// 纠错：修正拼写、语法与标点。
   correct,
 
-  /// 解释：用主要语言说明含义与难点。
   explain,
 }
 
-/// 翻译、润色、纠错与解释的默认系统提示词，全部模型服务共用；用户可在「设置 → 翻译 → 编辑提示词」修改并恢复默认（#100）。
 const defaultPrompts = <TextMode, String>{
   TextMode.translate:
       '你是一名专业翻译。请将用户消息 text 中的原文翻译为 target_language 指定的语言。'

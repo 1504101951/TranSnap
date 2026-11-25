@@ -8,23 +8,18 @@ import 'package:transnap/src/selection/selection_session.dart';
 import 'package:transnap/src/translation/language_direction.dart';
 import 'package:transnap/src/translation/translation_types.dart';
 
-/// 用独立服务身份和受控输入流验证会话取消，不代替会话状态转换。
 class _StreamingProvider extends TranslationProvider {
-  /// id 为已提交服务身份，events 为本次请求实际消费的事件流。
   _StreamingProvider(this.id, this.events);
 
   @override
   final String id;
   final Stream<TranslationEvent> events;
 
-  /// request 为选区原文及语言方向；返回受控业务输入，不创建额外完成事件。
   @override
   Stream<TranslationEvent> translate(TranslationRequest request) => events;
 }
 
-/// 按给定事件完成翻译并保留请求内容，供会话输入输出验证使用。
 class RecordingProvider implements TranslationProvider {
-  /// id 为服务身份，events 为每次翻译的事件序列；构造可独立配置的测试服务。
   RecordingProvider({
     this.id = 'recording',
     this.events = const [TranslationUpdate('你好'), TranslationCompleted()],
@@ -53,8 +48,6 @@ void main() {
     test(
       '删除${override ? '卡片选中' : '当前激活'}服务取消展开会话，删除其他服务保留卡片，新请求使用已提交默认服务',
       () async {
-        // 边界：旧服务在输出部分译文后保持连接，删除另一服务不能结束它；
-        // 默认配置已切换时，仍须依据旧卡片实际使用的身份关闭，新选区再采用新的默认服务。
         final started = Completer<void>();
         final released = Completer<void>();
         final visible = Completer<void>();
@@ -115,7 +108,6 @@ void main() {
         expect(session.isExpanded, isFalse);
         expect(session.canRetry, isFalse);
 
-        // 旧输入的迟到事件不能覆盖后续独立会话的完整业务结果。
         events.add(const TranslationUpdate('旧译文'));
         events.add(const TranslationCompleted());
         session.begin(sessionId: 'next-default-card', text: 'New selection');
@@ -130,7 +122,6 @@ void main() {
   }
 
   test('输入翻译使用独立语言方向，其余入口使用全局方向（#99）', () async {
-    // 边界：原文识别为英文；全局主要语言为中文时目标为中文，输入翻译主要语言为英文、次要为日文时目标为日文。
     final provider = RecordingProvider();
     final session = SelectionSession(
       detectLanguage: (_) async => 'en',
@@ -154,8 +145,6 @@ void main() {
   });
 
   test('卡片服务菜单：切换服务只影响本卡片，润色时非模型服务明确失败，新选区回到默认服务（#100）', () async {
-    // 边界：默认服务译出「默认」，菜单选 model 译出「模型」；润色模式选非模型服务 plain 时失败且不调用默认模型；
-    // 新选区开始后 serviceOverride 清空，再翻译使用默认服务。
     final model = RecordingProvider(
       events: const [TranslationUpdate('模型'), TranslationCompleted()],
     );
@@ -195,7 +184,6 @@ void main() {
   });
 
   test('切换模式对同一原文重新处理：解释用主要语言，润色保持原文语言，无模型服务时明确失败', () async {
-    // 边界：原文识别为英文、主要语言为简体中文；翻译目标为中文，解释目标也为中文，润色目标为英文本身。
     final assist = RecordingProvider(
       events: const [TranslationUpdate('结果'), TranslationCompleted()],
     );
@@ -220,10 +208,8 @@ void main() {
 
     await session.switchMode(TextMode.polish);
     expect(assist.requests.last.targetLanguage, 'en');
-    // 朗读结果栏使用请求的输出语言：润色结果仍是英文。
     expect(session.outputLanguage, 'en');
 
-    // 默认服务不是模型服务：不发请求，卡片给出可操作的失败说明。
     available = false;
     final sent = assist.requests.length;
     await session.switchMode(TextMode.correct);
@@ -231,13 +217,11 @@ void main() {
     expect(session.snapshot.message, SelectionSession.assistUnavailable);
     expect(assist.requests, hasLength(sent));
 
-    // 新选区回到翻译模式。
     session.begin(sessionId: 's2', text: 'World');
     expect(session.mode, TextMode.translate);
   });
 
   test('展开后的请求保留激活时服务和语言，设置变更只影响下一次翻译', () async {
-    // 设置窗口保存可跨越选区补读/语言识别的 await，不能切换已授权请求的接收方。
     final detection = Completer<String?>();
     final first = RecordingProvider();
     final next = RecordingProvider();
@@ -263,7 +247,6 @@ void main() {
   });
 
   test('键盘无 AX 文本时可显示按钮，只有显式补读的有效文字会被翻译', () async {
-    // 空文本只代表待确认键盘选区；自动捕获和缺少补读的激活不能发送空请求。
     final provider = RecordingProvider();
     final session = SelectionSession(
       detectLanguage: (_) async => 'en',
@@ -286,7 +269,6 @@ void main() {
   test(
     'explicit activation preserves prepared paragraphs in request and card',
     () async {
-      // 捕获只显示按钮；明确激活后的格式补读结果才进入翻译请求和双语原文。
       final provider = RecordingProvider();
       final session = SelectionSession(
         provider: provider,
@@ -308,7 +290,6 @@ void main() {
   test(
     'late source read cannot translate or replace a newer selection',
     () async {
-      // 原文读取也是异步边界；新选区到达后，旧读取结果不能发请求或覆盖新卡片。
       final provider = RecordingProvider();
       final session = SelectionSession(
         provider: provider,
@@ -330,7 +311,6 @@ void main() {
   test(
     'missing or oversized prepared text never reaches the provider',
     () async {
-      // null 是原生会话失效边界；补读后超过 50,000 字符也必须在请求前拦截。
       for (final text in [null, 'x' * (SelectionSession.selectionLimit + 1)]) {
         final provider = RecordingProvider();
         final session = SelectionSession(
@@ -374,7 +354,6 @@ void main() {
   test(
     'late translation cannot reopen a dismissed or replaced selection',
     () async {
-      // 在首个异步结果到达前结束 s1 并创建 s2；旧更新和完成事件都不能污染新选区。
       final session = SelectionSession(
         detectLanguage: (_) async => 'en',
         provider: RecordingProvider(),
@@ -446,9 +425,6 @@ void main() {
   });
 
   test('先唤起面板后异步读取选区完成翻译，密码框错误码返回明确失败提示', () async {
-    // 作用：验证全局翻译快捷键空文本先进入 translating 态再通过 readSelection 补读原文并完成翻译，
-    // 以及原生返回 secureField 错误码时进入 failed 态并展示密码框提示。
-    // 边界：readSelection 挂起期间 snapshot.phase == translating；密码框错误不触发翻译请求。
     final provider = RecordingProvider(
       events: const [TranslationUpdate('你好'), TranslationCompleted()],
     );

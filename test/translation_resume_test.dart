@@ -9,10 +9,8 @@ import 'package:transnap/src/translation/language_direction.dart';
 import 'package:transnap/src/translation/providers/api_translation_provider.dart';
 import 'package:transnap/src/translation/translation_types.dart';
 
-/// 真实本地HTTP失败到恢复的业务路径，不以内部调用次数代替结果。
 void main() {
   test('长文失败保留完整片，恢复沿用原服务方向和前片1000字符上下文', () async {
-    // 4000+4000超过单片6000，第二次HTTP返回503；长译文验证双尾1000边界。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final inputs = <Map<String, dynamic>>[];
@@ -36,7 +34,7 @@ void main() {
             'choices': [
               {
                 'index': 0,
-                // 未开双语对照的模型按编号分批，译文行首带段落编号（#113）。
+                
                 'delta': {'content': inputs.length == 1 ? '[1] ${'译' * 1200}' : '[1] 续译'},
               },
             ],

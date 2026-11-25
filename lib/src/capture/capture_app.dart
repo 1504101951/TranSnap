@@ -16,9 +16,7 @@ import '../common/widgets/native_glass.dart';
 import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
 
-/// 采集工具的统一悬浮控制条、长图保留页及视频结果；选区准备由截图选择层负责。
 class CaptureApp extends StatefulWidget {
-  /// channel 为会话状态及显式采集命令通道；可注入以验证界面状态。
   const CaptureApp({
     super.key,
     this.channel = const MethodChannel(ChannelNames.capture),
@@ -26,14 +24,11 @@ class CaptureApp extends StatefulWidget {
 
   final MethodChannel channel;
 
-  /// 无参数；返回采集控制状态，不创建翻译监听或数据库。
   @override
   State<CaptureApp> createState() => _CaptureAppState();
 }
 
-/// 维护实际采集状态和一秒响应；GIF参数由已保存的截图设置决定。
 class _CaptureAppState extends State<CaptureApp> {
-  // 首个原生状态到达前为空闲；原生每次状态都带 phase，缺少即按协议错误抛出（#124）。
   Map<String, dynamic> _state = {'phase': CapturePhase.idle.name};
   bool _pending = false;
   String? _pendingMethod;
@@ -41,12 +36,10 @@ class _CaptureAppState extends State<CaptureApp> {
   bool _feedbackIsError = false;
   bool _feedbackHovered = false;
   Timer? _feedbackTimer;
-  // 长截图默认使用「适合宽度」模式，每次新结果重置（#67 第 5 条、#145）。
   bool _fitWidth = true;
 
   CapturePhase get _phase => CapturePhase.parse(_state['phase'] as String);
 
-  /// 无参数；订阅原生状态并请求当前会话，不枚举来源或打开准备页面。
   @override
   void initState() {
     super.initState();
@@ -59,12 +52,10 @@ class _CaptureAppState extends State<CaptureApp> {
     unawaited(_initialize());
   }
 
-  /// 无参数；加载当前资源快照，真实错误由当前界面呈现。
   Future<void> _initialize() async {
     await _invoke(MethodNames.getCaptureState);
   }
 
-  /// 无参数；解除平台订阅并取消本窗口反馈计时。
   @override
   void dispose() {
     widget.channel.setMethodCallHandler(null);
@@ -72,7 +63,6 @@ class _CaptureAppState extends State<CaptureApp> {
     super.dispose();
   }
 
-  /// state为完整快照；仅新的保存结果或错误触发反馈，重复进度回包不延长文字寿命。
   void _apply(Map<String, dynamic> state) {
     if (!mounted) return;
     final previous = _state;
@@ -105,8 +95,6 @@ class _CaptureAppState extends State<CaptureApp> {
     }
   }
 
-  /// message 为操作结果；普通提示显示 1000ms，isError 为 true 时采用错误样式并保持 2000ms、
-  /// 支持悬停暂停与手动关闭，不改变媒体状态（#144）。
   void _showFeedback(String message, {bool isError = false}) {
     _feedbackTimer?.cancel();
     setState(() {
@@ -117,7 +105,6 @@ class _CaptureAppState extends State<CaptureApp> {
     _startFeedbackTimer();
   }
 
-  /// 无参数；在非悬停状态启动提示倒计时（错误 2s、普通 1s），无返回值。
   void _startFeedbackTimer() {
     _feedbackTimer?.cancel();
     if (_feedback == null || (_feedbackIsError && _feedbackHovered)) return;
@@ -134,7 +121,6 @@ class _CaptureAppState extends State<CaptureApp> {
     });
   }
 
-  /// hovered 为鼠标是否停留在错误气泡上；悬停期间暂停倒计时，移开后重计 2s，无返回值（#144）。
   void _onFeedbackHoverChanged(bool hovered) {
     if (_feedbackHovered == hovered) return;
     _feedbackHovered = hovered;
@@ -146,7 +132,6 @@ class _CaptureAppState extends State<CaptureApp> {
     }
   }
 
-  /// 无参数；手动关闭当前提示气泡并重置状态，无返回值（#144）。
   void _dismissFeedback() {
     if (_feedback == null) return;
     _feedbackTimer?.cancel();
@@ -157,7 +142,6 @@ class _CaptureAppState extends State<CaptureApp> {
     });
   }
 
-  /// method/arguments 为已知采集命令及参数；并发等待时忽略重入，返回命令是否成功完成（未抛出平台异常），错误只显示在当前窗口。
   Future<bool> _invoke(
     String method, [
     Map<String, Object?> arguments = const {},
@@ -191,24 +175,20 @@ class _CaptureAppState extends State<CaptureApp> {
     }
   }
 
-  /// 无参数；立即放弃当前会话，原生停止后台任务并保留已经保存的文件。
   Future<void> _discard() => _invoke(MethodNames.cancelCapture);
 
-  /// 无参数；复制会话中的完整源像素PNG，成功后显示一秒，失败沿用命令错误。
   Future<void> _copyImage() async {
     await _invoke(MethodNames.copyScreenshot);
     if (!mounted || _feedback != null) return;
     _showFeedback('已复制');
   }
 
-  /// 无参数；将完整录制或裁剪片段复制到剪贴板，成功后显示「已复制视频」，失败沿用原生错误反馈（#142）。
   Future<void> _copyVideo() async {
     final ok = await _invoke(MethodNames.copyRecording);
     if (!ok || !mounted || _feedback != null) return;
     _showFeedback('已复制视频');
   }
 
-  /// 无参数；两种采集共用四个独立材料气泡，状态只读，三操作沿用真实阶段约束。
   Widget _active() {
     final paused = _phase == CapturePhase.paused;
     final scrolling = _state['kind'] == 'scrolling';
@@ -218,7 +198,6 @@ class _CaptureAppState extends State<CaptureApp> {
     final liveDetail = (_state['detail'] as String?) ?? '';
     final liveStatus = liveDetail.isEmpty ? '实时翻译' : liveDetail;
     final progress = _state['kind'] == 'liveTranslation'
-        // 同步录制时在翻译状态前显示录制时长。
         ? (_state['recording'] == true
               ? '录制：$elapsed · $liveStatus'
               : liveStatus)
@@ -226,7 +205,6 @@ class _CaptureAppState extends State<CaptureApp> {
         ? '长截图：${_state['height'] ?? 0} 像素'
         : '录制：$elapsed';
     final label = switch (_phase) {
-      // 录制倒计时期间显示剩余秒数，其余准备过程显示通用文案（#129）。
       CapturePhase.preparing =>
         _state['countdown'] is int ? '${_state['countdown']} 秒后开始' : '正在准备采集…',
       CapturePhase.pausing => '正在暂停…',
@@ -243,7 +221,6 @@ class _CaptureAppState extends State<CaptureApp> {
     final countdown = _state['countdown'] as int?;
     final status = label;
 
-    /// description 为上方提示，child 为状态或操作，busy 为是否显示按钮等待进度环；返回不共享外壳的32pt玻璃气泡。
     Widget bubble(String description, Widget child, {bool busy = false}) =>
         Tooltip(
           message: description,
@@ -261,7 +238,6 @@ class _CaptureAppState extends State<CaptureApp> {
           ),
         );
 
-    /// index 为错峰序号，description 为提示与可访问名，icon 为操作图标，action 为空时禁用，busy 控制外圈等待进度环；返回明确命中尺寸的按钮。
     Widget action(
       int index,
       String description,
@@ -371,13 +347,11 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// seconds 为秒数；格式化为 m:ss，供录制结果播放条使用。
   String _formatDuration(double seconds) {
     final total = seconds.isFinite && seconds > 0 ? seconds.floor() : 0;
     return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
   }
 
-  /// seconds 为目标秒数；仅转发合法位置给原生 AVPlayer，避免频繁拖动阻塞按钮禁用态。
   void _seekTo(double seconds) {
     final id = _state['id'];
     if (id == null) return;
@@ -390,8 +364,6 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// 无参数；返回统一结果窗骨架：中性衬底（四周 24pt 留白）+ 底部 52pt 实底操作栏，
-  /// 标题栏与播放器控制条隐藏，全部操作收进底部栏（#67 第 4、7 条、#145）。
   Widget _videoResult() {
     final pixels = Size(
       (_state['width'] as num).toDouble(),
@@ -409,10 +381,8 @@ class _CaptureAppState extends State<CaptureApp> {
     );
     final playing = _state['playing'] == true;
     final converting = _phase == CapturePhase.converting;
-    // 文件复制没有可测量的编码进度；缺少 progress 的忙碌快照只显示保存状态。
     final saving = converting && _state['progress'] == null;
     final enabled = !_pending && !converting;
-    // 转换中的导出类型；只有该类型的按钮变为取消，其余导出按钮禁用。
     final exporting = converting
         ? RecordingExport.parse(_state['exporting'] as String)
         : null;
@@ -432,7 +402,6 @@ class _CaptureAppState extends State<CaptureApp> {
           constraints.maxWidth,
           GlassMetrics.resultBarHeight,
         );
-        // 最小窗口 600pt 下预留所有固定按钮，剩余宽度分配给播放进度滑块并封顶 220pt。
         final sliderWidth = (constraints.maxWidth - 490)
             .clamp(64.0, 220.0)
             .toDouble();
@@ -657,7 +626,6 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// child 为视频或长图结果，allowCopyVideo 为真时响应 ⌘C 复制视频；Escape 立即放弃当前会话并保留已保存文件。
   Widget _resultPage(Widget child, {bool allowCopyVideo = false}) => Material(
     type: MaterialType.transparency,
     child: Focus(
@@ -686,7 +654,6 @@ class _CaptureAppState extends State<CaptureApp> {
     ),
   );
 
-  /// 无参数；返回长截图结果窗：中性衬底四周 24pt 留白，默认适合宽度且可切换实际大小，底部 52pt 操作栏提供放弃、缩放与复制保存（#67 第 5、7 条、#145）。
   Widget _imageResult() {
     final pixels = Size(
       (_state['width'] as num).toDouble(),
@@ -855,14 +822,12 @@ class _CaptureAppState extends State<CaptureApp> {
     );
   }
 
-  /// context 为窗口上下文；使用项目统一原生玻璃主题与窗口背景。
   @override
   Widget build(BuildContext context) => NativeGlassApp(
     title: 'TranSnap 采集',
     home: Builder(builder: _buildPage),
   );
 
-  /// context为内部主题；录制与长截图共用状态条，完成后分别展示视频或长图结果。
   Widget _buildPage(BuildContext context) {
     if (_phase == CapturePhase.idle) {
       return const SizedBox.shrink();
@@ -909,7 +874,6 @@ class _CaptureAppState extends State<CaptureApp> {
       CapturePhase.scrolling,
       CapturePhase.finalizing,
     ].contains(_phase)) {
-      // 面板上部保留提示空间；仅四个气泡绘制材料，外围不绘制背景或阴影。
       return Material(
         type: MaterialType.transparency,
         child: LayoutBuilder(

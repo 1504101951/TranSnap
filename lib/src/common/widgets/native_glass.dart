@@ -19,21 +19,16 @@ import 'package:motor/motor.dart';
 
 import 'app_motion.dart';
 
-/// 普通窗口的连续阅读底色；四角由AppKit统一裁剪，Flutter只绘制内容，不另画面板。
 class NativeGlassWindowPage extends StatelessWidget {
-  /// child为窗口内容；与原生标题区使用同一不透明语义色。
   const NativeGlassWindowPage({super.key, required this.child});
   final Widget child;
 
-  /// context提供当前外观；返回无内部圆角或顶部接缝的页面背景。
   @override
   Widget build(BuildContext context) =>
       ColoredBox(color: Theme.of(context).colorScheme.surface, child: child);
 }
 
-/// macOS 原生玻璃材料；AppKit 处理折射及系统可访问性，Flutter 保留业务和交互。
 class NativeGlassSurface extends StatelessWidget {
-  /// child 为前景控件，radius 为逻辑点圆角，busy 为按钮等待进度环开关；创建单个材料层，不对子内容做图像滤镜。
   const NativeGlassSurface({
     super.key,
     required this.child,
@@ -45,13 +40,10 @@ class NativeGlassSurface extends StatelessWidget {
   final Widget child;
   final double? radius;
 
-  /// 页面只绘制阅读背景，独立交互控件才启用原生折射，避免嵌套。
   final bool material;
 
-  /// 为 true 时在材料外扩 2pt 绘制强调色进度环；内部结构恒定，不重建原生材料（#142）。
   final bool busy;
 
-  /// child 为传入前景；穿透透明包装层递归识别底层按钮、实底、图标按钮类型与启用回调。
   static ({
     bool isButton,
     bool isFilled,
@@ -102,7 +94,6 @@ class NativeGlassSurface extends StatelessWidget {
     }
   }
 
-  /// context 提供主题；返回原生材料与前景的有序叠放，材料不抢占手势。
   @override
   Widget build(BuildContext context) {
     final button = _inspectButton(child);
@@ -113,16 +104,13 @@ class NativeGlassSurface extends StatelessWidget {
                   ? GlassMetrics.primaryRadius
                   : GlassMetrics.controlRadius)
             : GlassMetrics.panelRadius);
-    // 材料配置也是依赖；只改透明度时主题颜色可能不变，仍需更新原生视图。
     context.dependOnInheritedWidgetOfExactType<_GlassAppearanceScope>();
     final brightness = Theme.of(context).brightness;
     final highContrast = MediaQuery.highContrastOf(context);
-    // 新弹窗成为活动层时，下面的页面使用普通内容底色，避免叠加两层折射。
     final activeLayer = ModalRoute.isCurrentOf(context) != false;
     if (material &&
         context.dependOnInheritedWidgetOfExactType<_GlassMaterialScope>() !=
             null) {
-      // 下拉已选项等共享父材料；弹出路由脱离此scope后才创建自己的玻璃，按钮仍保留微交互与焦点环。
       return button.isButton
           ? NativeGlassButtonFeedback(
               radius: radius,
@@ -136,7 +124,6 @@ class NativeGlassSurface extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         child: ColoredBox(
           color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.78),
-          // 浮层不经过Scaffold，必须在阅读表面建立Material文本基底，避免继承诊断双下划线。
           child: Material(type: MaterialType.transparency, child: child),
         ),
       );
@@ -151,7 +138,6 @@ class NativeGlassSurface extends StatelessWidget {
             )
           else
             Positioned.fill(
-              // 原生材料只绘图，Flutter平台视图包装层也必须退出键盘遍历。
               child: ExcludeFocus(
                 child: ExcludeSemantics(
                   child: AppKitView(
@@ -189,8 +175,6 @@ class NativeGlassSurface extends StatelessWidget {
             child: glass,
           )
         : glass;
-    // 放松列表的横向紧约束，让材料跟随前景尺寸；输入框/滑块自身仍填满可用宽度。
-    // 外层始终包一层 BusyRing 保持子树结构恒定，等待态切换不重建底层 AppKitView（#142）。
     final surface = Align(
       alignment: AlignmentDirectional.centerStart,
       widthFactor: 1,
@@ -203,7 +187,6 @@ class NativeGlassSurface extends StatelessWidget {
       ),
     );
     if (!button.isButton) return surface;
-    // 可见按钮保持28/30pt，外围透明命中区域至少32pt；标准按钮仍处理自身语义和键盘。
     return GestureDetector(
       excludeFromSemantics: true,
       behavior: HitTestBehavior.opaque,
@@ -224,11 +207,7 @@ class NativeGlassSurface extends StatelessWidget {
   }
 }
 
-/// 复用标准按钮的动作与语义，统一提供 Bezel 高光、悬停叠层、按下弹性微缩及强调色焦点环（#67、#144）。
 class NativeGlassButtonFeedback extends StatefulWidget {
-  /// child 为可操作控件或完整玻璃胶囊，radius 为超椭圆圆角，enabled 决定是否响应交互反馈，
-  /// inset 为外围命中与描边留白，hoverFeedback 控制悬停视觉层，pressScale 为按下缩放比例，
-  /// accentHighlight 控制悬停边框是否使用强调色高光，bezel 控制静息态顶部高光与微渐变。
   const NativeGlassButtonFeedback({
     super.key,
     required this.child,
@@ -250,19 +229,16 @@ class NativeGlassButtonFeedback extends StatefulWidget {
   final bool accentHighlight;
   final bool bezel;
 
-  /// 无参数；创建按钮瞬时交互状态，不持有业务数据。
   @override
   State<NativeGlassButtonFeedback> createState() =>
       _NativeGlassButtonFeedbackState();
 }
 
-/// 维护控件悬停、按下微缩和焦点绘制；业务动作仍由标准按钮处理。
 class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
   bool _hovered = false;
   bool _pressed = false;
   bool _focused = false;
 
-  /// context 提供主题与动态效果偏好；抑制子按钮内置 Material 叠色与焦点边后统一绘制悬停、微缩与强调色焦点环。
   @override
   Widget build(BuildContext context) {
     final outerTheme = Theme.of(context);
@@ -294,7 +270,6 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
 
     const transparentOverlay = WidgetStatePropertyAll(Colors.transparent);
     final noneSide = const WidgetStatePropertyAll(BorderSide.none);
-    // 屏蔽内层 ButtonStyle 自带叠色与默认焦点边，避免与外层统一玻璃反馈重影。
     final cleanChild = Theme(
       data: outerTheme.copyWith(
         filledButtonTheme: FilledButtonThemeData(
@@ -362,7 +337,6 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
                     child: IgnorePointer(
                       child: Padding(
                         padding: widget.inset,
-                        // 为静息玻璃按钮叠加克制纵向微渐变与顶部高光，避免按钮边缘发虚（#67 方案 A）。
                         child: DecoratedBox(
                           decoration: ShapeDecoration(
                             gradient: LinearGradient(
@@ -421,10 +395,7 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
   }
 }
 
-/// 字段标题、行内校验错误和说明位于材料外，避免浮动元素越过原生视图裁剪边界。
 class NativeGlassField extends StatefulWidget {
-  /// label 为可选字段标题，semanticLabel 在无可见标题时补足语义名，helper 为补充说明，
-  /// errorText 为行内校验错误信息；child 是不带浮动标签的输入或选择控件。
   const NativeGlassField({
     super.key,
     this.label,
@@ -440,16 +411,13 @@ class NativeGlassField extends StatefulWidget {
   final String? errorText;
   final Widget child;
 
-  /// 无参数；创建仅跟踪键盘焦点的状态，不持有业务输入。
   @override
   State<NativeGlassField> createState() => _NativeGlassFieldState();
 }
 
-/// 跟踪字段焦点以绘制连续曲线边框，不持有输入内容。
 class _NativeGlassFieldState extends State<NativeGlassField> {
   bool _focused = false;
 
-  /// context 提供主题；返回外置标题、连续圆角焦点/报错边框、报错行与说明，保留输入子树状态。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -490,7 +458,6 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
                       side: BorderSide(color: borderColor, width: borderWidth),
                     ),
                   ),
-                  // 标题由外层承担；移除输入框自带圆弧边框，焦点只绘制一层连续曲线。
                   child: InputDecorationTheme(
                     data: const InputDecorationThemeData(
                       isDense: true,
@@ -545,9 +512,7 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
   }
 }
 
-/// 设置行只给开关本身提供胶囊材料，标题与说明直接融入页面。
 class NativeGlassSwitchTile extends StatelessWidget {
-  /// title/subtitle 为文字语义，value 是开关状态，onChanged 为空表示禁用，leading 为可选左侧图标锚点。
   const NativeGlassSwitchTile({
     super.key,
     required this.title,
@@ -562,7 +527,6 @@ class NativeGlassSwitchTile extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
   final Widget? leading;
 
-  /// context 提供控件主题；返回只有右侧按钮可交互的设置项，且悬停标题行不触发背景变化。
   @override
   Widget build(BuildContext context) => ListTile(
     contentPadding: EdgeInsets.zero,
@@ -571,7 +535,6 @@ class NativeGlassSwitchTile extends StatelessWidget {
     subtitle: subtitle == null
         ? null
         : Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
-    // 标题和说明只读，避免点击文字意外更改并自动保存偏好。
     hoverColor: Colors.transparent,
     focusColor: Colors.transparent,
     splashColor: Colors.transparent,
@@ -587,9 +550,7 @@ class NativeGlassSwitchTile extends StatelessWidget {
   );
 }
 
-/// 紧凑选择器；当前值与菜单分别布局，避免菜单内边距裁切选中值。
 class NativeGlassDropdown<T> extends StatelessWidget {
-  /// label/value/items 是字段名称、选中值和有序选项；caption 为标题下方说明，leading 为可选左侧图标锚点，onChanged 为空表示禁用。
   const NativeGlassDropdown({
     super.key,
     required this.label,
@@ -606,7 +567,6 @@ class NativeGlassDropdown<T> extends StatelessWidget {
   final String? caption;
   final Widget? leading;
 
-  /// 无参数；返回带字段名称的设置行，右侧为玻璃菜单按钮。
   @override
   Widget build(BuildContext context) => NativeGlassSettingRow(
     title: label,
@@ -620,12 +580,7 @@ class NativeGlassDropdown<T> extends StatelessWidget {
   );
 }
 
-/// 不带字段名称的玻璃菜单按钮；设置行与译文卡片标题区共用同一菜单材料与选项样式。
 class NativeGlassMenuButton<T> extends StatefulWidget {
-  /// value/items 是选中值和有序选项；onChanged 为空表示禁用；
-  /// dense 为真时不设最小宽度、左右内边距 6pt，用于截图工具栏编辑器 72pt 宽的组头（#67）；
-  /// flat 非空时触发器用该平面装饰代替独立玻璃材料，与周围平面格子同底（#67 原生克制风格）；
-  /// quiet 为真时触发器是按内容宽度的次级文字菜单：12pt 次要色文字加 12pt 下箭头、左右内边距 6、圆角 6、无底（#134 服务菜单）。
   const NativeGlassMenuButton({
     super.key,
     required this.value,
@@ -642,18 +597,15 @@ class NativeGlassMenuButton<T> extends StatefulWidget {
   final Decoration? flat;
   final bool quiet;
 
-  /// 无参数；创建触发器和当前菜单项的焦点状态。
   @override
   State<NativeGlassMenuButton<T>> createState() =>
       _NativeGlassMenuButtonState<T>();
 }
 
-/// 管理触发器与当前菜单选项焦点；选中值由调用方持有。
 class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
   final _buttonFocus = FocusNode();
   final _selectedFocus = FocusNode();
 
-  /// 无参数；释放窗口内持有的两个焦点节点。
   @override
   void dispose() {
     _buttonFocus.dispose();
@@ -661,7 +613,6 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
     super.dispose();
   }
 
-  /// context 提供主题；菜单共享一层材料，值超过一行时按18pt行高增长。
   @override
   Widget build(BuildContext context) {
     final value = widget.value;
@@ -670,7 +621,6 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
     return MenuAnchor(
       childFocusNode: _buttonFocus,
       onOpen: () {
-        // 菜单挂载后聚焦当前值，使鼠标和键盘打开都能直接用方向键选择。
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _selectedFocus.context != null) {
             _selectedFocus.requestFocus();
@@ -679,7 +629,6 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
       },
       style: NativeGlassMenuPanel.anchorStyle,
       menuChildren: [
-        // NativeGlassMenuPanel/NativeGlassMenuItem提供与其他玻璃菜单一致的材料和选项样式。
         NativeGlassMenuPanel(
           children: [
             for (final option in items.entries)
@@ -735,7 +684,6 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
     );
   }
 
-  /// context 提供主题，controller 控制菜单开合；返回次级文字菜单触发器，宽度按内容、最大 240pt。
   Widget _quietTrigger(BuildContext context, MenuController controller) {
     final style = Theme.of(context).textTheme.bodySmall!;
     final onChanged = widget.onChanged;
@@ -783,7 +731,6 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
     );
   }
 
-  /// trigger 为下拉触发按钮；flat 非空时返回带悬停、微缩与焦点反馈的平面按钮包装，否则返回独立玻璃材料包装。
   Widget _surface(Widget trigger) {
     final flat = widget.flat;
     if (flat == null) return NativeGlassSurface(material: true, child: trigger);
@@ -795,9 +742,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
   }
 }
 
-/// 玻璃菜单的共享材料面板；下拉菜单按钮与截图「录制选项」共用，超出最大高度时内部滚动。
 class NativeGlassMenuPanel extends StatelessWidget {
-  /// children 为自上而下的菜单项或分隔线，maxHeight 为面板最大高度（默认 320pt）。
   const NativeGlassMenuPanel({
     super.key,
     required this.children,
@@ -806,14 +751,12 @@ class NativeGlassMenuPanel extends StatelessWidget {
   final List<Widget> children;
   final double maxHeight;
 
-  /// MenuAnchor 自身不绘制材料、阴影与内边距，外观全部由面板提供。
   static const anchorStyle = MenuStyle(
     padding: WidgetStatePropertyAll(EdgeInsets.zero),
     backgroundColor: WidgetStatePropertyAll(Colors.transparent),
     elevation: WidgetStatePropertyAll(0),
   );
 
-  /// context 未使用；返回一层玻璃材料包裹的可滚动纵向菜单，宽度与高度受规格边界约束。
   @override
   Widget build(BuildContext context) => NativeGlassSurface(
     material: true,
@@ -837,10 +780,7 @@ class NativeGlassMenuPanel extends StatelessWidget {
   );
 }
 
-/// 玻璃菜单的单个选项；命中高 32pt、圆角与按压反馈与下拉选项一致。
 class NativeGlassMenuItem extends StatelessWidget {
-  /// label 为选项文字；onPressed 为空表示禁用；checked 非空时在文字前保留 16pt 勾选位，
-  /// true 显示勾选；focusNode 用于打开菜单时聚焦当前项。
   const NativeGlassMenuItem({
     super.key,
     required this.label,
@@ -853,7 +793,6 @@ class NativeGlassMenuItem extends StatelessWidget {
   final bool? checked;
   final FocusNode? focusNode;
 
-  /// context 未使用；返回带统一悬停、微缩与按压反馈的菜单按钮。
   @override
   Widget build(BuildContext context) => NativeGlassButtonFeedback(
     radius: GlassMetrics.menuItemRadius,
@@ -863,7 +802,6 @@ class NativeGlassMenuItem extends StatelessWidget {
     child: MenuItemButton(
       focusNode: focusNode,
       onPressed: onPressed,
-      // 勾选位固定宽度，同组未勾选项的文字仍左对齐。
       leadingIcon: checked == null
           ? null
           : SizedBox.square(
@@ -891,15 +829,11 @@ class NativeGlassMenuItem extends StatelessWidget {
   );
 }
 
-/// 设置行左侧图标锚点（#67、#144）：16pt 单色线性图标，次要文字色，无底块、渐变与投影；
-/// 只帮助扫读定位，内容区的颜色留给待处理状态。读屏器跳过图标，由行文字承载语义。
 class NativeGlassRowIcon extends StatelessWidget {
-  /// icon 为描边图标字形。
   const NativeGlassRowIcon({super.key, required this.icon});
 
   final IconData icon;
 
-  /// context 提供主题配色；返回次要色的 16pt 图标。
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: LineIcon(
@@ -910,14 +844,11 @@ class NativeGlassRowIcon extends StatelessWidget {
   );
 }
 
-/// 快捷键机械立体键帽组（#67 方案 A）；每个修饰键与主键渲染为独立微型键帽，读屏按空格串联读取完整组合。
 class NativeGlassKeycaps extends StatelessWidget {
-  /// tokens 为按展示顺序拆分的按键文本列表，如 ['⇧', '⌘', '@']。
   const NativeGlassKeycaps({super.key, required this.tokens});
 
   final List<String> tokens;
 
-  /// context 提供明暗外观；返回合并语义的横向等高键帽队列。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -984,10 +915,7 @@ class NativeGlassKeycaps extends StatelessWidget {
   }
 }
 
-/// 常规设置行；文字与右侧控件不足时按Spec换行，不压缩字号。
 class NativeGlassSettingRow extends StatelessWidget {
-  /// title 为独立字段名称，child 为宽度最多240pt的控件，caption为可换行说明，leading 为可选左侧语义图标锚点，
-  /// captionWarning 为真时说明行以橙色（浅 #8A4A00 / 深 #FF9F0A）显示提示。
   const NativeGlassSettingRow({
     super.key,
     required this.title,
@@ -1002,7 +930,6 @@ class NativeGlassSettingRow extends StatelessWidget {
   final Widget? leading;
   final bool captionWarning;
 
-  /// context 提供文字缩放；以可用宽度判断是否保持左右两列。
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -1034,7 +961,6 @@ class NativeGlassSettingRow extends StatelessWidget {
                 Expanded(child: label),
               ],
             );
-      // 160pt文字列+16pt列间距+240pt控件列，低于该值时明确换行。
       return ConstrainedBox(
         constraints: BoxConstraints(
           minHeight: caption == null
@@ -1071,21 +997,16 @@ class NativeGlassSettingRow extends StatelessWidget {
   );
 }
 
-/// 权限状态（#142 第 14 条）：已开启时为次要色对勾与「已开启」，未开启时为橙色警告与「未开启」；
-/// 颜色只留给需要处理的状态，不随系统强调色变化。
 class NativeGlassStatus extends StatelessWidget {
-  /// granted 为是否已开启；label 可覆写展示与语义文字。
   const NativeGlassStatus({super.key, required this.granted, this.label});
 
   final bool granted;
   final String? label;
 
-  /// context 提供明暗外观；返回 14pt 图标加 12pt 文字的状态。
   @override
   Widget build(BuildContext context) {
     final text = label ?? (granted ? '已开启' : '未开启');
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // 未开启用固定橙色（浅 #8A4A00 / 深 #FF9F0A），在窗口底色上满足 WCAG 2.2 AA 4.5:1（#144）。
     final color = granted
         ? Theme.of(context).colorScheme.onSurfaceVariant
         : (dark ? const Color(0xFFFF9F0A) : const Color(0xFF8A4A00));
@@ -1114,11 +1035,7 @@ class NativeGlassStatus extends StatelessWidget {
   }
 }
 
-/// 同组设置共享一张纯色卡片（#67、#144）：圆角 12、0.5pt 外轮廓，无阴影与内高光；左右内边距 16、上下 4，
-/// 行间 0.5pt 细线从行文字左缘起画；可选外置眉标左缩进 16、与卡片间距 8，只有一行的分组不传眉标。
 class NativeGlassGroup extends StatelessWidget {
-  /// children 为按顺序排列的设置行；title 为可选眉标；dividerIndent 为细线相对卡片内容左缘的缩进，
-  /// 默认等于 16pt 行图标加 12pt 间距，行没有图标时传 0。
   const NativeGlassGroup({
     super.key,
     required this.children,
@@ -1129,7 +1046,6 @@ class NativeGlassGroup extends StatelessWidget {
   final String? title;
   final double dividerIndent;
 
-  /// context 提供语义底色与明暗外观；返回带 n−1 条细线的分组。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -1143,7 +1059,6 @@ class NativeGlassGroup extends StatelessWidget {
           side: BorderSide(color: line, width: GlassMetrics.groupBorderWidth),
         ),
       ),
-      // 内层透明 Material 让组内 ListTile 的焦点与波纹绘制在卡片之上。
       child: Material(
         type: MaterialType.transparency,
         child: Padding(
@@ -1199,9 +1114,7 @@ class NativeGlassGroup extends StatelessWidget {
   }
 }
 
-/// 外观与导航共用平整分段；共享强调色选中底由 Bouncy 物理弹簧驱动位置与宽度，减少动态效果时直接切换（#142）。
 class NativeGlassSegments<T> extends StatefulWidget {
-  /// value/options/onChanged 为选中状态；navigation决定72×32导航或76×28外观分段。
   const NativeGlassSegments({
     super.key,
     required this.value,
@@ -1216,7 +1129,6 @@ class NativeGlassSegments<T> extends StatefulWidget {
   final ValueChanged<T> onChanged;
   final bool navigation;
 
-  /// 无参数；创建跟踪分段测量坐标的滑块状态。
   @override
   State<NativeGlassSegments<T>> createState() => _NativeGlassSegmentsState<T>();
 }
@@ -1227,25 +1139,21 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
   List<({double left, double width})>? _rects;
   bool _measureScheduled = false;
 
-  /// count 为分段数；返回每段对应的全局键，用于测量真实横坐标与宽度。
   static List<GlobalKey> _makeKeys(int count) =>
       List.generate(count, (_) => GlobalKey());
 
-  /// 无参数；初始化各段测量回调。
   @override
   void initState() {
     super.initState();
     _scheduleMeasure();
   }
 
-  /// 无参数；字体或文本缩放变化时重新测量各段位置与宽度。
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scheduleMeasure();
   }
 
-  /// oldWidget 为旧配置；分段数目、文案、图标或模式变更时重新测量。
   @override
   void didUpdateWidget(covariant NativeGlassSegments<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1262,7 +1170,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     }
   }
 
-  /// a/b 为分段映射；返回键值顺序是否完全一致。
   static bool _sameOptions<K>(Map<K, String> a, Map<K, String> b) {
     if (a.length != b.length) return false;
     final itA = a.entries.iterator;
@@ -1276,7 +1183,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     return true;
   }
 
-  /// a/b 为分段图标映射；返回是否完全一致。
   static bool _sameIcons<K>(Map<K, IconData> a, Map<K, IconData> b) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {
@@ -1285,7 +1191,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     return true;
   }
 
-  /// 无参数；合并多次重建请求，在帧末统一测量各段真实矩形。
   void _scheduleMeasure() {
     if (_measureScheduled) return;
     _measureScheduled = true;
@@ -1295,7 +1200,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     });
   }
 
-  /// 无参数；将各段相对 Stack 的起点与宽度写入状态，供滑块对齐。
   void _measure() {
     if (!mounted) return;
     final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
@@ -1322,7 +1226,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     setState(() => _rects = measured);
   }
 
-  /// dx 为命中点横坐标，defaultWidth 为未测量前的固定段宽；返回对应的分段键。
   T _hitOption(double dx, double defaultWidth) {
     final rects = _rects;
     if (rects != null && rects.length == widget.options.length) {
@@ -1340,7 +1243,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
     return widget.options.keys.elementAt(index);
   }
 
-  /// context 提供主题与文字缩放；可见高度固定基线，点击区域至少32pt。
   @override
   Widget build(BuildContext context) {
     final width = widget.navigation
@@ -1458,9 +1360,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
                                 child: TextButton(
                                   onPressed: () => widget.onChanged(option.key),
                                   style: TextButton.styleFrom(
-                                    // 局部foregroundColor会生成Ink悬停层，反馈仅由外层统一玻璃反馈负责。
                                     overlayColor: Colors.transparent,
-                                    // 保证每段至少为规范基线尺寸，较长文字自然横向伸展。
                                     minimumSize: Size(width, height),
                                     maximumSize: Size(double.infinity, height),
                                     padding: const EdgeInsets.symmetric(
@@ -1498,7 +1398,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
                           ),
                       ],
                     ),
-                    // 仅相邻未选项之间保留1pt分隔，选中块边缘不叠线。
                     for (var index = 1; index < keys.length; index++)
                       if (keys[index - 1] != widget.value &&
                           keys[index] != widget.value)
@@ -1528,8 +1427,6 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
   }
 }
 
-/// 侧边栏一级分组：title/icon 为分组标题与图标；value 非空时分组本身可选中（无子页），
-/// 否则 children 为按顺序排列的子页值与名称，分组只作标签。
 typedef NativeGlassSidebarSection<T> = ({
   String title,
   IconData icon,
@@ -1537,9 +1434,7 @@ typedef NativeGlassSidebarSection<T> = ({
   Map<T, String> children,
 });
 
-/// 设置窗口左侧两级导航（#67）：玻璃材料、固定宽度，不随正文滚动；一级分组始终展开。
 class NativeGlassSidebar<T> extends StatelessWidget {
-  /// value 为当前子页，sections 为一级分组，onChanged 接收被点选的子页，topPadding 为顶部避让窗口按钮的留白。
   const NativeGlassSidebar({
     super.key,
     required this.value,
@@ -1552,7 +1447,6 @@ class NativeGlassSidebar<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   final double topPadding;
 
-  /// 无参数；计算当前选中项在列表内容坐标系中的纵向起点与高度，未命中时返回 null。
   ({double top, double height})? _selectedGeometry() {
     var top = 0.0;
     for (final section in sections) {
@@ -1570,7 +1464,6 @@ class NativeGlassSidebar<T> extends StatelessWidget {
     return null;
   }
 
-  /// context 提供主题；返回固定宽度的导航列，选中滑块由 Bouncy 物理弹簧驱动（#142）。
   @override
   Widget build(BuildContext context) {
     final selection = _selectedGeometry();
@@ -1579,7 +1472,6 @@ class NativeGlassSidebar<T> extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final section in sections) ...[
-          // 一级行：可选中的分组直接是子页，其余只作标签。
           _row(
             context,
             height: GlassMetrics.sidebarSectionHeight,
@@ -1675,8 +1567,6 @@ class NativeGlassSidebar<T> extends StatelessWidget {
     );
   }
 
-  /// height/indent 为行高与左缩进，icon/label/bold 为行内容，target 为点选后切换到的子页；
-  /// target 为空时返回不可点选的标签行，否则返回透明背景按钮行（由底层弹簧滑块呈现选中底）。
   Widget _row(
     BuildContext context, {
     required double height,
@@ -1689,7 +1579,6 @@ class NativeGlassSidebar<T> extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final onAccent = NativeGlassTheme.onAccentOf(context);
     final selected = target != null && target == value;
-    // 一级分组图标放在 22×22 圆角 6 强调色方块内（自身选中时叠加半透前景色以保持对比），配自适应高对比 12pt 图标（#67 第 14 条、#144）。
     final content = Row(
       children: [
         if (icon != null) ...[
@@ -1769,9 +1658,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
   }
 }
 
-/// 固定36×20轨道和16×16滑块；系统Switch没有这些几何尺寸的公开配置。
 class NativeGlassSwitch extends StatefulWidget {
-  /// value 为当前开关值，onChanged为空时禁用；label提供可访问名称，busy为真时外圈显示等待进度环。
   const NativeGlassSwitch({
     super.key,
     required this.value,
@@ -1784,21 +1671,17 @@ class NativeGlassSwitch extends StatefulWidget {
   final String label;
   final bool busy;
 
-  /// 无参数；创建键盘焦点状态，业务值由调用方持有。
   @override
   State<NativeGlassSwitch> createState() => _NativeGlassSwitchState();
 }
 
-/// 维护开关键盘焦点、悬停与按下微缩反馈；将用户动作映射为值反转，不保存业务偏好。
 class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
   bool _focused = false;
   bool _hovered = false;
   bool _pressed = false;
 
-  /// 无参数；仅在启用时向业务层发布反转后的值。
   void _toggle() => widget.onChanged?.call(!widget.value);
 
-  /// context 提供主题与减少动态效果；返回带键盘、悬停微光、按压微缩、语义和 32pt 命中高度的开关。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -1824,7 +1707,6 @@ class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
       enabled: enabled,
       onTap: enabled ? _toggle : null,
       child: FocusableActionDetector(
-        // 仅开关36×32命中区显示可点击手形；标题区域保持默认指针。
         mouseCursor: enabled
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
@@ -1885,7 +1767,6 @@ class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
                                 ),
                                 border: border,
                               ),
-                        // 按住时果冻式横向微拉伸滑块，松手由 AppMotion.bouncy 物理弹簧推到终点。
                         child: SingleMotionBuilder(
                           value: widget.value ? 1.0 : 0.0,
                           motion: AppMotion.bouncy(context),
@@ -1959,9 +1840,7 @@ class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
   }
 }
 
-/// 服务配置等模态表单的玻璃容器；内容不重复折射，长表单由内容自身滚动。
 class NativeGlassDialog extends StatelessWidget {
-  /// title/content/actions 为标题、表单及操作列表，maxWidth 为最大宽度（点，默认表单宽度 568）；创建保持键盘和弹窗语义的对话框。
   const NativeGlassDialog({
     super.key,
     required this.title,
@@ -1974,8 +1853,6 @@ class NativeGlassDialog extends StatelessWidget {
   final List<Widget> actions;
   final double maxWidth;
 
-  /// 弹出统一规范的二次确认玻璃弹窗；title 为确认标题，message 为不可逆影响说明，
-  /// confirmLabel/cancelLabel 为主次按钮文案，destructive 为真时主按钮使用错误语义实底；返回用户是否确认。
   static Future<bool> confirm({
     required BuildContext context,
     required String title,
@@ -2012,12 +1889,10 @@ class NativeGlassDialog extends StatelessWidget {
     return confirmed == true;
   }
 
-  /// context 提供主题；返回宽度受限、带物理弹性入场且可容纳长表单的独立玻璃弹窗。
   @override
   Widget build(BuildContext context) => BouncyPresence(
     fromScale: 0.94,
     child: Dialog(
-      // 弹窗使用95%阅读底色，避免底层设置文字透过表单干扰阅读。
       backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
       insetPadding: const EdgeInsets.all(GlassMetrics.space24),
       child: ConstrainedBox(
@@ -2033,7 +1908,6 @@ class NativeGlassDialog extends StatelessWidget {
                 child: title,
               ),
               const SizedBox(height: GlassMetrics.space20),
-              // 弹窗表单内隐藏系统自动挂载的滚动条，避免与右侧按钮（如「恢复默认」）及输入边框重叠，仍保留正常滚动。
               Flexible(
                 child: ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context)
@@ -2056,9 +1930,7 @@ class NativeGlassDialog extends StatelessWidget {
   );
 }
 
-/// 页内统一语义提示横幅（#144）；集中呈现错误或提醒文案及可选重试操作。
 class NativeGlassBanner extends StatelessWidget {
-  /// message 为明确提示内容，isError 为真时使用错误语义色与图标，否则使用主题提示色与图标，action 为右侧可选内联操作。
   const NativeGlassBanner({
     super.key,
     required this.message,
@@ -2070,7 +1942,6 @@ class NativeGlassBanner extends StatelessWidget {
   final bool isError;
   final Widget? action;
 
-  /// context 提供明暗外观与强调色；返回具备 ≥ 4.5:1 前景对比度的语义横幅。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -2121,11 +1992,9 @@ class NativeGlassBanner extends StatelessWidget {
   }
 }
 
-/// Material默认将激活轨道增高2pt；统一轨道厚度使两侧均符合6pt规格。
 class _UniformSliderTrack extends RoundedRectSliderTrackShape {
   const _UniformSliderTrack();
 
-  /// 参数为Slider布局、状态和位置；仅取消激活轨道额外厚度，保留原生绘制/命中。
   @override
   void paint(
     PaintingContext context,
@@ -2154,19 +2023,15 @@ class _UniformSliderTrack extends RoundedRectSliderTrackShape {
   );
 }
 
-/// 强调色滑点：绘制白色圆点、轻投影与系统强调色描边，使滑点与轨道一体响应系统强调色（#67、#144）。
 class _AccentSliderThumbShape extends SliderComponentShape {
-  /// borderColor 为描边强调色，固定采用 GlassMetrics.sliderThumbRadius（8pt）。
   const _AccentSliderThumbShape({required this.borderColor});
 
   final Color borderColor;
 
-  /// isEnabled/isDiscrete 为控件可用与分段标记；返回固定 16×16 布局占用尺寸。
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
       const Size.fromRadius(GlassMetrics.sliderThumbRadius);
 
-  /// center 为滑点中心；依次绘制柔阴影、不透明白芯与 1.5pt 系统强调色外圈，禁用时淡出边框。
   @override
   void paint(
     PaintingContext context,
@@ -2206,18 +2071,13 @@ class _AccentSliderThumbShape extends SliderComponentShape {
   }
 }
 
-/// 五类窗口共用的语义主题；材料保持系统原生，内容区域以普通颜色保证可读性。
 abstract final class NativeGlassTheme {
-  /// a/b 为任意不透明色彩；按 WCAG 2.2 sRGB 相对亮度返回 1.0–21.0 对比度比值。
   static double contrastRatio(Color a, Color b) {
     final l1 = a.computeLuminance();
     final l2 = b.computeLuminance();
     return (math.max(l1, l2) + 0.05) / (math.min(l1, l2) + 0.05);
   }
 
-  /// accent 为强调色，foreground 为前景偏好（AccentForegrounds 或 #RRGGBB）；返回实底填充与前景色（#67、#144）。
-  /// 白色、黑色或自定义：实底保持原色，前景用所选颜色，对比度不作调整（设置页提示）。
-  /// 自动：白字达 4.5:1 用白字；否则浅亮强调色配深字 #1C1C1E；其余把实底向黑压暗到白字达标。
   static ({Color fill, Color foreground}) accentColorsFor(
     Color accent, {
     String foreground = AccentForegrounds.auto,
@@ -2228,7 +2088,6 @@ abstract final class NativeGlassTheme {
       return (fill: accent, foreground: Colors.white);
     }
     const darkInk = Color(0xFF1C1C1E);
-    // 浅亮强调色（如亮黄/绿/橙）保留原色配深字；中深色适度向黑压暗以维持白字。
     if (accent.computeLuminance() >= 0.27 &&
         contrastRatio(darkInk, accent) >= 4.5) {
       return (fill: accent, foreground: darkInk);
@@ -2249,22 +2108,18 @@ abstract final class NativeGlassTheme {
     return (fill: best, foreground: Colors.white);
   }
 
-  /// context 为主题内的位置；返回当前明暗外观下的原始系统强调色（用于选区框、滑块、焦点框与进度环，#142）。
   static Color accentOf(BuildContext context) =>
       Theme.of(context).extension<GlassAccent>()?.color ??
       Theme.of(context).colorScheme.primary;
 
-  /// context 为主题内的位置；返回用于选中实底按钮、滑块指示条与开态轨道的 ≥4.5:1 对比实底色。
   static Color accentFillOf(BuildContext context) =>
       Theme.of(context).extension<GlassAccent>()?.fill ??
       accentColorsFor(accentOf(context)).fill;
 
-  /// context 为主题内的位置；返回与 accentFillOf 配对的高对比前景文字或图标色。
   static Color onAccentOf(BuildContext context) =>
       Theme.of(context).extension<GlassAccent>()?.onAccent ??
       accentColorsFor(accentOf(context)).foreground;
 
-  /// base 为基础按钮样式，hoverOverlay/pressedOverlay 指定叠加色，focusedSide/restingSide 定义聚焦与常规描边。
   static ButtonStyle _withButtonStates(
     ButtonStyle base, {
     required Color overlayBase,
@@ -2289,8 +2144,6 @@ abstract final class NativeGlassTheme {
     ),
   );
 
-  /// brightness 为当前明暗模式，appearance 为视觉快照（取对应外观的系统强调色，默认系统蓝）；
-  /// 返回统一控件、输入框、卡片与弹窗的 Material 主题，accent 与 primary 只在这里定义（#67、#144）。
   static ThemeData data(
     Brightness brightness, [
     GlassAppearance appearance = const GlassAppearance(),
@@ -2315,13 +2168,10 @@ abstract final class NativeGlassTheme {
           outlineVariant: dark
               ? const Color(0xFF76767A)
               : const Color(0xFF848489),
-          // 文字与图标强调需要比实底更高的对比度：浅色向黑、深色向白混合（系统蓝时约 #005BC5 / #64ACFF）。
           primary: dark
               ? Color.lerp(accent, Colors.white, 0.35)
               : Color.lerp(accent, Colors.black, 0.25),
           onPrimary: dark ? Colors.black : Colors.white,
-          // 错误色取苹果红：深色 systemRed；浅色 systemRed（#FF3B30）作正文只有 3.3:1，
-          // 改用同色系高对比红 #D70015（5.0:1），白字放在其上同样达标（#67、#144）。
           error: dark ? const Color(0xFFFF453A) : const Color(0xFFD70015),
           onError: Colors.white,
         );
@@ -2362,7 +2212,6 @@ abstract final class NativeGlassTheme {
           height: GlassMetrics.captionLine / GlassMetrics.captionFont,
           color: colors.onSurfaceVariant,
         ),
-        // 字号只用 11 / 12 / 13 / 15 / 20 五级（#144 第 1 条）；bodyLarge 保持 13，Material 输入框与列表标题默认用它。
         labelSmall: text.copyWith(
           fontSize: GlassMetrics.statusFont,
           height: 16 / GlassMetrics.statusFont,
@@ -2386,7 +2235,6 @@ abstract final class NativeGlassTheme {
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.standard,
       splashFactory: NoSplash.splashFactory,
-      // 带行图标的列表行：16pt 图标列加 12pt 图文间距，文字与分组细线起点对齐（#67、#144）。
       listTileTheme: const ListTileThemeData(
         minLeadingWidth: GlassMetrics.rowIconSize,
         horizontalTitleGap: GlassMetrics.rowIconGap,
@@ -2616,10 +2464,7 @@ abstract final class NativeGlassTheme {
   }
 }
 
-/// 每个引擎仅持有视觉快照，业务设置仍归主引擎；改变主题不会替换表单或截图状态。
 class GlassAppearance {
-  /// mode 为 system/light/dark；opacity 为材料不透明度0.2–1，前景始终不透明；
-  /// accentLight/accentDark 为浅、深外观下的系统强调色，原生快照到达前为系统蓝（#142）。
   const GlassAppearance({
     this.mode = AppearanceModes.system,
     this.opacity = 0.8,
@@ -2632,12 +2477,10 @@ class GlassAppearance {
   final Color accentLight;
   final Color accentDark;
 
-  /// 强调色实底上的前景偏好（AccentForegrounds 或 #RRGGBB）。
   final String accentForeground;
   static final current = ValueNotifier(const GlassAppearance());
   static const channel = MethodChannel(ChannelNames.appearance);
 
-  /// map 为原生视觉快照（偏好与系统强调色）；校验边界后返回不可变配置，缺少强调色时抛出 FormatException。
   factory GlassAppearance.fromMap(Map<Object?, Object?> map) {
     final mode =
         map[PreferenceKeys.glassAppearance] as String? ??
@@ -2670,7 +2513,6 @@ class GlassAppearance {
     );
   }
 
-  /// 无参数；返回Material主题模式，跟随系统由Flutter现有亮度通知驱动。
   ThemeMode get themeMode => switch (mode) {
     AppearanceModes.light => ThemeMode.light,
     AppearanceModes.dark => ThemeMode.dark,
@@ -2678,21 +2520,16 @@ class GlassAppearance {
   };
 }
 
-/// 五类窗口共享的外观入口；专用视觉通道不覆盖任何业务通道的回调。
 class NativeGlassApp extends StatefulWidget {
-  /// home 为保留状态的业务根，title 为窗口语义名称；创建统一主题应用。
   const NativeGlassApp({super.key, required this.home, this.title = ''});
   final Widget home;
   final String title;
 
-  /// 无参数；返回仅订阅视觉偏好的状态，业务状态由home持有。
   @override
   State<NativeGlassApp> createState() => _NativeGlassAppState();
 }
 
-/// 订阅当前引擎视觉广播；dispose解除回调，不管理业务会话。
 class _NativeGlassAppState extends State<NativeGlassApp> {
-  /// 无参数；先注册广播再读取快照，不接管业务通道。
   @override
   void initState() {
     super.initState();
@@ -2706,7 +2543,6 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
     unawaited(_load());
   }
 
-  /// 无参数；读取本引擎启动时的视觉快照，返回加载完成的Future。
   Future<void> _load() async {
     final value = await GlassAppearance.channel
         .invokeMapMethod<Object?, Object?>(MethodNames.getAppearance);
@@ -2715,14 +2551,12 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
     }
   }
 
-  /// 无参数；解除当前引擎回调，不清除已保存偏好。
   @override
   void dispose() {
     GlassAppearance.channel.setMethodCallHandler(null);
     super.dispose();
   }
 
-  /// context 为当前引擎；仅重建主题与中文本地化委托，home的元素身份保持不变。
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<GlassAppearance>(
     valueListenable: GlassAppearance.current,
@@ -2741,49 +2575,38 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
   );
 }
 
-/// 把视觉广播传到已保留的子树，透明度更新不要求重建业务页面。
 class _GlassAppearanceScope
     extends InheritedNotifier<ValueNotifier<GlassAppearance>> {
-  /// child 为当前Navigator；订阅引擎视觉状态而不修改业务对象。
   _GlassAppearanceScope({required super.child})
     : super(notifier: GlassAppearance.current);
 }
 
-/// 标记单个原生材料的前景子树，避免共享控件重复折射。
 class _GlassMaterialScope extends InheritedWidget {
-  /// child为共享当前材料的内容；不保存业务状态。
   const _GlassMaterialScope({required super.child});
 
-  /// oldWidget为上次作用域；标记恒定，无需通知。
   @override
   bool updateShouldNotify(_GlassMaterialScope oldWidget) => false;
 }
 
-/// 主题携带的系统强调色（#142）；经 NativeGlassTheme.accentOf 读取，明暗切换时随主题插值，并派生满足 WCAG AA 的实底与前景色。
 class GlassAccent extends ThemeExtension<GlassAccent> {
-  /// color 为当前外观下解析的强调色，foreground 为实底前景偏好（AccentForegrounds 或 #RRGGBB）。
   const GlassAccent(this.color, {this.foreground = AccentForegrounds.auto});
   final Color color;
   final String foreground;
 
-  /// 无参数；返回选中实底颜色。
   Color get fill =>
       NativeGlassTheme.accentColorsFor(color, foreground: foreground).fill;
 
-  /// 无参数；返回与 fill 配对的前景色。
   Color get onAccent => NativeGlassTheme.accentColorsFor(
     color,
     foreground: foreground,
   ).foreground;
 
-  /// color/foreground 为替换值；返回新的强调色扩展。
   @override
   GlassAccent copyWith({Color? color, String? foreground}) => GlassAccent(
     color ?? this.color,
     foreground: foreground ?? this.foreground,
   );
 
-  /// other 为目标主题的扩展，t 为插值进度；返回颜色插值后的扩展，前景偏好过半时切换。
   @override
   GlassAccent lerp(covariant GlassAccent? other, double t) => other == null
       ? this

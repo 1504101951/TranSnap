@@ -20,7 +20,6 @@ import 'package:flutter/gestures.dart';
 
 import 'support/settings_pages.dart';
 
-/// 无参数；验证真实表单在菜单刷新时保留草稿，并阻止过期设置覆盖。
 void main() {
   testWidgets('菜单更新不会覆盖未保存编辑，显式重新加载才替换表单', (tester) async {
     const channel = MethodChannel(ChannelNames.settings);
@@ -77,7 +76,6 @@ void main() {
       (_) {},
     );
     await tester.pumpAndSettle();
-    // 草稿仍保留中文和开启的仅快捷键开关，不用检查通道调用次数代替用户结果。
     expect(
       tester
           .widget<NativeGlassSwitch>(find.byType(NativeGlassSwitch).first)
@@ -134,7 +132,6 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '快捷键');
-    // 先滚入视口再录制，避免点到不可命中区域。
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('全局翻译快捷键')),
       300,
@@ -175,7 +172,6 @@ void main() {
         return {...state, MethodNames.credentialIds: credentialIds};
       }
       if (call.method == MethodNames.testService) {
-        // 测试连接不得使主偏好提前包含新服务。
         expect(state[PreferenceKeys.services], isNull);
         return '你好，世界。';
       }
@@ -257,8 +253,6 @@ void main() {
   });
 
   testWidgets('侧边栏：点选二级行切换子页并显示标题，一级标签不切换，切换保留未保存草稿', (tester) async {
-    // 边界：「通用」「翻译」「截图」是只作标签的一级行，点击后仍停在当前子页；「MCP」本身是子页，「个性化」在「通用」之下；
-    // 标题与侧边栏同名，所以可见文字出现 2 次；快捷键页开启的开关在往返其他子页后仍为开启。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -291,7 +285,6 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
 
-    // 默认「权限与启动」子页：侧边栏行与标题各一处；登录与权限可见，其他子页内容不可见。
     expect(find.text('权限与启动'), findsNWidgets(2));
     expect(find.text('通用'), findsOneWidget);
     expect(find.text('登录时启动'), findsOneWidget);
@@ -318,7 +311,6 @@ void main() {
       expect(settingsSidebarRow(label), findsOneWidget);
     }
 
-    // 一级标签不可点：停留在「权限与启动」子页。
     await tester.tap(settingsSidebarRow('通用'));
     await tester.pumpAndSettle();
     await tester.tap(settingsSidebarRow('翻译'));
@@ -345,7 +337,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 在翻译一级行上点击仍停留在快捷键子页。
     await tester.tap(settingsSidebarRow('翻译'));
     await tester.pumpAndSettle();
     expect(find.text('仅使用快捷键'), findsOneWidget);
@@ -359,16 +350,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('/tmp/chosen'), findsOneWidget);
 
-    // 录制子页放置三个录制相关开关，不含截图目录。
     await openSettingsPage(tester, '录制');
     expect(find.text('实时翻译时同时录制'), findsOneWidget);
     expect(find.text('截图目录'), findsNothing);
 
-    // 操作子页放置区域截图快捷键。
     await openSettingsPage(tester, '操作');
     expect(find.byKey(const ValueKey('区域截图快捷键')), findsOneWidget);
 
-    // 工具栏子页直接展示网格编辑器，无需展开，也不弹出对话框，且只含可拼接功能（#141）。
     await openSettingsPage(tester, '工具栏');
     expect(find.byType(Dialog), findsNothing);
     expect(
@@ -391,7 +379,6 @@ void main() {
   });
 
   testWidgets('截图子页保存GIF帧率与最大宽度，留空恢复原宽且非法值不保存', (tester) async {
-    // 600是有效压缩上限；0非法、空值是不限制，保存后的重新加载必须保留用户选择。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -417,7 +404,6 @@ void main() {
     await tester.pumpWidget(const SettingsApp());
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '保存与导出');
-    // 截图目录行以「截图目录」为标题，未设置时说明行显示默认位置。
     expect(find.text('截图目录'), findsOneWidget);
     expect(find.text('系统图片目录/截图'), findsOneWidget);
     expect(find.text('每次询问'), findsNothing);
@@ -427,7 +413,6 @@ void main() {
     await tester.enterText(width, '600');
     await tester.pumpAndSettle();
     expect(settings[PreferenceKeys.gifMaximumWidth], 600);
-    // 输入框滚动后帧率下拉可能离开视口，点击前先滚入可见区域。
     await tester.ensureVisible(find.text('10 fps'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 fps'));
@@ -445,7 +430,6 @@ void main() {
       scrollable: settingsContentScrollable(),
     );
     expect(find.textContaining('最大宽度须为正整数'), findsOneWidget);
-    // 滚到底部提示后输入框可能已移出按需构建范围，反向滚回。
     await tester.scrollUntilVisible(
       width,
       -150,
@@ -463,8 +447,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('贴纸：添加时按原图比例给出默认大小，拖角缩小后保存；删除移除设置与文件（#103）', (tester) async {
-    // 边界：1000×500 的图默认 512×256pt；把右下角拖到预览中心右 50pt、下 10pt 处，宽度决定大小，长边变为
-    // 100/预览比例 ≈ 173pt（短于 512 但大于 16）；提交的 stickers 宽高与说明一致；删除后列表为空并请求删除文件。
     final png = await tester.runAsync(() async {
       final recorder = ui.PictureRecorder();
       Canvas(recorder).drawColor(const Color(0xFFFF0000), BlendMode.src);
@@ -521,7 +503,6 @@ void main() {
         .ancestor(of: handle, matching: find.byType(SizedBox))
         .first;
     final center = tester.getCenter(preview);
-    // 分步移动越过手势判定距离，最终指针在中心右 50pt、下 10pt：横向决定大小。
     final gesture = await tester.startGesture(tester.getCenter(handle));
     await gesture.moveBy(const Offset(-30, -30));
     await gesture.moveTo(center + const Offset(50, 10));
@@ -555,8 +536,6 @@ void main() {
   });
 
   testWidgets('翻译语言分段：切到输入翻译只修改输入翻译的一组语言，全局不变（#99）', (tester) async {
-    // 边界：全局 zh-CN/en，输入翻译未设置时显示复制的 zh-CN/en；切到「输入翻译」把次要语言改为日本語，
-    // 提交后输入翻译次要语言为 ja，全局次要语言仍为 en。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -597,9 +576,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('提示词：四个字段、恢复默认、空提示词不能保存，保存后自动提交提示词与思考开关', (tester) async {
-    // 边界：初始润色为自定义值时「恢复默认」可用，点击后回到默认值且按钮禁用；
-    // 纠错清空时显示「提示词不能为空。」且「保存」禁用；填回后保存，提交的偏好含四种提示词；
-    // 弹窗恰有翻译、润色、纠错、解释四个字段，只打开润色思考开关时只有 polishThinking 为 true。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -688,7 +664,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('截图子页确认动作：下拉只提供复制图片与复制并保存，选择后自动保存（#111）', (tester) async {
-    // 边界：缺省为复制图片；下拉恰好两项，选「复制并保存」后提交的偏好值为 copyAndSave。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -729,8 +704,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('术语表：管理弹窗内添加、编辑与删除即时自动保存，同一目标语言下重复时留在编辑弹窗提示', (tester) async {
-    // 边界：新增 api 与已有 API 只差大小写，视为重复；编辑条目本身不算与自己重复；
-    // 原文术语为空时「确定」不可用；译法留空显示为保留原文。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -764,7 +737,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('暂无术语'), findsOneWidget);
 
-    /// term/translation 为弹窗输入；打开添加弹窗、填写并点击确定。
     Future<void> add(String term, String translation) async {
       await tester.tap(find.text('添加术语'));
       await tester.pumpAndSettle();
@@ -781,7 +753,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// 无参数；返回已保存偏好中的术语表。
     List<Object?> saved() => state[PreferenceKeys.glossary] as List;
 
     await add('API', '应用接口');
@@ -827,7 +798,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('截图子页「长截图 → 滚动方式」默认手动滚动，选自动滚动后自动保存到偏好（#112）', (tester) async {
-    // 边界：偏好缺省时显示「手动滚动」；选「自动滚动」后偏好值为 automatic。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -870,7 +840,6 @@ void main() {
   testWidgets('截图录制页：指针开关默认关闭，点击特效下拉7项可选，右键与拖动区分默认开启并可自动保存（#105、#143）', (
     tester,
   ) async {
-    // 边界：缺省时截图包含指针为 false、点击特效为 off、区分右键为 true；切换下拉与开关后各自写入规范偏好值。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -960,8 +929,6 @@ void main() {
   testWidgets('默认翻译服务下拉固定先列谷歌翻译与 Apple 系统翻译，选中 Apple 保存内置 ID，服务列表不出现 Apple', (
     tester,
   ) async {
-    // 边界：已配置一个 OpenAI 服务；下拉恰为谷歌、Apple、OpenAI 三项且内置项在前；
-    // 选 Apple 后偏好为 apple-system；服务列表只含已配置服务，不含 Apple。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -1032,8 +999,6 @@ void main() {
   });
 
   testWidgets('通用子页显示语言包状态：查询中为检查中，成功显示说明，失败显示异常说明', (tester) async {
-    // 边界：通道未返回前显示「正在检查语言包…」；返回字符串时原样显示；
-    // 抛 PlatformException 时显示其 message，不显示检查中。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -1062,7 +1027,6 @@ void main() {
     expect(find.text('语言包已安装：English → 简体中文'), findsOneWidget);
     expect(find.text('正在检查语言包…'), findsNothing);
 
-    // 离开再回到通用子页会重新查询；这次以异常返回。
     reply = Completer<String>();
     await openSettingsPage(tester, '快捷键');
     await openSettingsPage(tester, '权限与启动');
@@ -1079,8 +1043,6 @@ void main() {
   });
 
   testWidgets('全局与输入快捷键录制状态隔离，切页取消录制且不阻塞非快捷键按钮（#144）', (tester) async {
-    // 作用：验证双快捷键各自独立展示等待提示、切页自动中止录制且丢弃迟到热键结果。
-    // 边界：点击「全局翻译快捷键」仅该钮变为等待态，离开到「通用」仍可申请权限，迟到回包不触发保存。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -1136,8 +1098,6 @@ void main() {
   });
 
   testWidgets('服务与排除应用空态提示、录屏特效联动禁用及 GIF 最大宽度就地校验（#144）', (tester) async {
-    // 作用：验证列表空态引导文案、关闭录屏点击特效时随动禁用衍生开关，以及 GIF 宽度就地内联报错。
-    // 边界：services 与 excludedApps 为空展示引导；off 态禁用「区分右键与拖动轨迹」；输入 0 展示内联 errorText。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -1205,8 +1165,6 @@ void main() {
   });
 
   testWidgets('快捷键按钮在字符宽度不同时保持统一最小宽度与左右对齐（#67）', (tester) async {
-    // 作用：验证全局翻译快捷键与输入翻译快捷键按钮在使用窄/宽不同字符标签时保持统一宽度与左右边界对齐。
-    // 边界：@ 与 ! 的字符宽度不同，按钮宽度均应 >= GlassMetrics.shortcutButtonMinWidth（128pt）且左右边缘差 <= 0.01pt。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;

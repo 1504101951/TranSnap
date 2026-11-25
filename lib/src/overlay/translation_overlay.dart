@@ -14,10 +14,7 @@ import '../selection/selection_session.dart';
 import 'dictionary_definition.dart';
 import '../translation/translation_types.dart';
 
-/// 当前选区的触发按钮和译文卡片；窗口位置由 macOS 管理。
 class TranslationOverlay extends StatefulWidget {
-  /// session 提供状态；三个无参回调分别翻译、关闭、拖动，onMode 切换处理模式，
-  /// speakingSource 指示外部朗读状态（true 原文/词典、false 译文、null 未朗读）；构造浮层内容。
   const TranslationOverlay({
     super.key,
     required this.session,
@@ -31,7 +28,6 @@ class TranslationOverlay extends StatefulWidget {
     this.speakingSource,
   });
 
-  /// 视觉按钮84×30，透明命中窗口额外提供上下各1pt点击空间。
   static const triggerSize = Size(84, 30);
   static const triggerWindowSize = Size(84, 32);
   final SelectionSession session;
@@ -40,19 +36,14 @@ class TranslationOverlay extends StatefulWidget {
   final VoidCallback onDrag;
   final ValueChanged<TextMode> onMode;
 
-  /// 卡片服务菜单选中的服务 id；用该服务重新处理当前原文，只影响本张卡片（#100）。
   final ValueChanged<String> onService;
 
-  /// source 为 true 时朗读原文栏，否则朗读结果栏；同一栏正在朗读时再次点击停止（#101）。
   final ValueChanged<bool> onSpeak;
 
-  /// 把当前单词、译文与词典释义加入生词本（#102）。
   final VoidCallback onAddVocabulary;
 
-  /// 外部受控朗读状态：true 原文/词典正在朗读，false 结果栏正在朗读，null 未朗读或由内部状态托管。
   final bool? speakingSource;
 
-  /// 模式菜单的选项名称，也是左栏标题；顺序即菜单顺序（#100）。
   static const modeLabels = {
     TextMode.translate: '翻译',
     TextMode.polish: '润色',
@@ -60,12 +51,10 @@ class TranslationOverlay extends StatefulWidget {
     TextMode.explain: '解释',
   };
 
-  /// 单栏卡片宽度、对照与词典布局宽度、卡片最大高度（#134 第 1 条）。
   static const singleWidth = 560.0;
   static const compareWidth = 720.0;
   static const maxHeight = 420.0;
 
-  /// 单栏卡片除正文外的固定高度：标题区 44、分隔线 0.5、正文上内边距 16、操作行上下各 4 与按钮命中 32（#134、#67 第 37 项）。
   static const singleChromeHeight =
       44 +
       0.5 +
@@ -73,8 +62,6 @@ class TranslationOverlay extends StatefulWidget {
       GlassMetrics.space4 * 2 +
       GlassMetrics.hitSize;
 
-  /// translated 为译文（或作为唯一正文的原文），dictionary 为词典布局左栏，single 为单栏布局；
-  /// 返回不含颜色的正文样式：单栏译文 15/22 w500、单栏原文 12/17、对照 15/22、词典左栏 15/22 w600（#134）。
   static TextStyle textStyleFor({
     required bool translated,
     required bool dictionary,
@@ -97,9 +84,6 @@ class TranslationOverlay extends StatefulWidget {
     );
   }
 
-  /// session 为当前会话，scaler 为系统文字缩放；返回卡片布局与窗口尺寸。
-  /// 只有一组段落配对、没有词典释义且单栏内容高度不超过 420 时为 560 宽单栏，高度按译文与原文实际行数计算；
-  /// 其余为 720×420 对照或词典布局。卡片与原生窗口尺寸共用这一判定（#134）。
   static ({bool single, Size size}) layoutFor(
     SelectionSession session,
     TextScaler scaler,
@@ -108,7 +92,6 @@ class TranslationOverlay extends StatefulWidget {
     final snap = session.snapshot;
     if (session.definition != null || snap.pairs.length > 1) return compare;
     const textWidth = singleWidth - GlassMetrics.space16 * 2;
-    // measure 按指定样式与宽度排版文字，返回所占高度。
     double measure(String text, TextStyle style, double width) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: style),
@@ -129,7 +112,6 @@ class TranslationOverlay extends StatefulWidget {
     if (session.sourceIsTarget) {
       content = measure(snap.sourceText, lead, textWidth);
     } else {
-      // 译文未到达时按骨架两行估算；原文占满内容宽度（#134 第 4 条）。
       final translated = snap.translatedText.isEmpty
           ? lead.height! * lead.fontSize! * 2
           : measure(snap.translatedText, lead, textWidth);
@@ -145,18 +127,15 @@ class TranslationOverlay extends StatefulWidget {
     return (single: true, size: Size(singleWidth, height));
   }
 
-  /// 无参数；创建只保存当前悬停段落的界面状态。
   @override
   State<TranslationOverlay> createState() => _TranslationOverlayState();
 }
 
-/// 根据会话呈现触发按钮或结果；持有段落悬停与轻量微交互状态，翻译由会话管理。
 class _TranslationOverlayState extends State<TranslationOverlay> {
   (String?, int)? _hoveredParagraph;
   TranslationPhase? _lastPhase;
   String? _lastSessionId;
   int _sweepCount = 0;
-  // 悬停卡片时底部操作行完全显示；悬停原文块或某一栏时，该处的朗读、复制按钮出现（#134）。
   bool _cardHovered = false;
   String? _hoveredPane;
   bool? _localSpeakingSource;
@@ -193,7 +172,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     setState(_syncSessionState);
   }
 
-  /// 会话标识或阶段跃迁时复位局部微交互态，并在完成翻译瞬间触发一次表面光学扫光（#142）。
   void _syncSessionState() {
     final phase = widget.session.snapshot.phase;
     final id = widget.session.sessionId;
@@ -214,12 +192,10 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     }
   }
 
-  /// context 提供主题；返回随会话更新的单按钮或结果卡片。
   @override
   Widget build(BuildContext context) {
     final snap = widget.session.snapshot;
     final definition = widget.session.definition;
-    // 已校验的语义段落成对展示；没有配对时整段作为一对。词典释义单独成栏。
     final pairs = snap.pairs.isEmpty
         ? [TranslationPair(snap.sourceText, snap.translatedText)]
         : snap.pairs;
@@ -227,7 +203,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       return const SizedBox.shrink();
     }
     if (snap.phase == TranslationPhase.trigger) {
-      // 触发态整块区域就是按钮，拖动手势胜出时不会误发翻译请求。
       return Center(
         child: BouncyPresence(
           key: ValueKey('trigger-${widget.session.sessionId}'),
@@ -251,7 +226,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   alignment: Alignment.center,
                   visualDensity: VisualDensity.standard,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  // 保留主题字体，让中文和系统字体设置使用同一套字形回退。
                   textStyle: Theme.of(context).textTheme.labelLarge!
                       .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
@@ -282,7 +256,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     final errorBannerText =
         snap.message ??
         (snap.phase == TranslationPhase.sizeLimited ? '选区过长' : '$modeLabel失败');
-    // 状态文字只在处理中与失败时出现；完成后标题区只留模式标签（#134）。
     final status = switch (snap.phase) {
       TranslationPhase.translating => '$modeLabel中…',
       TranslationPhase.failed =>
@@ -291,13 +264,11 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         statusInBanner ? '选区过长' : (snap.message ?? '选区过长'),
       _ => null,
     };
-    // 服务菜单：本卡片选用的服务，未选择时为默认服务（#100）。
     final choices = widget.session.serviceChoices();
     final currentService =
         widget.session.serviceOverride ??
         choices.firstWhere((choice) => choice.isDefault).id;
     final resultLabel = mode == TextMode.translate ? '译文' : modeLabel;
-    // layoutFor 与原生窗口尺寸共用同一判定：单栏、对照或词典（#134）。
     final single = TranslationOverlay.layoutFor(
       widget.session,
       MediaQuery.textScalerOf(context),
@@ -322,7 +293,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             dictionary: definition != null,
             failed: failed,
           );
-    // 首字到达时加载骨架 120ms 淡出，不与逐字显影同时出现（#142 第 2 条）。
     final revealedResult = AnimatedSwitcher(
       duration: AppMotion.reduced(context)
           ? Duration.zero
@@ -342,7 +312,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       dictionary: definition != null,
       failed: false,
     );
-    // 原文已是目标语言时只有原文；朗读与复制都作用于原文（#134 第 5 条）。
     final sourceOnly = widget.session.sourceIsTarget;
     final Widget body;
     if (single) {
@@ -374,7 +343,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ),
       );
     } else if (definition != null) {
-      // 词典布局：左 2/5 上下分屏（译文、原文），右 3/5 词典；栏头只有栏名（#134 第 7 条）。
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -416,7 +384,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ],
       );
     } else {
-      // 对照布局：左译文右原文各半，原文复制与朗读沉到底部操作行右侧（#134 第 5 条）。
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -430,7 +397,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ],
       );
     }
-    // 底部操作行默认 55% 不透明度，悬停卡片时完全显示（#134 第 6 条）。
     final primaryText = sourceOnly ? snap.sourceText : snap.translatedText;
     final footer = AnimatedOpacity(
       opacity: _cardHovered ? 1 : 0.55,
@@ -447,7 +413,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         child: Row(
           spacing: GlassMetrics.space4,
           children: [
-            // 左侧为当前结果（译文或润色等）的复制与朗读，命名成对；原文已是目标语言时作用于原文（#67、#101）。
             _FooterAction(
               key: const ValueKey('card-copy'),
               icon: CopyConfirmIcon(
@@ -469,7 +434,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   : '朗读$resultLabel',
               onPressed: primaryText.isEmpty ? null : () => _speak(sourceOnly),
             ),
-            // 查到释义且翻译完成后可加入生词本；本卡片加入后改为已加入并禁用（#102）。
             if (definition != null && snap.phase == TranslationPhase.completed)
               _FooterAction(
                 key: const ValueKey('card-vocabulary'),
@@ -482,7 +446,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                     ? null
                     : widget.onAddVocabulary,
               ),
-            // 右侧原文组：11pt 组名「原文」与两个只有图标的按钮，悬停提示说明作用（#67）。
             if (!sourceOnly) ...[
               const Spacer(),
               Text(
@@ -538,7 +501,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 44pt 标题区保留玻璃材料，左右内边距 8：标签与关闭按钮到卡片边缘都是 8（#134 第 2 条）。
                 SizedBox(
                   height: 44,
                   child: Padding(
@@ -551,7 +513,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                           value: mode,
                           onChanged: busy ? null : widget.onMode,
                         ),
-                        // 标题区空白整块可拖动，不显示拖动手柄；状态只在处理中与失败时出现。
                         Expanded(
                           child: MouseRegion(
                             cursor: SystemMouseCursors.move,
@@ -602,7 +563,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                             ),
                             label: const Text('重试'),
                           ),
-                        // 服务菜单为次级文字菜单；润色、纠错、解释只列模型服务与当前服务，处理中禁用（#100）。
                         NativeGlassMenuButton<String>(
                           quiet: true,
                           value: currentService,
@@ -630,7 +590,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   ),
                 ),
                 const Divider(height: 0.5, thickness: 0.5),
-                // 正文使用 95% 不透明阅读底色，不随窗口透明度变化，来源应用的内容不会透出。
                 Expanded(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -663,7 +622,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
   }
 
-  /// paneKey 为复制反馈槽位，text 为要复制的全文；写入剪贴板并触发该槽位的打勾反馈，无返回值。
   void _copy(String paneKey, String text) {
     Clipboard.setData(ClipboardData(text: text));
     setState(() {
@@ -671,11 +629,9 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     });
   }
 
-  /// source 为朗读原文（true）或结果（false）；返回该段是否正在朗读，外部受控状态优先。
   bool _speaking(bool source) =>
       (widget.speakingSource ?? _localSpeakingSource) == source;
 
-  /// source 为朗读原文（true）或结果（false）；同一段正在朗读时再次点击停止，交给外部朗读并在本地记录状态，无返回值。
   void _speak(bool source) {
     if (widget.speakingSource == null) {
       setState(() {
@@ -685,8 +641,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     widget.onSpeak(source);
   }
 
-  /// title 为栏名（也是悬停标识），body 为可滚动正文，actions 为悬停该栏时在栏名右侧出现的按钮；
-  /// 返回 28pt 栏头加独立滚动正文的一栏（对照与词典布局）。
   Widget _pane({
     required String title,
     required Widget body,
@@ -721,7 +675,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         ),
         Expanded(
           child: SingleChildScrollView(
-            // 结果栏分栏独立滚动，不争抢父级 PrimaryScrollController。
             primary: false,
             padding: const EdgeInsets.only(
               left: GlassMetrics.space16,
@@ -741,9 +694,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
   }
 
-  /// pairs 为已校验的段落配对，translated 选择译文（true）或原文（false），dictionary 为词典布局（左栏加粗），
-  /// failed 触发失败轻抖，lead 表示原文作为唯一正文（原文已是目标语言）；
-  /// 返回段间距 8pt 的段落列，悬停译文段落时高亮对应原文段落。
   Widget _paragraphs(
     List<TranslationPair> pairs, {
     required bool translated,
@@ -752,7 +702,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     bool lead = false,
   }) {
     final colors = Theme.of(context).colorScheme;
-    // 译文与对照、词典布局正文 15/22（词典左栏 w600）；单栏的原文为 12/17 次要色（#134）。
     final style =
         TranslationOverlay.textStyleFor(
           translated: translated || lead,
@@ -772,7 +721,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
       spacing: 8,
       children: [
         for (var index = 0; index < pairs.length; index++)
-          // 成功的译文逐字显影（CharReveal，#142）；原文与失败段沿用逐段入场与失败轻抖。
           if (translated && !failed)
             MouseRegion(
               key: ValueKey('${widget.session.sessionId}-reveal-$index'),
@@ -824,10 +772,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
   }
 }
 
-/// 卡片中的图标按钮：中心绘制 visual×visual 的可见按钮，外围 32×32 命中区同样触发动作。
 class _CardButton extends StatelessWidget {
-  /// tooltip 为提示与可访问名，icon 为图标组件，onPressed 为空表示禁用；
-  /// visual、radius、iconSize 为可见尺寸、圆角与图标边长。
   const _CardButton({
     super.key,
     required this.tooltip,
@@ -845,17 +790,14 @@ class _CardButton extends StatelessWidget {
   final double radius;
   final double iconSize;
 
-  /// 是否带独立玻璃材料；标题区关闭按钮为无底图标按钮（#134 第 2 条）。
   final bool material;
 
-  /// context 未使用；返回 32×32 命中区与居中的按钮。
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: GlassMetrics.hitSize,
     child: Stack(
       alignment: Alignment.center,
       children: [
-        // 可见按钮外的扩展命中区，排除重复语义，由上层可见按钮承担悬停、按压与提示。
         Positioned.fill(
           child: GestureDetector(
             excludeFromSemantics: true,
@@ -883,16 +825,12 @@ class _CardButton extends StatelessWidget {
   );
 }
 
-/// 标题区模式分段标签：翻译、润色、纠错、解释四个纯文字标签（#100、#134）。
-/// 高 28、圆角 8、左右内边距 8，与卡片左缘间距 8 使首个标签文字对齐正文左缘 16。
 class _ModeTabs extends StatelessWidget {
-  /// value 为当前模式，onChanged 为切换回调，处理中为空表示禁用。
   const _ModeTabs({required this.value, required this.onChanged});
 
   final TextMode value;
   final ValueChanged<TextMode>? onChanged;
 
-  /// context 提供主题；返回间距 2 的标签行，选中项 w600 与浅色 5% / 深色 8% 底。
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -937,9 +875,7 @@ class _ModeTabs extends StatelessWidget {
   }
 }
 
-/// 底部操作行按钮：14pt 图标加 12pt 次要色文字，可见高 24、命中高 32、左右内边距 8、圆角 6（#134 第 6 条）。
 class _FooterAction extends StatelessWidget {
-  /// icon 为图标组件，label 为文字与可访问名，onPressed 为空表示禁用。
   const _FooterAction({
     super.key,
     required this.icon,
@@ -951,14 +887,12 @@ class _FooterAction extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
 
-  /// context 提供主题；返回 32pt 高命中区内居中的 24pt 文字按钮。
   @override
   Widget build(BuildContext context) => SizedBox(
     height: GlassMetrics.hitSize,
     child: Stack(
       alignment: Alignment.center,
       children: [
-        // 可见按钮上下各 4pt 的扩展命中区，排除重复语义。
         Positioned.fill(
           child: GestureDetector(
             excludeFromSemantics: true,

@@ -12,9 +12,7 @@ import '../translation/translation_types.dart';
 import 'app_settings.dart';
 import 'service_config.dart';
 
-/// 主引擎的唯一设置所有者；串行提交偏好和凭据，系统成功后才公开新快照。
 class SettingsController {
-  /// initial为已加载偏好，platform提供系统事务，onSaved接收提交后的独立副本；构造复制偏好但不写入系统。
   SettingsController({
     required AppSettings initial,
     required this.platform,
@@ -28,13 +26,10 @@ class SettingsController {
   Future<void> _queue = Future.value();
   String? error;
 
-  /// 无参数；返回最近一次提交的独立偏好副本，外部编辑必须经过提交队列才生效。
   AppSettings get current => AppSettings.fromMap(_current.toMap());
 
-  /// 无参数；返回普通配置、修订号与凭据存在状态，不向附属引擎公开密钥。
   Future<Map<String, Object>> _snapshot() async => {
     ..._current.toMap(),
-    // toMap中的排除项仍是可变字典；协议快照不得暴露内部配置引用。
     PreferenceKeys.excludedApps: Map<String, String>.of(_current.excludedApps),
     'revision': _revision,
     MethodNames.credentialIds: await platform.credentialIds(
@@ -43,12 +38,10 @@ class SettingsController {
     'error': ?error,
   };
 
-  /// candidate为完整偏好，drafts按服务ID表示凭据修改；成功提交后返回新快照，失败保留当前配置。
   Future<Map<String, Object>> _save(
     AppSettings candidate,
     Map<String, Map<String, String>?> drafts,
   ) async {
-    // validate检查完整配置，prepareCredentialChanges只准备当前事务所需的凭据变更。
     candidate.validate();
     final credentials = await prepareCredentialChanges(
       previous: _current.services,
@@ -56,23 +49,18 @@ class SettingsController {
       drafts: drafts,
       readCredentials: platform.readCredentials,
     );
-    // applySettings原子提交系统偏好和凭据；成功前不改变主引擎状态。
     await platform.applySettings(candidate.toMap(), credentials: credentials);
-    // onSaved只取得副本，通知接收方不能绕过提交队列改写本次配置。
     onSaved(AppSettings.fromMap(candidate.toMap()));
     _current = candidate;
     error = null;
     _revision += 1;
-    // _snapshot仅暴露已提交配置和凭据存在状态。
     return _snapshot();
   }
 
-  /// call为普通设置、绘图偏好、菜单开关或服务测试请求；返回所属操作结果，错误不阻断后续提交。
   Future<Object?> handle(MethodCall call) {
     final operation = _queue.then<Object?>((_) async {
       switch (call.method) {
         case MethodNames.getSettings:
-          // _snapshot读取同一队列内已提交的修订号和配置。
           return _snapshot();
         case MethodNames.saveSettings:
           final map = Map<Object?, Object?>.from(call.arguments as Map);
@@ -89,7 +77,6 @@ class SettingsController {
             ),
           );
           try {
-            // _save统一校验和系统提交，表单只提供完整草稿。
             return await _save(AppSettings.fromMap(map), drafts);
           } on FormatException catch (error) {
             throw PlatformException(
@@ -98,7 +85,6 @@ class SettingsController {
             );
           }
         case MethodNames.saveDrawingPreferences:
-          // _save在队列执行时合并最新快照，绘图提交不会覆盖其他设置。
           return _save(
             AppSettings.fromMap({
               ..._current.toMap(),
@@ -107,7 +93,6 @@ class SettingsController {
             {},
           );
         case MethodNames.saveRecordingOptions:
-          // 截图工具栏「录制选项」与设置页共用同一组偏好，经同一队列合并最新快照提交（#129、#143）。
           final options = call.arguments as Map;
           return _save(
             AppSettings.fromMap({
@@ -120,7 +105,6 @@ class SettingsController {
             {},
           );
         case MethodNames.toggleAutomatic:
-          // _save使用当前开关状态，连续菜单请求按顺序产生独立修订。
           return _save(
             AppSettings.fromMap({
               ..._current.toMap(),
@@ -129,16 +113,13 @@ class SettingsController {
             {},
           );
         case MethodNames.testService:
-          // _testService负责完整连接测试；队列仅等待结果，不持有流式响应处理。
           return _testService(call.arguments);
         case MethodNames.checkSystemTranslation:
-          // _checkSystemTranslation 只查询语言包状态，不发起翻译。
           return _checkSystemTranslation();
         default:
           throw MissingPluginException('未知设置操作：${call.method}');
       }
     });
-    // 当前请求的错误仍返回调用方，队列尾部吸收错误以允许下一次修正。
     _queue = operation.then<void>(
       (_) {},
       onError: (Object error, StackTrace stack) {},
@@ -146,7 +127,6 @@ class SettingsController {
     return operation;
   }
 
-  /// arguments含服务配置和临时凭据；返回完整测试译文，不写入配置、凭据或历史。
   Future<String> _testService(Object? arguments) async {
     final map = Map<Object?, Object?>.from(arguments as Map);
     final config = ServiceConfig.fromMap(
@@ -156,18 +136,15 @@ class SettingsController {
       ...await platform.readCredentials(config.id),
       ...Map<String, String>.from(map['credentials'] as Map),
     };
-    // 测试连接使用已提交的翻译提示词与思考开关，与实际翻译一致。
     final provider = ApiTranslationProvider(
       config: config,
       credentials: () async => credentials,
       prompt: _current.prompts[TextMode.translate]!,
       thinking: _current.thinking[TextMode.translate]!,
-      // 与正式翻译一致，按待测配置的双语对照开关请求。
       semanticPairs: config.semanticPairs,
     );
     final result = StringBuffer();
     var completed = false;
-    // translate只测试示例文本；不写入设置、Keychain或翻译历史。
     await for (final event in provider.translate(
       const TranslationRequest(
         sourceText: 'Hello world.',
@@ -196,19 +173,15 @@ class SettingsController {
     return result.toString();
   }
 
-  /// 无参数；按已提交的主次语言查询 Apple 系统翻译语言包安装状态，不发起翻译。
-  /// 返回已安装语言对的说明；有不支持或未安装的语言对时抛出带下载位置的测试失败。
   Future<String> _checkSystemTranslation() async {
     final direction = _current.direction;
     final primary = direction.primaryCode;
     final secondary = direction.secondaryCode;
-    // 设置了次要语言时检查双向；否则检查测试文本 Hello world. 的语言对（英文译为主要语言）。
     final pairs = [
       if (secondary != null) ...[(primary, secondary), (secondary, primary)],
       if (secondary == null && primary != 'en') ('en', primary),
     ];
     if (pairs.isEmpty) return '主要语言为英文且未设置次要语言，翻译时按原文语言检查语言包。';
-    // statuses 只查询系统语言包状态，不触发下载。
     final statuses = await AppleTranslationProvider().statuses(pairs);
     final labels = [
       for (final (source, target) in pairs)

@@ -12,10 +12,7 @@ import '../translation/language_direction.dart';
 import '../translation/segmented_translation.dart';
 import '../translation/translation_types.dart';
 
-/// Dart 侧选区会话。激活前不请求翻译服务。
 class SelectionSession extends ChangeNotifier {
-  /// provider/detectLanguage/language 为默认服务、设备语言识别与全局翻译方向；inputLanguage/inputProvider 为输入翻译方向与服务，
-  /// 省略时分别与 language、provider 相同；lookupDefinition 查询词典释义，省略时不查词典。
   SelectionSession({
     required this.provider,
     required this.detectLanguage,
@@ -29,18 +26,14 @@ class SelectionSession extends ChangeNotifier {
            inputLanguage ?? language ?? LanguageDirection.systemDefault(),
        lookupDefinition = lookupDefinition ?? _noDefinition;
 
-  /// text 为待查文字；未接入词典时始终返回 null。
   static Future<String?> _noDefinition(String text) async => null;
 
-  /// 1–3 个拉丁字母词（可含连字符与撇号），由单个空格分隔。
   static final _latinTerm = RegExp(
     r"^[A-Za-z][A-Za-z'’-]*(?: [A-Za-z][A-Za-z'’-]*){0,2}$",
   );
 
-  /// 1–4 个汉字。
   static final _cjkTerm = RegExp(r'^[\u4e00-\u9fff]{1,4}$');
 
-  /// text 为原文；去首尾空白后为 1–3 个拉丁字母词且不超过 40 个字符，或为 1–4 个汉字时返回 true（#102）。
   static bool isDictionaryTerm(String text) {
     final term = text.trim();
     return term.length <= 40 &&
@@ -49,57 +42,41 @@ class SelectionSession extends ChangeNotifier {
 
   static const selectionLimit = TextLimits.translationInput;
 
-  // 设置更新供下一次翻译使用；已激活的请求保留自己的服务与语言方向。
   TranslationProvider provider;
   LanguageDirection language;
 
-  /// 输入翻译快捷键使用的语言方向，与全局翻译隔离（#99）。
   LanguageDirection inputLanguage;
 
-  /// 输入翻译快捷键使用的服务，与 provider 同为默认服务但不使用双语段落对照。
   TranslationProvider inputProvider;
 
-  /// 当前会话是否由输入翻译快捷键发起；激活时据此选择语言方向（#99）。
   bool _input = false;
 
-  /// 本会话读不到文字的原因（SelectionReadFailures）；null 表示没有可说明的原因。
   String? _readFailure;
   final Future<String?> Function(String text) detectLanguage;
 
-  /// 查询 macOS 词典释义；查不到返回 null。
   final Future<String?> Function(String text) lookupDefinition;
 
-  /// 翻译模式下查到的词典释义；为 null 时卡片按普通双语对照展示。
   String? definition;
 
-  /// 本卡片的单词是否已加入生词本；新选区或重新处理时清除，由 markSavedToVocabulary 置位。
   bool savedToVocabulary = false;
 
   TranslationSnapshot snapshot = TranslationSnapshot.idle;
   String? sessionId;
 
-  /// 卡片当前的处理模式；新选区回到翻译，切换模式对同一原文重新处理（#100）。
   TextMode mode = TextMode.translate;
 
-  /// mode 为润色、纠错或解释；返回按已提交设置构造的模型服务，默认服务不是模型服务时返回 null。
   TranslationProvider? Function(TextMode mode) assistProviderFor = (_) => null;
 
-  /// serviceId 为卡片服务菜单选中的服务，mode 为处理模式；返回该服务的 Provider，
-  /// 非翻译模式下服务不是模型服务时返回 null（#100）。
   TranslationProvider? Function(String serviceId, TextMode mode)
   serviceProviderFor = (_, _) => null;
 
-  /// 无参数；返回生成已提交服务菜单的回调，其结果为有序服务选项列表（#100）。
   List<ServiceChoice> Function() get serviceChoices => _serviceChoices;
 
-  /// value 为无参数且返回已提交服务列表的回调；替换后刷新卡片菜单，保留会话与结果，无返回值。
   set serviceChoices(List<ServiceChoice> Function() value) {
     _serviceChoices = value;
-    // 服务配置提交不改变当前翻译结果，但已有菜单必须同步删除或新增的选项。
     notifyListeners();
   }
 
-  /// 未接入设置时只有默认的谷歌翻译，回调由唯一设置持有者替换。
   List<ServiceChoice> Function() _serviceChoices = () => const [
     (
       id: ServiceConfig.builtinId,
@@ -109,32 +86,24 @@ class SelectionSession extends ChangeNotifier {
     ),
   ];
 
-  /// 本卡片在服务菜单中选用的服务；null 表示使用默认服务，新选区清空（#100）。
   String? serviceOverride;
 
-  /// 当前卡片使用的服务不是模型服务时，非翻译模式的失败说明。
   static const assistUnavailable =
       '润色、纠错与解释需要模型服务（OpenAI、DeepSeek 或 Anthropic）；可在卡片上切换服务，或把默认翻译服务设为模型服务。';
 
-  /// 无参数；返回当前是否为需要显式关闭的展开卡片。
   bool get isExpanded =>
       snapshot.phase != TranslationPhase.idle &&
       snapshot.phase != TranslationPhase.trigger;
 
-  /// 活跃请求与服务冻结到重试完成，不受期间设置修改影响。
   TranslationProgress? _progress;
   TranslationProvider? _activeProvider;
   LanguageDirection? _activeLanguage;
 
-  /// 无参数；返回当前失败是否有可恢复的分片请求。
   bool get canRetry =>
       snapshot.phase == TranslationPhase.failed && _progress != null;
 
-  /// 无参数；返回本会话实际服务，供成功历史使用。
   TranslationProvider get activeProvider => _activeProvider ?? provider;
 
-  /// serviceIds 为提交后仍存在的自定义服务 ID；当前展开会话依赖的服务被删除时取消并清空会话，
-  /// 返回需要关闭的原生会话 ID；内置服务或仍存在的服务返回 null。
   String? dismissIfServiceRemoved(Set<String> serviceIds) {
     if (!isExpanded) return null;
     final selected = serviceOverride ?? activeProvider.id;
@@ -144,18 +113,14 @@ class SelectionSession extends ChangeNotifier {
       return null;
     }
     final closedId = sessionId;
-    // dismiss 取消正在进行的请求并清空卡片；后续 begin 使用已提交的默认服务。
     dismiss();
     return closedId;
   }
 
-  /// 无参数；返回本会话冻结语言方向，供重试和成功历史使用。
   LanguageDirection get activeLanguage => _activeLanguage ?? language;
 
-  /// 无参数；返回当前请求的输出语言（翻译为目标语言，解释为主要语言，润色与纠错为原文语言），未发出请求时为 null。
   String? get outputLanguage => _progress?.request.targetLanguage;
 
-  /// 无参数；返回翻译模式下原文是否已是目标语言，此时卡片只显示原文一栏（#134）。
   bool get sourceIsTarget {
     final target = outputLanguage;
     return mode == TextMode.translate &&
@@ -167,9 +132,6 @@ class SelectionSession extends ChangeNotifier {
   StreamSubscription<TranslationEvent>? _translation;
   Completer<void>? _completion;
 
-  /// sessionId 标识选区，text 为已读原文；awaitSelection 允许键盘手势先显示按钮，点击后补读；
-  /// input 表示由输入翻译快捷键发起，激活时使用输入翻译的语言方向（#99）；
-  /// readFailure 为原生说明的读不到文字原因（SelectionReadFailures），决定空原文的失败说明。
   void begin({
     required String sessionId,
     required String? text,
@@ -180,10 +142,8 @@ class SelectionSession extends ChangeNotifier {
     this.sessionId = sessionId;
     _input = input;
     _readFailure = readFailure;
-    // 新选区结束旧请求，避免后台继续消耗连接；模式回到翻译。
     _cancelTranslation();
     mode = TextMode.translate;
-    // 服务菜单的选择只属于上一张卡片。
     serviceOverride = null;
     if (!awaitSelection && (text == null || text.trim().isEmpty)) {
       snapshot = TranslationSnapshot.idle;
@@ -198,14 +158,11 @@ class SelectionSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// readSelection 可在明确激活后补读原文；返回翻译结束或会话被取消时完成的 Future。
   Future<void> activate({Future<String?> Function()? readSelection}) async {
     if (snapshot.phase != TranslationPhase.trigger) return;
 
     final generation = _generation;
-    // 输入翻译使用不含段落对照的服务，其余入口使用默认服务。
     final activeProvider = _activeProvider = _input ? inputProvider : provider;
-    // 输入翻译使用独立的语言方向，其余入口使用全局翻译方向（#99）。
     final activeLanguage = _activeLanguage = _input ? inputLanguage : language;
     var source = snapshot.sourceText;
     snapshot = TranslationSnapshot(
@@ -219,7 +176,6 @@ class SelectionSession extends ChangeNotifier {
       if (readSelection != null) {
         final text = await readSelection();
         if (generation != _generation) return;
-        // 不发送失效选区的缓存；空读取由下方失败卡片统一说明。
         source = text ?? '';
         snapshot = TranslationSnapshot(
           phase: TranslationPhase.translating,
@@ -247,23 +203,16 @@ class SelectionSession extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // _translateSource 校验原文、识别语言并按当前模式发起请求。
     await _translateSource(source, generation, activeProvider, activeLanguage);
   }
 
-  /// mode 为目标处理模式；对卡片当前原文重新处理，翻译进行中或未展开时忽略，返回完成或取消的 Future。
   Future<void> switchMode(TextMode mode) => _reprocess(mode, serviceOverride);
 
-  /// serviceId 为卡片服务菜单选中的服务；用该服务按当前模式重新处理当前原文，只影响本张卡片，
-  /// 返回处理结束的 Future（#100）。
   Future<void> switchService(String serviceId) => _reprocess(mode, serviceId);
 
-  /// mode 为目标处理模式，serviceId 为本卡片选用的服务（null 为默认服务）；取消进行中的请求后，
-  /// 用对应 Provider 对当前原文重新处理；服务不支持该模式时显示失败说明，返回处理结束的 Future。
   Future<void> _reprocess(TextMode mode, String? serviceId) async {
     if (!isExpanded || snapshot.phase == TranslationPhase.translating) return;
     final source = snapshot.sourceText;
-    // 语言方向沿用本卡片冻结的设置，服务按目标模式与卡片选择取得。
     final language = activeLanguage;
     _cancelTranslation();
     this.mode = mode;
@@ -295,19 +244,15 @@ class SelectionSession extends ChangeNotifier {
     await _translateSource(source, generation, provider, language);
   }
 
-  /// source 为已读取的原文，generation 为发起时代次，provider/language 为冻结的服务与方向。
-  /// 校验空文本与长度上限，识别语言并按当前模式确定目标语言后运行请求；返回完成或取消的 Future。
   Future<void> _translateSource(
     String source,
     int generation,
     TranslationProvider provider,
     LanguageDirection language,
   ) async {
-    // 候选按钮尚未取得文字时不能产生空文本请求。
     if (source.trim().isEmpty) {
       snapshot = snapshot.copyWith(
         phase: TranslationPhase.failed,
-        // 焦点为密码框时说明不读取密码，其余情况提示重新选择（#1）。
         message: _readFailure == SelectionReadFailures.secureField
             ? '密码框中的文字不会被读取。'
             : '未读取到选中文字，请重新选择后使用翻译快捷键。',
@@ -337,7 +282,6 @@ class SelectionSession extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // 设备识别是异步桥调用；等待期间换选区或关闭不能发出旧请求。
     if (generation != _generation) return;
     final direction = language.resolve(detected);
     snapshot = snapshot.copyWith(detectedLanguage: direction.detectedLanguage);
@@ -346,31 +290,25 @@ class SelectionSession extends ChangeNotifier {
       detectedLanguage: direction.detectedLanguage,
       targetLanguage: switch (mode) {
         TextMode.translate => direction.targetLanguage,
-        // 解释给用户自己看，使用主要语言。
         TextMode.explain => language.primaryCode,
-        // 润色与纠错保持原文语言；无法识别时按主要语言处理。
         TextMode.polish || TextMode.correct =>
           direction.detectedLanguage ??
               LanguageDirection.normalize(language.primaryCode),
       },
     );
 
-    // 翻译模式下的单词或短语同时查询词典，释义与译文各自到达，互不阻塞。
     if (mode == TextMode.translate && isDictionaryTerm(source)) {
       unawaited(_lookup(source.trim(), generation));
     }
     _progress = TranslationProgress(request);
-    // 共享运行路径让初次翻译、模式切换和失败恢复遵循同一个取消、配对和完成边界。
     await _runTranslation(provider, _progress!);
   }
 
-  /// 无参数；标记本卡片单词已加入生词本并刷新卡片按钮，无返回值。
   void markSavedToVocabulary() {
     savedToVocabulary = true;
     notifyListeners();
   }
 
-  /// term 为去空白的原文，generation 为发起时代次；查到释义且会话未变时更新卡片，返回查询结束的 Future。
   Future<void> _lookup(String term, int generation) async {
     final found = await lookupDefinition(term);
     if (generation != _generation || found == null) return;
@@ -378,7 +316,6 @@ class SelectionSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 无参数；保留完整片并重新请求失败片，返回完成或取消的 Future。
   Future<void> retry() async {
     if (!canRetry) return;
     final progress = _progress!;
@@ -389,12 +326,10 @@ class SelectionSession extends ChangeNotifier {
     );
     notifyListeners();
     await _translation?.cancel();
-    // 取消订阅期间关闭/换选区不允许重启旧请求。
     if (!identical(progress, _progress)) return;
     await _runTranslation(_activeProvider!, progress);
   }
 
-  /// activeProvider 和 progress 为冻结服务及本次请求检查点；返回结束或取消的 Future。
   Future<void> _runTranslation(
     TranslationProvider activeProvider,
     TranslationProgress progress,
@@ -402,7 +337,6 @@ class SelectionSession extends ChangeNotifier {
     final generation = _generation;
     final completion = Completer<void>();
     _completion = completion;
-    // 保存真实流订阅，使关闭会话能即时取消 Provider 的网络连接。
     _translation =
         translateSegmented(
           activeProvider.translate,
@@ -417,7 +351,6 @@ class SelectionSession extends ChangeNotifier {
                 snapshot = snapshot.copyWith(
                   phase: TranslationPhase.translating,
                   translatedText: snapshot.translatedText + addition,
-                  // 恢复期间仍显示正在增长的统一结果，不能让旧完整配对遮住新片增量。
                   pairs: const [],
                   message: null,
                 );
@@ -436,7 +369,6 @@ class SelectionSession extends ChangeNotifier {
                 );
             }
             notifyListeners();
-            // 完整业务结果已经确定，不把历史提交拖到网络订阅清理之后。
             if ((event is TranslationCompleted ||
                     event is TranslationFailure) &&
                 !completion.isCompleted) {
@@ -454,9 +386,7 @@ class SelectionSession extends ChangeNotifier {
     await completion.future;
   }
 
-  /// 无参数；取消请求并清空当前选区，无返回值。
   void dismiss() {
-    // 关闭会话即停止请求，迟到事件仍由 generation 拦截。
     _cancelTranslation();
     sessionId = null;
     serviceOverride = null;
@@ -464,10 +394,8 @@ class SelectionSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 无参数；取消当前流并完成调用方等待，递增代次拒绝迟到事件，无返回值。
   void _cancelTranslation() {
     _generation += 1;
-    // 释义与生词状态属于被取消的这次处理；重新翻译时重新查询。
     definition = null;
     savedToVocabulary = false;
     _progress = null;
@@ -480,7 +408,6 @@ class SelectionSession extends ChangeNotifier {
     if (completion != null && !completion.isCompleted) completion.complete();
   }
 
-  /// 无参数；释放会话时取消网络订阅，无返回值。
   @override
   void dispose() {
     _cancelTranslation();

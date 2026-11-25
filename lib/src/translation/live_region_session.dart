@@ -11,16 +11,6 @@ import 'live_block_cache.dart';
 import 'translation_http.dart';
 import 'translation_types.dart';
 
-/// 已批准的实时翻译调度值。
-///
-/// candidateCoalescingDelay 按单个段落块计时：段落原文保持不变达到该时长后才可发送。
-/// requestStartInterval 是两个批次开始的最小间隔，不是完成后再等待。
-/// maxInflightBatches 是同时在途的批次上限；不允许并行的服务固定为 1。
-/// cacheBudgetBytes 是段落块缓存的内存预算，单位字节。
-/// transientRetryLimit 是同一段落原文在一次会话内临时错误或频率受限后的重试上限。
-/// rateLimitBackoff 是频率受限且服务未给出 Retry-After 时依次等待的时长，超过三次沿用最后一项；
-/// maxRetryAfter 是采用服务给出的 Retry-After 的上限（#118）。
-/// streamPublishInterval 是译文增量期间两次快照发布的最小间隔，其他变化立即发布（#68）。
 abstract final class LiveRegionSchedule {
   static const streamPublishInterval = Duration(milliseconds: 100);
   static const candidateCoalescingDelay = Duration(milliseconds: 200);
@@ -36,36 +26,28 @@ abstract final class LiveRegionSchedule {
   static const maxRetryAfter = Duration(seconds: 60);
 }
 
-/// 调度使用的时钟。now 在同一次会话内单调；schedule 只保留一个截止点。
 abstract class LiveRegionClock {
-  /// 无参数；返回本次调度使用的当前时刻。
   DateTime now();
 
-  /// delay 为距 now 的正间隔，fire 到点后执行；替换上一个尚未触发的截止点。
   void schedule(Duration delay, void Function() fire);
 
-  /// 无参数；取消尚未触发的截止点，无返回值。
   void cancelSchedule();
 }
 
-/// 系统单调时钟。用启动后的停表，避免壁钟回拨缩短请求间隔。
 final class SystemLiveRegionClock implements LiveRegionClock {
   final Stopwatch _watch = Stopwatch()..start();
   Timer? _timer;
 
-  /// 无参数；返回停表经过的毫秒，不读取壁钟。
   @override
   DateTime now() =>
       DateTime.fromMillisecondsSinceEpoch(_watch.elapsedMilliseconds);
 
-  /// delay 为等待时长，fire 为到点回调；取消旧计时后再登记，避免重复发送。
   @override
   void schedule(Duration delay, void Function() fire) {
     _timer?.cancel();
     _timer = Timer(delay, fire);
   }
 
-  /// 无参数；停止尚未触发的计时，无返回值。
   @override
   void cancelSchedule() {
     _timer?.cancel();
@@ -73,10 +55,7 @@ final class SystemLiveRegionClock implements LiveRegionClock {
   }
 }
 
-/// 一个段落块。坐标系由调用方决定：实时区域翻译为屏幕点、左下原点，截图翻译为图像像素、左上原点（#138）；
-/// 会话不换算坐标，原样写入盖层。没有坐标时只参与翻译，不画盖层。
 class LiveTextBlock {
-  /// text 为该段原文。x/y/width/height 为段落外接矩形，缺任一坐标则不覆盖。
   const LiveTextBlock({
     required this.text,
     this.x,
@@ -85,7 +64,6 @@ class LiveTextBlock {
     this.height,
   });
 
-  /// map 为原生段落块 {text, x, y, width, height}；返回段落块，缺少的坐标为 null。
   factory LiveTextBlock.fromMap(Map<Object?, Object?> map) => LiveTextBlock(
     text: '${map['text'] ?? ''}',
     x: (map['x'] as num?)?.toDouble(),
@@ -100,7 +78,6 @@ class LiveTextBlock {
   final double? width;
   final double? height;
 
-  /// 无参数。宽高为正且坐标完整时才能盖住这一段。
   bool get placeable =>
       x != null &&
       y != null &&
@@ -110,9 +87,7 @@ class LiveTextBlock {
       height! > 0;
 }
 
-/// 一次设备 OCR 结果。failure 非空表示识别失败；blocks 为按阅读顺序排列的段落块。
 class LiveOcrSample {
-  /// generation 为捕获代次。text 为整段原文；blocks 非空时以块文本拼接为准。
   const LiveOcrSample({
     required this.generation,
     this.text,
@@ -126,10 +101,7 @@ class LiveOcrSample {
   final List<LiveTextBlock> blocks;
 }
 
-/// 原生盖层与悬浮条绘制所用的业务快照。不含密钥、凭据或调度中间态。
 class LiveRegionView {
-  /// phase 为会话阶段；status 为悬浮条显示的进度或原因；failed 为 status 是否为翻译失败原因；
-  /// overlays 为盖层译文，metrics 为批次计时；均为原生盖层与悬浮条读取的字段（#124）。
   const LiveRegionView({
     required this.phase,
     required this.status,
@@ -143,19 +115,12 @@ class LiveRegionView {
   final LiveRegionPhase phase;
   final String status;
 
-  /// status 为服务级停止或段落最终失败的原因时为真；截图翻译据此让提示不自动消失（#138）。
   final bool failed;
 
-  /// 只包含已经能归属到段落块的译文。坐标与输入段落块相同。
   final List<Map<String, Object>> overlays;
 
-  /// 自上一次快照以来结束的批次计时，每个批次只出现一次；只含数量、毫秒数与结果，不含文字。
-  /// 字段：blocks 段落块数，chars 字符数，waitMs 段落块出现到批次开始的最长等待，
-  /// firstMs 批次开始到首段译文（没有译文为 -1），totalMs 批次开始到结束，
-  /// inflight 结束时的在途批次数，outcome 为 completed、cancelled 或失败类别名。
   final List<Map<String, Object>> metrics;
 
-  /// 无参数；返回可跨引擎传递的快照，不包含服务密钥。
   Map<String, Object?> toMap() => {
     'phase': phase.name,
     'status': status,
@@ -165,10 +130,7 @@ class LiveRegionView {
   };
 }
 
-/// 当前画面中的一个段落原文。同文出现在多处时共用一份译文，各处保留自己的矩形。
 class _Paragraph {
-  /// text 为段落原文，observedAt 为该原文本次出现在画面上的时刻；
-  /// immediate 为真表示属于会话首个非空画面，不需要发送等待。
   _Paragraph(this.text, this.observedAt, {required this.immediate});
 
   final String text;
@@ -176,20 +138,14 @@ class _Paragraph {
   final bool immediate;
   var places = <LiveTextBlock>[];
 
-  /// 画面上显示的译文；在途批次的增量也写在这里。
   var shown = '';
 
-  /// 译文是否已完整。
   var done = false;
 
-  /// 为真时该段落单独成批：编号对不上，或所在的多段批次遇到段落级错误。
   var alone = false;
 }
 
-/// 一个在途批次。keys 为各段落在缓存中的键，partial 为各段落已收到的译文。
 class _Batch {
-  /// texts 为批次内的段落原文，keys 为按本批次设置计算的缓存键；
-  /// startedAt 为批次开始时刻，wait 为其中段落块从出现到开始的最长等待。
   _Batch(this.texts, this.keys, this.startedAt, this.wait)
     : partial = [for (final _ in texts) StringBuffer()];
 
@@ -199,19 +155,12 @@ class _Batch {
   final DateTime startedAt;
   final Duration wait;
 
-  /// 首段译文到达的时刻。
   DateTime? firstAt;
   StreamSubscription<BatchTranslationEvent>? subscription;
   var cancelled = false;
 }
 
-/// 主引擎的实时区域翻译会话。实时区域翻译与截图翻译各持有一个实例，截图识别结果作为单个样本交给会话（#138）。
-///
-/// 翻译单元是段落块。每帧识别结果逐块查段落块缓存，未命中的段落块合并为批次发送。
-/// 只保存本次会话的缓存、调度和拒绝迟到事件所需的内存状态，不写历史。
 class LiveRegionSession {
-  /// providerFor 按设置构造服务；detectLanguage 为本地语言识别；clock 为单调时钟。
-  /// onView 在快照变化时通知原生盖层。inputLimit 为单个段落块拒发网络请求的字符上限。
   LiveRegionSession({
     required this.providerFor,
     required this.detectLanguage,
@@ -232,54 +181,41 @@ class LiveRegionSession {
     budgetBytes: LiveRegionSchedule.cacheBudgetBytes,
   );
   final _inflight = <_Batch>[];
-  // 尚未随快照发布的批次计时。
   var _metrics = <Map<String, Object>>[];
-  // 键为段落原文，顺序即当前画面的阅读顺序。
   var _paragraphs = <String, _Paragraph>{};
   var _generation = 0;
   var _phase = LiveRegionPhase.idle;
-  // 画面没有段落块时显示的状态：正在识别、未识别到文字或识别错误。
   var _notice = '';
-  // 服务级明确错误的提示；非空时本次会话不再发送批次。
   String? _halt;
-  // 最近一次段落级或临时错误的提示。
   String? _lastError;
   AppSettings? _latestSettings;
   var _firstNonEmpty = true;
 
-  /// 最近一次交给 onView 的快照；内容相同的快照不重复发布。
   LiveRegionView? _sent;
 
-  /// 译文增量的合并发布：计时器未到点期间只记下待发布标记。
   Timer? _streamTimer;
   var _streamPending = false;
   DateTime? _lastBatchStart;
 
-  /// 频率受限的退避截止时刻与连续受限次数；成功完成一批后次数清零，新会话全部重置（#118）。
   DateTime? _rateLimitedUntil;
   var _rateLimitStreak = 0;
   var _epoch = 0;
   var _pending = 0;
   final List<Completer<void>> _waiters = [];
 
-  /// settings 为开始时的当前偏好，generation 为捕获代次。
-  /// 建立空的运行快照并发布，无返回值。不继承上一次的文字、译文、缓存或计时。
   void start(AppSettings settings, int generation) {
     if (generation <= _generation && _phase != LiveRegionPhase.idle) return;
-    // 新会话不等待上一次的取消完成；epoch 递增后，旧完成回调不能减少这次的进行计数。
     _epoch += 1;
     _pending = 0;
     for (final waiter in List<Completer<void>>.of(_waiters)) {
       if (!waiter.isCompleted) waiter.complete();
     }
     _waiters.clear();
-    // 旧批次和缓存全部作废，迟到增量不能写入新代次；连接属于共享客户端，新会话直接复用（#68）。
     _release();
     _generation = generation;
     _phase = LiveRegionPhase.running;
     _latestSettings = settings;
     _paragraphs = {};
-    // 新会话的原生盖层是新建的，首个快照必须发布。
     _sent = null;
     _firstNonEmpty = true;
     _lastBatchStart = null;
@@ -291,7 +227,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// generation 为暂停后的新代次。停止发送并保留当前内容与缓存，发布暂停快照，无返回值。
   void pause(int generation) {
     if (_phase != LiveRegionPhase.running || generation <= _generation) return;
     _generation = generation;
@@ -301,7 +236,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// generation 为恢复后的新代次。沿用同一会话的缓存和请求间隔，发布运行快照，无返回值。
   void resume(int generation) {
     if (_phase != LiveRegionPhase.paused || generation <= _generation) return;
     _generation = generation;
@@ -309,7 +243,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// generation 为结束后的新代次。停止工作并清空缓存，发布结束快照，无返回值。
   void end(int generation) {
     if (_phase == LiveRegionPhase.idle ||
         _phase == LiveRegionPhase.discarded ||
@@ -322,7 +255,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// generation 为放弃后的新代次。清空本次内容与缓存，发布 discarded 快照，无返回值。
   void discard(int generation) {
     if (generation <= _generation && _phase != LiveRegionPhase.idle) return;
     _generation = generation;
@@ -335,8 +267,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// generation 为失效后的新代次，message 为用户可读原因。
-  /// 清空原文和译文，避免旧结果继续显示为当前译文；发布结束快照，无返回值。
   void captureUnavailable(int generation, String message) {
     if (_phase != LiveRegionPhase.running && _phase != LiveRegionPhase.paused) {
       return;
@@ -352,19 +282,15 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// settings 为已提交的新偏好。不打断在途批次，也不重译画面上未变化的段落块；
-  /// 之后发送的批次和新出现的段落块使用新偏好。无返回值。
   void noteSettings(AppSettings settings) {
     _latestSettings = settings;
   }
 
-  /// sample 为当前代次的 OCR 结果。逐块查缓存并调度；返回本地决策（语言识别、取消订阅）都结束后完成的 Future。
   Future<void> onOcr(LiveOcrSample sample) async {
     _applyOcr(sample);
     await settle();
   }
 
-  /// 无参数；等待检测语言、取消订阅等本地异步步骤结束，返回完成的 Future。
   Future<void> settle() {
     if (_pending == 0) return Future<void>.value();
     final waiter = Completer<void>();
@@ -380,7 +306,6 @@ class LiveRegionSession {
       _clearScreen(sample.failure!);
       return;
     }
-    // 没有块列表时，把整段原文当作一个无坐标的段落块。
     final blocks = [
       for (final block
           in sample.blocks.isEmpty
@@ -400,7 +325,6 @@ class LiveRegionSession {
     for (final block in blocks) {
       var paragraph = next[block.text];
       if (paragraph == null) {
-        // 原文不变的段落块沿用已有译文和计时；新出现的先查缓存。
         paragraph =
             _paragraphs[block.text] ??
             _appear(block.text, now, settings, immediate: immediate);
@@ -410,7 +334,6 @@ class LiveRegionSession {
       paragraph.places.add(block);
     }
     _paragraphs = next;
-    // 最新画面不再包含某个批次的任何段落块时，取消该批次。
     for (final batch in List<_Batch>.of(_inflight)) {
       if (!batch.texts.any(next.containsKey)) _cancel(batch);
     }
@@ -418,8 +341,6 @@ class LiveRegionSession {
     _evaluate();
   }
 
-  /// text 为新出现的段落原文，now 为出现时刻，settings 为当前偏好。
-  /// 返回该段落；缓存命中时直接带上完整译文。
   _Paragraph _appear(
     String text,
     DateTime now,
@@ -436,7 +357,6 @@ class LiveRegionSession {
     return paragraph;
   }
 
-  /// notice 为无文字或识别错误的提示。撤去全部段落块并取消在途批次。
   void _clearScreen(String notice) {
     _paragraphs = {};
     _notice = notice;
@@ -445,7 +365,6 @@ class LiveRegionSession {
     _publish();
   }
 
-  /// 无参数。把当前画面中未命中且已满足发送等待的段落块组成批次并发送。
   void _evaluate() {
     if (_phase != LiveRegionPhase.running || _halt != null) {
       clock.cancelSchedule();
@@ -489,12 +408,10 @@ class LiveRegionSession {
     final limit = providerFor(settings).allowsParallelBatches
         ? LiveRegionSchedule.maxInflightBatches
         : 1;
-    // 取消尚未完成的批次仍计入在途数量；任一批次结束后会再次评估。
     if (_inflight.length >= limit) {
       clock.cancelSchedule();
       return;
     }
-    // 频率受限的退避期内不发送新批次，到期后再评估（#118）。
     final limitedUntil = _rateLimitedUntil;
     if (limitedUntil != null && now.isBefore(limitedUntil)) {
       clock.schedule(limitedUntil.difference(now), _evaluate);
@@ -508,7 +425,6 @@ class LiveRegionSession {
         return;
       }
     }
-    // 按阅读顺序装满一个批次；需要单独发送的段落块自成一批。
     final items = <_Paragraph>[];
     var chars = 0;
     for (final paragraph in ready) {
@@ -525,7 +441,6 @@ class LiveRegionSession {
       chars += length;
     }
     _startBatch(items, settings);
-    // 还有待发送的段落块时，到请求开始间隔或最早的发送等待后再评估。
     if (ready.length > items.length) {
       clock.schedule(LiveRegionSchedule.requestStartInterval, _evaluate);
     } else if (nextDue != null) {
@@ -535,10 +450,7 @@ class LiveRegionSession {
     }
   }
 
-  /// items 为本批次的段落块，settings 为发送时的偏好。
-  /// 登记在途批次，按段落识别语言后拆分：已是目标语言的直接完成，其余按目标语言各发一次请求。
   void _startBatch(List<_Paragraph> items, AppSettings latest) {
-    // 批次绑定发送时的设置副本，之后的偏好修改不影响本批次。
     final settings = AppSettings.fromMap(latest.toMap());
     final texts = [for (final item in items) item.text];
     final now = clock.now();
@@ -560,14 +472,12 @@ class LiveRegionSession {
     _beginWork();
     unawaited(() async {
       try {
-        // _detectEach 按段落给出语言；中文占多数的画面里，英文段落仍要翻译。
         final detected = await _detectEach(texts);
         if (epoch != _epoch) return;
         if (batch.cancelled) {
           _inflight.remove(batch);
           return;
         }
-        // 按目标语言分组；已是目标语言的归入 same，原文即译文。
         final same = <int>[];
         final groups = <String, List<int>>{};
         final sources = <String, String?>{};
@@ -581,7 +491,6 @@ class LiveRegionSession {
             continue;
           }
           (groups[direction.targetLanguage] ??= []).add(index);
-          // 同组语言不一致时不声明来源语言，由服务自行判断。
           final source = sources.containsKey(direction.targetLanguage)
               ? sources[direction.targetLanguage]
               : direction.detectedLanguage;
@@ -589,14 +498,12 @@ class LiveRegionSession {
               source == direction.detectedLanguage ? source : null;
         }
 
-        /// indexes 为原批次下标；返回只含这些段落、沿用原批次时间的子批次。
         _Batch part(List<int> indexes) => _Batch(
           [for (final index in indexes) batch.texts[index]],
           [for (final index in indexes) batch.keys[index]],
           batch.startedAt,
           batch.wait,
         );
-        // 子批次全部登记后才结束任何一个，否则结束时的重新评估会把其余段落再发一次。
         _inflight.remove(batch);
         final passthrough = same.isEmpty ? null : part(same);
         final requests = {
@@ -604,7 +511,6 @@ class LiveRegionSession {
         };
         _inflight.addAll([?passthrough, ...requests.values]);
         if (passthrough != null) {
-          // 已是目标语言时原文即译文，不产生网络请求。
           for (final (index, text) in passthrough.texts.indexed) {
             passthrough.partial[index].write(text);
           }
@@ -614,8 +520,6 @@ class LiveRegionSession {
           _request(request, settings, sources[target], target);
         }
       } catch (_) {
-        // 语言识别或创建请求抛错时按临时失败收口：移出在途集合并交给重试逻辑，
-        // 不让批次一直占用名额、界面停在「正在翻译」（#116）。
         if (epoch != _epoch) return;
         if (batch.cancelled) {
           _inflight.remove(batch);
@@ -629,8 +533,6 @@ class LiveRegionSession {
     }());
   }
 
-  /// batch 为已登记的批次，settings 为发送时的偏好，detected 为来源语言（可为空），target 为目标语言。
-  /// 向服务发起一次请求；创建请求抛错时按临时失败收口，无返回值。
   void _request(
     _Batch batch,
     AppSettings settings,
@@ -645,7 +547,6 @@ class LiveRegionSession {
               detectedLanguage: detected,
               targetLanguage: target,
             ),
-            // translationHttpClient 为应用共享客户端，复用已建立的 TCP/TLS 连接（#68）。
             client: translationHttpClient,
           )
           .listen(
@@ -669,10 +570,8 @@ class LiveRegionSession {
         batch.firstAt ??= clock.now();
         batch.partial[index].write(addition);
         final paragraph = _paragraphs[batch.texts[index]];
-        // 只有仍在画面上的段落块才显示增量。
         if (paragraph == null || paragraph.done) return;
         paragraph.shown = batch.partial[index].toString();
-        // 增量密集到达时合并发布，避免每个 token 让原生重画全部段落块。
         _publishStreaming();
       case BatchCompleted():
         _complete(batch);
@@ -681,9 +580,7 @@ class LiveRegionSession {
     }
   }
 
-  /// batch 为已完整结束的批次。译文写入缓存；没有译文的段落块单独补发一次。
   void _complete(_Batch batch) {
-    // 一批成功后频率受限的退避从 2 秒重新计（#118）。
     _rateLimitStreak = 0;
     for (final (index, text) in batch.texts.indexed) {
       final translation = batch.partial[index].toString().trim();
@@ -691,7 +588,6 @@ class LiveRegionSession {
       if (translation.isEmpty) {
         if (paragraph != null && !paragraph.done) paragraph.shown = '';
         if (batch.texts.length == 1) {
-          // 单独补发仍没有译文，该段落块不再发送。
           _cache.reject(batch.keys[index]);
           _lastError = '服务未返回该段译文。';
         } else {
@@ -699,7 +595,6 @@ class LiveRegionSession {
         }
         continue;
       }
-      // 已离开画面的段落块也写入缓存，再次出现时直接命中。
       _cache.store(batch.keys[index], translation);
       if (paragraph == null) continue;
       paragraph
@@ -710,7 +605,6 @@ class LiveRegionSession {
     _finish(batch);
   }
 
-  /// batch 为失败的批次，message/kind 为原因与类别，retryAfter 为服务要求的重试等待。本批次已收到的译文不作为结果。
   void _fail(
     _Batch batch,
     String message,
@@ -723,20 +617,17 @@ class LiveRegionSession {
     }
     switch (kind) {
       case TranslationFailureKind.service:
-        // 本次会话停止发送新批次，待发送的段落块不再处理。
         _halt = message;
       case TranslationFailureKind.paragraph:
         if (batch.texts.length == 1) {
           _cache.reject(batch.keys.single);
           _lastError = message;
         } else {
-          // 分不清是哪个段落块引起的，各自单独补发一次。
           for (final text in batch.texts) {
             _paragraphs[text]?.alone = true;
           }
         }
       case TranslationFailureKind.rateLimited:
-        // 频率受限计入重试次数；按 Retry-After（不超过 60 秒）或 2/4/8 秒退避后才再发送（#118）。
         batch.keys.forEach(_cache.noteFailure);
         _lastError = message;
         const backoff = LiveRegionSchedule.rateLimitBackoff;
@@ -757,7 +648,6 @@ class LiveRegionSession {
     _finish(batch);
   }
 
-  /// batch 为已到终态的批次。移出在途集合并重新评估待发送的段落块。
   void _finish(_Batch batch) {
     _inflight.remove(batch);
     unawaited(batch.subscription?.cancel());
@@ -765,13 +655,11 @@ class LiveRegionSession {
     _evaluate();
   }
 
-  /// batch 为要取消的批次。取消完成前仍计入在途数量。
   void _cancel(_Batch batch) {
     if (batch.cancelled) return;
     batch.cancelled = true;
     _measure(batch, 'cancelled');
     final subscription = batch.subscription;
-    // 语言识别尚未返回时没有订阅；识别返回后见到取消标记即移出在途集合。
     if (subscription == null) return;
     final epoch = _epoch;
     _beginWork();
@@ -785,15 +673,12 @@ class LiveRegionSession {
     );
   }
 
-  /// 无参数。取消全部在途批次。
   void _cancelAll() {
     for (final batch in List<_Batch>.of(_inflight)) {
       _cancel(batch);
     }
   }
 
-  /// 无参数。会话结束时释放全部工作：停止计时、取消批次并清空缓存。
-  /// 取消订阅即由服务中止各自的请求；共享客户端不关闭，空闲连接留给之后的翻译复用（#68）。
   void _release() {
     clock.cancelSchedule();
     for (final batch in _inflight) {
@@ -804,8 +689,6 @@ class LiveRegionSession {
     _cache.clear();
   }
 
-  /// batch 为到达终态的批次，outcome 为 completed、cancelled 或失败类别名。
-  /// 记下一条计时，随下一次快照发布。
   void _measure(_Batch batch, String outcome) {
     final now = clock.now();
     _metrics.add({
@@ -833,28 +716,21 @@ class LiveRegionSession {
     }
   }
 
-  /// settings 为偏好，text 为段落原文；返回“服务＋语言方向＋段落原文”的缓存键。
   String _key(AppSettings settings, String text) {
     final direction = settings.direction;
     return '${settings.defaultServiceId}\n${direction.primaryCode}\n'
         '${direction.secondaryCode ?? ''}\n$text';
   }
 
-  /// key 为段落键；返回该段落是否已判定不再发送或已用尽临时错误的重试次数。
   bool _blocked(String key) =>
       _cache.rejected(key) ||
       _cache.failures(key) > LiveRegionSchedule.transientRetryLimit;
 
-  /// text 为段落原文；返回它是否已在某个未取消的在途批次中。
   bool _sending(String text) =>
       _inflight.any((batch) => !batch.cancelled && batch.texts.contains(text));
 
-  /// text 为段落原文；返回是否含汉字。
   bool _containsCjk(String text) => RegExp(r'[㐀-鿿]').hasMatch(text);
 
-  /// texts 为一批段落原文；返回逐段语言，无法识别时为 null。
-  /// 含汉字的段落合并识别一次：短段落单独识别经常没有结果，识别失败时按中文处理，避免再译成中文；
-  /// 合并识别也保留日文等含汉字语言的判断。不含汉字的段落逐段识别，识别不出的用它们合并后的结果。
   Future<List<String?>> _detectEach(List<String> texts) async {
     final hanzi = texts.where(_containsCjk).toList();
     final others = [
@@ -877,10 +753,8 @@ class LiveRegionSession {
     ];
   }
 
-  /// status 为 _status 的结果；返回它是否为翻译失败原因（服务级停止或最近的段落失败），进度与识别提示不算。
   bool _isFailure(String status) => status == _halt || status == _lastError;
 
-  /// 无参数；返回控制条显示的状态。
   String _status() {
     if (_halt != null) return _halt!;
     if (_paragraphs.isEmpty) return _notice;
@@ -891,14 +765,12 @@ class LiveRegionSession {
         if (!paragraph.done) paragraph,
     ];
     if (unfinished.isEmpty) return '已完成';
-    // 剩下的段落块都不再发送时显示最近的错误，否则仍在等待发送。
     final waiting = unfinished.any(
       (paragraph) => !_blocked(_key(settings, paragraph.text)),
     );
     return waiting ? '等待翻译' : _lastError ?? '等待翻译';
   }
 
-  /// 无参数。运行中且译文已归属到有坐标的段落块时才返回盖层。
   List<Map<String, Object>> _overlayMaps() {
     if (_phase != LiveRegionPhase.running) return const [];
     final maps = <Map<String, Object>>[];
@@ -919,7 +791,6 @@ class LiveRegionSession {
     return maps;
   }
 
-  /// 无参数；立即按当前状态生成快照并发布，取消尚未到点的增量发布，无返回值。
   void _publish() {
     _streamTimer?.cancel();
     _streamTimer = null;
@@ -927,12 +798,9 @@ class LiveRegionSession {
     _send();
   }
 
-  /// 无参数；译文增量的发布：距上次增量发布已满 streamPublishInterval 时立即发布，
-  /// 否则只更新 view，到点后补发最新快照，无返回值。
   void _publishStreaming() {
     if (_streamTimer != null) {
       _streamPending = true;
-      // view 保持最新但不取走计时，计时随下一次真正发布交出。
       final status = _status();
       view = LiveRegionView(
         phase: _phase,
@@ -949,7 +817,6 @@ class LiveRegionSession {
     });
   }
 
-  /// 无参数；生成快照并取走已结束批次的计时；阶段、状态、盖层都没变且没有计时时不通知 onView，无返回值。
   void _send() {
     final metrics = _metrics;
     _metrics = [];
@@ -973,7 +840,6 @@ class LiveRegionSession {
     onView?.call(view);
   }
 
-  /// a/b 为两份盖层列表；返回文字与矩形是否逐项相同。
   static bool _sameOverlays(
     List<Map<String, Object>> a,
     List<Map<String, Object>> b,

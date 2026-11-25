@@ -12,6 +12,10 @@
 
 通道名、方法名、UserDefaults 键与共享枚举只在 `common/constants` 定义，共享工具放 `common/utils`；细则见 [代码约定](docs/agents/coding-conventions.md)。
 
+## 注释
+
+不写、不维护任何代码注释，包括文档注释（`///`）、行内与块注释、测试说明与脚本说明。意图由命名、测试名称和规格 Issue 表达；理解行为以代码与 Issue 为准。新增或修改代码时不得添加注释，遇到残留注释直接删除。仅保留 Dart 分析器指令（`// ignore:`、`// ignore_for_file:`）与脚本首行 shebang；第三方或工具生成的文件（如 `macos/Flutter/GeneratedPluginRegistrant.swift`、`macos/Runner/Configs/*.xcconfig`）不在此列。
+
 ## 界面设计
 
 设计、实现、重构或审查界面前，读取并遵守 [UI 规则入口](docs/agents/liquid-glass-ui.md)。

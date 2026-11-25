@@ -1,4 +1,3 @@
-/// Spec #1 的逻辑点尺寸；控件、材料及窗口命中布局均从这些数值派生。
 abstract final class GlassMetrics {
   static const controlRadius = 8.0;
   static const primaryRadius = 10.0;
@@ -8,14 +7,12 @@ abstract final class GlassMetrics {
   static const buttonHeight = 28.0;
   static const buttonMinWidth = 64.0;
 
-  /// 设置页快捷键录制按钮统一最小宽度，对齐不同字符宽度的组合显示（#67）。
   static const shortcutButtonMinWidth = 128.0;
   static const primaryHeight = 32.0;
   static const primaryMinWidth = 72.0;
   static const hitSize = 32.0;
   static const icon = 16.0;
   static const iconGap = 6.0;
-  // 相邻破坏性操作之间保留空白，避免编辑与删除命中区相接。
   static const actionGap = 8.0;
   static const cropHandle = 8.0;
   static const cropHandleHitRadius = 12.0;
@@ -26,28 +23,22 @@ abstract final class GlassMetrics {
   static const menuMaxWidth = 320.0;
   static const appearanceSegmentWidth = 76.0;
   static const navigationWidth = 72.0;
-  // 设置窗口左侧两级导航（#67）：宽度、内边距、一级与二级行高、二级缩进。
   static const sidebarWidth = 200.0;
   static const sidebarPadding = 12.0;
   static const sidebarSectionHeight = 32.0;
   static const sidebarItemHeight = 28.0;
   static const sidebarItemIndent = 28.0;
-  // 通顶窗口的标题栏（#67）：系统标题栏高 28，侧边栏顶部避让红黄绿按钮的留白为 28＋10；
-  // 历史窗口紧凑工具栏标题栏高 38，分段在该带内与红黄绿按钮同一行居中。
   static const titlebarHeight = 28.0;
   static const sidebarTopInset = titlebarHeight + 10;
   static const compactTitlebarHeight = 38.0;
-  // 设置子页标题字号。
   static const pageTitleFont = 20.0;
   static const switchWidth = 36.0;
   static const switchHeight = 20.0;
   static const switchThumb = 16.0;
 
-  /// Apple 果冻开关按下态滑块横向拉伸宽度（#67、#144）。
   static const switchThumbPressedWidth = 21.0;
   static const sliderHeight = 32.0;
 
-  /// 透明度滑块最小宽度与右侧百分比数值宽度（等宽数字，容纳“80%”）（#67、#144）。
   static const sliderMinWidth = 160.0;
   static const sliderValueWidth = 36.0;
   static const sliderTrack = 6.0;
@@ -63,11 +54,9 @@ abstract final class GlassMetrics {
   static const captionFont = 12.0;
   static const captionLine = 17.0;
 
-  /// 设置页静态样式数值（#67 第 14 条）：行间细线、11pt 标签字号与侧边栏图标块。
   static const groupDividerThickness = 0.5;
   static const statusFont = 11.0;
 
-  /// 权限状态图标边长（#142 第 14 条）。
   static const statusIcon = 14.0;
   static const sidebarIconBox = 22.0;
   static const sidebarIconRadius = 6.0;
@@ -75,10 +64,8 @@ abstract final class GlassMetrics {
   static const sidebarSelectionInset = 6.0;
   static const toolbarPadding = 8.0;
   static const toolbarThickness = hitSize + toolbarPadding * 2;
-  // 采集结果工具栏相邻操作间距（视频结果为底部横排、长截图为右侧纵排），按Spec #67与原生承载尺寸保持一致。
   static const captureResultActionGap = 12.0;
 
-  /// 统一结果窗口骨架尺寸（#67、#145）：媒体区四周留白、底部操作栏高度、分组分隔线与文字按钮高度。
   static const resultCanvasPadding = 24.0;
   static const resultBarHeight = 52.0;
   static const resultDividerWidth = 1.0;
@@ -87,13 +74,11 @@ abstract final class GlassMetrics {
   static const toastGap = 8.0;
   static const feedbackDuration = Duration(milliseconds: 1000);
 
-  /// 错误提示气泡默认停留时长；悬停期间暂停并在移开后重计（#144）。
   static const errorFeedbackDuration = Duration(milliseconds: 2000);
   static const transition = Duration(milliseconds: 120);
   static const hoverOpacity = 0.06;
   static const pressedOpacity = 0.12;
 
-  /// 全局 4pt 间距阶梯、按钮按下微缩比例、焦点框与最小触控/滚动约束（#67、#144）。
   static const space4 = 4.0;
   static const space8 = 8.0;
   static const space12 = 12.0;
@@ -107,7 +92,6 @@ abstract final class GlassMetrics {
   static const sliderOverlayRadius = 14.0;
   static const sliderThumbBorderWidth = 1.5;
 
-  /// 设置分组与行（#67、#144）：眉标字号、左缩进与到卡片间距，卡片圆角、轮廓与上下内边距，16pt 单色行图标与图文间距。
   static const groupHeaderFont = 11.0;
   static const groupHeaderIndent = 16.0;
   static const groupHeaderGap = 8.0;

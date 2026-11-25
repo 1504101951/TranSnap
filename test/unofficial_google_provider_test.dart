@@ -9,7 +9,6 @@ import 'package:transnap/src/translation/translation_types.dart';
 
 void main() {
   test('dismissing a selection closes its in-flight HTTP connection', () async {
-    // 本地服务收到请求但不返回响应；关闭会话必须产生真实断连，不能只忽略译文。
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final requested = Completer<void>();
     final disconnected = Completer<void>();
@@ -40,7 +39,6 @@ void main() {
     addTearDown(session.dispose);
     session.begin(sessionId: 's1', text: 'Hello');
     final pending = session.activate();
-    // 5 秒是本地连接的失败上限，测试不等待任何外部翻译服务。
     await requested.future.timeout(const Duration(seconds: 5));
     session.dismiss();
     await disconnected.future.timeout(const Duration(seconds: 5));
@@ -49,7 +47,6 @@ void main() {
   });
 
   test('单篇请求挂起时按时限失败，显示超时文案且不标记完成（#114）', () async {
-    // 边界：本地服务接受连接但从不响应；时限缩短为 200ms，超时后只得到一条超时失败，没有译文与完成事件。
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final sockets = <Socket>[];
     server.listen((socket) {
@@ -84,7 +81,6 @@ void main() {
   });
 
   test('无法连接时说明检查网络', () async {
-    // 刚关闭的本机端口拒绝连接，等同断网时的 SocketException 边界；失败须说明连接问题而不是笼统的请求失败。
     final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = closed.port;
     await closed.close();
@@ -119,7 +115,6 @@ void main() {
   });
 
   test('preserves paragraph and line separators in translated sentences', () {
-    // 接口句段不是段落；只保留响应自带的分隔符，不能统一 join 换行或删除空行。
     const body =
         r'''[[["第一段。\n\n","First paragraph.\n\n"],["第二段。\n","Second paragraph.\n"],["同段换行。","Line break."]],null,"en"]''';
     expect(
@@ -129,7 +124,6 @@ void main() {
   });
 
   test('http error becomes failure without completed', () async {
-    // 实际 HTTP 429 是限流边界；验证网络响应到业务失败的转换。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       await request.drain<void>();
@@ -163,8 +157,6 @@ void main() {
   });
 
   test('批量翻译按换行拆回各段，行数对不上时不给出译文，限流按频率受限重试（#118）', () async {
-    // 作用：多个段落合成一次请求后仍能一一对应。
-    // 边界：返回 2 行对 2 段时逐段给出；返回 1 行对 2 段时全部缺失但整批完成；HTTP 429 为频率受限并带回 Retry-After。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final client = HttpClient();

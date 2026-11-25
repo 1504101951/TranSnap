@@ -1,7 +1,4 @@
-/// Emoji 下拉框的类别与表情：Unicode 17.0 `emoji-test.txt` 中完全限定的表情，
-/// 不含肤色变体与「Component」类，按文件顺序排列（#103）。
 abstract final class EmojiCatalog {
-  /// 每项为类别标题与该类表情（每个字符串是一个字素簇）。
   static const groups = <({String title, List<String> emoji})>[
     (title: '笑脸与情感', emoji: [
       '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',

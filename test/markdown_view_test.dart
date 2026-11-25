@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transnap/src/screenshot/markdown_view.dart';
 
-/// 验证识别结果 Markdown 的解析与渲染（#67「识别文字弹窗 Markdown 渲染（#96）」）：
-/// 标题、段落、列表、表格的拆分，表格分隔行与转义竖线，块间距，以及宽表格在表格内横向滚动。
 void main() {
   test('按原生 OCR 生成的格式拆分标题、段落、列表与表格，未知内容按段落保留', () {
     final blocks = parseMarkdownBlocks(
@@ -21,18 +19,15 @@ void main() {
     expect((blocks[0] as MarkdownHeading).text, 'Report');
     expect((blocks[1] as MarkdownParagraph).text, 'Intro line\nsecond line');
     expect((blocks[3] as MarkdownList).items, ['first', 'second']);
-    // 分隔行被去掉，\| 还原为 |，列数不足的行补空单元格。
     expect((blocks[4] as MarkdownTable).rows, [
       ['Name', 'Value'],
       ['a|b', '1'],
       ['short', ''],
     ]);
-    // 「#」后没有空格不是标题，按段落原样保留。
     expect((blocks[5] as MarkdownParagraph).text, '#not heading');
   });
 
   test('块间距：标题之后与相邻段落之间为 8，其他为 12', () {
-    // 边界依据：#67 第 2、3、6 条。
     const heading = MarkdownHeading('T');
     const paragraph = MarkdownParagraph('p');
     const list = MarkdownList(['a']);
@@ -79,7 +74,6 @@ void main() {
       (w) => w is SingleChildScrollView && w.scrollDirection == Axis.horizontal,
     );
     expect(horizontal, findsOneWidget);
-    // 单元格按内容取宽，超出 240 的正文区由横向滚动承载，不截断。
     expect(tester.getSize(find.text(wide)).width, greaterThan(240));
   });
 }

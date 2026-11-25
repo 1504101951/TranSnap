@@ -8,7 +8,6 @@ const translationSegmentTarget = 4000;
 const translationSegmentMax = 6000;
 const slidingContextChars = 1000;
 
-/// source 为完整原文；按约 4000 字分包，为保住段落可到 6000，超长段再按句/硬切；返回按顺序拼接即为原文的分片列表。
 List<String> splitTranslationSegments(String source) {
   const target = translationSegmentTarget;
   const max = translationSegmentMax;
@@ -32,7 +31,6 @@ List<String> splitTranslationSegments(String source) {
   for (final piece in paragraphs) {
     final pieceChars = piece.characters.length;
     if (piece.trim().isEmpty) {
-      // 空白也是原文字符；极长空白不能绕过每片上限。
       if (bufferChars + pieceChars > max) flush();
       if (pieceChars > max) {
         packed.addAll(_splitOversized(piece, max));
@@ -68,7 +66,6 @@ List<String> splitTranslationSegments(String source) {
   return packed;
 }
 
-/// text 超过 max；先按句子再按硬边界切开。
 Iterable<String> _splitOversized(String text, int max) sync* {
   final sentences = RegExp(r'[\s\S]+?(?:[。！？.!?]+|$)')
       .allMatches(text)
@@ -100,13 +97,10 @@ Iterable<String> _splitOversized(String text, int max) sync* {
   if (buffer.isNotEmpty) yield buffer.toString();
 }
 
-/// 一次整篇翻译的检查点；只提交完整片，失败片的暂存输出不参与恢复。
 class TranslationProgress {
-  /// request 冻结完整原文与方向；按当前分片规则创建仅属于该请求的检查点。
   TranslationProgress(this.request)
     : segments = splitTranslationSegments(request.sourceText);
 
-  /// 绑定原始请求，防止调用方把检查点用于另一篇文本。
   final TranslationRequest request;
   final List<String> segments;
   final List<TranslationPair> pairs = [];
@@ -116,8 +110,6 @@ class TranslationProgress {
   String translationTail = '';
 }
 
-/// translate 为单段服务；request 为整篇请求；usesSlidingContext 为模型后续片带尾部。
-/// progress 属于当前请求，保存完整片以供重试；返回有序增量及全篇完成或失败事件。
 Stream<TranslationEvent> translateSegmented(
   Stream<TranslationEvent> Function(TranslationRequest request) translate,
   TranslationRequest request, {
@@ -152,7 +144,6 @@ Stream<TranslationEvent> translateSegmented(
             sourceText: segment,
             detectedLanguage: request.detectedLanguage,
             targetLanguage: request.targetLanguage,
-            // 第一片沿用调用方带来的相邻块尾部，后面的片仍只用本请求自己的检查点。
             previousSourceTail: usesSlidingContext
                 ? (i > 0 ? checkpoint.sourceTail : request.previousSourceTail)
                 : null,
@@ -164,7 +155,6 @@ Stream<TranslationEvent> translateSegmented(
           );
           current = StreamIterator(translate(sliding));
           var translated = '';
-          // 连接结束不等于业务完成；缺少完成事件时不能把部分译文写入历史。
           var segmentCompleted = false;
           var segmentPairs = const <TranslationPair>[];
           while (await current!.moveNext()) {
@@ -190,14 +180,12 @@ Stream<TranslationEvent> translateSegmented(
           if (segmentPairs.isEmpty) {
             segmentPairs = [TranslationPair(segment, translated)];
           }
-          // 非流式提供方也必须向上层提供可见更新，不能只有完成配对。
           if (translated.isEmpty && segmentPairs.isNotEmpty) {
             translated = segmentPairs.map((pair) => pair.translation).join();
             if (translated.isNotEmpty) {
               output.add(TranslationUpdate(translated));
             }
           }
-          // 完整片原子提交；失败/取消时保留前一检查点，重试不会重复追加半片。
           checkpoint.pairs.addAll(segmentPairs);
           checkpoint.completedText += translated;
           checkpoint.sourceTail = _tail(segment);
@@ -218,7 +206,6 @@ Stream<TranslationEvent> translateSegmented(
   return output.stream;
 }
 
-/// text 为刚完成的单片；返回至多1000个完整字素，不累计更早片。
 String _tail(String text) {
   final units = text.characters;
   if (units.length <= slidingContextChars) return text;

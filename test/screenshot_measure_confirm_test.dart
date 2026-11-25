@@ -10,13 +10,10 @@ import 'package:transnap/src/screenshot/screenshot_app.dart';
 
 import 'support/capture_pixels.dart';
 
-/// 无参数；验证截图编辑器的取色、标尺与确认截图动作（#111）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('取色：悬停显示指针处色值，单击复制源像素的 #RRGGBB', (tester) async {
-    // 边界：截图左半为 #3366CC、右半为白色；悬停与单击在左半，复制值必须等于源像素；
-    // 移到右半时标签跟随为 #FFFFFF；取色与标尺默认位于截图的子级行。
     final editor = await _pumpEditor(tester, 'test/eyedropper');
     await tester.tap(find.byKey(const Key(ScreenshotActions.eyedropper)));
     await tester.pumpAndSettle();
@@ -24,7 +21,6 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: const Offset(100, 200));
     await mouse.moveTo(const Offset(101, 200));
-    // 源像素解码使用真实图像线程。
     await tester.runAsync(() => Future<void>.delayed(_decode));
     await tester.pump();
     expect(find.byKey(const Key('eyedropper-label')), findsOneWidget);
@@ -41,8 +37,6 @@ void main() {
   });
 
   testWidgets('标尺：拖动显示长度与 Δx × Δy，测量线不进入导出，切换工具后清除', (tester) async {
-    // 边界：从 (100,100) 拖到 (160,180)，Δ 为 60 × 80、长度恰为 100.0 像素（画布与截图 1:1）；
-    // 画线前后导出的 PNG 字节完全相同；切回截图工具后标签消失。
     final editor = await _pumpEditor(tester, 'test/ruler');
     await _copy(tester, editor);
     await tester.tap(find.byKey(const Key(ScreenshotActions.ruler)));
@@ -61,8 +55,6 @@ void main() {
   });
 
   testWidgets('确认截图按设置执行：复制并保存只发一次带复制标记的保存并关闭，改为复制图片后只复制并关闭', (tester) async {
-    // 边界：快照中的 screenshotConfirmAction 为 copyAndSave 时，确认只发出保存（copy: true，图片只传一次）与关闭，
-    // 没有单独的复制（#68）；工具栏变更通知把动作改为 copy 后，再次确认只新增复制与关闭，保存次数仍为 1。
     final editor = await _pumpEditor(
       tester,
       'test/confirm-action',
@@ -117,10 +109,8 @@ void main() {
   });
 }
 
-/// 等待真实图像线程完成解码或编码的时长。
 const _decode = Duration(milliseconds: 200);
 
-/// tester 为测试驱动；交替让出真实时间与推进帧，使在测试时钟里发起的图像编解码与后续通道调用完成，无返回值。
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
     await tester.runAsync(() => Future<void>.delayed(_decode));
@@ -128,7 +118,6 @@ Future<void> _settle(WidgetTester tester) async {
   }
 }
 
-/// 截图编辑测试通道：方法调用顺序、复制图片（含复制并保存）与复制文字。
 typedef _Editor = ({
   MethodChannel channel,
   List<String> calls,
@@ -136,13 +125,10 @@ typedef _Editor = ({
   List<String> texts,
 });
 
-/// editor 为编辑器通道；返回已请求关闭截图的次数。
 int _closes(_Editor editor) => editor.calls
     .where((method) => method == MethodNames.closeScreenshot)
     .length;
 
-/// tester 为测试驱动，name 为通道名，confirmAction 为快照中的确认动作（缺省不提供）；
-/// 以左半 #3366CC、右半白色的 640×480 截图装载编辑器，返回记录通道调用的 [_Editor]。
 Future<_Editor> _pumpEditor(
   WidgetTester tester,
   String name, {
@@ -176,7 +162,6 @@ Future<_Editor> _pumpEditor(
       case MethodNames.copyScreenshot:
         copies.add(arguments!['bytes'] as Uint8List);
       case MethodNames.saveScreenshot:
-        // 复制并保存由原生在保存成功后复制，带 copy 标记的保存同样计入复制。
         if (arguments!['copy'] == true) copies.add(arguments['bytes'] as Uint8List);
         return '/tmp/截图.png';
       case MethodNames.copyText:
@@ -186,16 +171,13 @@ Future<_Editor> _pumpEditor(
   });
   addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
   await tester.pumpWidget(ScreenshotApp(channel: channel));
-  // 源图异步建好后文档才有图。
   await awaitCaptureSource(tester);
   await tester.pumpAndSettle();
-  // 编辑器的源图解码使用真实图像线程，取色读取它的像素。
   await tester.runAsync(() => Future<void>.delayed(_decode));
   await tester.pump();
   return (channel: channel, calls: calls, copies: copies, texts: texts);
 }
 
-/// tester 为测试驱动，editor 为编辑器通道；点击复制并等待导出完成，无返回值。
 Future<void> _copy(WidgetTester tester, _Editor editor) async {
   final copy = find.byKey(const Key(ScreenshotActions.copy));
   await tester.ensureVisible(copy);
@@ -206,7 +188,6 @@ Future<void> _copy(WidgetTester tester, _Editor editor) async {
   await tester.pumpAndSettle();
 }
 
-/// 无参数；返回 640×480、左半 #3366CC、右半白色的 PNG。
 Future<Uint8List> _png() async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);

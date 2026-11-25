@@ -9,9 +9,6 @@ import '../common/constants/toolbar_grid.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_toolbar_preferences.dart';
 
-/// 截图工具栏网格编辑器（#141，#67「截图工具栏网格编辑器」）：顶部表头标 1–6，每组一行，左侧组头选修饰键组合，
-/// 6 个紧凑格位从左到右，格位即快捷键（组合 + 表头数字）；
-/// 整格拖到格位获得键位，同格交换；选中可承载子级的工具后在网格下方编辑其子级；仅修改偏好，不注册全局热键。
 class ScreenshotToolbarEditor extends StatefulWidget {
   const ScreenshotToolbarEditor({
     super.key,
@@ -23,14 +20,10 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   final ScreenshotToolbarPreferences value;
   final ValueChanged<ScreenshotToolbarPreferences> onChanged;
 
-  /// 被本应用全局快捷键占用的格位到用途名称；这些格位不可放入工具（#141）。
   final Map<({int modifiers, int digit}), String> reserved;
 
-  /// 与已启用系统快捷键相同的格位；放了工具时标红提示系统优先，不阻止保存（#141）。
   final Set<({int modifiers, int digit})> systemSlots;
 
-  /// 格子最大宽、高与间距、组头宽与组头到格子的间距、行间距（#67）；
-  /// 格子宽随内容区等分，最大 cellWidth，整张网格最大宽 gridWidth，一屏内显示不横向滚动。
   static const cellWidth = 64.0;
   static const cellHeight = 64.0;
   static const cellGap = 4.0;
@@ -43,23 +36,19 @@ class ScreenshotToolbarEditor extends StatefulWidget {
       ToolbarGrid.slots * cellWidth +
       (ToolbarGrid.slots - 1) * cellGap;
 
-  /// 表头行高；表头数字与格内名称字号，冲突与占用说明字号；眼睛图标与命中区（≥24pt 无障碍下限）（#67、#144）。
   static const headerRowHeight = 20.0;
   static const labelFont = 11.0;
   static const noteFont = 11.0;
   static const eyeIcon = 14.0;
   static const eyeHit = GlassMetrics.minTouchTarget;
 
-  /// 子级列表的行最小高度（#67）。
   static const childRowHeight = 40.0;
 
-  /// context 提供明暗外观；返回满足 WCAG AA（≥ 4.5:1）的系统快捷键冲突提示色。
   static Color conflictColor(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
       ? const Color(0xFFFF6961)
       : const Color(0xFFB3261E);
 
-  /// 原生克制风格（#67）：工具格与组合下拉的平面底色、0.5pt 细线颜色（浅/深），选中工具的强调色描边宽度。
   static const cellFillLight = Color(0xFFFFFFFF);
   static const cellFillDark = Color(0xFF2C2C2E);
   static const cellLineLight = Color(0x1A000000);
@@ -67,39 +56,31 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   static const hairline = 0.5;
   static const selectedBorder = 1.5;
 
-  /// context 为主题位置；返回当前明暗外观下工具格的平面底色与细线颜色。
   static ({Color fill, Color line}) cellColors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
       ? (fill: cellFillDark, line: cellLineDark)
       : (fill: cellFillLight, line: cellLineLight);
 
-  /// 被拖动格子的不透明度；目标格边框宽度。
   static const draggingOpacity = 0.6;
   static const targetBorder = 2.0;
 
-  /// 无参数；创建局部选中与错误状态，提交沿用父页自动保存。
   @override
   State<ScreenshotToolbarEditor> createState() =>
       _ScreenshotToolbarEditorState();
 }
 
-/// 格位坐标：column 为组下标，slot 为格下标（0–5）。
 typedef _Slot = ({int column, int slot});
 
 class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   late ScreenshotToolbarPreferences _value = widget.value;
   String? _error;
 
-  /// 选中的可承载子级的一级工具；非 null 时网格下方显示其子级列表。
   String? _selected;
 
-  /// 各功能拖拽手柄的焦点；按功能保存，键盘移动后格子换了位置焦点仍跟随该功能。
   final Map<String, FocusNode> _handles = {};
 
-  /// 各组拖拽手柄的焦点；按组合保存（组合各组唯一），组移动后焦点仍跟随该组。
   final Map<int, FocusNode> _columnHandles = {};
 
-  /// 无参数；释放手柄焦点。
   @override
   void dispose() {
     for (final node in [..._handles.values, ..._columnHandles.values]) {
@@ -108,14 +89,12 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     super.dispose();
   }
 
-  /// oldWidget 为父级旧快照；外部重新加载时采用父级配置。
   @override
   void didUpdateWidget(covariant ScreenshotToolbarEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.value != oldWidget.value) _value = widget.value;
   }
 
-  /// next 为完整配置；校验成功才提交，错误保留原值并给出原因。
   void _submit(ScreenshotToolbarPreferences next) {
     try {
       next.validate();
@@ -129,7 +108,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     }
   }
 
-  /// id 为功能；返回它所在的格位，子级或不存在时为 null。
   _Slot? _slotOf(String id) {
     for (final (column, value) in _value.columns.indexed) {
       final slot = value.slots.indexOf(id);
@@ -138,17 +116,12 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return null;
   }
 
-  /// 无参数；返回可修改的父子结构副本。
   Map<String, List<String>> _childrenCopy() => {
     for (final entry in _value.children.entries) entry.key: [...entry.value],
   };
 
-  /// id 为功能；返回它能否成为子级：自己没有子级。
   bool _canBeChild(String id) => (_value.children[id] ?? const []).isEmpty;
 
-  /// id 为被放下的功能，target 为目标格位；返回放下后的配置，不允许时为 null。
-  /// 目标格有工具时与 id 原位置交换：id 原在格位则两者互换；id 原为子级时，
-  /// 被换出的工具只有能成为子级（自己没有子级，且不是该父级本身）才交换。
   ScreenshotToolbarPreferences? _placeInSlot(String id, _Slot target) {
     final columns = [..._value.columns];
     final children = _childrenCopy();
@@ -172,8 +145,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return _value.copyWith(columns: columns, children: children);
   }
 
-  /// id 为被放下的功能，parent 为子级列表所属父级，index 为插入位置；返回放下后的配置，不允许时为 null。
-  /// id 不能是父级本身，且自己不能带子级；原在格位时留下空格。
   ScreenshotToolbarPreferences? _placeAsChild(
     String id,
     String parent,
@@ -190,7 +161,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       final siblings = children[_value.parentOf(id)]!;
       final old = siblings.indexOf(id);
       siblings.removeAt(old);
-      // 同一列表内向后移动时，移除后目标下标前移一位。
       if (_value.parentOf(id) == parent && old < position) position -= 1;
       if (siblings.isEmpty) children.remove(_value.parentOf(id));
     }
@@ -199,7 +169,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return _value.copyWith(columns: columns, children: children);
   }
 
-  /// id 为格位中的功能，dColumn/dSlot 为方向键位移（上下跨组、左右在组内）；校验全局快捷键保留与越界后交换。
   void _moveByKey(String id, int dColumn, int dSlot) {
     final from = _slotOf(id)!;
     final column = from.column + dColumn;
@@ -214,7 +183,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       modifiers: _value.columns[column].modifiers,
       digit: slot + 1,
     );
-    // 键盘方向键与鼠标拖拽共享同一全局保留格位校验，阻止进入不可保存状态（U-16）。
     if (widget.reserved.containsKey(targetSlot)) {
       setState(
         () => _error = '该格位已被全局快捷键“${widget.reserved[targetSlot]}”占用，无法移入。',
@@ -224,13 +192,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     final next = _placeInSlot(id, (column: column, slot: slot));
     if (next == null) return;
     _submit(next);
-    // 格子换位后重建，把焦点交回该功能的手柄，便于连续用方向键移动。
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _handles[id]?.requestFocus(),
     );
   }
 
-  /// id 为子级，delta 为 -1 或 1；在同一父级的子级之间移动一位，到头不动。
   void _shiftChild(String id, int delta) {
     final parent = _value.parentOf(id)!;
     final siblings = [..._value.children[parent]!];
@@ -245,7 +211,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// 无参数；查找当前网格中第一个未被全局快捷键保留的空格位，无可用空格返回 null。
   _Slot? _firstAvailableSlot() {
     for (final (columnIndex, column) in _value.columns.indexed) {
       for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
@@ -258,7 +223,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     return null;
   }
 
-  /// id 为子级功能；将其从子级列表中移出并放入第一个可用的一级非保留空格位（U-16）。
   void _promoteChild(String id) {
     final target = _firstAvailableSlot();
     if (target == null) {
@@ -269,7 +233,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     if (next != null) _submit(next);
   }
 
-  /// id 为一级功能，parent 为目标父级；将该工具移入父级的子级列表末尾（U-16）。
   void _demoteToChild(String id, String parent) {
     final next = _placeAsChild(
       id,
@@ -279,7 +242,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     if (next != null) _submit(next);
   }
 
-  /// parent 为目标父级，movable 为可移入的一级工具集合；弹出可键盘聚焦的选择窗完成移入。
   Future<void> _pickChildToDemote(String parent, List<String> movable) async {
     final chosen = await showDialog<String>(
       context: context,
@@ -328,7 +290,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     if (chosen != null && mounted) _demoteToChild(chosen, parent);
   }
 
-  /// 无参数；判断当前工具栏配置是否与默认分组、格位、子级及隐藏集合完全一致。
   bool get _isDefault {
     final defaults = ScreenshotToolbarPreferences();
     if (_value.columns.length != defaults.columns.length) return false;
@@ -354,7 +315,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         _value.hidden.containsAll(defaults.hidden);
   }
 
-  /// 无参数；经破坏性二次确认并检查全局快捷键冲突后，恢复工具栏为出厂默认排布（U-26）。
   Future<void> _confirmReset() async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
@@ -380,7 +340,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     setState(() => _selected = null);
   }
 
-  /// 无参数；用第一个未使用的组合新增一个空组，已有 8 组时不出现入口。
   void _addColumn() {
     final used = {for (final column in _value.columns) column.modifiers};
     final modifiers = ToolbarModifiers.allowed.firstWhere(
@@ -399,26 +358,21 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// from 为被移动的组下标，to 为目标位置；把该组移到 to，其余组依次让位。
-  /// 组合与格位随组移动，各工具快捷键不变，只改变工具栏上的排列（#141）。
   void _moveColumn(int from, int to) {
     if (from == to || to < 0 || to >= _value.columns.length) return;
     final modifiers = _value.columns[from].modifiers;
     final columns = [..._value.columns];
     columns.insert(to, columns.removeAt(from));
     _submit(_value.copyWith(columns: columns));
-    // 组重建后把焦点交回该组的手柄，便于连续用方向键移动。
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _columnHandles[modifiers]?.requestFocus(),
     );
   }
 
-  /// column 为组下标；删除空组，后续组前移。
   void _removeColumn(int column) {
     _submit(_value.copyWith(columns: [..._value.columns]..removeAt(column)));
   }
 
-  /// column 为组下标，modifiers 为新组合；检查已有工具格位是否与全局快捷键冲突后改变组合（U-16）。
   void _setModifiers(int column, int modifiers) {
     for (var slot = 0; slot < ToolbarGrid.slots; slot++) {
       if (_value.columns[column].slots[slot] == null) continue;
@@ -433,7 +387,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     _submit(_value.copyWith(columns: columns));
   }
 
-  /// id 为功能；切换显示或隐藏，格位与键位保持。
   void _toggleVisible(String id) {
     final visible = !_value.hidden.contains(id);
     _submit(
@@ -445,13 +398,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// column 为一组；返回组内工具是否全部隐藏（空组为 false）。
   bool _columnHidden(ToolbarColumn column) {
     final ids = column.slots.nonNulls;
     return ids.isNotEmpty && ids.every(_value.hidden.contains);
   }
 
-  /// column 为一组；组内工具全部隐藏时一次全部显示，否则一次全部隐藏，格位与键位保持（#1）。
   void _toggleColumnVisible(ToolbarColumn column) {
     final ids = column.slots.nonNulls.toSet();
     _submit(
@@ -463,7 +414,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// context 为页面主题；每组一行自上而下，格子按内容宽等分（最大 64）一屏显示，底部操作与子级区随设置正文滚动。
   @override
   Widget build(BuildContext context) {
     final selected = _selected != null && _slotOf(_selected!) != null
@@ -478,7 +428,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             padding: const EdgeInsets.only(bottom: GlassMetrics.space8),
             child: NativeGlassBanner(message: _error!, isError: true),
           ),
-        // 网格最大宽 484，窄于此时格子等分剩余宽度，不横向滚动（#67）。
         ConstrainedBox(
           key: const ValueKey('toolbar-grid'),
           constraints: const BoxConstraints(
@@ -488,7 +437,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: ScreenshotToolbarEditor.rowGap,
             children: [
-              // 表头：组头宽度之后，每个格子上方标出数字键 1–6。
               Row(
                 key: const ValueKey('toolbar-digits'),
                 children: [
@@ -561,7 +509,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// index 为组下标，column 为该组；返回可接收拖来的组的一行：组头与 6 个格子。
   Widget _column(BuildContext context, int index, ToolbarColumn column) {
     final used = {
       for (final other in _value.columns)
@@ -571,7 +518,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     final label = column.modifiers == 0
         ? '无修饰组'
         : '${ToolbarModifiers.label(column.modifiers)} 组';
-    // 组作为落点：拖来的组移到本组位置，落点一侧显示横线（上移在上方、下移在下方）（#67）。
     return DragTarget<int>(
       key: ValueKey('toolbar-column-$index'),
       onWillAcceptWithDetails: (details) => details.data != index,
@@ -596,8 +542,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// index/column 为组下标与组，used 为其他组已用组合，empty 为该组是否没有工具，label 为组名称；
-  /// 返回组头（组合下拉在上，拖动手柄与空组删除入口在下）与从左到右的 6 个格子。
   Widget _columnBody(
     BuildContext context,
     int index,
@@ -631,7 +575,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             child: NativeGlassMenuButton<int>(
               key: ValueKey('toolbar-modifiers-$index'),
               dense: true,
-              // 组合下拉与工具格同底，不单独使用玻璃材料（#67 原生克制风格）。
               flat: ShapeDecoration(
                 color: ScreenshotToolbarEditor.cellColors(context).fill,
                 shape: RoundedSuperellipseBorder(
@@ -645,7 +588,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 ),
               ),
               value: column.modifiers,
-              // 其他组已用的组合不可选，保证各组组合不重复。
               items: {
                 for (final modifiers in ToolbarModifiers.allowed)
                   if (!used.contains(modifiers))
@@ -658,7 +600,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
           ),
           Row(
             children: [
-              // 组拖拽手柄：鼠标拖到其他组上移动本组；聚焦后上下方向键移动（#67）。
               Semantics(
                 label: '移动$label',
                 onIncrease: () => _moveColumn(index, index + 1),
@@ -709,7 +650,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   ),
                 ),
               ),
-              // 非空组为整组眼睛：组内全部隐藏时为闭眼，点击一次全部显示，否则一次全部隐藏（#67、#1）。
               if (!empty)
                 IconButton(
                   key: ValueKey('toolbar-hide-column-$index'),
@@ -768,10 +708,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// at 为格位，modifiers 为所在组组合，id 为格中功能（空格为 null）；返回可放下的格子。
   Widget _cell(BuildContext context, _Slot at, int modifiers, String? id) {
     final slot = (modifiers: modifiers, digit: at.slot + 1);
-    // 全局快捷键占用的格位不可放入；与系统快捷键相同的格位可放但标红提示（#141）。
     final reservedFor = widget.reserved[slot];
     final systemConflict = id != null && widget.systemSlots.contains(slot);
     return DragTarget<String>(
@@ -808,7 +746,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                   width: ScreenshotToolbarEditor.hairline,
                 ),
         );
-        // 空格只有虚线框；被全局快捷键占用时居中注明用途，长说明在格内换行。
         final content = id == null
             ? CustomPaint(
                 painter: _DashedBorder(colors.outlineVariant),
@@ -831,10 +768,8 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                       ),
               )
             : _toolCell(context, id, conflict: systemConflict);
-        // 宽度由所在行等分决定（最大 64），高固定 64。
         return Container(
           height: ScreenshotToolbarEditor.cellHeight,
-          // 工具格为平面底色加细线，空格只有虚线框（#67 原生克制风格）。
           decoration: ShapeDecoration(
             shape: shape,
             color: id == null
@@ -847,9 +782,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id 为格中功能，conflict 为与系统快捷键冲突；返回可整格拖动的紧凑格：
-  /// 自上而下为图标与名称（冲突时名称下方注明「系统优先」），右上角为眼睛按钮。
-  /// 点按或键盘 Enter/Space 触发可承载子级的工具时选中它，网格下方显示其子级。
   Widget _toolCell(BuildContext context, String id, {required bool conflict}) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
@@ -911,7 +843,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         ],
       ),
     );
-    // 整格作为拖拽来源；方向键上下跨组、左右在组内与相邻格交换，Enter/Space 展开可承载子级的面板（U-16）。
     final draggable = _handle(
       context,
       id,
@@ -928,13 +859,11 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       },
       child: cell,
     );
-    // 与系统快捷键冲突时悬停说明系统优先（#67）。
     return conflict
         ? Tooltip(message: '与系统快捷键冲突，系统优先', child: draggable)
         : draggable;
   }
 
-  /// parent 为选中的父级；返回「〈名称〉的子级」列表与键盘可访问的移入工具入口，可拖入拖出网格与排序。
   Widget _childrenList(BuildContext context, String parent) {
     final children = _value.children[parent] ?? const <String>[];
     final title = '${ScreenshotActions.labels[parent]}的子级';
@@ -970,7 +899,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
         const SizedBox(height: GlassMetrics.space4),
         for (final (index, id) in children.indexed)
           _childRow(context, parent, index, id),
-        // 末尾落点：拖到这里排到子级末尾；没有子级时同样作为第一个子级的落点。
         DragTarget<String>(
           key: ValueKey('toolbar-children-end-$parent'),
           onWillAcceptWithDetails: (details) =>
@@ -1004,7 +932,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// parent 为父级，index 为子级下标，id 为子级；返回可拖动、支持键盘移出一级并可在其前方放下的一行。
   Widget _childRow(BuildContext context, String parent, int index, String id) {
     final label = ScreenshotActions.labels[id]!;
     final visible = !_value.hidden.contains(id);
@@ -1056,7 +983,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 ),
               ),
             ),
-            // 键盘可直达的移出替代手段：点击即可升回第一个非保留的一级空格位（U-16）。
             NativeGlassSurface(
               material: true,
               child: IconButton(
@@ -1075,9 +1001,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id/label 为功能与名称，onKey 把方向键映射为移动动作（不处理时返回 null），
-  /// child 为拖拽来源的外观（格位中的整格），为空时使用 32×32 拖拽图标（子级列表行）；
-  /// 返回拖拽来源：鼠标拖动放到格位或子级列表，聚焦后方向键移动并显示 2pt 焦点描边，提供可访问性调整动作。
   Widget _handle(
     BuildContext context,
     String id,
@@ -1151,8 +1074,6 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     );
   }
 
-  /// id/label 为功能与名称，visible 为当前可见性，size/hit 为图标与命中区边长（格内为紧凑尺寸）；
-  /// 返回切换显示的眼睛按钮（#67）。
   Widget _eye(
     String id,
     String label,
@@ -1179,12 +1100,10 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
   );
 }
 
-/// 空格的 1pt 虚线边框（#67）：沿圆角矩形绘制 4pt 线段、3pt 间隔。
 class _DashedBorder extends CustomPainter {
   const _DashedBorder(this.color);
   final Color color;
 
-  /// canvas/size 为绘制目标；沿 r8 圆角矩形路径按段描线。
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -1205,7 +1124,6 @@ class _DashedBorder extends CustomPainter {
     }
   }
 
-  /// oldDelegate 为上一画笔；颜色变化时重画。
   @override
   bool shouldRepaint(covariant _DashedBorder oldDelegate) =>
       oldDelegate.color != color;

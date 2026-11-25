@@ -2,9 +2,7 @@ import 'dart:convert';
 
 import 'glossary.dart';
 
-/// 术语文件中的一行；保留文件位置以及校验成功的条目或错误说明。
 class GlossaryImportRow {
-  /// position 为 CSV 起始行号或 JSON 条目序号；entry/error 分别为有效条目与错误，返回不可变预览行。
   const GlossaryImportRow({required this.position, this.entry, this.error});
 
   final int position;
@@ -12,17 +10,13 @@ class GlossaryImportRow {
   final String? error;
 }
 
-/// 已完成格式及逐行校验的术语草稿；有错误时禁止产生提交列表。
 class GlossaryImport {
-  /// rows 为按文件顺序排列的预览行；返回不可变解析结果。
   GlossaryImport(List<GlossaryImportRow> rows) : rows = List.unmodifiable(rows);
 
   final List<GlossaryImportRow> rows;
 
-  /// 无参数；返回错误行数，任一错误均阻止整批提交。
   int get errorCount => rows.where((row) => row.error != null).length;
 
-  /// existing 为当前术语列表；返回文件中首次出现且当前列表没有的键数量。
   int addedCount(List<GlossaryEntry> existing) {
     final keys = existing.map((entry) => entry.key).toSet();
     return rows
@@ -30,7 +24,6 @@ class GlossaryImport {
         .length;
   }
 
-  /// existing 为当前术语列表；返回与现有条目或文件前行重复的行位置。
   Set<int> duplicatePositions(List<GlossaryEntry> existing) {
     final keys = existing.map((entry) => entry.key).toSet();
     return {
@@ -39,7 +32,6 @@ class GlossaryImport {
     };
   }
 
-  /// existing 为完整当前列表，overwrite 决定重复时是否覆盖；返回合并副本，有错误时抛出 FormatException。
   List<GlossaryEntry> merge(
     List<GlossaryEntry> existing, {
     required bool overwrite,
@@ -49,7 +41,6 @@ class GlossaryImport {
     final indices = {
       for (final (index, entry) in merged.indexed) entry.key: index,
     };
-    // 按文件顺序合并：保留取首条，覆盖取最后一条，现有条目的位置不变。
     for (final row in rows) {
       final entry = row.entry!;
       final index = indices[entry.key];
@@ -64,7 +55,6 @@ class GlossaryImport {
   }
 }
 
-/// text 为已解码 UTF-8 文本，format 为 csv/json；返回含位置与错误的完整预览，语言接受系统使用的语言标签。
 GlossaryImport parseGlossaryFile(String text, {required String format}) {
   final rows = <GlossaryImportRow>[];
   final languageTag = RegExp(
@@ -74,20 +64,17 @@ GlossaryImport parseGlossaryFile(String text, {required String format}) {
     r'(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*'
     r'(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?$',
   );
-  // BOM 只属于文件编码标记，不作为表头或 JSON 内容的一部分。
   final source = text.startsWith('\uFEFF') ? text.substring(1) : text;
   try {
     final List<(int, Object?)> records;
     switch (format) {
       case 'csv':
-        // _parseCsv 保留跨行字段，并报告格式错误所在的物理行。
         final csv = _parseCsv(source);
         if (csv.isEmpty ||
             csv.first.$2.join(',') != 'term,translation,language' ||
             csv.first.$2.length != 3) {
           throw const FormatException('CSV 表头必须为 term,translation,language。');
         }
-        // 整行为空的记录（空行）不是术语，跳过而不计为错误。
         records = [
           for (final row in csv.skip(1))
             if (row.$2.length != 1 || row.$2.single.isNotEmpty) (row.$1, row.$2),
@@ -122,7 +109,6 @@ GlossaryImport parseGlossaryFile(String text, {required String format}) {
           throw const FormatException('term、translation、language 均须为字符串。');
         }
         if (term.trim().isEmpty) throw const FormatException('原文术语不能为空。');
-        // 系统首选语言可以不在设置下拉列表中；校验标签结构并保留原码，判重仍使用既有规范键。
         if (!languageTag.hasMatch(language.replaceAll('_', '-'))) {
           throw FormatException('目标语言码无效：$language。');
         }
@@ -149,7 +135,6 @@ GlossaryImport parseGlossaryFile(String text, {required String format}) {
   return GlossaryImport(rows);
 }
 
-/// entries 为待导出的完整术语列表，format 为 csv/json；返回仅包含术语三个字段的 UTF-8 文本内容。
 String exportGlossaryFile(
   List<GlossaryEntry> entries, {
   required String format,
@@ -159,11 +144,9 @@ String exportGlossaryFile(
         .convert([for (final entry in entries) entry.toMap()]);
   }
   if (format != 'csv') throw const FormatException('仅支持 CSV 或 JSON 术语文件。');
-  // CSV 所有字段统一引用，双引号加倍转义，保持逗号和多行内容完整。
   return 'term,translation,language\r\n${entries.map((entry) => [entry.term, entry.translation, entry.language].map((value) => '"${value.replaceAll('"', '""')}"').join(',')).join('\r\n')}';
 }
 
-/// text 为 CSV 全文；返回起始物理行号及字段列表，严格拒绝未闭合引号和引用字段外的非分隔字符。
 List<(int, List<String>)> _parseCsv(String text) {
   final records = <(int, List<String>)>[];
   var fields = <String>[];

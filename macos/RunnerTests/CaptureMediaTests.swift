@@ -10,9 +10,7 @@ import XCTest
 
 @testable import TranSnap
 
-/// 使用真实位图与本地编码文件验证输出；不调用屏幕权限，不控制其他应用。
 final class CaptureMediaTests: XCTestCase {
-    /// 旧识别尚未结束时只保留新代次的最新帧，结束后才开始下一次。
     func testLiveOcrSlotKeepsOnePendingFrameForTheCurrentGeneration() {
         var slot = LiveOcrSlot()
         slot.adopt(1)
@@ -30,13 +28,10 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertTrue(slot.offer(generation: 3))
     }
 
-    /// 无参数；截图存储按类型与本地日期分类，重名只新增序号文件，已有文件、已取消的发布与越界路径都不改写任何内容（#124）。
-    /// 边界：同一日期五种输出进入不同分类，APNG 扩展名为 png 但不进截图分类；根路径被文件占用、名称越出目录与目录已删除都必须报错。
     func testScreenshotStorageClassifiesByDateAndKeepsExistingFiles() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
-        // 日期用公历构造，不受用户的日历区域设置影响。
         let date = try XCTUnwrap(Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12)))
         let kinds: [(ScreenshotStorage.Category, String, String)] = [
             (.screenshot, "截图", "png"), (ScreenshotStorage.Category(.mp4), "视频", "mp4"), (ScreenshotStorage.Category(.gif), "gif", "gif"),
@@ -49,7 +44,6 @@ final class CaptureMediaTests: XCTestCase {
             let source = directory.appendingPathComponent("source.\(ext)")
             try Data([1, 2, 3]).write(to: source)
             try Data([9]).write(to: target)
-            // 同名媒体只新增序号文件；临时源与已保存内容均保持不变，不留暂存文件。
             let output = try ScreenshotStorage.publish(source: source, target: target)
             XCTAssertEqual(output.lastPathComponent, "采集-2.\(ext)")
             XCTAssertEqual(try Data(contentsOf: output), Data([1, 2, 3]))
@@ -57,19 +51,16 @@ final class CaptureMediaTests: XCTestCase {
             XCTAssertEqual(try Data(contentsOf: source), Data([1, 2, 3]))
             XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains { $0.hasSuffix(".partial") })
         }
-        // 根路径被真实文件占用时必须失败，不能报告保存成功或污染该文件。
         let blockedRoot = directory.appendingPathComponent("blocked")
         try Data([7]).write(to: blockedRoot)
         XCTAssertThrowsError(try ScreenshotStorage.datedDirectory(basePath: blockedRoot.path, category: .screenshot, date: date))
         XCTAssertEqual(try Data(contentsOf: blockedRoot), Data([7]))
-        // 同一毫秒内或重复保存同一截图是重名边界，已有文件的字节必须完全保留。
         let first = try ScreenshotStorage.save(Data([1, 2, 3]), directory: directory, name: "截图.png")
         let second = try ScreenshotStorage.save(Data([4, 5, 6]), directory: directory, name: "截图.png")
         let third = try ScreenshotStorage.save(Data([7]), directory: directory, name: "截图.png")
         XCTAssertEqual([second.lastPathComponent, third.lastPathComponent], ["截图-2.png", "截图-3.png"])
         XCTAssertEqual(try Data(contentsOf: first), Data([1, 2, 3]))
         XCTAssertEqual(try Data(contentsOf: second), Data([4, 5, 6]))
-        // 取消是真实任务状态；发布不得创建目标，也不能删除仍可预览的来源或遗留暂存文件。
         let cancelledTarget = directory.appendingPathComponent("cancelled.gif")
         let cancelled = Task {
             withUnsafeCurrentTask { $0?.cancel() }
@@ -82,18 +73,15 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: cancelledTarget.path))
         XCTAssertEqual(try Data(contentsOf: first), Data([1, 2, 3]))
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasSuffix(".partial") })
-        // 名称越出所选目录、所选目录已删除都必须报错。
         XCTAssertThrowsError(try ScreenshotStorage.save(Data([8]), directory: directory, name: "../outside.png"))
         XCTAssertThrowsError(try ScreenshotStorage.save(Data([8]), directory: directory.appendingPathComponent("removed"), name: "截图.png"))
     }
 
-    /// 无参数；没有真实冻结帧时，即使请求结构完整也必须拒绝启动，不能把任意ID当作屏幕身份。
     @MainActor
     func testCaptureToolbarRejectsMissingScreenFrame() throws {
         let controller = ScreenshotWindowController()
         controller.onPrepareCapture = { _, _, _ in }
         var response: Any?
-        // 通过真实截图通道处理入口验证拒绝结果，不申请权限或创建编辑窗口。
         controller.handle(FlutterMethodCall(methodName: AppConstants.prepareCaptureMethod,
             arguments: ["id": "non-screen-image", "kind": "region", "scrolling": false])) {
             response = $0
@@ -103,7 +91,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertNil(controller.liveCaptureID)
     }
 
-    /// 无参数；实际绘制的选区中心必须透明，外侧像素保持截图约定的60%黑色。
     @MainActor
     func testRecordingShadeLeavesLiveSelectionTransparent() throws {
         let shade = CaptureShadeView(frame: NSRect(x: 0, y: 0, width: 128, height: 128))
@@ -116,14 +103,12 @@ final class CaptureMediaTests: XCTestCase {
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = graphics
         graphics.cgContext.clear(shade.bounds)
-        // 取中心与远离1pt边框的外侧点，直接验证输出像素而非下游绘制调用。
         shade.draw(shade.bounds)
         let inside = try XCTUnwrap(bitmap.colorAt(x: 64, y: 64))
         let outside = try XCTUnwrap(bitmap.colorAt(x: 8, y: 8))
         XCTAssertEqual(inside.alphaComponent, 0, accuracy: 1.0 / 255)
         XCTAssertEqual(outside.alphaComponent, 0.6, accuracy: 1.0 / 255)
         XCTAssertEqual(outside.redComponent, 0, accuracy: 1.0 / 255)
-        // 两个重叠窗口必须构成透明并集；不能因奇偶填充让重叠区域变暗。
         shade.selection = shade.bounds
         shade.contentRects = [NSRect(x: 16, y: 16, width: 64, height: 64),
                               NSRect(x: 48, y: 48, width: 64, height: 64)]
@@ -134,7 +119,6 @@ final class CaptureMediaTests: XCTestCase {
 
     }
 
-    /// 无参数；区域录制在非减少动态效果时叠加 22%/78% 虚线相位流光、暂停冻住 speed、恢复延续且窗口遮罩或减少动态效果时不创建图层（#142）。
     @MainActor
     func testRegionRecordingFlowLayerTracksDashPauseAndWindowExclusion() throws {
         var reduceMotion = false
@@ -145,7 +129,6 @@ final class CaptureMediaTests: XCTestCase {
 
         shade.flowsBorder = true
         let flow = try XCTUnwrap(shade.flowLayer)
-        // inset 0.5pt 后矩形宽 100、高 60，周长 320，22% 为 70.4，78% 为 249.6。
         let pattern = try XCTUnwrap(flow.lineDashPattern).map(\.doubleValue)
         XCTAssertEqual(pattern.count, 2)
         XCTAssertEqual(pattern[0], 70.4, accuracy: 0.01)
@@ -159,7 +142,6 @@ final class CaptureMediaTests: XCTestCase {
         shade.flowPaused = false
         XCTAssertEqual(flow.speed, 1)
 
-        // 窗口录制设置 contentRects 后立即移除流光图层；减少动态效果开启时同样不创建。
         shade.contentRects = [NSRect(x: 10, y: 10, width: 100, height: 100)]
         XCTAssertNil(shade.flowLayer)
 
@@ -169,7 +151,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertNil(shade.flowLayer)
     }
 
-    /// 无参数；长截图过程提示依次尝试选区上、下、左、右并离选区8pt，避开面板与缩略图，都放不下才居中且不超过选区宽减16pt；1000ms后移除。
     @MainActor
     func testScrollHintAvoidsSelectionThenFallsBackToCenterAndExpires() async throws {
         let shade = CaptureShadeView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
@@ -181,12 +162,10 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(above.midX, shade.selection.midX, accuracy: 1)
         XCTAssertLessThanOrEqual(above.width, 240)
         XCTAssertEqual(try XCTUnwrap(shade.hintView).cornerRadius, 8)
-        // 上方被缩略图占用时改到下方。
         shade.showHint(text, isError: true, avoiding: [NSRect(x: 0, y: 380, width: 800, height: 220)])
         let below = try XCTUnwrap(shade.hintView).frame
         XCTAssertEqual(below.maxY, shade.selection.minY - 8)
         XCTAssertEqual(shade.subviews.count, 1)
-        // 选区占满可用区时四个方向都放不下，提示居中且宽度不超过选区宽减16pt。
         shade.selection = NSRect(x: 0, y: 0, width: 120, height: 600)
         shade.showHint(text, isError: false, visible: shade.selection)
         let center = try XCTUnwrap(shade.hintView).frame
@@ -199,21 +178,17 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertTrue(shade.subviews.isEmpty)
     }
 
-    /// 无参数；缩略图取已确认长图底部并等比缩小、不放大，回退目标框标出参照帧正文底部41像素重叠段；面板上方8pt右对齐。
     @MainActor
     func testScrollPreviewShowsLongImageTailAndTarget() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         for offset in [0, 40, 80] { try stitcher.append(frame(offset: offset)) }
-        // 272像素长图按0.5缩小，最大高60只显示底部120像素。
         let preview = try XCTUnwrap(stitcher.preview(width: 48, maxHeight: 60, markTarget: true))
         XCTAssertEqual(preview.image.width, 48)
         XCTAssertEqual(preview.image.height, 60)
         let target = try XCTUnwrap(preview.target)
-        // 底栏16、重叠41：目标距底(16+41)×0.5=28.5，高20.5。
         XCTAssertEqual(target.minY, 31.5, accuracy: 0.01)
         XCTAssertEqual(target.height, 20.5, accuracy: 0.01)
         XCTAssertNil(try XCTUnwrap(stitcher.preview(width: 48, maxHeight: 60, markTarget: false)).target)
-        // 缩略图比原图宽时不放大，按原宽显示整张较矮长图。
         let full = try XCTUnwrap(stitcher.preview(width: 200, maxHeight: 400, markTarget: false))
         XCTAssertEqual(full.image.width, 96)
         XCTAssertEqual(full.image.height, 272)
@@ -231,7 +206,6 @@ final class CaptureMediaTests: XCTestCase {
                        NSRect(x: 1272, y: 100, width: 160, height: 248))
     }
 
-    /// 无参数；320×84采集面板切换到带标题栏结果窗后，同一Flutter内容须避开系统按钮且保留完整高度。
     @MainActor
     func testCapturePanelLayoutSupportsControlAndResultModes() throws {
         let engine = FlutterEngine(name: "capture-layout-test", project: nil, allowHeadlessExecution: true)
@@ -239,18 +213,14 @@ final class CaptureMediaTests: XCTestCase {
         let panel = CaptureWindowController.makeWindow(compact: true)
         let result = CaptureWindowController.makeWindow(compact: false)
         defer { panel.close(); result.close(); engine.shutDownEngine() }
-        // 使用录屏和长截图共有的安装入口复现无标题窗口布局，不能只验证普通窗口。
         NativeGlassFactory.installContent(flutter, in: panel)
-        // 与采集控制器的present一致，在安装内容后提交最终控制尺寸再进行布局。
         panel.setContentSize(AppConstants.captureControlSize)
         panel.contentView?.layoutSubtreeIfNeeded()
         XCTAssertEqual(flutter.view.frame.width, 320, accuracy: 0.01)
         XCTAssertEqual(flutter.view.frame.height, 84, accuracy: 0.01)
-        // 检查项目材料/Flutter承载后的真实命中叶，不能让透明装饰吞掉首次鼠标。
         let hit = try XCTUnwrap(panel.contentView?.hitTest(NSPoint(x: 160, y: 42)))
         XCTAssertTrue(hit.acceptsFirstMouse(for: nil))
 
-        // 转移真实内容到普通结果窗，标题栏占用不能落到Flutter媒体或操作区域中。
         let content = panel.contentViewController
         panel.contentViewController = nil
         result.contentViewController = content
@@ -261,7 +231,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertLessThan(flutter.view.convert(flutter.view.bounds, to: nil).maxY, result.frame.height)
     }
 
-    /// 无参数；活动采集须跨Space置顶，媒体结果须能激活且允许普通应用和系统对话框位于其上。
     @MainActor
     func testCaptureAndResultWindowsUseSeparateActivationAndLevels() {
         let controls = CaptureWindowController.makeWindow(compact: true)
@@ -277,7 +246,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertFalse(result.styleMask.contains(.nonactivatingPanel))
         XCTAssertFalse(result.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(result.canBecomeKey)
-        // AppKit只让已显示的普通窗口成为主窗口，按用户打开结果后的真实状态验证。
         result.makeKeyAndOrderFront(nil)
         XCTAssertTrue(result.canBecomeMain)
         for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
@@ -286,24 +254,20 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数/返回值；非key面板首个down/up须改变按钮状态，窗口焦点和应用激活态均保持不变。
     @MainActor
     func testCaptureFirstClickChangesControlWithoutStealingFocus() throws {
         let panel = CaptureWindowController.makeWindow(compact: true)
         let control = CaptureButtonEventFixture(frame: NSRect(origin: .zero, size: AppConstants.captureControlSize))
-        // 真实玻璃穿透命中后，包装层沿用NSView默认首鼠标策略，复现平台视图的事件边界。
         control.addSubview(NativeGlassView(frame: control.bounds))
         panel.contentView = control
         panel.alphaValue = 0.01
         defer { panel.close() }
-        // 默认面板策略在宿主激活或未激活时都会吞首击；不依赖外部应用接管测试宿主焦点。
         panel.orderFrontRegardless()
         let wasActive = NSApp.isActive
         XCTAssertFalse(panel.isKeyWindow)
         let point = NSPoint(x: 160, y: 42)
         XCTAssertTrue(panel.contentView?.hitTest(point) === control)
         XCTAssertFalse(control.acceptsFirstMouse(for: nil))
-        // 只将一组事件交给本进程的真实面板，不使用全局鼠标注入或第二次激活点击。
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             let event = try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
@@ -315,7 +279,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(NSApp.isActive, wasActive)
     }
 
-    /// 无参数；853×434 媒体加四周 24pt 衬底与底部 52pt 操作栏占 901×534 内容区，全屏及宽/高极值均须完整容纳且不裁掉 600×200 最小内容（#67、#145）。
     @MainActor
     func testVideoResultBoundsDoNotCreateAnInvisibleDesktopOverlay() {
         let visible = NSRect(x: -1920, y: 24, width: 1920, height: 1056)
@@ -329,12 +292,10 @@ final class CaptureMediaTests: XCTestCase {
             let frame = CaptureWindowController.resultFrame(pixels: pixels, scale: 2, visible: visible)
             XCTAssertTrue(visible.contains(frame))
             XCTAssertGreaterThanOrEqual(frame.width, 600)
-            // 内容至少容纳最小结果窗高度 200pt，再加系统标题栏（#67、#145）。
             XCTAssertGreaterThan(frame.height, 200)
         }
     }
 
-    /// 无参数/返回值；点击真实红按钮一次即结束会话，不进入会阻塞结果窗口的确认循环。
     @MainActor
     func testVideoResultSystemCloseImmediatelyEndsSession() async throws {
         let controller = CaptureWindowController(screenshot: ScreenshotWindowController())
@@ -348,7 +309,6 @@ final class CaptureMediaTests: XCTestCase {
             if !active && controller.service.id != token { ended.fulfill() }
         }
         result.makeKeyAndOrderFront(nil)
-        // 系统关闭入口走完整的异步资源状态转换，检查最终身份与阶段而不是下游调用。
         try XCTUnwrap(result.standardWindowButton(.closeButton)).performClick(nil)
         await fulfillment(of: [ended], timeout: 3)
         XCTAssertNotEqual(controller.service.id, token)
@@ -357,7 +317,6 @@ final class CaptureMediaTests: XCTestCase {
         controller.onActiveChanged = nil
     }
 
-    /// 无参数；负坐标副屏和上/下排列都以可用区右下角定位，保留8pt边距和全部提示空间。
     @MainActor
     func testCaptureControlsAnchorToVisibleBottomRight() {
         for visible in [NSRect(x: -1920, y: 24, width: 1920, height: 1056),
@@ -370,7 +329,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数；真实矢量图标栅格化为16pt@2x PNG；缺失图标是可展示的空资产，不是来源列表错误。
     @MainActor
     func testApplicationIconRendersVectorAndHandlesMissingAsset() throws {
         let vector = NSImage(size: NSSize(width: 256, height: 256), flipped: false) { rect in
@@ -386,7 +344,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertNil(MediaCaptureService.applicationIconPNG(nil))
     }
 
-    /// 无参数；负坐标、显示器间空隙及1x/2x混合倍率必须保留桌面位置，黑色填充其余画布。
     func testApplicationCanvasKeepsMixedScaleDisplaysAndBlackGaps() throws {
         let canvas = try ApplicationCaptureCanvas(displays: [
             .init(id: 1, frame: CGRect(x: -64, y: -32, width: 64, height: 48), scale: 1),
@@ -397,7 +354,6 @@ final class CaptureMediaTests: XCTestCase {
             1: CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 48)),
             2: CIImage(color: .blue).cropped(to: CGRect(x: 0, y: 0, width: 128, height: 96)),
         ]
-        // composite输出真实CI像素，通过统一RGBA读取核对每个像素，不断言绘制调用。
         let image = try XCTUnwrap(CIContext().createCGImage(canvas.composite(frames), from: CGRect(origin: .zero, size: canvas.size)))
         let bytes = try pixels(image)
         for y in 0..<160 {
@@ -407,14 +363,12 @@ final class CaptureMediaTests: XCTestCase {
                 XCTAssertEqual(Array(bytes[(y * 256 + x) * 4..<(y * 256 + x + 1) * 4]), expected)
             }
         }
-        // 奇数尺寸向外补黑边，不裁掉最后一列/行；相同尺寸的拓扑移动也不能视为同一画布。
         let odd = try ApplicationCaptureCanvas(displays: [.init(id: 1,
             frame: CGRect(x: 0, y: 0, width: 65, height: 65), scale: 1)])
         XCTAssertEqual(odd.size, CGSize(width: 66, height: 66))
         XCTAssertThrowsError(try ApplicationCaptureCanvas(displays: []))
     }
 
-    /// 无参数；两路合成实际编码H264并解码，验证尺寸、黑底及左右来源均进入同一MP4。
     func testApplicationEncoderProducesDecodableCompositeVideo() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -428,7 +382,6 @@ final class CaptureMediaTests: XCTestCase {
             XCTFail(error.localizedDescription)
         }
         encoder.queue.async {
-            // 两屏输入使用实际CI图像，进入与ScreenCaptureKit相同的帧接收/编码入口。
             encoder.receive(CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64)), display: 1)
             encoder.receive(CIImage(color: .blue).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64)), display: 2)
         }
@@ -442,7 +395,6 @@ final class CaptureMediaTests: XCTestCase {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         let result = try await generator.image(at: .zero)
         let bytes = try pixels(result.image)
-        // 距接缝32像素的中心色允许5级有损误差，同时检查非主色通道及显示器间黑色空隙。
         for (x, expected) in [(32, [255, 0, 0]), (96, [0, 0, 0]), (160, [0, 0, 255])] {
             for channel in 0..<3 {
                 XCTAssertLessThanOrEqual(abs(Int(bytes[(32 * 192 + x) * 4 + channel]) - expected[channel]), 5)
@@ -450,8 +402,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数/返回值；真实编码器的快速结束、红蓝变化及150ms队列延迟均能导出可解码GIF/APNG。
-    /// 边界：首帧PTS为零、轨道600刻度且严格递增；1/10/30fps覆盖最低、默认与最高采样率，32px验证缩小。
     func testApplicationEncoderExportsReadableAnimationsAcrossTimingBoundaries() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ApplicationMedia-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -463,13 +413,11 @@ final class CaptureMediaTests: XCTestCase {
             let video = folder.appendingPathComponent("\(scenario).mp4")
             let encoder = try ApplicationVideoEncoder(canvas: canvas, url: video) { XCTFail($0.localizedDescription) }
             encoder.queue.async {
-                // receive使用与系统采集相同的真实图像入口，不申请屏幕权限。
                 encoder.receive(CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64)), display: 1)
             }
             try await encoder.waitUntilReady()
             if scenario != "immediate" {
                 if scenario == "delayed" {
-                    // 150ms跨过四个30fps定时边界；输出时长必须保留排队经过时间。
                     encoder.queue.asyncAfter(deadline: .now() + 0.1) { Thread.sleep(forTimeInterval: 0.15) }
                 }
                 try await Task.sleep(nanoseconds: 350_000_000)
@@ -488,7 +436,6 @@ final class CaptureMediaTests: XCTestCase {
             let track = try XCTUnwrap(tracks.first)
             let scale = try await track.load(.naturalTimeScale)
             XCTAssertEqual(scale, 600)
-            // 读取解码后的帧序列，验证实际容器时间而非私有字段或append调用次数。
             let reader = try AVAssetReader(asset: asset)
             let output = AVAssetReaderTrackOutput(track: track,
                 outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
@@ -517,14 +464,12 @@ final class CaptureMediaTests: XCTestCase {
                     for index in 0..<count {
                         let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, index, nil))
                         XCTAssertEqual([image.width, image.height], [32, 32])
-                        // pixels统一解码通道；主色需超过200且另一主色低于40，容纳H264与动图量化误差。
                         let rgb = Array(try pixels(image).prefix(3))
                         let color = try XCTUnwrap(rgb.indices.max(by: { rgb[$0] < rgb[$1] }))
                         XCTAssertTrue(color == 0 || color == 2)
                         XCTAssertGreaterThan(rgb[color], 200)
                         XCTAssertLessThan(rgb[color == 0 ? 2 : 0], 40)
                         colors.append(color)
-                        // 单帧PNG无需动画延时；累计取整最多误差0.005秒，末帧最少0.01秒可再延长不足0.01秒。
                         if count > 1 {
                             let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any])
                             let key = format == .gif ? kCGImagePropertyGIFDictionary : kCGImagePropertyPNGDictionary
@@ -542,7 +487,6 @@ final class CaptureMediaTests: XCTestCase {
             if scenario != "immediate" {
                 for format in [GIFExporter.Format.gif, .apng] {
                     let animation = folder.appendingPathComponent("\(scenario)-crop.\(format.kind.fileExtension)")
-                    // 0.5–0.7秒完全落在0.35秒后的蓝段，10fps恰好两帧，裁剪不得回到红色首帧。
                     let count = try await GIFExporter.export(source: video, destination: animation,
                         options: .init(framesPerSecond: 10), format: format,
                         range: CMTimeRange(start: CMTime(value: 5, timescale: 10), duration: CMTime(value: 2, timescale: 10))) { _ in }
@@ -562,8 +506,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数/返回值；零屏及仅收到一屏均没有完整合成帧，保留结束必须明确失败，不能交付空MP4。
-    /// 边界：画布要求两屏；0/2与1/2都不能建立有效帧时间，2/2成功路径由真实合成视频用例覆盖。
     func testApplicationEncoderRejectsFinishWithoutCompleteFrames() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ApplicationEmpty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -593,8 +535,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数/返回值；首帧前后放弃均取消后续准备，不留下启动等待或可交付MP4。
-    /// 边界：无帧放弃不得提交无效结束时间；已有一帧放弃仍必须取消整个编码结果。
     func testDiscardBeforeFirstFrameCancelsReadiness() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -611,13 +551,11 @@ final class CaptureMediaTests: XCTestCase {
                 }
                 try await encoder.waitUntilReady()
             }
-            // finish模拟真实放弃先完成的状态；waitUntilReady必须观察已结束的编码器身份。
             try await encoder.finish(discard: true)
             do {
                 try await encoder.waitUntilReady()
                 XCTFail("已放弃的录制不能继续等待或进入可录制状态。")
             } catch is CancellationError {
-                // 取消为预期业务结果，不要求调用方等待首帧超时。
             }
             do {
                 _ = try await GIFExporter.metadata(video)
@@ -626,7 +564,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// width/height为像素尺寸，offset为滚动，top/bottom为固定带，repeatRows指定重复周期、blankRows指定正文空白行范围；返回真实位图。
     private func frame(width: Int = 96, height: Int = 192, offset: Int, top: Int = 12,
                        bottom: Int = 16, cornerOnly: Bool = false, changedHeader: Bool = false,
                        repeatRows: Int = 0, blankRows: [Range<Int>] = []) throws -> CGImage {
@@ -637,7 +574,6 @@ final class CaptureMediaTests: XCTestCase {
                 if y < top { color = changedHeader ? [30, 40, 50] : [220, 230, 240] }
                 else if y >= height - bottom && !cornerOnly { color = [80, 90, 100] }
                 else {
-                    // 非周期二维纹理提供唯一位移；颜色来自行列，输出不用相似度容差蒙混过关。
                     let row = y - top + offset
                     let contentRow = repeatRows > 0 ? row % repeatRows : row
                     let seed = UInt32(contentRow) &* 73856093 ^ UInt32(x) &* 19349663
@@ -658,7 +594,6 @@ final class CaptureMediaTests: XCTestCase {
             provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
     }
 
-    /// image为任意可解码图；返回统一RGBA行序，避免不同解码器通道布局影响断言。
     private func pixels(_ image: CGImage) throws -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
         try bytes.withUnsafeMutableBytes { buffer in
@@ -670,13 +605,11 @@ final class CaptureMediaTests: XCTestCase {
         return bytes
     }
 
-    /// result为PNG输出；解码后返回真实图像，空数据及坏容器都会失败。
     private func decode(_ result: Data) throws -> CGImage {
         let source = try XCTUnwrap(CGImageSourceCreateWithData(result as CFData, nil))
         return try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
     }
 
-    /// 无参数；没有帧时只失败，已有首帧时停止原因仍进入可保存结果；过期会话不能覆盖当前图。
     @MainActor
     func testScrollFailureKeepsConfirmedImageAndEmptyCaptureFails() throws {
         let empty = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: false))
@@ -705,11 +638,9 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(ready.phase, .imageReady)
     }
 
-    /// 无参数；录制延时期间处于准备阶段且快照携带剩余秒数，放弃后回到空闲且到时不再开始录制，无返回值（#129）。
     @MainActor
     func testRecordingCountdownCancelReturnsIdle() async throws {
         let service = MediaCaptureService()
-        // 边界：倒计时在建立捕获流之前进行，不申请屏幕录制权限即可观察；3 秒为最短的非零延时。
         let start = Task { @MainActor in
             try await service.startRecording(["kind": CaptureTarget.display.rawValue], delay: 3)
         }
@@ -720,7 +651,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(service.phase, .idle)
         XCTAssertFalse(service.isCountingDown)
         XCTAssertNil(service.snapshot()["countdown"])
-        // 边界：被放弃的倒计时在下一秒醒来后以取消结束，会话仍为空闲。
         do {
             try await start.value
             XCTFail("倒计时被放弃后不应开始录制")
@@ -728,21 +658,18 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(service.phase, .idle)
     }
 
-    /// 无参数；保存后重复放弃只清空当前结果，已保存文件和下一份会话不受旧交付影响。
     @MainActor
     func testSavedScrollSurvivesRepeatedDiscardAndRejectsOldDelivery() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ScrollOwnership-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: false))
-        // 一张确认帧是可保留结果的最小边界，不申请屏幕权限或依赖实际滚动。
         try stitcher.append(frame(offset: 0))
         let image = try stitcher.finish()
         let service = MediaCaptureService()
         let previousID = service.id
         service.publishFinishedScroll(png: image.png, width: image.width, height: image.height,
             frames: image.frames, failure: nil, token: previousID)
-        // save写入真实独立目录，noteSavedScroll只公开已经成功写入的路径。
         let saved = try ScreenshotStorage.save(image.png, directory: directory, name: "长截图.png")
         service.noteSavedScroll(saved.path)
         await service.cancel()
@@ -752,7 +679,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertNil(service.snapshot()["imageBytes"])
         XCTAssertEqual(try Data(contentsOf: saved), image.png)
 
-        // 同一服务复用新会话身份，前一次采集的迟到交付不能覆盖新结果或回填保存路径。
         let currentID = service.id
         XCTAssertNotEqual(currentID, previousID)
         service.publishFinishedScroll(png: image.png, width: image.width, height: image.height,
@@ -768,7 +694,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: saved), image.png)
     }
 
-    /// 无参数；首尾固定带各一次，40像素位移低于164像素正文的75%上限，逐像素验证完整拼接。
     func testAutomaticTopAndBottomAreKeptExactlyOnce() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         for offset in [0, 40, 80] { try stitcher.append(frame(offset: offset)) }
@@ -779,11 +704,9 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；正文空白跨过首帧对边缘，第三帧文字进入边缘仍应连续；40小于可靠重叠上限。
     func testScrollingBlankParagraphEdgesAreNotFixedBars() throws {
         let blanks = [0..<70, 150..<240]
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
-        // 三帧覆盖空白重合与退出空白两个边界，不以调用次数代替输出像素验证。
         for offset in [0, 40, 80] {
             try stitcher.append(frame(offset: offset, top: 0, bottom: 0, blankRows: blanks))
         }
@@ -793,7 +716,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；真实12/16像素固定栏旁的正文空白不能被并入固定栏，固定栏仍仅保留一次。
     func testFixedBarsBesideScrollingBlankParagraphsAreKeptOnce() throws {
         let blanks = [0..<70, 140..<220]
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
@@ -806,7 +728,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；16×12角落按钮只遮住局部正文，自动模式须按真实位移去重且不误判其余正文变化。
     func testAutomaticBandExcludesCornerButtonWithoutDuplicatingIt() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         for offset in [0, 32, 64] {
@@ -818,7 +739,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；手动底带覆盖局部角落按钮，正文连续且按钮只存在于最后一屏底带。
     func testManualBandExcludesCornerButtonWithoutInventingCoveredPixels() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 12, bottom: 24, automatic: false))
         for offset in [0, 32, 64] { try stitcher.append(frame(offset: offset, bottom: 24, cornerOnly: true)) }
@@ -828,7 +748,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；静止等待、反向和8行周期歧义保留确认像素，固定导航变色仍按正文位移追加。
     func testIdleReverseAndDynamicHeaderPreserveConfirmedResult() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         XCTAssertFalse(try stitcher.append(frame(offset: 0)))
@@ -838,10 +757,8 @@ final class CaptureMediaTests: XCTestCase {
         let before = try stitcher.finish().png
         XCTAssertThrowsError(try stitcher.append(frame(offset: 20)))
         XCTAssertEqual(try stitcher.finish().png, before)
-        // 顶部固定内容变色不破坏正文接缝；输出保留首帧顶部并追加80像素正文。
         XCTAssertTrue(try stitcher.append(frame(offset: 80, changedHeader: true)))
         XCTAssertEqual(try pixels(decode(stitcher.finish().png)), try pixels(frame(height: 272, offset: 0)))
-        // 周期8行的正文可对应多个位移；即使误差为0，也不能猜测采用其中一个接缝。
         let repeating = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: false))
         try repeating.append(frame(offset: 0, top: 0, bottom: 0, repeatRows: 8))
         let unchanged = try repeating.finish().png
@@ -849,7 +766,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try repeating.finish().png, unchanged)
     }
 
-    /// 无参数；64像素正文为合法最小值，63像素、超长边及不一致尺寸均不能发布追加内容。
     func testStitchDimensionsAndEmptyResultFailClearly() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: false))
         XCTAssertThrowsError(try stitcher.finish())
@@ -863,8 +779,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertThrowsError(try oversized.append(frame(width: 32769, height: 64, offset: 0, top: 0, bottom: 0)))
     }
 
-    /// url为本用例私有路径，indices为写入的帧号（第 n 帧呈现于 n/30 秒，缺省为 0–29 连续帧），
-    /// colorProperties为可选的 AVVideoColorPropertiesKey 色彩标注；写入1秒64×48无声H264，三段颜色用于核验时间顺序。
     private func writeMovie(_ url: URL, indices: [Int] = Array(0..<30), colorProperties: [String: String]? = nil) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         var settings: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 64, AVVideoHeightKey: 48]
@@ -908,19 +822,15 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(writer.status, .completed, writer.error?.localizedDescription ?? "")
     }
 
-    /// 无参数；完整视频保存立即进入忙碌状态，真实文件发布保持全部字节，写盘失败保留预览且可重试。
-    /// 边界：重复保存必须拒绝；实际不存在的目标目录触发失败；已有同名文件不覆盖，输出仍可解码。
     @MainActor
     func testUntrimmedVideoSavePublishesInBackgroundAndRecoversFromFileFailure() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureSave-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = directory.appendingPathComponent("source.mp4")
-        // writeMovie 生成真实的一秒视频；逐字节相同证明未裁剪保存没有重新编码。
         try await writeMovie(source)
         let bytes = try Data(contentsOf: source)
         let service = MediaCaptureService()
-        // publishFinishedRecording 使用生产完成入口校验源视频，不启动屏幕采集或申请权限。
         try await service.publishFinishedRecording(source, token: service.id)
         let target = directory.appendingPathComponent("saved.mp4")
         try Data([9]).write(to: target)
@@ -941,7 +851,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: published), bytes)
         XCTAssertEqual(try Data(contentsOf: target), Data([9]))
         XCTAssertEqual(try Data(contentsOf: source), bytes)
-        // metadata 验证发布文件真实可解码，不以路径存在代替有效输出。
         let info = try await GIFExporter.metadata(published)
         XCTAssertEqual(info.duration, 1, accuracy: 0.04)
         XCTAssertFalse(service.isBusy)
@@ -973,19 +882,15 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: retry), bytes)
     }
 
-    /// 无参数；保存中的取消和关闭等待真实文件任务结束，已经发布的文件保留，旧录制完成事件不污染新会话。
-    /// 边界：取消可能发生在原子发布之前或之后；前者没有输出，后者完整保留，均无暂存残留且源视频不变。
     @MainActor
     func testVideoSaveCancelAndCloseKeepCommittedFilesAndRejectStaleRecording() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureSaveCancel-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         let source = directory.appendingPathComponent("source.mp4")
-        // writeMovie 创建不依赖屏幕权限的真实录制，外部夹具目录由测试持有。
         try await writeMovie(source)
         let bytes = try Data(contentsOf: source)
         let service = MediaCaptureService()
-        // publishFinishedRecording 与实际分段合并后的交付使用相同的解码与身份校验。
         try await service.publishFinishedRecording(source, token: service.id)
         let cancelled = expectation(description: "取消保存回到源视频结果")
         service.onChange = { state in
@@ -1011,7 +916,6 @@ final class CaptureMediaTests: XCTestCase {
         try service.saveVideo(to: closingTarget)
         await service.cancel()
         service.onChange = nil
-        // 关闭等待期间不能短暂回到可保存结果，防止清理前再启动另一个文件任务。
         XCTAssertEqual(closingPhases, [CapturePhase.converting.rawValue, CapturePhase.finalizing.rawValue, CapturePhase.idle.rawValue])
         XCTAssertEqual(service.phase, .idle)
         XCTAssertNotEqual(service.id, previousID)
@@ -1020,7 +924,6 @@ final class CaptureMediaTests: XCTestCase {
         if FileManager.default.fileExists(atPath: closingTarget.path) {
             XCTAssertEqual(try Data(contentsOf: closingTarget), bytes)
         }
-        // 已结束会话的迟到交付不能把空闲会话变回结果页，也不能恢复旧保存路径。
         try await service.publishFinishedRecording(source, token: previousID)
         XCTAssertEqual(service.phase, .idle)
         XCTAssertNil(service.snapshot()["savedPath"])
@@ -1032,14 +935,12 @@ final class CaptureMediaTests: XCTestCase {
         await service.cancel()
     }
 
-    /// 无参数；两个1秒分段合并为2秒，跨接缝颜色顺序和源文件不变证明暂停没有占位画面。
     func testPausedRecordingSegmentsJoinWithoutTimeGap() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureSegments-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         let first = directory.appendingPathComponent("first.mp4")
         let second = directory.appendingPathComponent("second.mp4")
-        // 使用真实H264输入覆盖原生合并与解码链路。
         try await writeMovie(first)
         try FileManager.default.copyItem(at: first, to: second)
         let original = try Data(contentsOf: first)
@@ -1052,7 +953,6 @@ final class CaptureMediaTests: XCTestCase {
         var colors: [Int] = []
         for seconds in [0.1, 0.9, 1.1, 1.9] {
             let image = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600)).image
-            // 解码像素的主色顺序应在第二段重新开始，而非延长第一段结尾。
             let rgb = Array(try pixels(image).prefix(3))
             colors.append(try XCTUnwrap(rgb.indices.max(by: { rgb[$0] < rgb[$1] })))
         }
@@ -1061,7 +961,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: second), original)
     }
 
-    /// 无参数；全长1秒视频以10fps导出10帧，验证等比缩小、顺序、累计延时和原文件不变。
     func testGIFRealVideoHasOrderedFramesAndAccurateDuration() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureMediaTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1092,7 +991,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(colors, colors.sorted())
         XCTAssertEqual(delays, 1.0, accuracy: 0.011)
         XCTAssertEqual(try Data(contentsOf: video), original)
-        // 未限制或限制大于源宽都不放大；尺寸必须由实际媒体元数据决定。
         for maximum in [nil, 1000] as [Int?] {
             let output = directory.appendingPathComponent("original-\(maximum ?? 0).gif")
             _ = try await GIFExporter.export(source: video, destination: output,
@@ -1104,8 +1002,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数；APNG 按裁剪区间导出：0.5–1.0 秒在 10fps 下恰好 5 帧，首帧来自区间起点（绿段）而非视频开头（红段），
-    /// 延时合计等于区间时长，文件无限循环且源视频不变（#110）。
     func testAPNGExportUsesTrimRangeAndLoopsForever() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureAPNGTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1134,13 +1030,11 @@ final class CaptureMediaTests: XCTestCase {
             let frame = try XCTUnwrap(properties[kCGImagePropertyPNGDictionary] as? [CFString: Any])
             delays += try XCTUnwrap(frame[kCGImagePropertyAPNGUnclampedDelayTime] as? Double)
         }
-        // 0.5、0.6 秒落在绿段（第 10–19 帧），0.7–0.9 秒落在蓝段（第 20–29 帧）。
         XCTAssertEqual(colors, [1, 1, 2, 2, 2])
         XCTAssertEqual(delays, 0.5, accuracy: 0.011)
         XCTAssertEqual(try Data(contentsOf: video), original)
     }
 
-    /// 无参数；裁剪 0.4–0.9 秒重新编码后时长为 0.5 秒（容差一帧），开头取自绿段、结尾取自蓝段，源视频不变（#110）。
     func testTrimmedVideoMatchesSelectedRange() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureTrimTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1157,7 +1051,6 @@ final class CaptureMediaTests: XCTestCase {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
         var colors: [Int] = []
-        // 输出 0.05 秒对应源 0.45 秒（第 13 帧，绿），0.45 秒对应源 0.85 秒（第 25 帧，蓝）。
         for seconds in [0.05, 0.45] {
             let image = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600)).image
             let rgb = Array(try pixels(image).prefix(3))
@@ -1167,9 +1060,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: video), original)
     }
 
-    /// 无参数；源为 0–9、15–29 帧的变帧率视频，裁剪 0.35–0.9 秒导出 WebM（#110）。
-    /// 边界：0.35 秒落在 10–14 帧的空档内，跨过起点的第 9 帧从 0 计时；其后第 15–26 帧按源时间减起点取整到毫秒，
-    /// 第 27 帧恰在 0.9 秒终点上不进入；总时长 550ms，最后一帧时长补到终点；矩阵转为 BT.601 写成代码 6，BT.709 色域与传递特性写成代码 1。
     func testWebMExportKeepsSourceFrameTimesWithinTrimRange() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureWebMTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1195,14 +1085,12 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(webm.frames.map { $0.time }, [0] + (15...26).map { Int64((Double($0) / 30 - 0.35) * 1000 + 0.5) })
         XCTAssertTrue(webm.frames[0].key)
         XCTAssertEqual(webm.frames.last?.duration, 550 - 517)
-        // VP8 帧标签首位 0 为关键帧，关键帧在第 3–5 字节带起始码 9D 01 2A。
         XCTAssertTrue(webm.frames.allSatisfy { ($0.data[0] & 1 == 0) == $0.key })
         XCTAssertTrue(webm.frames.filter { $0.key }.allSatisfy { $0.data[3..<6] == Data([0x9D, 0x01, 0x2A]) })
         XCTAssertEqual(webm.cues.map { $0.time }, webm.clusters.filter { $0.key }.map { $0.time })
         XCTAssertEqual(try Data(contentsOf: video), original)
     }
 
-    /// 无参数；首个进度回报后取消导出：抛出 CancellationError，已创建的 WebM 被删除，源视频不变（#110）。
     func testWebMCancellationDuringExportRemovesOutput() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureWebMCancel-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1215,7 +1103,6 @@ final class CaptureMediaTests: XCTestCase {
         let task = Task {
             try await WebMExporter.export(source: video, destination: output, range: nil) { _ in started.continuation.yield() }
         }
-        // 第一帧已写入编码会话、输出文件已创建后才取消。
         for await _ in started.stream { break }
         XCTAssertTrue(FileManager.default.fileExists(atPath: output.path))
         task.cancel()
@@ -1224,9 +1111,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: video), original)
     }
 
-    /// 无参数；写出器按关键帧与 Int16 相对时间码切分 Cluster，并回填 Segment 大小与索引位置（#110）。
-    /// 边界：66667µs 进位为 67ms，2000499µs 舍为 2000ms、2000500µs 进为 2001ms；相对 Cluster 起点 32767ms
-    /// 的帧留在原 Cluster，32768ms 的帧开新 Cluster 但不建索引；最后一帧为非关键帧时用 -1ms 的 ReferenceBlock 指向上一帧。
     func testWebMWriterSplitsClustersAndPatchesIndex() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WebMWriter-\(UUID().uuidString).webm")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1252,8 +1136,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertNil(webm.frames[6].duration)
     }
 
-    /// 无参数；收到的编码帧少于读入帧数（编码器丢帧）时 finish 报错（#110）。
-    /// 边界：读入 3 帧只收到 2 帧即差 1 帧，必须失败；收到帧数与读入帧数相等的成功路径由 Cluster 切分用例覆盖。
     func testWebMWriterRejectsDroppedFrames() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WebMWriterDrop-\(UUID().uuidString).webm")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1266,9 +1148,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数；方向键途径按次数步进：单步目标为选区高度的 25%，放大最多 1.5 倍，接缝失败后目标减半，次数取整并限制范围（#112）。
-    /// 边界：选区高 1000px 目标 250px，首步 2 次；移动 500px 后 2×250/500=1 次；
-    /// 移动 25px 后应放大到 10 次，被 1.5 倍截到 1.5；接缝失败后步长减半、目标 125；次数下限 1、上限 40。
     func testAutoScrollKeyPlanStepsInPresses() {
         let start = ContinuousClock.now
         let at = { (ms: Int) in start.advanced(by: .milliseconds(ms)) }
@@ -1287,9 +1166,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(AutoScrollKeys.presses(99), 40)
     }
 
-    /// 无参数；自动滚动步进：画面移动后连续 2 帧静止才滚下一步，按实测位移校准增量且最多放大 4 倍（#112）。
-    /// 边界：选区高 1000px 目标 500px；首步 0.01 移动 100px，只静止 1 帧时仍等待，第 2 帧静止才按 0.01×500/100=0.05
-    /// 截到 4 倍即 0.04；第二步移动 400px 后按 0.04×500/400=0.05 滚动（未超 4 倍上限 0.16）。
     func testAutoScrollPlanCalibratesStepAfterSettling() {
         let start = ContinuousClock.now
         let at = { (ms: Int) in start.advanced(by: .milliseconds(ms)) }
@@ -1304,8 +1180,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(step, 0.05, accuracy: 1e-9)
     }
 
-    /// 无参数；画面持续移动时单步最多等 1000ms 再滚下一步（#112）。
-    /// 边界：每 100ms 移动 10px，第 900ms 仍等待，第 1000ms 开始下一步；累计 100px 按 0.05 截到 4 倍 0.04。
     func testAutoScrollPlanStepsAfterMaximumWaitWhileMoving() {
         let start = ContinuousClock.now
         let at = { (ms: Int) in start.advanced(by: .milliseconds(ms)) }
@@ -1315,8 +1189,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(plan.frame(shift: 10, now: at(1000)), .scroll(by: 0.04))
     }
 
-    /// 无参数；滚动后 1500ms 无移动：从未移动过为不支持，移动过为到底；到底后不再出动作，重新开始即恢复滚动（#112）。
-    /// 边界：第 1400ms 仍等待、第 1500ms 判定；到底判定后的帧返回等待。
     func testAutoScrollPlanSeparatesUnsupportedFromBottom() {
         let start = ContinuousClock.now
         let at = { (ms: Int) in start.advanced(by: .milliseconds(ms)) }
@@ -1336,8 +1208,6 @@ final class CaptureMediaTests: XCTestCase {
         guard case .scroll = bottom.start(now: at(5000)) else { return XCTFail("继续后应重新开始滚动") }
     }
 
-    /// 无参数；接缝失败时退回并把步长减半，退回后的画面连续 2 帧静止才按新步长重试（#112）。
-    /// 边界：首步 0.01 失配后为 0.005；退回后第 1 帧静止仍等待，第 2 帧重试。
     func testAutoScrollPlanRewindsAndRetriesWithHalfStep() {
         let start = ContinuousClock.now
         let at = { (ms: Int) in start.advanced(by: .milliseconds(ms)) }
@@ -1348,7 +1218,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(plan.frame(shift: 0, now: at(300)), .scroll(by: 0.005))
     }
 
-    /// 解析后的 WebM：头部类型、Info、视频轨与 Colour（矩阵、范围、传递特性、色域），Cluster 与其中按时间顺序的帧，以及 Cues。
     private struct ParsedWebM {
         var docType = ""
         var timecodeScale: UInt64 = 0
@@ -1362,13 +1231,11 @@ final class CaptureMediaTests: XCTestCase {
         var cues: [(time: Int64, position: Int)] = []
     }
 
-    /// data为EBML字节，range为父元素数据范围；返回直接子元素的ID、元素起点与数据范围。
     private func ebmlChildren(_ data: Data, _ range: Range<Int>) -> [(id: UInt32, start: Int, payload: Range<Int>)] {
         var items: [(id: UInt32, start: Int, payload: Range<Int>)] = []
         var offset = range.lowerBound
         while offset < range.upperBound {
             let start = offset
-            // ID 与尺寸的长度都由首字节前导零个数决定；ID 保留长度标记位，尺寸去掉标记位。
             let idLength = data[offset].leadingZeroBitCount + 1
             let id = data[offset..<offset + idLength].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
             offset += idLength
@@ -1381,7 +1248,6 @@ final class CaptureMediaTests: XCTestCase {
         return items
     }
 
-    /// data为WebM文件；返回 [ParsedWebM]。同时断言 Segment 大小等于文件剩余长度、SeekHead 指向 Cues、每个 CuePoint 指向 Cluster。
     private func parseWebM(_ data: Data) throws -> ParsedWebM {
         let uint = { (range: Range<Int>) in data[range].reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
         var result = ParsedWebM()
@@ -1423,7 +1289,6 @@ final class CaptureMediaTests: XCTestCase {
                 var first = true
                 for child in ebmlChildren(data, element.payload) {
                     if child.id == 0xE7 { clusterTime = Int64(uint(child.payload)); continue }
-                    // SimpleBlock 直接是块；BlockGroup 内含 Block、BlockDuration 与可选 ReferenceBlock。
                     let parts = child.id == 0xA0 ? ebmlChildren(data, child.payload) : [child]
                     let block = try XCTUnwrap(parts.first { $0.id == 0xA1 || $0.id == 0xA3 }).payload
                     let relative = Int16(bitPattern: UInt16(data[block.lowerBound + 1]) << 8 | UInt16(data[block.lowerBound + 2]))
@@ -1451,7 +1316,6 @@ final class CaptureMediaTests: XCTestCase {
         return result
     }
 
-    /// 无参数；预先取消不留下输出；无效元数据/设置与1801帧拒绝，1800帧边界允许。
     func testGIFCancellationAndValidationProtectSource() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CaptureCancelTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -1476,11 +1340,9 @@ final class CaptureMediaTests: XCTestCase {
             XCTAssertThrowsError(try GIFExporter.Options().validate(duration: duration, sourceWidth: 64))
         }
         XCTAssertEqual(try GIFExporter.Options(framesPerSecond: 30).validate(duration: 60, sourceWidth: 64), 1800)
-        // 0.6秒在10fps下恰好六帧，浮点尾差不能生成超过结束时间的帧。
         XCTAssertEqual(try GIFExporter.Options().validate(duration: 0.6, sourceWidth: 64), 6)
         XCTAssertThrowsError(try GIFExporter.Options(framesPerSecond: 30).validate(duration: 60.01, sourceWidth: 64))
     }
-    /// 无参数；唯一中文正文以8.5像素平滑滚动，整数和四分像素起点均应输出完整宽度与34像素增量。
     func testSmoothTextScrollingPreservesOverlapAndPixels() throws {
         let document = try textDocument()
         for initial in [0.0, 0.25] {
@@ -1490,7 +1352,6 @@ final class CaptureMediaTests: XCTestCase {
             XCTAssertEqual(result.width, document.width)
             XCTAssertEqual(result.height, 834)
             XCTAssertEqual(result.frames, 5)
-            // 整数条带保留原像素；仅接缝相位最多半像素差，平均RGB误差限3/255，高误差像素限5%。
             let expected = try pixels(textViewport(document, offset: initial, height: result.height))
             let actual = try pixels(decode(result.png))
             var total = 0.0
@@ -1503,7 +1364,6 @@ final class CaptureMediaTests: XCTestCase {
             XCTAssertLessThanOrEqual(total / Double(result.width * result.height * 3), 3)
             XCTAssertLessThanOrEqual(Double(affected) / Double(result.width * result.height), 0.05)
         }
-        // 视觉完全重复的段落存在多个同样可靠的接缝，不能通过亚像素容错猜测位移。
         let repeated = try textDocument(repeated: true)
         let ambiguous = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         try ambiguous.append(textViewport(repeated, offset: 0))
@@ -1512,8 +1372,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try ambiguous.finish().png, confirmed)
     }
 
-    /// 无参数；文字在分数像素位置按覆盖面积重绘（网页平滑滚动），正文与稀疏评论都应接受并保持累计高度，
-    /// 完全重复的段落仍须拒绝。旧配准只拟合相邻行线性插值，这类帧在首次移动即误报缺少重叠。
     func testAreaRasterizedTextScrollingKeepsOverlapAndHeight() throws {
         let article = scrollingText(comments: false)
         let comments = scrollingText(comments: true)
@@ -1526,7 +1384,6 @@ final class CaptureMediaTests: XCTestCase {
             }
             let result = try stitcher.finish()
             XCTAssertEqual(result.frames, 4)
-            // 按累计分数位移取整，不能因逐帧舍入丢失或重复正文行。
             XCTAssertLessThanOrEqual(abs(Double(result.height) - (640 + 3 * step)), 0.75)
             let expected = try pixels(areaTextViewport(text, offset: initial, height: result.height))
             let actual = try pixels(decode(result.png))
@@ -1549,7 +1406,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try ambiguous.finish().png, confirmed)
     }
 
-    /// comments决定稀疏评论或逐行不同的正文；返回固定伪随机生成的中文文本，不依赖网络页面。
     private func scrollingText(comments: Bool) -> String {
         if comments {
             return (0..<60).map { "第\($0 + 1)条评论：" + String(repeating: "好看", count: $0 % 5 + 1)
@@ -1568,8 +1424,6 @@ final class CaptureMediaTests: XCTestCase {
         return text
     }
 
-    /// text为页面正文，offset为四分之一像素滚动量，height为视口高度；4倍栅格后按面积缩回600像素宽，
-    /// 模拟网页在分数像素位置重绘文字，而不是对整数帧做线性插值。
     private func areaTextViewport(_ text: String, offset: Double, height: Int = 640) throws -> CGImage {
         let width = 600
         let scale = 4
@@ -1590,7 +1444,6 @@ final class CaptureMediaTests: XCTestCase {
             let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: largeWidth, height: largeHeight,
                 bitsPerComponent: 8, bytesPerRow: largeWidth, space: CGColorSpaceCreateDeviceGray(),
                 bitmapInfo: CGImageAlphaInfo.none.rawValue))
-            // CoreText页面原点在左下；4倍空间的整数位移把页顶offset处移到视口顶部。
             context.translateBy(x: 0, y: CGFloat(largeHeight + Int((offset * Double(scale)).rounded()) - pageHeight))
             CTFrameDraw(frame, context)
         }
@@ -1618,7 +1471,6 @@ final class CaptureMediaTests: XCTestCase {
             decode: nil, shouldInterpolate: false, intent: .defaultIntent))
     }
 
-    /// repeated决定唯一编号或完全重复的中文行；返回900×1600的真实CoreText栅格图，不依赖桌面内容。
     private func textDocument(repeated: Bool = false) throws -> CGImage {
         let width = 900
         let height = 1600
@@ -1647,7 +1499,6 @@ final class CaptureMediaTests: XCTestCase {
         return try XCTUnwrap(context.makeImage())
     }
 
-    /// document为CoreText原图，offset为分数像素滚动，height为视口高度；返回线性栅格化的同宽新帧。
     private func textViewport(_ document: CGImage, offset: Double, height: Int = 800) throws -> CGImage {
         let source = try pixels(document)
         let width = document.width
@@ -1668,10 +1519,8 @@ final class CaptureMediaTests: XCTestCase {
             decode: nil, shouldInterpolate: false, intent: .defaultIntent))
     }
 
-    /// 无参数；600像素/秒滚动时4fps跨150像素越过123像素上限，10fps的60像素步进须生成连续原图。
     func testDenserScrollFramesPreserveFastMovingContentWithoutWeakeningOverlap() throws {
         let sparse = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
-        // frame生成顶部12、底部16固定像素，正文164像素至少保留41像素重叠。
         try sparse.append(frame(offset: 0))
         let confirmed = try sparse.finish().png
         XCTAssertThrowsError(try sparse.append(frame(offset: 150)))
@@ -1681,14 +1530,11 @@ final class CaptureMediaTests: XCTestCase {
         for offset in stride(from: 0, through: 180, by: 60) {
             try dense.append(frame(offset: offset))
         }
-        // 同一移动正文增加180像素；decode/pixels检查接缝内容，不只检查最终尺寸。
         let result = try dense.finish()
         XCTAssertEqual(result.height, 372)
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(frame(height: 372, offset: 0)))
     }
 
-    /// 无参数；单帧滚过123像素上限只丢弃本帧，回滚到参照帧重叠范围后继续追加且像素连续；
-    /// 位移比例供预警使用，尺寸变化仍是不可恢复错误。
     func testTooFastFrameIsRecoverableAndScrollingBackContinues() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         try stitcher.append(frame(offset: 0))
@@ -1698,10 +1544,8 @@ final class CaptureMediaTests: XCTestCase {
         }
         XCTAssertEqual(try stitcher.finish().png, confirmed)
         XCTAssertEqual(stitcher.acceptedFrames, 1)
-        // 参照帧仍是offset 0；回滚到60像素后正常追加，60/123低于60%预警线。
         XCTAssertTrue(try stitcher.append(frame(offset: 60)))
         XCTAssertLessThan(stitcher.lastShiftRatio, 0.6)
-        // 164像素正文允许单帧123像素；再移动80像素超过60%，仍可拼接。
         XCTAssertTrue(try stitcher.append(frame(offset: 140)))
         XCTAssertEqual(stitcher.lastShiftRatio, 80.0 / 123.0, accuracy: 0.001)
         let result = try stitcher.finish()
@@ -1712,7 +1556,6 @@ final class CaptureMediaTests: XCTestCase {
         }
     }
 
-    /// 无参数；6×6徽标RGB变化10但正文唯一匹配40像素位移，输出首顶末底的完整272像素长图。
     func testAutomaticStitchAcceptsChangingFixedPixelsWhenBodyMatches() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         try stitcher.append(animatedFrame(offset: 0))
@@ -1733,7 +1576,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 无参数；正文重排导致不可匹配时停止，输出保持为上一张已确认PNG。
     func testUnreliableBodyMatchStillStopsAfterConfirmedFrames() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 0, bottom: 0, automatic: true))
         try stitcher.append(animatedFrame(offset: 0))
@@ -1744,7 +1586,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try stitcher.finish().png, confirmed)
     }
 
-    /// 无参数；手动12/16像素边界遵守首顶末底，固定栏动态像素不能进入正文条带。
     func testFinishUsesFirstTopAndLastBottomWithChangingBars() throws {
         let stitcher = ScrollStitcher(edges: .init(top: 12, bottom: 16, automatic: false))
         try stitcher.append(animatedFrame(offset: 0))
@@ -1756,10 +1597,8 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(try pixels(decode(result.png)), try pixels(expected))
     }
 
-    /// 录屏点击特效配置解析、作用范围门控、局部坐标边界、合成事件过滤与启停生命周期（#143）。
     @MainActor
     func testRecordingClickOverlayConfigAndLifecycle() throws {
-        // 缺省与非法值安全回落到 off，区分右键默认开启。
         let defaults = RecordingClickOverlay.resolvedConfig(preferences: [:])
         XCTAssertEqual(defaults.effect, .off)
         XCTAssertTrue(defaults.rightDistinct)
@@ -1770,7 +1609,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(invalid.effect, .off)
         XCTAssertFalse(invalid.rightDistinct)
 
-        // 只有非应用录制且选用自定义光学特效时才渲染透明覆盖窗。
         XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .off, isApplicationTarget: false))
         XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .system, isApplicationTarget: false))
         XCTAssertFalse(RecordingClickOverlay.shouldRenderOverlay(effect: .optical, isApplicationTarget: true))
@@ -1778,14 +1616,12 @@ final class CaptureMediaTests: XCTestCase {
             XCTAssertTrue(RecordingClickOverlay.shouldRenderOverlay(effect: effect, isApplicationTarget: false))
         }
 
-        // 局部坐标只接受录制窗口框内的点。
         let frame = NSRect(x: 100, y: 200, width: 300, height: 180)
         XCTAssertEqual(RecordingClickOverlay.localPoint(globalPoint: NSPoint(x: 150, y: 260), in: frame), CGPoint(x: 50, y: 60))
         XCTAssertNil(RecordingClickOverlay.localPoint(globalPoint: NSPoint(x: 99, y: 260), in: frame))
         XCTAssertTrue(RecordingClickOverlay.isRightClick(.rightMouseDown))
         XCTAssertFalse(RecordingClickOverlay.isRightClick(.leftMouseDown))
 
-        // 本应用合成的鼠标事件必须被过滤。
         let rawCG = try XCTUnwrap(CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: .zero, mouseButton: .left))
         let rawEvent = try XCTUnwrap(NSEvent(cgEvent: rawCG))
         XCTAssertTrue(RecordingClickOverlay.shouldAcceptMonitorEvent(rawEvent))
@@ -1794,7 +1630,6 @@ final class CaptureMediaTests: XCTestCase {
         let markedEvent = try XCTUnwrap(NSEvent(cgEvent: markedCG))
         XCTAssertFalse(RecordingClickOverlay.shouldAcceptMonitorEvent(markedEvent))
 
-        // 启动自定义光学特效后处于运行态，应用录制或 stop 后彻底卸载不残留。
         let overlay = RecordingClickOverlay()
         overlay.start(frame: frame, preferences: [AppConstants.recordingClickEffectKey: RecordingClickEffect.optical.rawValue], isApplicationTarget: false)
         XCTAssertTrue(overlay.isRunning)
@@ -1804,7 +1639,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertFalse(overlay.isRunning)
     }
 
-    /// width/height为像素尺寸，offset为正文位移，variant改变6×6固定徽标，bodyRevision重排正文；返回RGBA图。
     private func animatedFrame(
         width: Int = 96,
         height: Int = 192,
@@ -1858,20 +1692,15 @@ final class CaptureMediaTests: XCTestCase {
         ))
     }
 
-    /// 无参数/返回值；验证逐字显影批基准（首次/追加/替换/相同/Emoji）、600ms 错峰上限与单字进度/模糊边界（#142）。
     func testCharRevealBatchCalculation() {
-        // 首次出现从 0 开始整段显影；内容不变返回全长以免重播；紧接旧前缀追加仅显影增量部分。
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "", current: "你好世界"), 0)
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "你好世界"), 4)
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好", current: "你好世界"), 2)
-        // 内容被替换或截断时从头重新显影；清空返回 0。
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "再见"), 0)
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好世界", current: "你好"), 0)
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "你好", current: ""), 0)
-        // 按 grapheme cluster（Character）计数，Emoji 不被拆分成代理对。
         XCTAssertEqual(CharRevealBatch.batchBase(previous: "😀👍", current: "😀👍新词"), 2)
 
-        // 短段落沿用 18ms 错峰；长段落压低单字错峰使同批总错峰不超过 600ms 上限。
         XCTAssertEqual(CharRevealBatch.stagger(revealingCount: 0), 0)
         XCTAssertEqual(CharRevealBatch.stagger(revealingCount: 10), AppConstants.charRevealStagger, accuracy: 0.0001)
         let longCount = 100
@@ -1884,7 +1713,6 @@ final class CaptureMediaTests: XCTestCase {
             accuracy: 0.0001
         )
 
-        // 单字进度钳位 0...1，模糊半径按 3 * (1 - t) 同步退至 0。
         XCTAssertEqual(CharRevealBatch.progress(elapsed: 0.0, index: 1, stagger: 0.018), 0, accuracy: 0.0001)
         XCTAssertEqual(CharRevealBatch.progress(elapsed: 0.148, index: 1, stagger: 0.018), 0.5, accuracy: 0.001)
         XCTAssertEqual(CharRevealBatch.progress(elapsed: 1.0, index: 1, stagger: 0.018), 1, accuracy: 0.0001)
@@ -1893,7 +1721,6 @@ final class CaptureMediaTests: XCTestCase {
         XCTAssertEqual(CharRevealBatch.blurRadius(progress: 1.5), 0, accuracy: 0.0001)
     }
 
-    /// 无参数/返回值；验证复制视频临时文件命名、同秒冲突顺延与启动清空剪贴板子目录仅移除内部残留（#68 第 10 条、#142）。
     func testClipboardVideoDirectoryNamingAndStartupCleanup() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipboardVideoTests-\(UUID().uuidString)", isDirectory: true)
@@ -1925,15 +1752,12 @@ final class CaptureMediaTests: XCTestCase {
 
 }
 
-/// 模拟平台视图命中层上的暂停按钮状态；由实际AppKit鼠标序列驱动，不覆盖首鼠标接受策略。
 private final class CaptureButtonEventFixture: NSView {
     private var pressed = false
     private(set) var isPaused = false
 
-    /// event为面板送达的按下事件；开始一次按钮手势，无返回值。
     override func mouseDown(with event: NSEvent) { pressed = true }
 
-    /// event为同一按钮的松开事件；完整按下/松开才切换暂停状态，无返回值。
     override func mouseUp(with event: NSEvent) {
         guard pressed else { return }
         pressed = false

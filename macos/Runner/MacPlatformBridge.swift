@@ -6,7 +6,6 @@ import LocalAuthentication
 import ServiceManagement
 import FlutterMacOS
 
-/// Dart ↔ Swift 平台通道。不保存翻译状态，不实现 Provider。
 final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     static let methodChannelName = AppConstants.platformChannel
     static let eventChannelName = AppConstants.platformEventsChannel
@@ -15,17 +14,14 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     private let overlay: OverlayPanelController
     private let selectionMonitor: SelectionMonitor
     let screenshot = ScreenshotWindowController()
-    /// 一个采集控制器持有当前媒体会话，菜单与独立窗口共享资源状态。
     @MainActor lazy var live: LiveRegionCoordinator = LiveRegionCoordinator(bridge: self, controls: self.capture)
     @MainActor lazy var capture: CaptureWindowController = {
         let controller = CaptureWindowController(screenshot: screenshot)
-        // 录屏与长截图期间选区翻译照常工作（#1），只同步菜单栏的采集状态。
         controller.onActiveChanged = { active in
             StatusBarController.shared.setCaptureActive(active)
         }
         return controller
     }()
-    /// MCP 请求入口；开关读取已提交的普通偏好，工具由 MCPToolRunner 执行。
     @MainActor lazy var mcp = MCPCaptureServer(
         isEnabled: {
             let preferences = AppPreferences.current
@@ -35,14 +31,11 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         run: MCPToolRunner.run,
         isTrustedPeer: MCPPeer.isTrustedHelper
     )
-    /// 译文卡片朗读；只持有当前朗读的文字。
     private let speech = SpeechService()
-    /// Apple 系统翻译；只持有进行中的会话供取消，翻译业务由 Dart 的 AppleTranslationProvider 负责。
     @MainActor lazy var systemTranslation = SystemTranslationService()
     private var methods: FlutterMethodChannel?
     var onReady: (() -> Void)? {
         didSet {
-            // Dart 可能在回调赋值前就发来 appReady；补一次，避免向导被丢掉。
             if pendingAppReady, let onReady {
                 pendingAppReady = false
                 onReady()
@@ -50,9 +43,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
     }
     private var pendingAppReady = false
-    /// 当前输入翻译会话的浮标与失败气泡锚点（AppKit 全局坐标），非输入翻译会话为 nil（#99）。
     private var inputAnchor: InputAnchor?
-    /// 输入翻译读取原文时持有选区的节点；复制兜底读取时为 nil。
     private var inputSelection: AXUIElement?
     var closePermissionWizard: (() -> Void)?
     var shortcutRecorder: ((UInt32, UInt32) -> Void)?
@@ -62,7 +53,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     var hasSelection: Bool { currentSessionId != nil }
     private(set) var retainsResult = false
 
-    /// overlay 为浮层，selectionMonitor 为系统输入监听；创建不含翻译业务状态的平台桥。
     init(overlay: OverlayPanelController, selectionMonitor: SelectionMonitor) {
         self.overlay = overlay
         self.selectionMonitor = selectionMonitor
@@ -70,11 +60,9 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         screenshot.onPrepareCapture = { [weak self] source, scrolling, region in
             guard let self else { return }
             if source["live"] as? Bool == true {
-                // 实时翻译复用目标选择，但不进入录屏编码器。
                 try await self.live.begin(source: source, region: region)
                 return
             }
-            // 截图工具栏的目标交给同一个媒体会话，截图控制器不持有录制资源。
             try self.capture.prepare(source: source, scrolling: scrolling, region: region)
         }
         screenshot.onPreviewLiveRegion = { [weak self] screen in
@@ -85,24 +73,19 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
         screenshot.onCaptureSources = { [weak self] preferred in
             guard let self else { throw CancellationError() }
-            // 同一媒体资源层提供应用清单，截图控制器只隔离截图身份。
             return try await self.capture.sources(preferredApplicationID: preferred)
         }
         screenshot.onPrepareCaptureControls = { [weak self] in
-            // prepareControls在用户选择录制目标期间预初始化并复用隐藏界面。
             self?.capture.prepareControls()
         }
         screenshot.onCapturingChanged = { [weak self] active in
-            // 截图取帧期间挂起选区监听；翻译浮层保持显示，随画面进入冻结帧。
             self?.selectionMonitor.isCapturingScreenshot = active
         }
         screenshot.onFrozenEditorVisibleChanged = { [weak self] visible in
-            // 冻结编辑层显示期间收起实时浮层，避免叠在冻结画面里的卡片上；关闭后恢复。
             self?.overlay.setCaptureHidden(visible)
         }
     }
 
-    /// messenger 为主引擎通道，overlay 为浮层，selectionMonitor 为输入监听；返回已注册的平台桥。
     @discardableResult
     static func register(with messenger: FlutterBinaryMessenger, overlay: OverlayPanelController, selectionMonitor: SelectionMonitor) -> MacPlatformBridge {
         let instance = MacPlatformBridge(overlay: overlay, selectionMonitor: selectionMonitor)
@@ -117,12 +100,10 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         return instance
     }
 
-    /// 已注册平台桥的进程共享入口；原生窗口与菜单转发请求，不持有另一份业务状态。
     enum Shared {
         static var instance: MacPlatformBridge?
     }
 
-    /// call 为带 sessionId 的窗口命令；通过 result 返回成功或参数错误，无直接返回值。
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any] ?? [:]
         switch call.method {
@@ -140,7 +121,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("Overlay 坐标和尺寸必须有效"))
                 return
             }
-            // 显示前再次核对会话，失效后迟到的 Dart 指令不能重新弹窗。
             overlay.show(
                 at: NSPoint(x: x, y: y),
                 size: NSSize(width: width, height: height),
@@ -151,7 +131,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let sessionId = args["sessionId"] as? String else {
                 result(Self.badArguments("retainOverlay 需要 sessionId")); return
             }
-            // 展开由显式翻译触发，之后被动选区和前台变化只影响新的采集。
             if currentSessionId == sessionId { retainsResult = true }
             result(nil)
         case AppConstants.hideOverlayMethod:
@@ -166,7 +145,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             sourceProcessIdentifier = nil
             retainsResult = false
             overlay.hide(sessionId: sessionId)
-            // Dart 结束输入翻译会话：收起进行中浮标；失败气泡由自身计时关闭（#67）。
             MainActor.assumeIsolated { InputStatusBubble.shared.closeProgress() }
             result(nil)
         case AppConstants.setOverlaySizeMethod:
@@ -189,7 +167,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("dragOverlay 需要 sessionId"))
                 return
             }
-            // Flutter 区分拖动与点击，AppKit 负责实际移动且不激活应用。
             overlay.drag(sessionId: sessionId)
             result(nil)
         case AppConstants.readSelectionForTranslationMethod:
@@ -198,7 +175,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
             guard currentSessionId == sessionId, let pid = sourceProcessIdentifier else { result(nil); return }
             selectionReadTask?.cancel()
-            // 明确点击或热键唤起后才允许复制读取段落，自动检测阶段不注入按键。
             selectionReadTask = Task { @MainActor [weak self] in
                 let selection = await AccessibilitySelection.readFrontmostSelection(sourcePID: pid, allowCopy: true)
                 guard let self, !Task.isCancelled, self.currentSessionId == sessionId else { result(nil); return }
@@ -215,7 +191,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let sessionId = args["sessionId"] as? String, let text = args["text"] as? String else {
                 result(Self.badArguments("替换选区需要 sessionId/text")); return
             }
-            // 只替换仍属于本会话、仍在前台且未开启安全输入的来源应用；返回 nil 表示已替换，字符串为未替换原因（#99）。
             guard currentSessionId == sessionId, let pid = sourceProcessIdentifier else {
                 result("输入已结束，未替换原文。"); return
             }
@@ -223,14 +198,11 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result("来源应用已切换，未替换原文。"); return
             }
             guard !IsSecureEventInputEnabled() else { result("安全输入已开启，未替换原文。"); return }
-            // 通过校验即将粘贴：收起进行中浮标，避免遮挡或在粘贴后才迟到出现（#67）。
             MainActor.assumeIsolated { InputStatusBubble.shared.closeProgress() }
             Task { @MainActor in
-                // focusWritableInput 确定粘贴目标：焦点不在输入框时聚焦来源窗口内唯一的可写入输入框，0 个或多个则不粘贴（#1）。
                 guard await AccessibilitySelection.focusWritableInput(sourcePID: pid, selection: self.inputSelection) else {
                     result("没有可写入的输入框，未替换原文。"); return
                 }
-                // pasteReplacingSelection 经剪贴板粘贴，并在来源应用读取后还原原剪贴板。
                 let pasted = await AccessibilitySelection.pasteReplacingSelection(text, pasteboard: .general, paste: AccessibilitySelection.postPasteKey)
                 result(pasted ? nil : "无法写入剪贴板，未替换原文。")
             }
@@ -238,7 +210,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let sessionId = args["sessionId"] as? String, let message = args["message"] as? String else {
                 result(Self.badArguments("showInputFailure 需要 sessionId/message")); return
             }
-            // 只为仍属于当前输入翻译的会话显示；锚点在读取完成时取得（#99）。
             if currentSessionId == sessionId, let inputAnchor {
                 MainActor.assumeIsolated { InputStatusBubble.shared.showFailure(message, anchor: inputAnchor) }
             }
@@ -247,7 +218,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             var settings = AppPreferences.current
             settings["systemLanguage"] = Locale.preferredLanguages.first ?? "en"
             settings[AppConstants.launchAtLoginKey] = [.enabled, .requiresApproval].contains(SMAppService.mainApp.status)
-            // 设置页面展示解析后的根目录；空偏好使用系统Pictures下的截图目录。
             settings[AppConstants.screenshotSaveDirectoryKey] =
                 ScreenshotStorage.rootDirectory(
                     UserDefaults.standard.string(forKey: AppConstants.screenshotSaveDirectoryKey)
@@ -268,7 +238,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(url.path)
             }
         case AppConstants.importStickerImageMethod:
-            // 选择图片后取首帧、长边超过上限时按比例缩小并编码为 PNG，交给上传框设定默认大小（#103）。
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.png, .jpeg, .gif, .heic, .webP]
             panel.allowsMultipleSelection = false
@@ -291,7 +260,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("保存贴纸需要 id/bytes")); return
             }
             do {
-                // 贴纸目录在首次保存时创建；文件名即贴纸 id。
                 try FileManager.default.createDirectory(at: AppConstants.stickersURL, withIntermediateDirectories: true)
                 let url = AppConstants.stickersURL.appendingPathComponent("\(id).png")
                 try bytes.data.write(to: url, options: .atomic)
@@ -300,7 +268,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments(error.localizedDescription))
             }
         case AppConstants.stickerDirectoryMethod:
-            // 设置页按目录与 id 显示缩略图（#103）。
             result(AppConstants.stickersURL.path)
         case AppConstants.deleteStickerMethod:
             guard let id = args["id"] as? String else {
@@ -318,7 +285,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let id = args["id"] as? String else {
                 result(Self.badArguments("缺少服务标识。")); return
             }
-            // 钥匙串读取耗时写入性能日志，定位翻译请求前的凭据开销（#68「性能测量边界」）。
             let readStart = ContinuousClock.now
             defer { PerformanceLog.record("credentials-read", since: readStart) }
             do { result(try Self.readCredentials(id: id) ?? [:]) }
@@ -334,7 +300,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                     kSecAttrService as String: AppConstants.credentialsKeychainService,
                     kSecAttrAccount as String: id,
                     kSecReturnAttributes as String: true,
-                    // 常规设置只查询存在状态；授权留给用户主动读取或修改凭据时处理。
                     kSecUseAuthenticationContext as String: context,
                 ]
                 let status = SecItemCopyMatching(query as CFDictionary, nil)
@@ -348,10 +313,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let text = args["text"] as? String else {
                 result(Self.badArguments("缺少待识别文本")); return
             }
-            // 设备语言识别耗时写入性能日志，首次调用含模型加载（#68「性能测量边界」）。
             let detectStart = ContinuousClock.now
             defer { PerformanceLog.record("translate-detect", since: detectStart) }
-            // LanguageDetection 在低置信度时取用户语言，中文按字形判断简繁。
             result(LanguageDetection.detect(text))
         case AppConstants.openFileMethod, AppConstants.revealFileMethod, AppConstants.copyImageFileMethod:
             guard let path = args["path"] as? String else {
@@ -360,13 +323,11 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             let url = URL(fileURLWithPath: path)
             switch call.method {
             case AppConstants.openFileMethod:
-                // 系统默认应用打开，不激活或修改文件。
                 result(NSWorkspace.shared.open(url))
             case AppConstants.revealFileMethod:
                 NSWorkspace.shared.activateFileViewerSelecting([url])
                 result(nil)
             default:
-                // 复制 PNG 原始数据；文件不可读时返回错误，不改动剪贴板。
                 guard let png = try? Data(contentsOf: url) else {
                     result(FlutterError(code: AppConstants.copyFailedError, message: "图片文件不可读。", details: nil)); return
                 }
@@ -402,7 +363,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let text = args["text"] as? String else {
                 result(Self.badArguments("lookupDefinition 需要 text")); return
             }
-            // 词典服务使用「词典」App 已启用的词典离线查询；查不到返回 nil。
             let range = CFRange(location: 0, length: (text as NSString).length)
             result(DCSCopyTextDefinition(nil, text as CFString, range)?.takeRetainedValue() as String?)
         case AppConstants.openGlossaryFileMethod:
@@ -413,13 +373,11 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             NSApp.activate(ignoringOtherApps: true)
             panel.begin { response in
                 guard response == .OK, let url = panel.url else { result(nil); return }
-                // 文件读取放在后台，格式与业务校验由 Dart 的术语模块负责。
                 Task { @MainActor in
                     do {
                         let text = try await Task.detached { try String(contentsOf: url, encoding: .utf8) }.value
                         result(["name": url.lastPathComponent, "format": url.pathExtension.lowercased(), "text": text])
                     } catch let error as CocoaError where error.code == .fileReadInapplicableStringEncoding {
-                        // 其他编码的文件给出可操作的说明，不显示系统底层文案。
                         result(FlutterError(code: AppConstants.settingsFailedError,
                                             message: "术语文件须为 UTF-8 编码，请另存为 UTF-8 后再导入。", details: nil))
                     } catch {
@@ -431,7 +389,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let text = args["text"] as? String, let suggestedName = args["suggestedName"] as? String else {
                 result(Self.badArguments("saveTextFile 需要 text/suggestedName")); return
             }
-            // 用户在保存面板选择位置，取消返回 nil；写入失败返回错误，不静默丢弃导出内容。
             let panel = NSSavePanel()
             panel.nameFieldStringValue = suggestedName
             panel.allowedContentTypes = (suggestedName as NSString).pathExtension.lowercased() == "json"
@@ -450,7 +407,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             guard let text = args["text"] as? String, let language = args["language"] as? String else {
                 result(Self.badArguments("toggleSpeech 需要 text/language")); return
             }
-            // toggle 在同一段正在朗读时停止，否则改读新文字；返回调用后是否在朗读。
             result(speech.toggle(text: text, language: language))
         case AppConstants.stopSpeechMethod:
             speech.stop()
@@ -465,7 +421,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("systemTranslate 需要 requestId/texts/source/target/strategy")); return
             }
             Task { @MainActor in
-                // translate 返回按下标排列的译文；错误映射为跨端错误码，由 Dart 生成界面文案。
                 do {
                     result(try await self.systemTranslation.translate(
                         requestId: requestId, texts: texts, source: source, target: target, strategy: strategy
@@ -479,7 +434,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("cancelSystemTranslation 需要 requestId")); return
             }
             Task { @MainActor in
-                // cancel 停止对应会话；进行中的翻译随后以失败返回，Dart 已丢弃该结果。
                 self.systemTranslation.cancel(requestId: requestId)
                 result(nil)
             }
@@ -488,11 +442,9 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 result(Self.badArguments("systemTranslationStatus 需要 [源语言, 目标语言] 列表")); return
             }
             Task { @MainActor in
-                // status 只查询系统语言包状态，不触发下载；回复留在主线程。
                 result(await SystemTranslationService.status(pairs: pairs))
             }
         case AppConstants.previewAppearanceMethod:
-            // 只覆盖外观快照并广播，不写偏好；nil 清除预览，各窗口回到已保存的值（#144）。
             NativeGlassFactory.preview = call.arguments as? [String: Any] ?? [:]
             NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
             result(nil)
@@ -515,26 +467,22 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             closePermissionWizard?()
             result(nil)
         case AppConstants.applicationSupportPathMethod:
-            // 目录路径由 AppConstants 计算，这里负责首次访问时创建。
             let dir = AppConstants.applicationSupportURL
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             result(dir.path)
         case AppConstants.mcpHelperPathMethod:
-            // helper 与 App 主程序同在 Contents/MacOS，路径随 App 实际安装位置变化。
             let executable = Bundle.main.executableURL!.deletingLastPathComponent()
             result(executable.appendingPathComponent(AppConstants.mcpHelperName).path)
         case AppConstants.historyChangedMethod:
             NotificationCenter.default.post(name: AppConstants.historyChangedNotification, object: nil)
             result(nil)
         case AppConstants.publishLiveRegionMethod:
-            // 快照字段由 LiveRegionCoordinator.publish 逐项校验，缺失即终止（#132）。
             let state = call.arguments as! [String: Any]
             Task { @MainActor in
                 self.live.publish(state)
                 result(nil)
             }
         case AppConstants.publishScreenshotTranslationMethod:
-            // 截图翻译快照由截图控制器核对捕获身份后转给截图引擎（#138）。
             let state = call.arguments as! [String: Any]
             Task { @MainActor in
                 self.screenshot.publishTranslation(state)
@@ -553,7 +501,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 ])
             }
         case AppConstants.openAccessibilityMethod:
-            // 已授权则只复用，不再弹系统提示。
             if AccessibilitySelection.isTrusted(prompt: false) {
                 result(nil)
                 return
@@ -565,13 +512,9 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             SMAppService.openSystemSettingsLoginItems()
             result(nil)
         case AppConstants.openTranslationLanguagesMethod:
-            // 只把用户带到「语言与地区」，下载由系统完成，App 内不触发下载（#98）。
             NSWorkspace.shared.open(AppConstants.translationLanguagesSettingsURL)
             result(nil)
         case AppConstants.systemShortcutsMethod:
-            // 系统设置「键盘快捷键」只把用户改过的项写入该偏好域，参数为 [字符, 虚拟键码, NSEvent 修饰键标志]。
-            // 已知限制：未改动、沿用系统默认值的项不在其中；数字行 1–6 加 ⌃⌥⌘ 目前没有默认启用的系统快捷键，
-            // 若系统新增此类默认快捷键需重新评估（#141）。
             let entries = UserDefaults(suiteName: AppConstants.symbolicHotKeysDomain)?
                 .dictionary(forKey: AppConstants.symbolicHotKeysKey) as? [String: [String: Any]] ?? [:]
             let enabled: [[String: Int]] = entries.values.compactMap { entry in
@@ -602,17 +545,14 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
             result(nil)
         case AppConstants.perfMarkMethod:
-            // Dart 主引擎的阶段耗时写入同一性能日志。
             PerformanceLog.note(args["stage"] as! String, milliseconds: (args["ms"] as! NSNumber).doubleValue)
             result(nil)
         case AppConstants.appStartFailedMethod:
             result(nil)
-            // 菜单栏应用默认不在前台；先激活，提示才不会被其他应用窗口挡住（#126）。
             NSApp.activate(ignoringOtherApps: true)
             let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
             alert.alertStyle = .warning
             alert.messageText = "TranSnap 无法启动"
-            // message 由 Dart 启动入口必定提供。
             alert.informativeText = "主程序初始化失败：\(args["message"] as! String)"
             alert.addButton(withTitle: "退出")
             alert.runModal()
@@ -622,9 +562,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
     }
 
-    /// settings 为 Dart 校验过的完整偏好；先完成系统副作用再落盘，结果通过 result 返回。
     private func applySettings(_ settings: [String: Any], credentials: [String: Any], result: @escaping FlutterResult) {
-        // 三种全局快捷键按用途读取组合；任一缺失都视为参数不完整。
         var shortcuts: [GlobalHotKey: SelectionMonitor.HotKeyBinding] = [:]
         for purpose in GlobalHotKey.allCases {
             if let keyCode = settings[purpose.keyCodeKey] as? UInt32, let modifiers = settings[purpose.modifiersKey] as? UInt32 {
@@ -643,7 +581,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         var written: [String] = []
         var loginChanged = false
         do {
-            // 先读取全部回滚数据；任何授权/读取失败都不会覆盖已有凭据。
             for id in credentials.keys { previousCredentials[id] = try Self.readCredentials(id: id) }
             for (id, value) in credentials {
                 try Self.storeCredentials(id: id, value: value as? [String: String])
@@ -655,21 +592,16 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 loginChanged = true
             }
             try selectionMonitor.configure(automatic: automatic, excludedApps: Set(excluded.keys), shortcuts: shortcuts)
-            // 截图导出仍读独立键；保存设置时与 preferences 字典同步，避免双源互相覆盖。
             if let directory = settings[AppConstants.screenshotSaveDirectoryKey] as? String, !directory.isEmpty {
                 UserDefaults.standard.set(directory, forKey: AppConstants.screenshotSaveDirectoryKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: AppConstants.screenshotSaveDirectoryKey)
             }
-            // 凭据与系统副作用成功后才保存不含密钥的偏好。
             UserDefaults.standard.set(settings, forKey: AppConstants.preferencesKey)
-            // 只有配置事务提交后广播外观，所有已打开引擎共享同一已保存快照；拖动中的预览随保存结束。
             NativeGlassFactory.preview = [:]
             NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
             screenshot.toolbarPreferencesChanged()
-            // 菜单由主执行器管理，偏好事务完成后在其执行器上刷新可见状态。
             DispatchQueue.main.async { StatusBarController.shared.updateAutomatic(automatic) }
-            // 关闭 MCP 或「允许操控电脑」时立即结束进行中的操控会话，撤下边框（#140）。
             let controlEnabled = settings[AppConstants.mcpEnabledKey] as? Bool == true
                 && settings[AppConstants.mcpControlEnabledKey] as? Bool == true
             if !controlEnabled { Task { @MainActor in MCPControl.shared.endSession() } }
@@ -678,7 +610,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             let originalError = error
             do {
                 for id in written.reversed() {
-                    // 不存在与空字典分开表示，失败时恢复原始钥匙串状态。
                     try Self.storeCredentials(id: id, value: previousCredentials[id])
                 }
                 if loginChanged {
@@ -692,7 +623,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
     }
 
-    /// id 为服务账户；从当前用户钥匙串读取 JSON 凭据，未保存返回 nil。
     static func readCredentials(id: String) throws -> [String: String]? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -712,7 +642,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         return credentials
     }
 
-    /// id 为服务账户，value 为凭据字典或 nil（删除）；只操作当前用户钥匙串，无返回值。
     static func storeCredentials(id: String, value: [String: String]?) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -737,7 +666,6 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
     }
 
-    /// result 为通道回调，work 为逐像素处理大图的工作；在后台执行，回到主线程返回结果或 compose_failed 错误（#109）。
     private func composeInBackground(_ result: @escaping FlutterResult, _ work: @escaping () throws -> Any) {
         DispatchQueue.global(qos: .userInitiated).async {
             let value: Any
@@ -750,51 +678,38 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         }
     }
 
-    /// call为附属窗口请求；先交给本进程的系统能力（handle），handle 未实现的方法转主Dart引擎，通过result返回结果（#120）。
-    /// 跨引擎业务方法表只在主引擎的 lib/main.dart 维护一份；系统能力与业务方法不能同名，否则会在本地处理。
     func routeWindowRequest(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         handle(call) { [weak self] value in
-            // FlutterMethodNotImplemented 是哨兵对象，按身份比较。
             guard let self, (value as? NSObject) === FlutterMethodNotImplemented else {
                 result(value)
                 return
             }
-            // requestApplication只跨越引擎边界；业务状态由主引擎所属模块管理。
             self.requestApplication(call.method, arguments: call.arguments, result: result)
         }
     }
 
-    /// message 为给调用方的说明；返回参数错误，通道处理共用。
     private static func badArguments(_ message: String) -> FlutterError {
         FlutterError(code: AppConstants.badArgsError, message: message, details: nil)
     }
 
-    /// method/arguments为菜单或窗口的业务请求；转到主Dart引擎，由result返回所属模块的结果。
     func requestApplication(_ method: String, arguments: Any? = nil, result: @escaping FlutterResult) {
         methods!.invokeMethod(method, arguments: arguments, result: result)
     }
 
-    /// point 为屏幕坐标；返回它是否位于当前可见浮层内。
     func overlayContains(_ point: NSPoint) -> Bool {
         overlay.contains(point)
     }
 
-    /// text 为选中文字，gesture 为手势，x/y 为屏幕锚点，sourcePID 为来源进程、sourceAppName为采集时冻结的应用名；发送新会话，无返回值。
     func emitSelectionCaptured(text: String, gesture: String, readFailure: SelectionReadFailure? = nil, x: CGFloat, y: CGFloat, sourcePID: pid_t, sourceAppName: String?,
                                inputAnchor: InputAnchor? = nil, inputSelection: AXUIElement? = nil) {
         guard !retainsResult || SelectionGesture(rawValue: gesture)?.isExplicit == true else { return }
-        // 只有显式热键可以替换保留的结果；被动手势不打断阅读或正在进行的翻译。
         retainsResult = false
-        // 结束被替换的会话，迟到命令仍由新旧 sessionId 隔离。
         invalidateSelection()
         let sessionId = UUID().uuidString
         currentSessionId = sessionId
         sourceProcessIdentifier = sourcePID
-        // 输入翻译失败气泡的锚点属于本会话；其他手势为 nil（#99）。
         self.inputAnchor = inputAnchor
-        // 读取原文时持有选区的节点，用于判断粘贴目标（#1）。
         self.inputSelection = inputSelection
-        // 输入翻译读取完成后 300ms 仍未结束才显示进行中浮标；会话结束、替换或失败会取消或收起它（#67）。
         if let inputAnchor {
             MainActor.assumeIsolated { InputStatusBubble.shared.showProgress(anchor: inputAnchor) }
         }
@@ -803,26 +718,20 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             "sessionId": sessionId,
             "text": text,
             "gesture": gesture,
-            // 明确热键读不到文字的原因；读到文字或没有可说明的原因时为 null（#1）。
             "readFailure": (readFailure?.rawValue as Any?) ?? NSNull(),
-            // 此刻的来源进程才对应原文；不保存 PID、窗口或选区坐标到历史。
             "sourceAppName": (sourceAppName as Any?) ?? NSNull(),
             "x": x,
             "y": y,
         ])
     }
 
-    /// processIdentifier 为新前台进程；离开来源时只结束未展开的按钮，无返回值。
     func sourceApplicationChanged(to processIdentifier: pid_t?) {
         guard sourceProcessIdentifier != processIdentifier else { return }
-        // 显示非激活面板不会改变前台 PID，因此不会误关自身浮层。
         invalidateSelection()
     }
 
-    /// eventType 为失效或 Escape 类型；被动失效只关闭按钮，Escape 关闭所有状态，无返回值。
     func invalidateSelection(eventType: String = AppConstants.selectionInvalidatedEvent) {
         guard !retainsResult || eventType == AppConstants.escapePressedMethod else { return }
-        // 会话失效或被新会话替换：取消或收起进行中浮标，失败气泡保留（#67）。
         MainActor.assumeIsolated { InputStatusBubble.shared.closeProgress() }
         selectionReadTask?.cancel()
         selectionReadTask = nil
@@ -837,18 +746,15 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         ])
     }
 
-    /// payload 为带类型和会话 ID 的事件字典；发送至 Dart，无返回值。
     func emit(_ payload: [String: Any]) {
         eventSink?(payload)
     }
 
-    /// arguments 为未使用的订阅参数，events 为 Dart 事件接收端；保存订阅并返回 nil。
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         eventSink = events
         return nil
     }
 
-    /// arguments 为未使用的取消参数；移除事件接收端并返回 nil。
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
         eventSink = nil
         return nil

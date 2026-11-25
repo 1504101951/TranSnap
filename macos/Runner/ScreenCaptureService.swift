@@ -4,46 +4,33 @@ import CoreVideo
 import ScreenCaptureKit
 import Vision
 
-/// 系统截图模块的权限与冻结帧；本进程捕获才会把 TranSnap 写入屏幕录制 TCC。
 enum ScreenCaptureService {
-    /// 显示器内容无法读取（编号缺失或不在可捕获列表）时显示给用户的提示。
     private static let displayUnreadableMessage = "无法读取显示器内容，请检查屏幕录制权限。"
 
-    /// 指针所在显示器的冻结帧，包含 BGRA 源图、像素尺寸、AppKit显示坐标及可选前台窗口裁剪框。
     struct FreezeFrame {
         let displayID: CGDirectDisplayID
         let scale: CGFloat
-        /// ScreenCaptureKit 输出的 BGRA（sRGB、8 位、alpha 在前、小端）源图，冻结显示与截图引擎共用（#68 批次 A）。
         let image: CGImage
         let pixelWidth: Int
         let pixelHeight: Int
-        /// AppKit 屏幕坐标下的显示器矩形，编辑窗与冻结帧对齐。
         let displayFrame: NSRect
-        /// 前台窗口映射到冻结帧像素的裁剪框；找不到则为 nil。
         let windowCrop: NSRect?
     }
 
-    /// 无参数；返回本进程当前是否已获屏幕录制授权。
     static func isAuthorized() -> Bool {
         CGPreflightScreenCaptureAccess()
     }
 
-    /// 无参数；已授权则直接复用，不再弹系统框。
-    /// 不写 TCC.db；ad-hoc 重签后系统会当成新身份，那时仍需再授权一次。
-    /// promoteToRegularApp 为 true 时才切到普通激活，避免截图时 Dock/整屏闪一下。
     @MainActor
     static func requestAccess(promoteToRegularApp: Bool = false) async -> Bool {
         if isAuthorized() { return true }
-        // 申请期间临时登记为普通应用，系统授权框才能显示在前台；结束时撤销。
         let presence = NSObject()
         if promoteToRegularApp {
             DockPresence.enter(presence)
             NSApp.activate(ignoringOtherApps: true)
         }
         defer { DockPresence.leave(presence) }
-        // 只在尚未授权时申请；已授权不得再次 CGRequest。
         _ = CGRequestScreenCaptureAccess()
-        // 只打开设置页不会把本进程写入列表；ScreenCaptureKit 枚举才会登记 TranSnap。
         _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         for _ in 0..<20 {
             if isAuthorized() { return true }
@@ -52,7 +39,6 @@ enum ScreenCaptureService {
         return isAuthorized()
     }
 
-    /// 无参数；打开系统「屏幕录制」设置页，不修改 TCC 数据库。
     static func openScreenRecordingSettings() {
         let urls = [
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
@@ -63,8 +49,6 @@ enum ScreenCaptureService {
         }
     }
 
-    /// displayID明确目标屏，空值使用指针所在屏；showsCursor 为冻结帧是否包含鼠标指针。
-    /// 返回冻结帧，目标消失时抛错，不切换到其他屏幕。
     @MainActor
     static func captureActiveDisplay(displayID: CGDirectDisplayID?, showsCursor: Bool) async throws -> FreezeFrame {
         let mouse = NSEvent.mouseLocation
@@ -85,11 +69,9 @@ enum ScreenCaptureService {
                 userInfo: [NSLocalizedDescriptionKey: displayUnreadableMessage]
             )
         }
-        // 取帧与前台窗口建议选区分别计时（#68「性能测量边界」）。
         let captureStart = ContinuousClock.now
         let (image, scale) = try await captureDisplayImage(displayID: screenNumber, showsCursor: showsCursor, excludingWindowIDs: [])
         PerformanceLog.record("screenshot-capture-image", since: captureStart)
-        // 截图引擎按 BGRA 原始字节建图；配置已要求 32BGRA，格式不符说明系统输出变化，直接报错。
         let order = image.bitmapInfo.intersection(.byteOrderMask)
         guard image.bitsPerComponent == 8, image.bitsPerPixel == 32, order == .byteOrder32Little,
               [.premultipliedFirst, .noneSkipFirst, .first].contains(image.alphaInfo) else {
@@ -99,7 +81,6 @@ enum ScreenCaptureService {
                 userInfo: [NSLocalizedDescriptionKey: "截图像素格式不受支持。"]
             )
         }
-        // 只有「鼠标所在显示器」模式需要前台窗口建议选区；整屏截图不枚举窗口列表。
         var windowCrop: NSRect?
         if displayID == nil {
             let cropStart = ContinuousClock.now
@@ -121,9 +102,6 @@ enum ScreenCaptureService {
         )
     }
 
-    /// displayID 为目标显示器，showsCursor 为是否绘制鼠标指针（区域截图按设置，MCP 不绘制）；
-    /// excludingWindowIDs 为不进入画面的窗口（MCP 排除操控边框，区域截图为空）。
-    /// 返回该显示器物理像素的图像与点到像素比例；显示器不在可捕获列表时抛错。
     static func captureDisplayImage(
         displayID: CGDirectDisplayID, showsCursor: Bool, excludingWindowIDs: Set<CGWindowID>
     ) async throws -> (image: CGImage, scale: CGFloat) {
@@ -138,7 +116,6 @@ enum ScreenCaptureService {
         let filter = SCContentFilter(
             display: display, excludingWindows: content.windows.filter { excludingWindowIDs.contains($0.windowID) }
         )
-        // contentRect 是点，必须乘 pointPixelScale 才是物理像素；用 1x 缓冲再拉伸会整屏发糊。
         let scale = CGFloat(filter.pointPixelScale)
         let configuration = imageConfiguration(
             width: max(display.width, Int((filter.contentRect.width * scale).rounded())),
@@ -149,7 +126,6 @@ enum ScreenCaptureService {
         return (image, scale)
     }
 
-    /// 无参数。返回屏上可见的普通层级窗口，排除本进程窗口；坐标为全局点坐标（原点主显示器左上角）。
     static func visibleWindows() async throws -> [SCWindow] {
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -159,7 +135,6 @@ enum ScreenCaptureService {
         }
     }
 
-    /// window 为可见窗口。返回只含该窗口自身内容的物理像素图像，窗口被遮挡时仍截取窗口内容。
     static func captureWindowImage(_ window: SCWindow) async throws -> CGImage {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = CGFloat(filter.pointPixelScale)
@@ -171,7 +146,6 @@ enum ScreenCaptureService {
         return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
     }
 
-    /// width、height 为输出物理像素，showsCursor 为是否绘制鼠标指针。返回不含音频、按 sRGB 原尺寸输出的静态截图配置。
     private static func imageConfiguration(width: Int, height: Int, showsCursor: Bool) -> SCStreamConfiguration {
         let configuration = SCStreamConfiguration()
         configuration.width = width
@@ -180,12 +154,10 @@ enum ScreenCaptureService {
         configuration.capturesAudio = false
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.colorSpaceName = CGColorSpace.sRGB
-        // 按物理像素尺寸输出，禁止系统缩放捕获内容。
         configuration.scalesToFit = false
         return configuration
     }
 
-    /// png 为截图 PNG；解码为位图，供文字识别与二维码识别共用同一份图像（#68），无法解码时抛出错误。
     static func decodeImage(png: Data) throws -> CGImage {
         guard let image = NSBitmapImageRep(data: png)?.cgImage else {
             throw NSError(
@@ -197,16 +169,12 @@ enum ScreenCaptureService {
         return image
     }
 
-    /// image 为已解码的截图；返回 OCR Markdown（块之间空一行），无字返回空字符串（#96）。
     static func recognizeText(image: CGImage) async throws -> String {
         try await recognizeDocument(image: image).map(\.markdown).joined(separator: "\n\n")
     }
 
-    /// image 为已解码的截图；返回画面中带文字内容的二维码与条码，结构为 {symbology, payload}（symbology 为 Vision 类型名，如 qr、ean13）。
-    /// 按位置自上而下、自左向右排序，类型与内容都相同的码只保留一个；无码返回空数组（#108）。
     static func detectCodes(image: CGImage) async throws -> [[String: String]] {
         let observations = try await DetectBarcodesRequest().perform(on: image)
-        // 归一化坐标原点在左下：上边越高越靠前，同一高度再按左边缘。
         let ordered = observations.sorted { first, second in
             let a = first.boundingBox.cgRect, b = second.boundingBox.cgRect
             return a.maxY != b.maxY ? a.maxY > b.maxY : a.minX < b.minX
@@ -220,15 +188,12 @@ enum ScreenCaptureService {
         }
     }
 
-    /// OCR Markdown 的一个块；rect 为块在识别图像中的像素框，原点左上。
     struct OCRBlock: Equatable {
         let markdown: String
         let rect: CGRect
     }
 
-    /// Vision 文档结构的中间表示；像素框原点左上。与 Vision 类型解耦，Markdown 组织规则可单独验证。
     struct OCRLayout {
-        /// 表格单元格；row、column 为合并区域的起始行列。
         struct Cell {
             let row: Int
             let column: Int
@@ -241,7 +206,6 @@ enum ScreenCaptureService {
         var tables: [(cells: [Cell], rect: CGRect)] = []
     }
 
-    /// image 为截图像素。用 Vision 文档识别得到标题、段落、列表与表格，返回按阅读顺序排列的 Markdown 块。
     static func recognizeDocument(image: CGImage) async throws -> [OCRBlock] {
         let observations = try await paragraphRequest().perform(on: image)
         let width = Double(image.width)
@@ -265,8 +229,6 @@ enum ScreenCaptureService {
         }
     }
 
-    /// layout 为一页文档结构。返回 Markdown 块（#96「工具」返回 4）：标题为 `# 标题`，段落为纯文本，列表每项一行 `- 项`，
-    /// 表格为首行作表头的 Markdown 表格；已在表格或列表内的段落与重复标题不再输出；按块顶部、再按左边缘排序。
     static func markdownBlocks(_ layout: OCRLayout) -> [OCRBlock] {
         var blocks: [OCRBlock] = []
         let title = layout.title.map { (text: normalized($0.text), rect: $0.rect) }
@@ -277,7 +239,6 @@ enum ScreenCaptureService {
         for paragraph in layout.paragraphs {
             let text = normalized(paragraph.text)
             let center = CGPoint(x: paragraph.rect.midX, y: paragraph.rect.midY)
-            // 段落中心落在表格或列表内，说明该文字已由表格或列表输出。
             guard !text.isEmpty, text != title?.text, !covered.contains(where: { $0.contains(center) }) else { continue }
             blocks.append(OCRBlock(markdown: text, rect: paragraph.rect))
         }
@@ -293,7 +254,6 @@ enum ScreenCaptureService {
         return blocks.sorted { ($0.rect.minY, $0.rect.minX) < ($1.rect.minY, $1.rect.minX) }
     }
 
-    /// cells 为表格单元格。返回首行作表头的 Markdown 表格；合并单元格只写在起始格，同一起始格只取第一次出现；无单元格时为 nil。
     private static func tableMarkdown(_ cells: [OCRLayout.Cell]) -> String? {
         guard let rows = cells.map(\.row).max().map({ $0 + 1 }),
               let columns = cells.map(\.column).max().map({ $0 + 1 }) else { return nil }
@@ -306,7 +266,6 @@ enum ScreenCaptureService {
         return ([lines[0], separator] + lines.dropFirst()).joined(separator: "\n")
     }
 
-    /// text 为段落原文。返回合并连续空格、去掉每行首尾空白与空行后的文字。
     private static func normalized(_ text: String) -> String {
         text.components(separatedBy: .newlines)
             .map { $0.split(whereSeparator: { $0 == " " || $0 == "\t" }).joined(separator: " ") }
@@ -314,13 +273,11 @@ enum ScreenCaptureService {
             .joined(separator: "\n")
     }
 
-    /// text 为表格单元格或列表项原文；escapePipes 为 true 时转义 `|`。返回单行文字，所有空白合并为一个空格。
     private static func cellText(_ text: String, escapePipes: Bool) -> String {
         let single = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return escapePipes ? single.replacingOccurrences(of: "|", with: "\\|") : single
     }
 
-    /// pixelBuffer 为屏幕流帧。返回段落块：text 为整段原文，x/y/width/height 为段落外接矩形的像素框，坐标原点在图像左上。
     static func recognizeParagraphs(pixelBuffer: CVPixelBuffer) async throws -> [[String: Any]] {
         let observations = try await paragraphRequest().perform(on: pixelBuffer)
         return paragraphBlocks(
@@ -330,7 +287,6 @@ enum ScreenCaptureService {
         )
     }
 
-    /// 无参数；返回中英文段落识别请求，屏幕流帧与静态截图共用同一识别配置。
     private static func paragraphRequest() -> RecognizeDocumentsRequest {
         var request = RecognizeDocumentsRequest()
         request.textRecognitionOptions.useLanguageCorrection = true
@@ -340,13 +296,11 @@ enum ScreenCaptureService {
         return request
     }
 
-    /// paragraphs 为识别出的段落，width/height 为图像像素。返回左上原点的段落像素框，跳过空段落。
     private static func paragraphBlocks(
         _ paragraphs: [DocumentObservation.Container.Text],
         width: Double,
         height: Double
     ) -> [[String: Any]] {
-        // 段落识别把折行文字合成一段；列表项与表格单元格各自成段。
         paragraphs.compactMap { paragraph in
             let text = paragraph.transcript
             guard !text.isEmpty else { return nil }
@@ -354,23 +308,17 @@ enum ScreenCaptureService {
         }
     }
 
-    /// box 为左下原点的归一化识别框，width/height 为图像像素；返回左上原点的像素矩形。
     private static func pixelRect(_ box: CGRect, width: Double, height: Double) -> CGRect {
         CGRect(x: box.minX * width, y: (1 - box.maxY) * height, width: box.width * width, height: box.height * height)
     }
 
-    /// text 为识别文字，box 为归一化识别框，width/height 为图像像素；返回通道传输的文字块 {text, x, y, width, height}。
     private static func textBlock(_ text: String, box: CGRect, width: Double, height: Double) -> [String: Any] {
         let rect = pixelRect(box, width: width, height: height)
         return ["text": text, "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
     }
 
-    /// png 为截图引擎合成的 PNG；返回段落块，结构与 recognizeParagraphs 相同：
-    /// text 为整段原文（折行已合成一段），x/y/width/height 为图像像素框，坐标原点在左上（#138）。
     static func recognizeBlocks(png: Data) async throws -> [[String: Any]] {
-        // decodeImage 解码失败时抛出「无法读取截图以识别文字。」。
         let image = try decodeImage(png: png)
-        // 与实时翻译使用同一段落识别配置，截图翻译与实时翻译的分块一致。
         let observations = try await paragraphRequest().perform(on: image)
         return paragraphBlocks(
             observations.flatMap { $0.document.paragraphs },

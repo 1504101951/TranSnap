@@ -4,10 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:transnap/src/history/translation_history.dart';
 
-/// 无参数；验证真实 SQLite 的排序、分页、持久化与已有数据保留。
 void main() {
   test('同毫秒的重复原文独立保存，分页期间新增记录不挤动后续页', () {
-    // 12 条跨越 10 条边界；相同时间和原文验证 ID 次序与不去重。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     final store = TranslationHistoryStore(
@@ -48,7 +46,6 @@ void main() {
   });
 
   test('关闭并重开数据库后保留记录及关闭开关，重新启用后可继续记录', () {
-    // 磁盘库模拟重启；关闭记录不能删除原有结果或在重启后自动开启。
     final directory = Directory.systemTemp.createTempSync(
       'translation-history-',
     );
@@ -104,7 +101,6 @@ void main() {
   });
 
   test('新增来源字段保留已有记录和关闭偏好，不猜测旧记录来源', () {
-    // 使用已交付的数据库结构，验证扩展字段时没有清库或覆盖用户设置。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     database.execute('''
@@ -128,7 +124,6 @@ void main() {
   });
 
   test('搜索原文译文、来源与日期交集，关键词符号不作为通配符', () {
-    // 同一天起点包含、下一天起点排除；11 条命中项跨越固定10条游标边界。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     final store = TranslationHistoryStore(
@@ -203,7 +198,6 @@ void main() {
   });
 
   test('首次默认期限等待确认，确认事务仅清理翻译历史且边界包含', () {
-    // 30天边界前1毫秒过期、恰在边界保留；模拟已有库无期限偏好。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     final now = DateTime(2026, 11, 3);
@@ -231,7 +225,6 @@ void main() {
     expect(store.retentionConfirmed, isFalse);
     expect(store.expiredCount(30), 1);
     expect(store.page(), hasLength(3));
-    // 预览其他期限不提交，模拟取消后重开仍待确认且数据完整。
     expect(store.expiredCount(90), 0);
     store = TranslationHistoryStore(database, now: () => now);
     expect(store.retentionConfirmed, isFalse);
@@ -253,7 +246,6 @@ void main() {
   });
 
   test('读取只按期限过滤不删除；改为永久时已过期记录不再出现', () {
-    // 作用：列表与来源读取不写库（#68）。边界：时间前进 1 毫秒跨过 30 天下界，库中行仍在；随后改为永久，该行已按原期限删除。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     var now = DateTime(2026, 11, 3);
@@ -280,7 +272,6 @@ void main() {
   });
 
   test('已确认期限随时钟清理，永久与只读失败保持设置和数据', () {
-    // 时间前进1毫秒跨越30天边界；真实只读SQLite拒绝写入，随后恢复可继续提交。
     final database = sqlite3.openInMemory();
     addTearDown(database.close);
     var now = DateTime(2026, 11, 3);

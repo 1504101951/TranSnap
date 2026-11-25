@@ -4,17 +4,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transnap/src/settings/mcp_platforms.dart';
 
-/// 验证 MCP 接入平台服务（#96「设置」6–13）：命令式平台的检测、安装、重复安装、删除与路径变化判定，
-/// 配置文件式平台的条目读写、备份与其他内容保留，以及安装时清除 helper 隔离属性。
-/// CLI 为临时目录中按各家参数格式工作的真实脚本，配置文件位于临时主目录。
 void main() {
   late Directory root;
   late Directory bin;
   late Directory home;
   late String helper;
 
-  /// 模拟 claude、codex、grok 的 mcp 子命令：登记的 helper 路径存于脚本旁的 <cli>.registered。
-  /// claude 的 add 在名称已存在时失败；get 不存在时退出码为 1；grok 用 list --json 输出数组。
   const fakeCli = r'''#!/bin/bash
 cli=$(basename "$0"); store="$(dirname "$0")/$cli.registered"
 args=(); skip=0
@@ -43,7 +38,6 @@ esac
 
   tearDown(() => root.deleteSync(recursive: true));
 
-  /// 作用：在 bin 中安装一个模拟 CLI。参数 name：可执行文件名。
   void installCli(String name) {
     final file = File('${bin.path}/$name')..writeAsStringSync(fakeCli);
     Process.runSync('/bin/chmod', ['+x', file.path]);
@@ -52,7 +46,6 @@ esac
   McpPlatformService service() => McpPlatformService(
     helperPath: helper,
     home: home.path,
-    // 系统目录提供 bash、cat 等，模拟 CLI 目录在前。
     searchPath: () async => '${bin.path}:/usr/bin:/bin',
   );
 
@@ -89,11 +82,9 @@ esac
       expect(await mcp.detect(target), McpInstallState.installed);
       expect(File('${bin.path}/$cli.registered').readAsStringSync(), helper);
 
-      // 边界依据：claude 的 add 遇到同名条目报错，重复安装必须先删除再添加。
       await mcp.install(target);
       expect(await mcp.detect(target), McpInstallState.installed);
 
-      // App 挪动位置后登记的是旧路径，应判定为路径已变化。
       File('${bin.path}/$cli.registered').writeAsStringSync(
         '/Old/TranSnap.app/Contents/MacOS/transnap-mcp',
       );
@@ -152,7 +143,6 @@ esac
     });
     expect(File('${config.path}.bak').readAsStringSync(), original);
 
-    // 条目存在但命令不是当前 helper 时为路径已变化。
     final moved = jsonDecode(config.readAsStringSync()) as Map<String, Object?>;
     (moved['mcpServers'] as Map)['transnap'] = {
       'command': '/Old/transnap-mcp',
@@ -198,7 +188,6 @@ esac
   });
 
   test('安装前清除 helper 的 com.apple.quarantine；属性不存在时安装照常成功', () async {
-    // 边界依据：下载版 App 解压后带隔离属性，helper 由客户端直接启动时会被 Gatekeeper 拦截。
     Process.runSync('/usr/bin/xattr', [
       '-w',
       'com.apple.quarantine',

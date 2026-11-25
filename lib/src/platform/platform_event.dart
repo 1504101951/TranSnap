@@ -1,15 +1,11 @@
 import '../common/constants/method_names.dart';
 import '../common/constants/bridge_event_types.dart';
 
-/// 原生平台上报的事件。所有事件携带 sessionId，过期 Session 直接丢弃。
 sealed class PlatformEvent {
-  /// sessionId标识所属原生会话；构造供路由过滤过期事件的基类。
   const PlatformEvent({required this.sessionId});
 
   final String sessionId;
 
-  /// map为原生事件字典；按type构造事件，未知类型返回UnknownBridgeEvent，由调用方判断会话身份。
-  /// 原生每个事件都带 type 与 sessionId，选区事件另带 text、gesture、x、y；缺失即两端协议不一致，按类型错误抛出（#132）。
   factory PlatformEvent.fromMap(Map<Object?, Object?> map) {
     final type = map['type'] as String;
     final sessionId = map['sessionId'] as String;
@@ -34,10 +30,7 @@ sealed class PlatformEvent {
   }
 }
 
-/// 已捕获选区事件；携带原文、手势、来源和锚点，供会话创建或替换。
 final class SelectionCaptured extends PlatformEvent {
-  /// sessionId标识选区，text为原文，gesture为触发方式，readFailure为读不到文字的原因，x/y为锚点，
-  /// sourceAppName为可选来源；构造不可变事件。
   const SelectionCaptured({
     required super.sessionId,
     required this.text,
@@ -51,30 +44,22 @@ final class SelectionCaptured extends PlatformEvent {
   final String text;
   final String gesture;
 
-  /// 明确热键读不到文字的原因（SelectionReadFailures）；读到文字或没有可说明的原因时为 null。
   final String? readFailure;
   final double x;
   final double y;
 
-  /// 捕获选区时的应用显示名；不使用翻译完成时可能已经切换的前台应用。
   final String? sourceAppName;
 }
 
-/// 原生选区失效事件；仅针对sessionId对应的未展开会话。
 final class SelectionInvalidated extends PlatformEvent {
-  /// sessionId标识失效选区；构造事件，由路由方决定清理。
   const SelectionInvalidated({required super.sessionId});
 }
 
-/// 原生Escape事件；通知路由关闭对应会话的触发按钮或结果卡片。
 final class EscapePressed extends PlatformEvent {
-  /// sessionId标识按键所属会话；构造事件本身不取消请求。
   const EscapePressed({required super.sessionId});
 }
 
-/// 未知协议事件；保留原始类型，供调用方安全忽略。
 final class UnknownBridgeEvent extends PlatformEvent {
-  /// sessionId为所属会话，type为未知类型；构造事件不改变现有状态。
   const UnknownBridgeEvent({required super.sessionId, required this.type});
 
   final String type;

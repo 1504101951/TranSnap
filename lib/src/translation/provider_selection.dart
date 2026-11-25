@@ -7,30 +7,23 @@ import 'providers/apple_translation_provider.dart';
 import 'providers/unofficial_google_provider.dart';
 import 'translation_types.dart';
 
-/// settings为启动请求时的配置，platform提供凭据读取；返回默认服务，凭据在请求前读取。
-/// 返回值同时支持单篇翻译和实时翻译使用的批量翻译。
 BatchTranslationProvider providerForSettings(
   AppSettings settings,
   SettingsPlatform platform,
 ) => providerForService(settings, platform, settings.defaultServiceId);
 
-/// settings 为当前配置；返回默认翻译服务需要预热连接的地址（#68）。
-/// 内置谷歌翻译为其接口地址，配置型服务为其 API 地址；Apple 系统翻译在本机运行，返回 null。
 Uri? translationOrigin(AppSettings settings) {
   final serviceId = settings.defaultServiceId;
   if (serviceId == ServiceConfig.systemId) return null;
   if (serviceId == ServiceConfig.builtinId) {
     return Uri.parse(ServiceConfig.builtinEndpoint);
   }
-  // 默认服务 id 已由设置校验保证存在于服务列表。
   final config = settings.services.singleWhere(
     (service) => service.id == serviceId,
   );
   return Uri.parse(config.baseUrl);
 }
 
-/// settings 与 platform 同上；返回输入翻译使用的默认服务 Provider。
-/// 输入翻译只需要替换文本，固定不使用双语段落对照，即使该服务在设置中开启了对照。
 BatchTranslationProvider providerForInput(
   AppSettings settings,
   SettingsPlatform platform,
@@ -41,9 +34,6 @@ BatchTranslationProvider providerForInput(
   semanticPairs: false,
 );
 
-/// settings 为发起时的配置，platform 提供凭据读取，serviceId 为内置服务（谷歌翻译、Apple 系统翻译）或已配置服务的 id；
-/// semanticPairs 省略时取该服务配置的双语段落对照开关，输入翻译传 false 关闭；
-/// 返回该服务的翻译 Provider，凭据在请求前读取（#100 卡片服务菜单与默认服务共用）。
 BatchTranslationProvider providerForService(
   AppSettings settings,
   SettingsPlatform platform,
@@ -51,12 +41,10 @@ BatchTranslationProvider providerForService(
   bool? semanticPairs,
 }) {
   if (serviceId == ServiceConfig.builtinId) return UnofficialGoogleProvider();
-  // 系统翻译在本机完成，不读取凭据。
   if (serviceId == ServiceConfig.systemId) return AppleTranslationProvider();
   final config = settings.services.singleWhere(
     (service) => service.id == serviceId,
   );
-  // 术语表只交给配置型服务；其中只有模型服务把命中的术语写入请求。
   return ApiTranslationProvider(
     config: config,
     credentials: () => platform.readCredentials(serviceId),
@@ -67,8 +55,6 @@ BatchTranslationProvider providerForService(
   );
 }
 
-/// settings 为发起时的配置，platform 提供凭据读取，mode 为润色、纠错或解释。
-/// 返回使用默认服务与处理提示词的模型 Provider；默认服务不是模型服务时返回 null，由调用方提示。
 TranslationProvider? assistProviderForSettings(
   AppSettings settings,
   SettingsPlatform platform,
@@ -80,8 +66,6 @@ TranslationProvider? assistProviderForSettings(
   settings.defaultServiceId,
 );
 
-/// settings/platform 同上，mode 为润色、纠错或解释，serviceId 为服务 id；
-/// 返回使用该服务与该模式提示词、思考开关的模型 Provider；服务不是模型服务时返回 null（#100）。
 TranslationProvider? assistProviderForService(
   AppSettings settings,
   SettingsPlatform platform,
@@ -102,12 +86,10 @@ TranslationProvider? assistProviderForService(
     mode: mode,
     prompt: settings.prompts[mode]!,
     thinking: settings.thinking[mode]!,
-    // 润色、纠错与解释不走段落对照。
     semanticPairs: false,
   );
 }
 
-/// settings 为当前配置；返回两个内置服务（谷歌翻译、Apple 系统翻译）与全部已配置服务的菜单项，顺序与设置页一致。
 List<ServiceChoice> serviceChoices(AppSettings settings) => [
   for (final (id, name) in [
     (ServiceConfig.builtinId, ServiceConfig.builtinName),
@@ -128,7 +110,6 @@ List<ServiceChoice> serviceChoices(AppSettings settings) => [
     ),
 ];
 
-/// provider为请求实际使用的服务；返回可记录的模型名，非模型服务返回null。
 String? translationHistoryModel(TranslationProvider provider) {
   if (provider is! ApiTranslationProvider || provider.config.model.isEmpty) {
     return null;

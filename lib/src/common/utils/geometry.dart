@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-/// points 为点列；返回包围盒，单点时给 1px 以免空矩形。
 Rect boundsForPoints(List<Offset> points) {
   var minX = points.first.dx;
   var minY = points.first.dy;
@@ -21,8 +20,6 @@ Rect boundsForPoints(List<Offset> points) {
   );
 }
 
-/// src 为源图像素矩形，image 为源图尺寸，fitted 为显示矩形。
-/// 返回映射到显示坐标的矩形。
 Rect mapRectToFitted(Rect src, Size image, Rect fitted) {
   return Rect.fromLTRB(
     fitted.left + src.left / image.width * fitted.width,
@@ -32,8 +29,6 @@ Rect mapRectToFitted(Rect src, Size image, Rect fitted) {
   );
 }
 
-/// crop 为源图像素裁剪框（左上原点），display 为 AppKit 屏幕矩形，image 为冻结帧像素尺寸。
-/// 返回选区左下角的 AppKit 点，贴图钉在选区而不是指针处。
 Offset pinOriginAppKit({
   required Rect crop,
   required Rect display,
@@ -47,9 +42,6 @@ Offset pinOriginAppKit({
   );
 }
 
-/// anchor 为保持不动的角点，toward 为指针一侧的点，ratio 为宽高比，byHeight 为 true 时由高度推算宽度，
-/// bounds 为截图像素尺寸，minSide 为较短边的最小长度（0 表示不限制）。
-/// 返回从 anchor 指向 toward 所在方向、保持 ratio 且不越出 bounds 的矩形；空间不足时整体缩小（#106）。
 Rect ratioRect({
   required Offset anchor,
   required Offset toward,
@@ -60,12 +52,10 @@ Rect ratioRect({
 }) {
   final right = toward.dx >= anchor.dx;
   final down = toward.dy >= anchor.dy;
-  // 先按驱动方向得到宽度，再保证较短边不小于 minSide。
   var width = byHeight
       ? (toward.dy - anchor.dy).abs() * ratio
       : (toward.dx - anchor.dx).abs();
   width = math.max(width, minSide * math.max(1, ratio));
-  // 指针一侧剩余空间换算成宽度上限，超出时整体缩小。
   width = math.min(
     width,
     math.min(

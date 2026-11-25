@@ -2,17 +2,14 @@ import Carbon
 import Cocoa
 import FlutterMacOS
 
-/// 设置使用独立 Flutter 引擎和普通窗口；浮层保持非激活且不共享视图控制器。
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var engine: FlutterEngine?
     private var window: NSWindow?
     private var channel: FlutterMethodChannel?
-    /// 保留尚未确认的启动，重复打开合并为同一次请求。
     private var pendingStartup: WindowEngine.Startup?
     private var recordingMonitor: Any?
     private var recordingResult: FlutterResult?
 
-    /// 无参数；按需创建设置引擎，激活设置窗口，无返回值。
     func show() {
         if let window {
             refresh()
@@ -20,7 +17,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             return
         }
         guard pendingStartup == nil else { return }
-        // WindowEngine 等待 Dart 就绪确认；完成前不创建或显示设置窗口。
         pendingStartup = WindowEngine.start(
             name: AppConstants.settingsEngineName, entrypoint: AppConstants.settingsEntrypoint,
             channel: AppConstants.settingsChannel, handler: { [weak self] call, result in
@@ -34,46 +30,38 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                         result(FlutterError(code: AppConstants.badArgsError, message: "缺少窗口标题", details: nil))
                         return
                     }
-                    // 切换设置子页时同步更新原生窗口标题，不重复 App 名（#1、#144）。
                     self?.window?.title = title
                     result(nil)
                 case AppConstants.startWindowDragMethod:
-                    // 设置窗口右侧顶部 28pt 拖动区由 Flutter 转发拖动（#67）。
                     WindowEngine.beginDrag(self?.window)
                     result(nil)
                 default:
-                    // routeWindowRequest统一区分主引擎业务和系统操作，窗口仅保留快捷键录制与标题同步。
                     bridge.routeWindowRequest(call, result: result)
                 }
             }, completion: { [weak self] started in
                 guard let self else { return }
                 self.pendingStartup = nil
                 guard let started else {
-                    // reportStartFailure 统一提示引擎未能就绪，失败资源由启动对象释放。
                     WindowEngine.reportStartFailure("设置窗口")
                     return
                 }
                 self.engine = started.engine
                 self.channel = started.channel
-                // makeWindow 建出普通窗口（全高沉浸侧边栏）；设置窗关闭后保留引擎以便快速重开，并持久化窗口几何尺寸（#67、#144）。
                 let window = WindowEngine.makeWindow(
                     flutter: started.flutter, title: "权限与启动", size: NSSize(width: 760, height: 640),
                     minSize: NSSize(width: 680, height: 480), delegate: self,
                     autosaveName: AppConstants.settingsWindowAutosaveName,
                     fullSizeTitlebar: true)
                 self.window = window
-                // present 激活并前置已经就绪的设置窗口。
                 WindowEngine.present(window)
             })
     }
 
-    /// result 接收 keyCode/modifiers/label，取消为 nil；仅在当前设置窗口录制一次组合。
     private func recordShortcut(result: @escaping FlutterResult) {
         finishRecording(nil)
         recordingResult = result
         MacPlatformBridge.Shared.instance?.shortcutRecorder = { [weak self] keyCode, modifiers in
             let preferences = AppPreferences.current
-            // 被系统吞掉的只会是已注册的三种全局快捷键之一，按组合找回已保存的显示名。
             let purpose = GlobalHotKey.allCases.first {
                 preferences[$0.keyCodeKey] as? UInt32 == keyCode && preferences[$0.modifiersKey] as? UInt32 == modifiers
             }
@@ -106,12 +94,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             } catch {
                 self.finishRecording(FlutterError(code: AppConstants.shortcutInvalidError, message: error.localizedDescription, details: nil))
             }
-            // 录制时消费组合键，避免 Command-Q/W 等触发设置窗口菜单；其他窗口不受影响。
             return nil
         }
     }
 
-    /// value 为录制结果或 FlutterError/nil；先解除回调再通知 Dart，防止重复完成。
     private func finishRecording(_ value: Any?) {
         if let recordingMonitor { NSEvent.removeMonitor(recordingMonitor) }
         recordingMonitor = nil
@@ -121,24 +107,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         result?(value)
     }
 
-    /// notification 为设置窗口失焦通知；中止录制并保留原有组合，无返回值。
     func windowDidResignKey(_ notification: Notification) { finishRecording(nil) }
 
-    /// notification 为设置窗口关闭通知；窗口与引擎保留以便快速重开，只撤销 Dock 与 ⌘Tab 登记，无返回值。
     func windowWillClose(_ notification: Notification) {
         DockPresence.leave(notification.object as! NSWindow)
     }
 
-    /// 无参数；菜单改动或再次打开窗口时刷新主引擎快照，无返回值。
     func refresh() {
         channel?.invokeMethod(AppConstants.refreshSettingsMethod, arguments: nil)
     }
 
-    /// 无参数；退出时撤销待启动窗口、结束录制并释放设置窗口和引擎，无返回值。
     func shutdown() {
         pendingStartup?.cancel()
         pendingStartup = nil
-        // finishRecording 解除原生录制回调后通知 Dart 取消本次快捷键录制。
         finishRecording(nil)
         window?.delegate = nil
         window?.close()

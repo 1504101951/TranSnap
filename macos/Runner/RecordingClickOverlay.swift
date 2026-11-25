@@ -1,8 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// 录屏鼠标点击特效透明覆盖层（#143）：穿透鼠标、不抢焦点、不标记控制窗口标识，
-/// 由 ScreenCaptureKit 原生采集进视频，并在暂停/停止/取消时立即释放监听与图层。
 @MainActor
 final class RecordingClickOverlay {
     private var panel: NSPanel?
@@ -16,7 +14,6 @@ final class RecordingClickOverlay {
     private var activePressLayers: [Int: [CALayer]] = [:]
     private var lastTrailPoints: [Int: CGPoint] = [:]
 
-    /// 读取系统「减少动态效果」设置；测试可覆写以隔离系统偏好（#144 U-33）。
     var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private(set) var isRunning = false
 
@@ -25,7 +22,6 @@ final class RecordingClickOverlay {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
     }
 
-    /// preferences 为主偏好字典；解析并返回点击特效枚举与是否区分右键及拖动轨迹。
     static func resolvedConfig(preferences: [String: Any]) -> (effect: RecordingClickEffect, rightDistinct: Bool) {
         let raw = preferences[AppConstants.recordingClickEffectKey] as? String
         let effect = raw.flatMap(RecordingClickEffect.init(rawValue:)) ?? .off
@@ -33,29 +29,23 @@ final class RecordingClickOverlay {
         return (effect, rightDistinct)
     }
 
-    /// effect 为已选特效，isApplicationTarget 为是否为窗口（应用）录制；仅非应用录制且选用自定义光学特效时开启覆盖层。
     static func shouldRenderOverlay(effect: RecordingClickEffect, isApplicationTarget: Bool) -> Bool {
         !isApplicationTarget && effect != .off && effect != .system
     }
 
-    /// event 为本地或全局鼠标事件；过滤本应用合成事件（SyntheticEvent.isMarked），返回是否应渲染特效。
     nonisolated static func shouldAcceptMonitorEvent(_ event: NSEvent) -> Bool {
         !SyntheticEvent.isMarked(event)
     }
 
-    /// globalPoint 为 AppKit 屏幕点坐标，windowFrame 为录制窗口帧；位于录制区域内时返回层内局部坐标，否则返回 nil。
     static func localPoint(globalPoint: NSPoint, in windowFrame: NSRect) -> CGPoint? {
         guard !windowFrame.isEmpty, windowFrame.contains(globalPoint) else { return nil }
         return CGPoint(x: globalPoint.x - windowFrame.minX, y: globalPoint.y - windowFrame.minY)
     }
 
-    /// type 为鼠标事件类型；返回是否属于右键事件。
     static func isRightClick(_ type: NSEvent.EventType) -> Bool {
         type == .rightMouseDown || type == .rightMouseDragged || type == .rightMouseUp
     }
 
-    /// frame 为录制区间 AppKit 屏幕坐标，preferences 为偏好字典，isApplicationTarget 标记是否为应用录制；
-    /// 满足条件时显示透明穿透特效窗口并挂载鼠标监听，无返回值。
     func start(frame: NSRect?, preferences: [String: Any], isApplicationTarget: Bool = false) {
         stop()
         let config = Self.resolvedConfig(preferences: preferences)
@@ -73,7 +63,6 @@ final class RecordingClickOverlay {
             backing: .buffered,
             defer: false
         )
-        // 不设置 captureControlWindowIdentifier，确保 ScreenCaptureKit 按正常内容采集入画（#143）。
         overlay.isReleasedWhenClosed = false
         overlay.isOpaque = false
         overlay.backgroundColor = .clear
@@ -122,7 +111,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// 无参数；卸载全部鼠标监听、清空图层并关闭透明覆盖窗口，无返回值。
     func stop() {
         if let localMonitor {
             NSEvent.removeMonitor(localMonitor)
@@ -146,13 +134,11 @@ final class RecordingClickOverlay {
         isRunning = false
     }
 
-    /// globalPoint 为 AppKit 屏幕坐标；读取指针当前所在显示器的真实像素倍率，避免跨屏 DPI 失配（#144 U-33）。
     private func screenScale(for globalPoint: NSPoint) -> CGFloat {
         let matched = NSScreen.screens.first { $0.frame.contains(globalPoint) }?.backingScaleFactor
         return max(1, matched ?? panel?.backingScaleFactor ?? backingScale)
     }
 
-    /// type 为事件类型，globalPoint 为全局鼠标坐标；按当前特效样式与减少动态偏好驱动按下、拖动轨迹与释放动画。
     private func handleMouse(type: NSEvent.EventType, globalPoint: NSPoint) {
         guard isRunning, let rootLayer = hostLayer else { return }
         backingScale = screenScale(for: globalPoint)
@@ -199,7 +185,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// buttonKey 标识左键(0)或右键(2)；移除尚未释放的按下态图层，避免失焦或越界残留。
     private func clearPressLayers(for buttonKey: Int) {
         guard let layers = activePressLayers.removeValue(forKey: buttonKey) else { return }
         for layer in layers {
@@ -208,7 +193,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// isRight 表示是否为区分后的右键；返回主高亮色及强对比双衬线色（#144 U-33）。
     private func colors(isRight: Bool) -> (accent: NSColor, contrastDark: NSColor, contrastLight: NSColor) {
         let accent = isRight ? AppConstants.clickEffectRightColor : AppConstants.clickEffectLeftColor
         return (
@@ -218,7 +202,6 @@ final class RecordingClickOverlay {
         )
     }
 
-    /// point 为层内点坐标，isRight 为右键区分标记，rootLayer 为宿主根图层；创建按下收缩提示图层并返回，减弱动态效果下直接展示静态高对比环。
     private func makePressLayers(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) -> [CALayer] {
         let palette = colors(isRight: isRight)
         var created: [CALayer] = []
@@ -238,7 +221,6 @@ final class RecordingClickOverlay {
 
         guard !reduceMotion else { return created }
 
-        // 按下平滑微缩蓄力。
         let startPath = circlePath(radius: startR)
         let endPath = circlePath(radius: endR)
         for layer in [contrastRing, mainRing] {
@@ -254,7 +236,6 @@ final class RecordingClickOverlay {
         return created
     }
 
-    /// point 为轨迹采样点，isRight 为右键标记，rootLayer 为宿主图层；绘制按住拖动期间的柔和淡出微光点。
     private func emitTrailDot(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let r: CGFloat = effect == .liquid ? 5.0 : 4.0
@@ -280,7 +261,6 @@ final class RecordingClickOverlay {
         CATransaction.commit()
     }
 
-    /// point 为松开点坐标，isRight 为右键标记，rootLayer 为宿主图层；开启减少动态效果时统一降级为纯透明度静态提示（#144 U-33）。
     private func emitReleaseEffect(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         guard effect != .off, effect != .system else { return }
         if isReduceMotion() {
@@ -303,7 +283,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// point 为松开点坐标，isRight 为右键标记，rootLayer 为宿主图层；静止双对比环淡出，避免弹簧过冲与闪烁射线（#144 U-33）。
     private func emitReducedMotionRelease(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let radius: CGFloat = 18
@@ -330,7 +309,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// 1. 光学涟漪：主水光双对比环 + 延迟回声细环。
     private func emitOptical(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectDuration
@@ -351,7 +329,6 @@ final class RecordingClickOverlay {
         )
     }
 
-    /// 2. 液态弹波：玻璃微珠弹性过冲 + 外围折射水波环。
     private func emitLiquid(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectDuration
@@ -392,7 +369,6 @@ final class RecordingClickOverlay {
         )
     }
 
-    /// 3. 聚光微点：柔和光片绽放扩散 + 双对比环外衬 + 右键外弧提示。
     private func emitSpotlight(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectDuration
@@ -457,7 +433,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// 4. 星芒微烁：8 道精密光学短射线 + 中心细微环。
     private func emitPrism(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectDuration
@@ -512,7 +487,6 @@ final class RecordingClickOverlay {
         }
     }
 
-    /// 5. 极简双对比环：原生黑白圆环的丝滑缓动升级版。
     private func emitMinimal(at point: CGPoint, isRight: Bool, in rootLayer: CALayer) {
         let palette = colors(isRight: isRight)
         let duration = AppConstants.clickEffectMinimalDuration
@@ -528,7 +502,6 @@ final class RecordingClickOverlay {
         )
     }
 
-    /// 共享扩散圆环动画构造器；动画完成后自动从父图层移除。
     private func addExpandingRing(
         at point: CGPoint,
         from startR: CGFloat,
@@ -571,7 +544,6 @@ final class RecordingClickOverlay {
         CATransaction.commit()
     }
 
-    /// point 为中心点，radius 为初始半径，stroke 为描边色，lineWidth 为线宽，dashed 为是否虚线；构造清晰圆形 CAShapeLayer。
     private func makeCircleShape(at point: CGPoint, radius: CGFloat, stroke: NSColor, lineWidth: CGFloat, dashed: Bool = false) -> CAShapeLayer {
         let layer = CAShapeLayer()
         layer.position = point
@@ -587,7 +559,6 @@ final class RecordingClickOverlay {
         return layer
     }
 
-    /// radius 为圆半径；返回以原点为中心的椭圆路径。
     private func circlePath(radius: CGFloat) -> CGPath {
         CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2), transform: nil)
     }

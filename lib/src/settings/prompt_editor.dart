@@ -6,10 +6,7 @@ import '../common/constants/glass_metrics.dart';
 import '../common/constants/text_mode.dart';
 import '../common/widgets/native_glass.dart';
 
-/// 提示词弹窗：编辑翻译、润色、纠错、解释的系统提示词与思考开关，提示词可分别恢复默认；
-/// 保存返回完整的提示词与思考开关，取消返回 null（#100）。
 class PromptEditor extends StatefulWidget {
-  /// prompts 为四种模式的当前提示词，thinking 为四种模式的当前思考开关。
   const PromptEditor({
     super.key,
     required this.prompts,
@@ -18,7 +15,6 @@ class PromptEditor extends StatefulWidget {
   final Map<TextMode, String> prompts;
   final Map<TextMode, bool> thinking;
 
-  /// 弹窗中四个字段的模式与名称，顺序即显示顺序。
   static const labels = {
     TextMode.translate: '翻译',
     TextMode.polish: '润色',
@@ -26,12 +22,10 @@ class PromptEditor extends StatefulWidget {
     TextMode.explain: '解释',
   };
 
-  /// 无参数；返回持有四个输入框与思考开关的状态。
   @override
   State<PromptEditor> createState() => _PromptEditorState();
 }
 
-/// 持有四个输入框与思考开关；只在保存时把内容交回设置页。
 class _PromptEditorState extends State<PromptEditor> {
   late final _controllers = {
     for (final mode in PromptEditor.labels.keys)
@@ -39,7 +33,6 @@ class _PromptEditorState extends State<PromptEditor> {
   };
   late final _thinking = {...widget.thinking};
 
-  /// 无参数；释放四个输入框控制器。
   @override
   void dispose() {
     for (final controller in _controllers.values) {
@@ -48,11 +41,9 @@ class _PromptEditorState extends State<PromptEditor> {
     super.dispose();
   }
 
-  /// 无参数；返回是否有空提示词，有则禁用保存。
   bool get _hasEmpty =>
       _controllers.values.any((controller) => controller.text.trim().isEmpty);
 
-  /// mode 为处理模式，label 为字段名；经二次确认后将提示词恢复为默认模板。
   Future<void> _confirmReset(TextMode mode, String label) async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
@@ -65,7 +56,6 @@ class _PromptEditorState extends State<PromptEditor> {
     setState(() => _controllers[mode]!.text = defaultPrompts[mode]!);
   }
 
-  /// context 为弹窗上下文；返回说明、四个提示词字段与取消/保存操作。
   @override
   Widget build(BuildContext context) => NativeGlassDialog(
     title: const Text('提示词'),
@@ -110,7 +100,6 @@ class _PromptEditorState extends State<PromptEditor> {
     ],
   );
 
-  /// mode 为处理模式，label 为字段名；返回独立分卡、标题行带紧凑图标、思考开关与恢复默认的多行提示词字段，空值在框内底部就地报错。
   Widget _field(TextMode mode, String label) {
     final controller = _controllers[mode]!;
     final fallback = defaultPrompts[mode]!;
@@ -189,7 +178,6 @@ class _PromptEditorState extends State<PromptEditor> {
                         setState(() => _thinking[mode] = value),
                   ),
                   const SizedBox(width: GlassMetrics.actionGap),
-                  // 内容已是默认值时无需恢复。
                   NativeGlassSurface(
                     material: true,
                     child: TextButton(
@@ -203,7 +191,6 @@ class _PromptEditorState extends State<PromptEditor> {
                 ],
               ),
               const SizedBox(height: GlassMetrics.space8),
-              // 顶行已渲染标题，此处置空 label 仅保留 semanticLabel 并由输入框内置 errorText 归属报错（U-13）。
               NativeGlassField(
                 label: null,
                 semanticLabel: label,
@@ -213,7 +200,6 @@ class _PromptEditorState extends State<PromptEditor> {
                   controller: controller,
                   minLines: 4,
                   maxLines: 8,
-                  // 修改后重新判断「恢复默认」与「保存」是否可用。
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(),
                 ),

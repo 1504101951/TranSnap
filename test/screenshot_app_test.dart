@@ -25,7 +25,6 @@ import 'package:transnap/src/settings/app_settings.dart';
 
 import 'support/capture_pixels.dart';
 
-/// 无参数；验证文件名、编辑文档像素结果与编辑器导出反馈，无返回值。
 void main() {
   test('截图快捷键独立保存并拒绝与翻译使用同一组合', () {
     final settings = AppSettings(primaryLanguage: 'zh-CN');
@@ -37,7 +36,6 @@ void main() {
     expect(restored.shortcutKeyCode, 17);
     restored.screenshotShortcutKeyCode = restored.shortcutKeyCode;
     expect(restored.validate, throwsFormatException);
-    // 日期跨月且毫秒不足三位，文件名仍可排序、不含路径分隔符。
     expect(
       screenshotFilename(DateTime(2026, 9, 6, 1, 2, 3, 4)),
       '截图_2026-09-06_01-02-03-004.png',
@@ -53,8 +51,6 @@ void main() {
   });
 
   test('编辑文档：删除标注可撤销并回到原位置，重做再次删除', () async {
-    // 作用：清空文字后文字框被删除，这一步必须能撤销。
-    // 边界：删除三个标注中间的一个，撤销后它回到下标 1 而不是末尾；删除不存在的 id 不产生撤销步骤。
     final document = EditDocument();
     document.loadCapture(await decodePng(await _pngCheckerboard()));
     final ids = [
@@ -77,13 +73,10 @@ void main() {
     document.undo();
     document.removeAnnotation('missing');
     document.undo();
-    // 最后一次撤销撤的是添加 c，说明删除不存在的标注没有入栈。
     expect(document.annotations.map((item) => item.text), ['a', 'b']);
   });
 
   test('文字框高度随宽度换行增长，空文字仍占一行', () {
-    // 作用：拖动左右手柄改变宽度后，高度按内容重新计算。
-    // 边界：同一段文字在宽度减半后行数增加、高度变大；空文字的高度等于一行文字的高度。
     const text = 'aaaa aaaa aaaa aaaa';
     final wide = textBoxHeight(text: text, fontSize: 18, width: 2000);
     final narrow = textBoxHeight(text: text, fontSize: 18, width: 100);
@@ -92,7 +85,6 @@ void main() {
   });
 
   test('编辑文档：裁剪改变导出尺寸，标注改像素，撤销重做可逆，遮挡导出不可还原', () async {
-    // 左上红、右下蓝的 8x8，便于断言裁剪边界与遮挡覆盖。
     final source = await _pngCheckerboard();
     final document = EditDocument();
     document.loadCapture(await decodePng(source));
@@ -105,7 +97,6 @@ void main() {
     expect(await _pixel(croppedImage, 1, 1), _red);
     croppedImage.dispose();
 
-    // 裁剪不进撤销；恢复全图用 setCrop，再叠加标注。
     expect(document.canUndo, isFalse);
     document.setCrop(const Rect.fromLTWH(0, 0, 8, 8));
     expect(document.cropRect, const Rect.fromLTWH(0, 0, 8, 8));
@@ -156,15 +147,13 @@ void main() {
     final annotated = await document.renderPng();
     final annotatedImage = await _decode(annotated);
     expect(annotatedImage.width, 8);
-    // 遮挡区域必须是纯黑，不能再读出原图蓝色。
     expect(_nearColor(await _pixel(annotatedImage, 6, 6), _black), isTrue);
     expect(_nearColor(await _pixel(annotatedImage, 6, 6), _blue), isFalse);
     expect(listEquals(annotated, source), isFalse);
     annotatedImage.dispose();
 
-    // 导出位图本身不含图层：即使文档撤销遮挡，已导出的 PNG 像素仍保持黑色。
     final bakedBytes = annotated;
-    document.undo(); // 撤销遮挡
+    document.undo();
     expect(
       document.annotations.where((item) => item.kind == AnnotationKind.mask),
       isEmpty,
@@ -173,7 +162,6 @@ void main() {
     expect(_nearColor(await _pixel(bakedImage, 6, 6), _black), isTrue);
     bakedImage.dispose();
 
-    // 撤销后重新导出应恢复原图蓝像素，证明历史作用在文档而非已导出字节。
     final afterUndo = await document.renderPng();
     final afterUndoImage = await _decode(afterUndo);
     expect(_nearColor(await _pixel(afterUndoImage, 6, 6), _blue), isTrue);
@@ -185,7 +173,6 @@ void main() {
     expect(_nearColor(await _pixel(afterRedoImage, 6, 6), _black), isTrue);
     afterRedoImage.dispose();
 
-    // 新捕获清空历史与标注。
     final next = await _solidPng(2, 2, _red);
     document.loadCapture(await decodePng(next));
     expect(document.annotations, isEmpty);
@@ -242,15 +229,12 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
-    // 保存目录在设置中配置，编辑窗不展示路径选择。
     expect(find.text('/tmp/screenshots'), findsNothing);
     expect(find.text('固定目录…'), findsNothing);
 
-    // 关闭不触发 copy，剪贴板参数保持未写入。
     calls.clear();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -265,25 +249,20 @@ void main() {
     );
     expect(copiedBytes, isNull);
 
-    // 重新装载会话，验证保存失败时图片仍在，并显示错误。
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     saveError = '目录不可写';
-    // toImage/codec 必须在真实异步区完成，否则导出 Future 会挂在 FakeAsync。
     await _tapExport(tester, const Key('screenshot-save'));
     expect(find.text('目录不可写'), findsOneWidget);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
 
-    // 遮挡后再复制，通道必须收到合成 bytes，而非原始捕获。
     saveError = null;
     await tester.tap(find.byKey(const Key('screenshot-tool-rect')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('screenshot-shape-filledRectangle')));
     await tester.pumpAndSettle();
     final canvas = find.byKey(const Key('screenshot-canvas'));
-    // 在画布上拖出遮挡块；8x8 放大后需足够大的屏幕拖拽才能跨过 ≥1 源图像素。
     await tester.drag(canvas, const Offset(220, 220));
     await tester.pumpAndSettle();
     calls.clear();
@@ -298,10 +277,8 @@ void main() {
             as Map;
     expect(copyArgs['id'], 'shot');
     expect(copyArgs['bytes'], same(copiedBytes));
-    // 合成结果应与原图不同（至少因遮挡改变）。
     expect(listEquals(copiedBytes! as Uint8List, bytes!), isFalse);
 
-    // 双击触发复制并关闭会话。
     calls.clear();
     await tester.runAsync(() async {
       await tester.tap(canvas);
@@ -322,8 +299,6 @@ void main() {
   });
 
   testWidgets('源图像素建图失败时显示不自动消失的错误，不停在空白等待', (tester) async {
-    // 作用：打开的图片、剪贴板图片或长截图建图失败时，编辑器必须给出明确错误，而不是永远等待解码回调。
-    // 边界：8×8、每行 32 字节的 BGRA 源图需要 256 字节，只给 16 字节；错误提示超过 2s 错误停留时长后仍在。
     const channel = MethodChannel('test/screenshot-bad-pixels');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -352,7 +327,6 @@ void main() {
   });
 
   testWidgets('无屏幕录制权限时不进入编辑画布', (tester) async {
-    // 边界：仅 screenAccess=false、无 bytes 时展示申请入口，不创建编辑画布。
     const channel = MethodChannel('test/screenshot-denied');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -383,8 +357,6 @@ void main() {
   });
 
   testWidgets('无屏幕权限的导入图片保留选区、像素与OCR翻译，屏幕采集入口禁用', (tester) async {
-    // 作用：普通图片按 BGRA 与 imageScale 进入现有编辑器，识别与翻译仍消费真实图片。
-    // 边界：screenAccess=false 且 canCaptureMedia=false 不阻拦本地图片；8×8 红蓝图用于验证通道顺序与完整选区。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -424,11 +396,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // awaitCaptureSource 等待 BGRA 解码完成；选区尺寸属于实际装入的图片。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
-    // 打开图片使用统一结果窗骨架：中性衬底、52pt 底部工具行，不挂载截图浮动网格或屏幕采集按钮（#67、#145）。
     expect(find.byKey(const Key('result-window-canvas')), findsOneWidget);
     expect(find.byKey(const Key('result-window-bar')), findsOneWidget);
     expect(find.byKey(const Key('screenshot-toolbar')), findsNothing);
@@ -442,7 +412,6 @@ void main() {
     ]) {
       expect(find.byKey(Key(action)), findsNothing);
     }
-    // 底部工具行包含左区六工具+撤销重做、右区识别文字/翻译/贴图/复制/保存；选中画笔等工具从底部向上展开托盘（#67、#145）。
     for (final key in [
       const Key(ScreenshotActions.cursor),
       const Key(ScreenshotActions.rect),
@@ -470,14 +439,12 @@ void main() {
       lessThan(tester.getRect(find.byKey(const Key('result-window-bar'))).top),
     );
 
-    // _tapExport 让识别消费编辑器实际导出的 PNG，并展示可复制的文字结果。
     await _tapExport(tester, const Key(ScreenshotActions.ocrCopy));
     expect(find.text('Imported text'), findsOneWidget);
     await tester.tap(find.byTooltip('复制全部'));
     await tester.pump();
     expect(clipboard, 'Imported text');
     await tester.runAsync(() async {
-      // _decode 与 _pixel 验证 OCR 收到的全图红蓝像素，不能用空画布代替有效导入。
       final image = await _decode(recognizedPixels!);
       expect(image.width, 8);
       expect(image.height, 8);
@@ -487,7 +454,6 @@ void main() {
     });
     await tester.tap(find.byTooltip('关闭').last);
     await tester.pump();
-    // _tapExport 复用图上翻译入口；_publishTranslation 模拟主引擎会话推回译文快照。
     await _tapExport(tester, const Key(ScreenshotActions.ocrTranslate));
     await _publishTranslation(tester, channel, {
       'id': 'imported-image',
@@ -506,8 +472,6 @@ void main() {
   });
 
   testWidgets('识别结果渲染 Markdown，复制全部保存原文且弹窗保留到手动关闭', (tester) async {
-    // 作用：验证识别结果展示、模拟原生剪贴板内容与弹窗生命周期。
-    // 边界：识别后不自动复制；复制全部保留标题与表格标记，2 秒后弹窗仍在，手动关闭才消失。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -515,11 +479,9 @@ void main() {
     final bytes = await tester.runAsync(_pngCheckerboard);
     final capture = await tester.runAsync(() => capturePixels(bytes!));
     const channel = MethodChannel('test/screenshot-ocr');
-    // 原生识别结果含标题与表格，页面应显示排版后的正文。
     const markdown = '# Hello\n\n| World |\n| --- |';
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    // 模拟原生剪贴板的业务状态，保存收到的实际文本而非调用次数。
     String? clipboard;
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == MethodNames.getScreenshot) {
@@ -542,12 +504,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
-    // _tapExport 启动识别并等待结果弹窗。
     await _tapExport(tester, const Key('screenshot-ocr-copy'));
-    // 识别完成显示 Markdown 正文，尚未展示复制成功反馈。
     expect(clipboard, isNull);
     expect(find.text('已复制文字'), findsNothing);
     expect(find.text('Hello'), findsOneWidget);
@@ -557,7 +516,6 @@ void main() {
     await tester.pump();
     expect(clipboard, markdown);
     expect(find.text('已复制文字'), findsOneWidget);
-    // 复制后弹窗不自动关闭；点关闭才消失。
     await tester.pump(const Duration(seconds: 2));
     expect(find.text('Hello'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭').last);
@@ -566,9 +524,6 @@ void main() {
   });
 
   testWidgets('等待中的功能按钮自身显示进度环；按钮隐藏时在工具栏末尾显示进度环格（#142）', (tester) async {
-    // 作用：等待状态落在被点击的按钮上，工具栏不再出现沙漏格。
-    // 边界：识别未返回时「识别文字」按钮的进度环为等待态且没有状态格；返回后进度环结束；
-    // 隐藏「识别文字」后用 ⌥1 触发，按钮不可见，等待期间末尾出现进度环格，返回后消失。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -597,7 +552,6 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pump();
-    // ring 取「识别文字」按钮外的进度环。
     BusyRing ring() => tester.widget<BusyRing>(
       find
           .ancestor(
@@ -606,7 +560,6 @@ void main() {
           )
           .first,
     );
-    // settle 让合成 PNG 等真实异步步骤跑完，再推进动画帧。
     Future<void> settle() async {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
@@ -650,7 +603,6 @@ void main() {
   });
 
   test('只有带主机名的 http/https 内容可作为链接打开', () {
-    // 边界：协议大小写不敏感；缺主机名、无协议的域名与 file/javascript/tel 协议都只能复制（#108）。
     expect(isOpenableLink('https://example.com/a?b=1'), isTrue);
     expect(isOpenableLink('HTTP://EXAMPLE.COM'), isTrue);
     for (final payload in [
@@ -666,8 +618,6 @@ void main() {
   });
 
   testWidgets('识别结果列出二维码与条码：逐条复制，只有 http/https 可打开并关闭截图', (tester) async {
-    // 边界：没有文字时不显示复制全部；javascript 内容的二维码不提供打开；打开失败保留截图并提示；
-    // 打开成功后关闭截图；文字与码都为空时提示三者都没有（#108）。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -705,7 +655,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await _tapExport(tester, const Key('screenshot-ocr-copy'));
@@ -748,7 +697,6 @@ void main() {
     codes = [];
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await _tapExport(tester, const Key('screenshot-ocr-copy'));
@@ -757,9 +705,6 @@ void main() {
   });
 
   testWidgets('截图翻译把段落块交主引擎，并按快照逐段覆盖译文（#138）', (tester) async {
-    // 作用：识别出的段落块连同捕获身份原样交主引擎会话；每份快照到达即按段更新浮层与状态提示。
-    // 边界：第一份快照只含一段译文（另一段仍在翻译），未进入快照的段落不覆盖；
-    // 第二份快照另含宽为 0 的段落，宽或高不超过 1pt 的浮层只画底色、不画文字（#67）。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -773,7 +718,6 @@ void main() {
       {'text': 'Hello', 'x': 0, 'y': 0, 'width': 8, 'height': 4},
       {'text': 'World', 'x': 0, 'y': 4, 'width': 8, 'height': 4},
     ];
-    // 模拟主引擎收到的翻译请求参数。
     Map<Object?, Object?>? sent;
     messenger.setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
@@ -798,7 +742,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await _tapExport(tester, const Key('screenshot-ocr-translate'));
@@ -833,7 +776,6 @@ void main() {
     expect(find.text('零宽'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
 
-    // 边界：进度状态 1000ms 后消失；failed 为真的失败原因超过 1000ms 仍显示（#138）。
     await tester.pump(const Duration(milliseconds: 1100));
     expect(find.text('已完成'), findsNothing);
     const reason = 'Apple 系统翻译不支持「ro → 简体中文」。';
@@ -850,10 +792,7 @@ void main() {
   });
 
   test('译文浮层字号取能放进矩形的最大值，下限为 1（#67 截图译文浮层）', () {
-    // 作用：二分查找得到的字号排版后不超出矩形高度，且再大 1 即超出，说明取到的是最大值。
-    // 边界：查找精度 0.5，故以 +1 验证最大性；高 1 的矩形落在下限 1；单字在宽矩形中受矩形高度限制。
     const style = TextStyle(fontWeight: FontWeight.w600);
-    // height 按浮层同样的居中换行规则排版，返回文字总高。
     double height(String text, double fontSize, double width) {
       final painter = TextPainter(
         text: TextSpan(
@@ -890,8 +829,6 @@ void main() {
   });
 
   testWidgets('截图翻译的迟到识别结果不发起翻译且不在替换后的截图上显示（#115）', (tester) async {
-    // 作用：截图被替换后，旧识别结果不能进入主引擎翻译业务。
-    // 边界：识别完成前换图；模拟主引擎没有收到旧原文，当前画布不出现旧译文或成功反馈。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -912,7 +849,6 @@ void main() {
     };
     final requested = Completer<void>();
     final reply = Completer<List<Object?>>();
-    // 模拟主引擎收到的段落块，不以界面隐藏代替没有翻译请求。
     Object? translatedBlocks;
     messenger.setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
@@ -931,13 +867,11 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.ensureVisible(
       find.byKey(const Key('screenshot-ocr-translate')),
     );
-    // 截图编码使用真实图像线程，识别请求在编码完成后才发出：交替让出真实时间与推进帧，最多 5 秒。
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key('screenshot-ocr-translate')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -948,7 +882,6 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );
     }
-    // 完成器仅用于安排“识别期间换图”的输入顺序，不作为业务断言。
     await tester.runAsync(
       () => requested.future.timeout(const Duration(seconds: 1)),
     );
@@ -962,7 +895,6 @@ void main() {
       ),
       (_) {},
     );
-    // 换图后源图重新异步建好，画布才会回来。
     await awaitCaptureSource(tester);
     reply.complete([
       {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
@@ -970,7 +902,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(translatedBlocks, isNull);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
-    // 旧截图会话排队中的快照晚于换图到达，也不能覆盖新截图（#138）。
     await _publishTranslation(tester, channel, {
       'id': 'first',
       'phase': 'running',
@@ -1012,7 +943,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -1064,7 +994,6 @@ void main() {
     final image = await _decode(stroked);
     expect(image.width, 6);
     expect(image.height, 6);
-    // 折线不是填满包围盒：裁剪后 (5,0) 仍是原图蓝，不是绿色填充。
     expect(_nearColor(await _pixel(image, 5, 0), _blue), isTrue);
     expect(
       _nearColor(await _pixel(image, 5, 0), const Color(0xFF00FF00)),
@@ -1107,7 +1036,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1155,8 +1083,6 @@ void main() {
   testWidgets('贴纸：美化的子级打开贴纸面板，选中后放在选区中央并导出，原生转发 Delete 删除（#103）', (
     tester,
   ) async {
-    // 边界：64×64 蓝图、选区为整图；贴纸默认 20×20pt、倍率 1，放在中心 (32,32)；导出中心为红，
-    // Delete 转发后贴纸删除、导出中心恢复蓝色。
     tester.view.physicalSize = const Size(900, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1194,7 +1120,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1203,11 +1128,9 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key(ScreenshotActions.sticker)));
     await tester.pumpAndSettle();
-    // 默认 Emoji 段；切到「贴纸」段后才有我的贴纸格。
     await tester.tap(find.text('贴纸').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sticker-cell-red')));
-    // 读取贴纸文件与解码使用真实 IO 和图像线程，交替让出真实时间与推进帧。
     for (var i = 0; i < 5; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
@@ -1215,7 +1138,6 @@ void main() {
       await tester.pump();
     }
 
-    /// 返回复制导出图中心像素的 RGB。
     Future<(int, int, int)> exportedCenter() async {
       await tester.ensureVisible(find.byKey(const Key('screenshot-copy')));
       return (await tester.runAsync(() async {
@@ -1251,8 +1173,6 @@ void main() {
   });
 
   testWidgets('贴纸下拉框：默认 Emoji 段，点表情放置 Emoji 贴纸并收起（#103）', (tester) async {
-    // 边界：64×64 蓝图、无我的贴纸；下拉框默认显示 Emoji 段（首个类别的首个表情格存在，且是懒构建的第一个可见格），
-    // 点该表情格后下拉框关闭；测试环境没有表情字形，放置结果无法按像素断言，只断言下拉框收起且无异常。
     tester.view.physicalSize = const Size(900, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1279,7 +1199,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1301,8 +1220,6 @@ void main() {
   testWidgets('贴纸下拉框：两段都有「管理贴纸…」且高度不变，点击收起并发出 openStickerSettings（#103）', (
     tester,
   ) async {
-    // 边界：无我的贴纸时贴纸段显示「还没有贴纸」；Emoji 段已有「管理贴纸…」，切到贴纸段后按钮仍在、下拉框高度不变；
-    // 在贴纸段点击后下拉框关闭并向原生发出 openStickerSettings（原生再结束截图并打开设置）。
     tester.view.physicalSize = const Size(900, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1339,7 +1256,6 @@ void main() {
     await tester.tap(find.byKey(const Key(ScreenshotActions.sticker)));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sticker-manage')), findsOneWidget);
-    // 下拉框高度由固定网格区决定，两段一致。
     final emojiHeight = tester.getSize(find.byType(StickerPanel)).height;
     await tester.tap(find.text('贴纸').last);
     await tester.pumpAndSettle();
@@ -1355,7 +1271,6 @@ void main() {
   });
 
   testWidgets('美化行：未开启美化时下拉禁用，应用背景后可用，「无背景」关闭美化（#103）', (tester) async {
-    // 边界：初始两个下拉 onChanged 为空；应用默认渐变后内边距下拉可用；再次打开背景选「无背景」后恢复禁用。
     tester.view.physicalSize = const Size(900, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1379,7 +1294,6 @@ void main() {
     );
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1387,7 +1301,6 @@ void main() {
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
 
-    /// 返回内边距下拉是否可用。
     bool paddingEnabled() =>
         tester
             .widget<NativeGlassMenuButton<double>>(
@@ -1410,7 +1323,6 @@ void main() {
   });
 
   testWidgets('美化行选择背景后复制输出扩出内边距的图片，贴图仍是原图，切换工具收起美化行', (tester) async {
-    // 边界：倍率 1、默认内边距 64pt，64px 原图复制后为 192px；贴图不受美化影响。
     tester.view.physicalSize = const Size(900, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1432,7 +1344,6 @@ void main() {
             'width': 64,
             'height': 64,
             'directory': '',
-            // 贴图按显示器坐标定位，需要冻结帧所在显示器。
             'displayX': 0,
             'displayY': 0,
             'displayWidth': 900,
@@ -1451,14 +1362,12 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.ensureVisible(find.byKey(const Key('screenshot-beautify')));
     await tester.tap(find.byKey(const Key('screenshot-beautify')));
     await tester.pump();
-    // 贴纸作为美化的子级插列；背景、内边距与圆角在网格下方的美化行（#141）。
     expect(
       find.descendant(
         of: find.byKey(const Key('screenshot-beautify-row')),
@@ -1473,7 +1382,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    // 背景按钮打开通用调色盘（默认渐变页签），选渐变预设「海洋」后应用（#103）。
     await tester.tap(find.byTooltip('背景'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('gradient-preset-1')));
@@ -1481,7 +1389,6 @@ void main() {
     await tester.tap(find.byKey(const Key('apply-color')));
     await tester.pumpAndSettle();
 
-    /// key 为工具栏按钮；点击并等待导出完成。
     Future<void> press(String key) async {
       await tester.ensureVisible(find.byKey(Key(key)));
       await tester.runAsync(() async {
@@ -1499,7 +1406,6 @@ void main() {
     expect((image!.width, image.height), (192, 192));
     image.dispose();
 
-    // 切换工具收起美化行，已选美化仍生效。
     await tester.ensureVisible(find.byKey(const Key('screenshot-tool-rect')));
     await tester.tap(find.byKey(const Key('screenshot-tool-rect')));
     await tester.pump();
@@ -1546,7 +1452,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1587,7 +1492,6 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
-    // ⌘Z 之后再次导出：画笔痕迹消失，全部像素回到原图的纯蓝。
     copied = null;
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key('screenshot-copy')));
@@ -1608,7 +1512,6 @@ void main() {
   });
 
   testWidgets('快照带窗口裁剪时导出尺寸等于该矩形', (tester) async {
-    // 边界：crop 为 4x4 且贴在 8x8 左上；导出宽高必须是 4，不是整张 8。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1642,7 +1545,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await _tapExport(tester, const Key('screenshot-copy'));
@@ -1654,7 +1556,6 @@ void main() {
   });
 
   testWidgets('文字工具有颜色字号；结束输入后单击选中、再次点击进入编辑', (tester) async {
-    // 边界：提交后点同一位置应带回原文；改字后导出不再是上一版。
     tester.view.physicalSize = const Size(640, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1680,7 +1581,6 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -1705,8 +1605,6 @@ void main() {
     final canvasBox = tester.getRect(
       find.byKey(const Key('screenshot-canvas')),
     );
-    // 点文本框内部，不点边角，避免被当成拉伸/移动。
-    // 单击选中，不进入编辑；紧接着再次点击同一文字框才进入编辑。
     await tester.tapAt(canvasBox.center + const Offset(120, 120));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-text-field')), findsNothing);
@@ -1726,8 +1624,6 @@ void main() {
   });
 }
 
-/// tester 驱动帧，channel 为截图引擎通道，state 为主引擎截图翻译快照（id 加 LiveRegionView.toMap 字段）；
-/// 模拟原生转发一次 publishScreenshotTranslation 并推进一帧，无返回值（#138）。
 Future<void> _publishTranslation(
   WidgetTester tester,
   MethodChannel channel,
@@ -1744,7 +1640,6 @@ Future<void> _publishTranslation(
   await tester.pump();
 }
 
-/// tester 点击导出按钮；key 为 copy/save/pin。导出含 toImage，需真实异步。
 Future<void> _tapExport(WidgetTester tester, Key key) async {
   await tester.ensureVisible(find.byKey(key));
   await tester.runAsync(() async {
@@ -1758,7 +1653,6 @@ const _red = Color(0xFFFF0000);
 const _blue = Color(0xFF0000FF);
 const _black = Color(0xFF000000);
 
-/// 无参数；返回左上红、右下蓝的 8x8 PNG，用于裁剪与遮挡边界断言。
 Future<Uint8List> _pngCheckerboard() async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -1772,7 +1666,6 @@ Future<Uint8List> _pngCheckerboard() async {
   return data!.buffer.asUint8List();
 }
 
-/// width/height 为像素尺寸，color 为填充色；返回纯色 PNG。
 Future<Uint8List> _solidPng(int width, int height, Color color) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -1788,14 +1681,12 @@ Future<Uint8List> _solidPng(int width, int height, Color color) async {
   return data!.buffer.asUint8List();
 }
 
-/// bytes 为 PNG；返回解码后的图像。
 Future<ui.Image> _decode(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
   final frame = await codec.getNextFrame();
   return frame.image;
 }
 
-/// image 为位图，x/y 为像素坐标；返回该点不透明颜色。
 Future<Color> _pixel(ui.Image image, int x, int y) async {
   final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   final offset = (y * image.width + x) * 4;
@@ -1808,7 +1699,6 @@ Future<Color> _pixel(ui.Image image, int x, int y) async {
   );
 }
 
-/// a/b 为待比较字节；返回内容是否完全一致。
 bool listEquals(Uint8List a, Uint8List b) {
   if (identical(a, b)) return true;
   if (a.length != b.length) return false;
@@ -1818,7 +1708,6 @@ bool listEquals(Uint8List a, Uint8List b) {
   return true;
 }
 
-/// a/b 为颜色；在编解码误差内判定是否接近，避免 PNG 往返的 1/255 抖动。
 bool _nearColor(Color a, Color b) {
   return (a.r - b.r).abs() < 0.08 &&
       (a.g - b.g).abs() < 0.08 &&

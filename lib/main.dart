@@ -27,24 +27,18 @@ import 'src/translation/provider_selection.dart';
 import 'src/translation/translation_http.dart';
 import 'src/common/constants/text_mode.dart';
 
-/// 无参数；启动主引擎，初始化失败时让原生弹出实际错误后再抛出，返回启动完成的 Future（#126）。
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 组合根：两平台共用的通道适配器同时实现全部平台端口，按端口注入各业务模块。
   final bridge = ChannelPlatformBridge();
   try {
-    // _startApplication 装配配置、存储、会话与跨窗口请求入口。
     await _startApplication(bridge);
   } catch (error) {
-    // 未完成初始化时主通道没有处理器，窗口请求会一直等待；先让原生提示原因并退出，再保留原异常。
     await bridge.appStartFailed('$error');
     rethrow;
   }
 }
 
-/// bridge 为实现全部平台端口的通道适配器；装配主引擎唯一的配置、翻译会话、历史存储与跨窗口请求入口，返回装配完成的 Future。
 Future<void> _startApplication(ChannelPlatformBridge bridge) async {
-  // 启动各阶段计时：读取设置、打开数据库、应用系统配置与整体就绪（#68「性能测量边界」）。
   final total = Stopwatch()..start();
   final stage = Stopwatch()..start();
   final initial = AppSettings.fromMap(await bridge.loadSettings());
@@ -52,27 +46,22 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   stage.reset();
   final support = await bridge.applicationSupportPath();
   Directory(support).createSync(recursive: true);
-  // 翻译历史与生词本共用同一个 SQLite 文件。
   final database = sqlite3.open('$support/translation_history.sqlite')
-    // WAL 日志模式：写入只追加日志，减少每次提交的同步写盘（#68）。
     ..execute('PRAGMA journal_mode=WAL');
   unawaited(bridge.perfMark('launch-dart-database', stage));
   final history = TranslationHistoryStore(
     database,
     onChanged: () => unawaited(bridge.notifyHistoryChanged()),
   );
-  // 截图历史图片与截图保存目录分开，清理只作用于此目录（#29）。
   final screenshots = ScreenshotHistoryStore(
     database,
     Directory('$support/ScreenshotHistory'),
     onChanged: () => unawaited(bridge.notifyHistoryChanged()),
   );
-  // 生词本增删后与历史一样通知历史窗口刷新（#102）。
   final vocabulary = VocabularyStore(
     database,
     onChanged: () => unawaited(bridge.notifyHistoryChanged()),
   );
-  // providerForSettings复用翻译模块的服务选择；SelectionSession拥有请求、重试和取消。
   final session = SelectionSession(
     provider: providerForSettings(initial, bridge),
     inputProvider: providerForInput(initial, bridge),
@@ -81,7 +70,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
     inputLanguage: initial.inputDirection,
     lookupDefinition: bridge.lookupDefinition,
   );
-  // 实时翻译会话只留在主引擎。原生盖层按快照绘制，不持有服务或密钥。
   final live = LiveRegionSession(
     providerFor: (settings) => providerForSettings(settings, bridge),
     detectLanguage: bridge.detectLanguage,
@@ -94,7 +82,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
     initial: initial,
     platform: bridge,
     onSaved: (candidate) {
-      // dismissIfServiceRemoved 从会话源头取消已删除服务的请求，保留其他服务的展开结果。
       final closedId = session.dismissIfServiceRemoved({
         for (final service in candidate.services) service.id,
       });
@@ -102,40 +89,27 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         unawaited(bridge.stopSpeech());
         unawaited(bridge.hideOverlay(sessionId: closedId));
       }
-      // 普通设置提交只撤下未展开触发态；保留会话继续使用冻结的服务和语言快照。
       if (!session.isExpanded) session.dismiss();
       session.language = candidate.direction;
-      // 输入翻译的语言方向与全局翻译隔离，同样只影响下一次翻译（#99）。
       session.inputLanguage = candidate.inputDirection;
-      // providerForSettings在下一次请求前按已提交配置读取对应服务凭据。
       session.provider = providerForSettings(candidate, bridge);
-      // 输入翻译服务不使用双语段落对照，同样只影响下一次翻译。
       session.inputProvider = providerForInput(candidate, bridge);
-      // 菜单使用本次提交快照并通知保留卡片，避免已删除的其他服务仍可选择。
       session.serviceChoices = () => serviceChoices(candidate);
-      // 实时翻译之后发送的批次使用新配置，不重译画面上未变化的段落块。
       live.noteSettings(candidate);
     },
   );
-  // 润色、纠错与解释在切换时按已提交配置取得默认模型服务（#100）。
   session.assistProviderFor = (mode) =>
       assistProviderForSettings(settings.current, bridge, mode);
-  // 卡片服务菜单按已提交配置构造所选服务：翻译模式取翻译服务，其余模式取模型服务（#100）。
   session.serviceProviderFor = (serviceId, mode) => mode == TextMode.translate
       ? providerForService(settings.current, bridge, serviceId)
       : assistProviderForService(settings.current, bridge, mode, serviceId);
-  // 首次提交设置前使用启动快照；每次读取 settings.current 都会深拷贝全部设置。
   session.serviceChoices = () => serviceChoices(initial);
 
-  // prewarm 按当前默认服务预热共享连接，让握手与本地识别并行；Apple 系统翻译没有地址，不预热（#68）。
   void prewarm() {
     final origin = translationOrigin(settings.current);
     if (origin != null) unawaited(prewarmTranslationConnection(origin));
   }
 
-  // 截图翻译复用实时翻译的段落会话，单独一个实例，与实时区域翻译互不打断（#138）。
-  // screenshotCapture 为当前翻译所属的捕获身份；为 null 时不再推送快照。
-  // screenshotGeneration 为截图会话代次，每次开始或结束递增，旧代次的迟到事件被会话丢弃。
   String? screenshotCapture;
   var screenshotGeneration = 0;
   final screenshotTranslation = LiveRegionSession(
@@ -145,14 +119,12 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
     onView: (view) {
       final id = screenshotCapture;
       if (id == null) return;
-      // 快照带上捕获身份，原生只转给仍是该截图的编辑引擎。
       unawaited(
         bridge.publishScreenshotTranslation({'id': id, ...view.toMap()}),
       );
     },
   );
 
-  // handleApplicationRequests只路由跨引擎请求；同引擎直接调用所属模块，不绕回原生通道。
   bridge.handleApplicationRequests((call) async {
     switch (call.method) {
       case MethodNames.getSettings:
@@ -162,7 +134,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.toggleAutomatic:
       case MethodNames.testService:
       case MethodNames.checkSystemTranslation:
-        // handle拥有唯一设置队列，校验和系统事务成功后才发布新修订。
         return settings.handle(call);
       case MethodNames.historyPage:
       case MethodNames.historyRecording:
@@ -172,12 +143,10 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.setHistoryRetention:
       case MethodNames.deleteHistory:
       case MethodNames.clearHistory:
-        // handleHistoryRequest访问同一个历史库，不等待设置提交或服务测试。
         return handleHistoryRequest(history, call);
       case MethodNames.vocabularyList:
       case MethodNames.deleteVocabulary:
       case MethodNames.vocabularyCsv:
-        // handleVocabularyRequest 访问同一个数据库中的生词本。
         return handleVocabularyRequest(vocabulary, call);
       case MethodNames.recordScreenshotHistory:
       case MethodNames.screenshotHistoryList:
@@ -186,7 +155,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.screenshotHistoryRecording:
       case MethodNames.setScreenshotHistoryRecording:
       case MethodNames.addScreenshotHistory:
-        // handleScreenshotHistoryRequest 按开关写入导出截图、无条件加入拼接与拆分结果，并按条数与时长清理。
         return handleScreenshotHistoryRequest(
           screenshots,
           call,
@@ -195,13 +163,11 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.liveRegionCommand:
         final command = Map<Object?, Object?>.from(call.arguments as Map);
         final generation = command['generation'] as int;
-        // 未知命令由 byName 直接抛错（#127）；快照只经 publishLiveRegion 发给原生，命令回包不携带快照（#124）。
         final action = LiveRegionAction.values.byName(
           command['action'] as String,
         );
         switch (action) {
           case LiveRegionAction.start:
-            // 开始后首帧识别期间同时完成连接握手。
             prewarm();
             live.start(settings.current, generation);
           case LiveRegionAction.pause:
@@ -233,7 +199,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         return null;
       case MethodNames.cancelScreenshotTranslation:
         final map = Map<Object?, Object?>.from(call.arguments as Map);
-        // 只结束仍属于该截图的会话；旧窗口的结束事件不影响新截图的翻译。
         if (screenshotCapture != map['id']) return null;
         screenshotCapture = null;
         screenshotGeneration += 1;
@@ -244,12 +209,9 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         return null;
       case MethodNames.translateScreenshotBlocks:
         final map = Map<Object?, Object?>.from(call.arguments as Map);
-        // 每次点击「翻译文字」开始新代次：旧批次、缓存与迟到增量全部作废。
-        // 设置在开始时冻结，会话不接收之后的设置变化。
         screenshotCapture = map['id'] as String;
         screenshotGeneration += 1;
         screenshotTranslation.start(settings.current, screenshotGeneration);
-        // 截图识别结果作为单个样本交给会话；首个非空样本立即分批发送，返回后译文经快照推送。
         await screenshotTranslation.onOcr(
           LiveOcrSample(
             generation: screenshotGeneration,
@@ -267,7 +229,6 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
 
   stage.reset();
   try {
-    // applySettings应用已保存的系统配置；启动失败仍保留设置入口供用户修正。
     await bridge.applySettings(initial.toMap());
   } on PlatformException catch (error) {
     settings.error = error.message;
@@ -284,48 +245,35 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       vocabulary: vocabulary,
     ),
   );
-  // appReady通知原生主界面已能接收请求与首次启动窗口调度。
   await bridge.appReady();
   unawaited(bridge.perfMark('launch-dart-ready', total));
 }
 
-/// 无参数；设置引擎入口只创建表单，不创建监听器或翻译会话；返回就绪确认完成的 Future。
 @pragma('vm:entry-point')
 Future<void> settingsMain() async {
-  // _runWindow 提交窗口根组件后通知原生入口已执行。
   await _runWindow(const SettingsApp());
 }
 
-/// 无参数；截图引擎只创建图片预览，不初始化翻译或全局监听；返回就绪确认完成的 Future。
 @pragma('vm:entry-point')
 Future<void> screenshotMain() async {
-  // _runWindow 提交窗口根组件后通知原生入口已执行。
   await _runWindow(const ScreenshotApp());
 }
 
-/// 无参数；采集引擎只管理录制、GIF 与长截图界面，原生持有媒体资源；返回就绪确认完成的 Future。
 @pragma('vm:entry-point')
 Future<void> captureMain() async {
-  // _runWindow 提交窗口根组件后通知原生入口已执行。
   await _runWindow(const CaptureApp());
 }
 
-/// 无参数；启动权限向导界面，由原生处理系统授权；返回就绪确认完成的 Future。
 @pragma('vm:entry-point')
 Future<void> permissionWizardMain() async {
-  // _runWindow 提交窗口根组件后通知原生入口已执行。
   await _runWindow(const PermissionWizardApp());
 }
 
-/// 无参数；启动独立历史引擎，历史读写仍委托主引擎；返回就绪确认完成的 Future。
 @pragma('vm:entry-point')
 Future<void> historyMain() async {
-  // _runWindow 提交窗口根组件后通知原生入口已执行。
   await _runWindow(const HistoryApp());
 }
 
-/// app 为附属窗口根组件；初始化绑定并提交组件后确认入口已执行，返回确认完成的 Future。
-/// 确认只覆盖入口，不等待首帧或页面业务数据。
 Future<void> _runWindow(Widget app) async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(app);

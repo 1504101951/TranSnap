@@ -11,7 +11,6 @@ import 'package:transnap/src/history/history_empty_state.dart';
 import 'package:transnap/src/history/history_list_card.dart';
 import 'package:transnap/src/history/vocabulary_page.dart';
 
-/// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
 Future<TestGesture> _startMouse(WidgetTester tester) async {
   final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
   await gesture.addPointer(location: Offset.zero);
@@ -19,7 +18,6 @@ Future<TestGesture> _startMouse(WidgetTester tester) async {
   return gesture;
 }
 
-/// tester 为测试驱动，mouse 为已登记鼠标，finder 为目标条目；移动鼠标到条目中心以显示悬停按钮。
 Future<void> _hoverRow(
   WidgetTester tester,
   TestGesture mouse,
@@ -29,15 +27,11 @@ Future<void> _hoverRow(
   await tester.pumpAndSettle();
 }
 
-/// 无参数；用假历史通道验证生词本分段的展示、悬停操作、删除确认、失败重试与导出状态。
 void main() {
   testWidgets('生词条目共用分组卡片且悬停显示复制删除，删除需确认后消失，导出成功不弹非错误横幅', (tester) async {
-    // 作用：验证生词本样式对齐历史列表、悬停按钮显隐、删除确认防误触、CSV 导出静默完成与删空状态。
-    // 边界：静息时按钮不可点击（透明度 0）；悬停后出现；取消删除保留原词，删空后显示统一空状态并禁用导出。
     const channel = MethodChannel('test/vocabulary-page');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    // 假主引擎：两条生词，删除即从列表移除；保存面板返回用户选择的路径。
     final rows = <Map<String, Object>>[
       {
         'word': 'serendipity',
@@ -79,7 +73,6 @@ void main() {
     expect(find.text('serendipity'), findsOneWidget);
     expect(find.text('机缘凑巧'), findsOneWidget);
     expect(find.text('noun 梨'), findsOneWidget);
-    // 静息状态下悬停操作区透明度为 0 且不逐行挂载 NativeGlassSurface。
     final firstActions = find.descendant(
       of: find.byKey(const ValueKey('vocabulary-serendipity')),
       matching: find.byType(AnimatedOpacity),
@@ -118,7 +111,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NativeGlassBanner), findsNothing);
 
-    // 边界：删到为空后显示统一空状态，导出按钮禁用。
     await _hoverRow(tester, mouse, find.byKey(const ValueKey('vocabulary-pear')));
     await tester.tap(find.byTooltip('删除生词'));
     await tester.pumpAndSettle();
@@ -136,8 +128,6 @@ void main() {
   });
 
   testWidgets('生词本导出等待期间按钮显示进度环，完成后收起（#142）', (tester) async {
-    // 作用：验证生词本点击「导出 CSV」后在系统保存返回前显示进度环，结束后关闭。
-    // 边界：saveTextFile 挂起时 BusyRing.active=true，完成后恢复 false。
     const channel = MethodChannel('test/vocabulary-busy');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -186,8 +176,6 @@ void main() {
   });
 
   testWidgets('生词本首次加载失败展示错误横幅与重试按钮，恢复后正常加载', (tester) async {
-    // 作用：验证首次读取抛 PlatformException 时退出转圈并提供「重试加载」入口。
-    // 边界：_entries == null 且 _loadError 非空时渲染 NativeGlassBanner 与「重试加载」。
     const channel = MethodChannel('test/vocabulary-load-error');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -227,8 +215,6 @@ void main() {
   });
 
   testWidgets('生词本结构化释义渲染、快捷复制按钮与删除失败提示正常', (tester) async {
-    // 作用：验证词典分节释义渲染、悬停后快捷复制触发图标确认以及删除异常错误横幅反馈。
-    // 边界：删除失败保留条目并通过 NativeGlassBanner 展示错误文案。
     const channel = MethodChannel('test/vocabulary-copy-delete-err');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;

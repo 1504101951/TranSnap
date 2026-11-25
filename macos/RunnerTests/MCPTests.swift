@@ -5,22 +5,15 @@ import XCTest
 
 @testable import TranSnap
 
-/// 验证 MCP 接口（#96 验收 1）：JSON-RPC 编解码与错误响应、参数到工具请求的转换、结果到工具内容的转换、
-/// 图片缩放尺寸与 capture_rect 坐标换算、取消、App 未运行与开关关闭的错误输出。
-/// helper 与 App 之间使用临时目录中的真实 Unix socket 与真实 MCPCaptureServer。
 final class MCPTests: XCTestCase {
-    /// 收集 helper 会话写出的消息；达到期望条数时完成 expectation。
     private final class Output {
         private let lock = NSLock()
         private var messages: [[String: Any]] = []
-        /// 原始行，用于检查参数顺序等序列化细节。
         private(set) var raw: [String] = []
         var expectation: XCTestExpectation?
         var expectedCount = 0
 
-        /// 参数 data：会话写出的一行 JSON。
         func append(_ data: Data) {
-            // 会话写出的每一行都必须是 JSON 对象；不是时记为测试失败并跳过该行。
             guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 XCTFail("会话写出的行不是 JSON 对象：\(String(decoding: data, as: UTF8.self))")
                 return
@@ -44,7 +37,6 @@ final class MCPTests: XCTestCase {
     private var server: MCPCaptureServer?
 
     override func setUp() {
-        // sun_path 上限 104 字节，使用短文件名。
         socketPath = NSTemporaryDirectory() + "mcp-\(UUID().uuidString.prefix(8)).sock"
     }
 
@@ -55,10 +47,7 @@ final class MCPTests: XCTestCase {
         unlink(socketPath)
     }
 
-    /// 作用：在临时 socket 上启动真实 App 侧服务。
-    /// 参数 enabled：MCP 开关；run：工具执行方，替代需要真实屏幕的 MCPToolRunner。
     @MainActor
-    /// 测试进程不是 helper，其余用例放行对端以验证协议；对端校验另有用例。control 为「允许操控电脑」开关。
     private func startServer(enabled: Bool = true, control: Bool = true, run: @escaping MCPCaptureServer.Run) {
         let server = MCPCaptureServer(
             isEnabled: { enabled }, isControlEnabled: { control }, run: run, isTrustedPeer: { _ in true }
@@ -67,15 +56,10 @@ final class MCPTests: XCTestCase {
         self.server = server
     }
 
-    /// 作用：把多行消息交给新的 helper 会话并等待指定条数的输出。
-    /// 参数 lines：JSON-RPC 文本；count：期望输出条数。
-    /// 返回：按写出顺序排列的消息对象。
     private func exchange(_ lines: [String], count: Int) async -> [[String: Any]] {
         await exchangeOutput(lines, count: count).all
     }
 
-    /// 作用：同 exchange，返回收集器以便读取原始行。参数 lines、count：同 exchange。
-    /// 返回：输出收集器。
     private func exchangeOutput(_ lines: [String], count: Int) async -> Output {
         let output = Output()
         let done = expectation(description: "收到 \(count) 条输出")
@@ -87,14 +71,11 @@ final class MCPTests: XCTestCase {
         return output
     }
 
-    /// 作用：取出 tools/call 结果的内容块与 isError。参数 message：响应对象。返回：(content, isError)。
     private func toolResult(_ message: [String: Any]) -> (content: [[String: Any]], isError: Bool) {
         let result = message["result"] as! [String: Any]
         return (result["content"] as! [[String: Any]], result["isError"] as! Bool)
     }
 
-    /// 作用：生成白底黑字的测试 PNG。参数 width、height：像素尺寸；text、x、baseline：文字及其左下角像素位置（CG 左下原点）。
-    /// 返回：PNG 数据。
     private func textImage(width: Int, height: Int, text: String, x: CGFloat, baseline: CGFloat) throws -> Data {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -112,8 +93,6 @@ final class MCPTests: XCTestCase {
         return try PNGEncoding.data(image, scale: 1)
     }
 
-    /// 解析失败、缺少 method、未知方法分别返回 -32700、-32600、-32601；通知不产生输出。
-    /// 边界依据：JSON-RPC 2.0 规范的标准错误码，以及“通知不得响应”的约定。
     func testEnvelopeErrorsAndNotificationsFollowJsonRpc() async {
         let messages = await exchange([
             "not json",
@@ -129,8 +108,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual((messages[2]["error"] as? [String: Any])?["code"] as? Int, MCPProtocol.methodNotFound)
     }
 
-    /// 无参数；结果含 NaN、Infinity 时序列化为同一 id 的 -32603 内部错误，合法消息与 JSONSerialization 输出一致（#121）。
-    /// 边界：NaN 与 Infinity 是 JSONSerialization 会抛出 Objective-C 异常的两类数值；字符串 id 与数字 id 都需原样保留，缺省 id 输出 null。
     func testUnserializableResultBecomesInternalError() throws {
         for (id, value) in [(7 as Any, Double.nan), ("a" as Any, Double.infinity)] {
             let data = MCPProtocol.encode(MCPProtocol.response(id: id, result: ["value": value]))
@@ -145,8 +122,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(MCPProtocol.encode(valid), try JSONSerialization.data(withJSONObject: valid, options: [.withoutEscapingSlashes]))
     }
 
-    /// initialize 原样回应支持的版本，不支持的版本回应最新版本；ping 返回空结果。
-    /// 边界依据：MCP 生命周期规范的版本协商规则。
     func testInitializeNegotiatesVersionAndPingAnswersEmpty() async {
         let messages = await exchange([
             #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
@@ -163,8 +138,6 @@ final class MCPTests: XCTestCase {
     }
 
 
-    /// 作用：tools/list 按声明顺序给出全部工具与英文说明；截图工具参数按声明顺序输出。
-    /// 边界依据：名称顺序等于 MCPTool.allCases；capture_rect 的 required 为五个坐标参数，output 默认 image。
     func testToolsListDeclaresOrderedEnglishSchemas() async throws {
         let output = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1)
         let tools = (output.all[0]["result"] as! [String: Any])["tools"] as! [[String: Any]]
@@ -187,7 +160,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(properties["width"]?["minimum"] as? Int, 1)
         XCTAssertNil(properties["width"]?["description"])
 
-        // 参数在原始 JSON 中按声明顺序出现。
         let raw = output.raw[0]
         let section = raw[raw.range(of: #""name":"capture_rect""#)!.lowerBound...]
         let order = ["display_index", "x", "y", "width", "height", "reference_detail", "output", "detail", "include_positions"]
@@ -195,8 +167,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(positions, positions.sorted())
     }
 
-    /// 作用：「允许操控电脑」只拒绝写入工具；tools/list 始终列出全部工具，只读的 snapshot 仍执行（#140）。
-    /// 边界依据：列表顺序含 snapshot、find 与五个写入工具；开关关闭时 snapshot 进入执行且 isError 为 false，click 不进入执行并返回点名五个写入工具的拒绝文案。
     @MainActor
     func testControlSwitchBlocksWriteToolsOnly() async {
         let listed = await exchangeOutput([#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#], count: 1)
@@ -216,15 +186,12 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(executed)
 
         executed = false
-        // click 带合法坐标，请求能通过参数校验并到达 App；拒绝发生在执行前。
         let click = await exchange([#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"click","arguments":{"display_index":0,"x":1,"y":1}}}"#], count: 1)
         XCTAssertEqual(toolResult(click[0]).content.first?["text"] as? String, AppConstants.mcpControlDisabledMessage)
         XCTAssertTrue(toolResult(click[0]).isError)
         XCTAssertFalse(executed)
     }
 
-    /// 作用：snapshot 与 find 的参数转换（#140）。
-    /// 边界依据：都缺省时读取前台应用；max_depth 超过上限按上限处理；app、window_id、root 互斥；find 至少要一个筛选条件。
     func testAccessibilityToolArguments() throws {
         XCTAssertEqual(
             try MCPProtocol.toolRequest(params: ["name": "snapshot"]),
@@ -247,9 +214,6 @@ final class MCPTests: XCTestCase {
         XCTAssertThrowsError(try MCPProtocol.toolRequest(params: ["name": "find", "arguments": ["root": "@s1:e1", "text": "OK"]]))
     }
 
-    /// 作用：操作工具的目标与参数转换（#140）。
-    /// 边界依据：ref 与坐标二选一，坐标须同时有 display_index、x、y；count 只能为 1 或 2；drag 只接受坐标；
-    /// type_text 可无目标（输入到前台焦点）且保留文字首尾空白。
     func testControlToolArguments() throws {
         XCTAssertEqual(
             try MCPProtocol.toolRequest(params: ["name": "click", "arguments": ["ref": "@s1:e2"]]),
@@ -282,9 +246,6 @@ final class MCPTests: XCTestCase {
         }
     }
 
-    /// 作用：按键组合解析与禁止组合（#140 安全基线）。
-    /// 边界依据：Command+Q 系列覆盖退出、注销与锁屏，Command+Option+Esc 为强制退出；不带 Command 的 Q 与 Esc 照常允许；
-    /// 多个主键、未知名称或只有修饰键都不能解析。
     func testKeyComboParsingAndForbiddenShortcuts() throws {
         let save = try XCTUnwrap(MCPKeyCombo("Cmd+Shift+S"))
         XCTAssertEqual(save.keyCode, CGKeyCode(kVK_ANSI_S))
@@ -300,12 +261,9 @@ final class MCPTests: XCTestCase {
         for invalid in ["cmd", "a+b", "cmd+hyper", ""] {
             XCTAssertNil(MCPKeyCombo(invalid), invalid)
         }
-        // 合成按键都带本应用标记。
         XCTAssertTrue(save.events().allSatisfy { $0.getIntegerValueField(.eventSourceUserData) == AppConstants.syntheticEventTag })
     }
 
-    /// 作用：会话时限（#140：最长 30 分钟、空闲 5 分钟）。
-    /// 边界依据：恰好到达上限即结束，差一秒不结束。
     func testControlSessionLimits() {
         let start = Date(timeIntervalSince1970: 0)
         XCTAssertFalse(MCPControlLimits.expired(startedAt: start, lastActionAt: start, now: start.addingTimeInterval(299)))
@@ -315,8 +273,6 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(MCPControlLimits.expired(startedAt: start, lastActionAt: active, now: start.addingTimeInterval(1800)))
     }
 
-    /// 作用：截图像素坐标换成全局点（#140）。
-    /// 边界依据：取像素中心；副显示器原点为负；坐标等于输出图宽或高即越界。
     @MainActor
     func testGlobalPointMapsImagePixelsToScreenPoints() {
         let left = MCPToolRunner.Display(
@@ -329,7 +285,6 @@ final class MCPTests: XCTestCase {
         XCTAssertNil(MCPToolRunner.globalPoint(x: 0, y: 250, reference: .low, display: left))
     }
 
-    /// 作用：操作结果为说明文字在前、可选截图在后（#140）。边界依据：未请求截图时只有文字块。
     func testDoneReplyBecomesTextThenImage() {
         let plain = MCPProtocol.toolResult(.done(message: "Clicked.", png: nil))["content"] as! [[String: Any]]
         XCTAssertEqual(plain.count, 1)
@@ -338,8 +293,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(shot.map { $0["type"] as? String }, ["text", "image"])
     }
 
-    /// 作用：元素清单输出为表格文本；不在屏上的元素坐标为空，不完整时首行提示展开局部（#140）。
-    /// 边界依据：displayIndex 为 nil 表示元素不与任何显示器相交；名称中的制表符会打乱表格，须替换为空格。
     func testElementsReplyBecomesTable() {
         let items = [
             MCPElementInfo(ref: "@s1:e1", depth: 0, role: "button", name: "Send\tNow", value: "", enabled: true,
@@ -354,8 +307,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(lines[3], "@s1:e2\t1\ttextfield\tSearch\tabc\tfalse\t\t\t\t\t")
     }
 
-    /// 作用：全局点坐标换成显示器 standard 输出图像素（窗口与元素共用，#140）。
-    /// 边界依据：副显示器原点为负；跨出显示器的部分裁掉；与任何显示器都不相交时为 nil。
     @MainActor
     func testStandardRectMapsGlobalPointsToDisplayImage() {
         let main = MCPToolRunner.Display(
@@ -374,9 +325,6 @@ final class MCPTests: XCTestCase {
         XCTAssertNil(MCPToolRunner.standardRect(CGRect(x: 5000, y: 0, width: 10, height: 10), displays: displays))
     }
 
-    /// 参数转换：缺省值、必填、取值范围与未声明参数。
-    /// 边界依据：display_index 与 x、y 下界为 0，width、height、window_id 下界为 1；布尔与小数不得被当作整数；
-    /// window_id 上界为 CGWindowID（UInt32）最大值；schema 声明 additionalProperties: false。
     func testToolRequestConversionAndArgumentBounds() throws {
         let defaults = MCPCaptureOptions(output: .image, detail: .standard, includePositions: false)
         XCTAssertEqual(try MCPProtocol.toolRequest(params: ["name": "capture_screen"]), .captureScreen(displayIndex: 0, options: defaults))
@@ -424,7 +372,6 @@ final class MCPTests: XCTestCase {
         }
     }
 
-    /// 未知工具返回 JSON-RPC 参数错误；参数错误返回 isError 工具结果且不连接 App。
     func testInvalidToolCallsReturnErrorsWithoutApp() async {
         let messages = await exchange([
             #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"capture_region"}}"#,
@@ -435,8 +382,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(toolResult(messages[1]).content.first?["text"] as? String, "output must be one of image, text, both")
     }
 
-    /// 没有 socket 文件与残留 socket 文件都返回「TranSnap is not running.」。
-    /// 边界依据：App 退出后 socket 文件可能残留，连接被拒绝同样代表未运行。
     func testAppNotRunningReturnsToolError() async throws {
         let call = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_displays"}}"#
         let missing = await exchange([call], count: 1)
@@ -449,8 +394,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(toolResult(stale[0]).content.first?["text"] as? String, AppConstants.mcpNotRunningMessage)
     }
 
-    /// 作用：非本 App helper 的连接被拒绝且不执行工具（#140）。
-    /// 边界依据：测试进程与 App 同一用户、socket 权限 0600 允许连接，正是对端签名校验要拦截的情形。
     @MainActor
     func testUntrustedPeerIsRefusedBeforeExecution() async {
         var executed = false
@@ -466,8 +409,6 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(executed)
     }
 
-    /// 作用：本应用合成事件带标记、可被监听识别，普通事件不带（#140）。
-    /// 边界依据：同一键码的事件只差标记一项，标记是选区监听区分自身注入与用户输入的唯一依据。
     func testSyntheticEventMarkIsReadableFromNSEvent() throws {
         let marked = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true))
         SyntheticEvent.mark(marked)
@@ -476,7 +417,6 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(SyntheticEvent.isMarked(try XCTUnwrap(NSEvent(cgEvent: plain))))
     }
 
-    /// 开关关闭时 App 返回开关关闭错误，不执行工具。
     @MainActor
     func testDisabledSwitchReturnsNotEnabled() async {
         var executed = false
@@ -490,8 +430,6 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(executed)
     }
 
-    /// 请求经真实 socket 到达 App；清单为制表符分隔的表格文本，截图结果为图片在前、Markdown 在后。
-    /// 边界依据：标题中的制表符与换行会打乱表格，须替换为空格。
     @MainActor
     func testRequestsReachAppAndRepliesBecomeContent() async throws {
         let png = Data([0x89, 0x50, 0x4E, 0x47])
@@ -534,14 +472,12 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(result.content[1]["text"] as? String, "# Title")
     }
 
-    /// notifications/cancelled 关闭对应连接，App 侧执行任务被取消，helper 不再响应该请求。
     @MainActor
     func testCancelNotificationCancelsAppTaskWithoutResponse() async {
         let started = expectation(description: "App 开始执行")
         let cancelled = expectation(description: "App 任务被取消")
         startServer { _ in
             started.fulfill()
-            // 挂起直到任务取消，代表执行中的截图。
             await withTaskCancellationHandler {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     Task { while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(20)) }; continuation.resume() }
@@ -566,7 +502,6 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(output.all.isEmpty)
     }
 
-    /// socket 文件权限为 0600；同一路径已有实例服务时拒绝再次监听，避免抢走对方连接。
     func testListenUsesOwnerOnlyPermissionAndRefusesSecondServer() throws {
         let fd = try MCPSocket.listen(path: socketPath)
         defer { close(fd) }
@@ -577,13 +512,10 @@ final class MCPTests: XCTestCase {
         }
     }
 
-    /// 作用：计算 Claude 视觉 token 数。参数 size：像素尺寸。返回：⌈宽/28⌉×⌈高/28⌉。
     private func tokens(_ size: (width: Int, height: Int)) -> Int {
         Int((Double(size.width) / 28).rounded(.up)) * Int((Double(size.height) / 28).rounded(.up))
     }
 
-    /// 返回图尺寸同时满足 token 上限与 1568 长边，且不放大；缩放接近上限而不过度缩小。
-    /// 边界依据：#96 决策 3；3024×1964 为 14 英寸 MacBook Pro 默认缩放的物理像素，按长边缩到 1568×1018 会有 2072 token。
     func testFittedSizeRespectsTokenBudgetAndLongEdge() {
         for detail in MCPDetail.allCases {
             for (width, height) in [(3024, 1964), (5120, 2880), (1000, 3136), (1568, 10)] {
@@ -600,8 +532,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(small.height, 600)
     }
 
-    /// capture_rect 坐标按参考清晰度的输出图换算回原始像素并向外取整；超出参考图或宽高为 0 时拒绝。
-    /// 边界依据：整张参考图必须换算为整张原图；右下边缘多 1 像素即越界；low 与 standard 参考图尺寸不同。
     func testSourceRectMapsReferenceCoordinatesToSourcePixels() {
         for detail in MCPDetail.allCases {
             let reference = MCPImageOutput.fitted(width: 3024, height: 1964, detail: detail)
@@ -621,15 +551,12 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(rect.minX, (100 * 3024 / Double(standard.width)).rounded(.down))
         XCTAssertEqual(rect.maxX, (110 * 3024 / Double(standard.width)).rounded(.up))
         XCTAssertNil(MCPImageOutput.sourceRect(x: 0, y: 0, width: 0, height: 5, detail: .standard, sourceWidth: 3024, sourceHeight: 1964))
-        // 原图未超限时尺寸不变，坐标原样对应。
         XCTAssertEqual(
             MCPImageOutput.sourceRect(x: 5, y: 6, width: 7, height: 8, detail: .standard, sourceWidth: 800, sourceHeight: 600),
             CGRect(x: 5, y: 6, width: 7, height: 8)
         )
     }
 
-    /// OCR Markdown：标题、段落、列表、表格按阅读顺序输出；表格或列表内的段落与重复标题不重复；
-    /// 合并单元格只写起始格；单元格 | 转义、换行替换为空格；段落内连续空白合并、空段落去除。
     func testMarkdownBlocksOrganizeDocumentStructure() {
         var layout = ScreenCaptureService.OCRLayout()
         layout.title = ("Report", CGRect(x: 10, y: 0, width: 200, height: 30))
@@ -659,7 +586,6 @@ final class MCPTests: XCTestCase {
         ])
     }
 
-    /// 返回文本：默认只有 Markdown 块；include_positions 时首行为返回图尺寸，每块前为换算后的像素位置；无块时为提示文本。
     func testMarkdownTextWithPositionsAndEmptyResult() {
         let blocks = [
             ScreenCaptureService.OCRBlock(markdown: "# T", rect: CGRect(x: 100, y: 40, width: 200, height: 20)),
@@ -674,7 +600,6 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(MCPImageOutput.text([], scaleX: 1, scaleY: 1, size: size, includePositions: true), AppConstants.mcpNoTextMessage)
     }
 
-    /// 截图结果：PNG 按 token 上限缩放；OCR 在原图识别并以 Markdown 返回；output 控制返回内容。
     func testImageReplyScalesPngAndReturnsMarkdown() async throws {
         let png = try textImage(width: 3136, height: 400, text: "TranSnap", x: 400, baseline: 140)
         let source = try MCPImageOutput.image(png)
@@ -703,6 +628,5 @@ final class MCPTests: XCTestCase {
 }
 
 private extension CGImage {
-    /// 像素尺寸元组，便于计算 token。
     var size: (width: Int, height: Int) { (width, height) }
 }

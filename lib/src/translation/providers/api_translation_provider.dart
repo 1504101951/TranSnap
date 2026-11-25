@@ -14,12 +14,7 @@ import '../paragraph_translation.dart';
 import '../translation_http.dart';
 import '../translation_types.dart';
 
-/// 配置型翻译服务。单篇翻译使用应用共享的 HTTP 客户端，取消只中止本次请求；批量翻译使用调用方传入的客户端。
 class ApiTranslationProvider implements BatchTranslationProvider {
-  /// config/credentials 为服务配置与凭据读取；mode 为处理模式，翻译外的模式只用于模型服务；
-  /// prompt 为该模式的系统提示词，thinking 为该模式的思考开关，二者只对模型服务生效；
-  /// glossary 为术语表，只有模型服务的翻译请求使用；
-  /// semanticPairs 为本 Provider 是否要求模型返回双语段落对照，由调用方决定（输入翻译固定 false），只对模型服务的翻译模式生效。
   ApiTranslationProvider({
     required this.config,
     required this.credentials,
@@ -33,36 +28,27 @@ class ApiTranslationProvider implements BatchTranslationProvider {
   final Future<Map<String, String>> Function() credentials;
   final TextMode mode;
 
-  /// 是否使用 JSON segments 协议整片请求并返回段落配对；不读取 config.semanticPairs，使同一服务在不同入口可有不同取舍。
   final bool semanticPairs;
 
-  /// 本模式的系统提示词，来自设置中全部模型服务共用的提示词（#100）。
   final String prompt;
 
-  /// 本模式是否开启思考；DeepSeek 与 Anthropic 按协议发送，OpenAI 官方与其他兼容端点不发送。
   final bool thinking;
 
-  /// 翻译模式的术语表；润色、纠错与解释的 Provider 不传入（#104）。
   final List<GlossaryEntry> glossary;
   @override
   String get id => config.id;
 
-  /// 润色、纠错与解释整段一次处理，不携带前片上下文。
   @override
   bool get usesSlidingContext => config.isModel && mode == TextMode.translate;
   @override
   bool get allowsParallelBatches => true;
 
-  /// request 为同一会话的原文与语言方向；返回增量译文及完整结束/失败事件。
   @override
   Stream<TranslationEvent> translate(TranslationRequest request) {
-    // 润色、纠错与解释的输出不与原文段落对应，整片直接交给模型，也不走「已是目标语言」的直通。
     if (mode != TextMode.translate) return _translate(request);
-    // 语义模型需要整篇上下文，整片发送并校验配对。
     if (config.isModel && semanticPairs) {
       return translateParagraphs(_translate, request);
     }
-    // 其他服务按原文段落建立一一对应，分批调用批量接口（#113）。
     final (:items, :chars) = switch (config.kind) {
       'google' => _googleBatchLimits,
       'baidu' => _baiduBatchLimits,
@@ -76,12 +62,9 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     );
   }
 
-  /// 单篇分批的上限：谷歌翻译 v2 每次最多 128 条、推荐每次不超过 5000 字符（官方文档）；
-  /// 百度按字符计，官方上限本次未能读取，取保守值 2000；模型使用段落批量通用上限（#113）。
   static const _googleBatchLimits = (items: 128, chars: 5000);
   static const _baiduBatchLimits = (items: null, chars: 2000);
 
-  /// 百度 54005（长文本请求频繁）按其文档「3s后再试」等待的时长（#118）。
   static const _baiduLongQueryRetryAfter = Duration(seconds: 3);
   static const _modelBatchLimits = (
     items: batchItemLimit,
@@ -91,9 +74,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
   static const _connectMessage = '无法连接翻译服务，请检查网络与 API 地址。';
   static const _unknownMessage = '翻译失败，请检查服务配置；返回内容可能不符合接口格式。';
 
-  /// error 为单篇或批量请求抛出的异常；返回用户可读原因、错误类别与服务要求的重试等待。
-  /// 业务失败原样返回；超时、无法连接与其他异常均为临时错误，其他异常不回显内容，
-  /// 避免将密钥、原文或选区带入错误信息（#124）。
   static _ApiFailure _failureOf(Object error) => switch (error) {
     _ApiFailure() => error,
     TimeoutException() => const _ApiFailure(translationTimeoutMessage),
@@ -102,7 +82,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
   };
   static const _requestTimeout = Duration(seconds: 90);
 
-  /// 本次请求命中术语时追加到系统提示词，说明用户消息中的 glossary。
   static const _glossaryInstruction =
       '\n用户消息中的 glossary 是术语表：原文出现 term 时，译文必须使用对应的 translation；'
       'translation 与 term 相同表示保留原文不译。';
@@ -112,17 +91,13 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       '每段译文单独占一行，行首保留原编号，格式为“[编号] 译文”，译文内不换行。'
       '只输出这些行，不附加解释。';
 
-  /// request 为一次服务请求的文本与方向；返回协议解析后的事件流，取消时关闭连接。
   Stream<TranslationEvent> _translate(TranslationRequest request) {
-    // 段落对照只属于翻译模式；润色、纠错与解释返回整段纯文本。
     final semantic = semanticPairs && mode == TextMode.translate;
     final output = StreamController<TranslationEvent>();
     var active = true;
-    // 共享客户端不随单次请求关闭；取消时中止本次请求并停止读取响应。
     HttpClientRequest? pending;
     StreamIterator<String>? additions;
 
-    /// response 为服务响应；读完正文并返回文本，取消时停止读取，保证连接可回到共享连接池或被丢弃。
     Future<String> readBody(HttpClientResponse response) async {
       final body = StringBuffer();
       final stream = StreamIterator(utf8.decoder.bind(response));
@@ -133,17 +108,13 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       return body.toString();
     }
 
-    /// event 为业务事件；取消后不再发布迟到结果，无返回值。
     void emit(TranslationEvent event) {
       if (active && !output.isClosed) output.add(event);
     }
 
-    /// 无参数；读取钥匙串凭据后执行单次协议请求，结束时发布完成事件。
     Future<void> run() async {
-      // _readSecret 校验配置并读取钥匙串凭据。
       final secret = await _readSecret();
       if (!active) return;
-      // translationHttpClient 为应用共享客户端，复用与服务之间的连接。
       final http = await _open(translationHttpClient);
       pending = http;
       if (!active) return;
@@ -165,9 +136,7 @@ class ApiTranslationProvider implements BatchTranslationProvider {
             target: request.targetLanguage,
           );
         default:
-          // 润色、纠错与解释直接使用本模式提示词；翻译在提示词后追加术语与输出格式要求。
           final assist = mode == TextMode.translate ? null : prompt;
-          // glossaryHits 只取原文出现且目标语言一致的术语；没有命中时请求与无术语表时一致。
           final terms = glossaryHits(glossary, [
             request.sourceText,
           ], request.targetLanguage);
@@ -212,7 +181,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       }
       final response = await http.close();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        // 正文只用于读取错误码，区分频率受限与额度不足，不回显（#118）。
         throw _statusFailure(
           response.statusCode,
           await readBody(response),
@@ -221,7 +189,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       }
       if (!config.isModel) {
         final data = jsonDecode(await readBody(response)) as Map;
-        // 两个解析函数各自校验服务错误并返回按原文顺序排列的译文。
         final text =
             (config.kind == 'baidu'
                     ? _baiduTranslations(data)
@@ -234,7 +201,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       }
 
       final buffer = StringBuffer();
-      // _modelAdditions 解析流式事件并校验结束原因，逐个给出新增译文；迭代器供取消时立即停止读取。
       final stream = StreamIterator(_modelAdditions(response));
       additions = stream;
       while (await stream.moveNext()) {
@@ -261,11 +227,9 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       try {
         await run().timeout(_requestTimeout);
       } catch (error) {
-        // _failureOf 把异常换成用户可读原因，不回显响应正文、请求 URL 或底层异常。
         emit(TranslationFailure(_failureOf(error).message));
       } finally {
         active = false;
-        // 只中止本次请求并停止读取响应，不关闭共享客户端。
         pending?.abort();
         await additions?.cancel();
         await output.close();
@@ -279,8 +243,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     return output.stream;
   }
 
-  /// request 为一批段落与语言方向，client 为会话持有的连接。
-  /// 一次请求翻译整批；返回带下标的增量及整批完成或失败事件，取消订阅即中止本次请求。
   @override
   Stream<BatchTranslationEvent> translateBatch(
     BatchTranslationRequest request, {
@@ -291,12 +253,10 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     HttpClientRequest? pending;
     StreamIterator<String>? additions;
 
-    /// event 为批量事件；取消后不再发布迟到结果，无返回值。
     void emit(BatchTranslationEvent event) {
       if (active && !output.isClosed) output.add(event);
     }
 
-    /// translations 为按原文顺序排列的译文；条数与原文不一致时无法对应，全部留作缺失。
     void emitItems(List<String> translations) {
       if (translations.length != request.texts.length) return;
       for (final (index, text) in translations.indexed) {
@@ -304,15 +264,12 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       }
     }
 
-    /// 无参数；执行一次批量请求，结束时发布整批完成事件。
     Future<void> run() async {
-      // _readSecret 校验配置并读取钥匙串凭据。
       final secret = await _readSecret();
       if (!active) return;
       final http = await _open(client);
       pending = http;
       if (!active) return;
-      // 一行只放一个段落，换行才能作为段落边界。
       final lines = [
         for (final text in request.texts) singleLineParagraph(text),
       ];
@@ -334,7 +291,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
             target: request.targetLanguage,
           );
         default:
-          // glossaryHits 在整批原文中筛选命中的术语。
           final terms = glossaryHits(
             glossary,
             request.texts,
@@ -351,9 +307,7 @@ class ApiTranslationProvider implements BatchTranslationProvider {
               'source_language': request.detectedLanguage,
               'target_language': request.targetLanguage,
               if (terms.isNotEmpty) 'glossary': terms,
-              // numberedBatchText 给每个段落加上“[编号]”行首。
               'paragraphs': numberedBatchText(request.texts),
-              // 单篇分批翻译携带上一片的原文与译文尾部作为上下文（#113）。
               if (request.previousSourceTail != null ||
                   request.previousTranslationTail != null)
                 'previous_context': {
@@ -366,12 +320,10 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       }
       final response = await http.close();
       if (!active) {
-        // 取消订阅会断开这条连接，不把未读响应留给连接池。
         unawaited(response.listen((_) {}).cancel());
         return;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        // 读完响应体，连接才能回到连接池复用；正文只用于读取错误码，不回显（#118）。
         throw _statusFailure(
           response.statusCode,
           await utf8.decoder.bind(response).join(),
@@ -389,7 +341,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
         emit(const BatchCompleted());
         return;
       }
-      // NumberedBatchParser 把流式文本按行首编号归属到段落。
       final parser = NumberedBatchParser(request.texts.length);
       final stream = StreamIterator(_modelAdditions(response));
       additions = stream;
@@ -405,7 +356,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       try {
         await run().timeout(_requestTimeout);
       } catch (error) {
-        // _failureOf 把异常换成用户可读原因与类别，不回显响应正文、请求 URL 或底层异常。
         final failure = _failureOf(error);
         emit(
           BatchFailure(
@@ -416,7 +366,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
         );
       } finally {
         active = false;
-        // 连接由会话持有；这里只中止本次请求并停止读取响应。
         pending?.abort();
         await additions?.cancel();
         await output.close();
@@ -430,11 +379,8 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     return output.stream;
   }
 
-  /// 无参数；校验服务配置、思考预算与凭据，返回钥匙串凭据。
-  /// 校验提示原样显示，不替换成通用失败；配置或凭据不合法不会因重试而改变（#123）。
   Future<Map<String, String>> _readSecret() async {
     try {
-      // _validateRequest 校验服务配置与本模式的思考预算。
       _validateRequest();
       final secret = await credentials();
       config.validateCredentials(secret);
@@ -444,15 +390,12 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     }
   }
 
-  /// client 为发送请求的 HTTP 客户端；返回指向本服务的 POST 请求。
   Future<HttpClientRequest> _open(HttpClient client) async {
     final http = await client.postUrl(_endpoint());
-    // 不随重定向把凭据或原文发送到另一个地址。
     http.followRedirects = false;
     return http;
   }
 
-  /// 无参数；返回本服务的请求地址，服务类型不受支持时抛服务级失败。
   Uri _endpoint() {
     final base = config.baseUrl.replaceFirst(RegExp(r'/+$'), '');
     final path = switch (config.kind) {
@@ -468,8 +411,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     return Uri.parse('$base$path');
   }
 
-  /// http 为待发送请求，secret 为凭据；q 为原文，多段以换行分隔；
-  /// detected/target 为语言方向。写入带签名的百度表单，无返回值。
   void _writeBaidu(
     HttpClientRequest http,
     Map<String, String> secret, {
@@ -508,8 +449,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     http.add(utf8.encode(Uri(queryParameters: body).query));
   }
 
-  /// http 为待发送请求，secret 为凭据；q 为一段原文或按顺序排列的多段原文；
-  /// detected/target 为语言方向。写入 Google 请求体，无返回值。
   void _writeGoogle(
     HttpClientRequest http,
     Map<String, String> secret, {
@@ -531,7 +470,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     );
   }
 
-  /// 无参数；校验服务配置，并在 Anthropic 开启思考时要求最大输出大于思考预算，不满足时抛 FormatException，无返回值。
   void _validateRequest() {
     config.validate();
     const budget = NetworkLimits.anthropicThinkingBudget;
@@ -542,8 +480,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     }
   }
 
-  /// http 为待发送请求，secret 为凭据；system 为系统提示词，input 为用户消息；
-  /// jsonObject 为真时要求 DeepSeek 返回 JSON 对象。写入流式模型请求体，无返回值。
   void _writeModel(
     HttpClientRequest http,
     Map<String, String> secret, {
@@ -552,21 +488,17 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     required bool jsonObject,
   }) {
     final Object body;
-    // 模型服务的 API Key 可留空；留空时不发送认证头（#123）。
     final apiKey = secret['apiKey'] ?? '';
     if (config.kind != 'anthropic') {
       if (apiKey.isNotEmpty) {
         http.headers.set('Authorization', 'Bearer $apiKey');
       }
-      // 服务类型或官方地址均可识别DeepSeek协议，两个请求选项使用同一判定。
       final isDeepSeek =
           config.kind == 'deepseek' ||
           Uri.parse(config.baseUrl).host == 'api.deepseek.com';
       body = {
         'model': config.model,
         'stream': true,
-        // DeepSeek 按本模式开关用协议参数开关思考；提示词中的 no_think 不能替代接口约束。
-        // OpenAI 官方与其他兼容端点的思考参数随模型而变，不发送，由模型默认决定。
         if (isDeepSeek) 'thinking': {'type': thinking ? 'enabled' : 'disabled'},
         if (jsonObject && isDeepSeek)
           'response_format': {'type': 'json_object'},
@@ -594,14 +526,12 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     http.add(utf8.encode(jsonEncode(body)));
   }
 
-  /// 额度或余额不足的错误码：OpenAI 兼容的 error.code/type 与 Google 的 errors[].reason（#118）。
   static const _quotaCodes = {
     'insufficient_quota',
     'dailyLimitExceeded',
     'quotaExceeded',
   };
 
-  /// 频率受限的错误码：OpenAI、Anthropic 的 error.code/type 与 Google 的 errors[].reason（#118）。
   static const _rateLimitCodes = {
     'rate_limit_exceeded',
     'rate_limit_error',
@@ -611,11 +541,7 @@ class ApiTranslationProvider implements BatchTranslationProvider {
   static const _quotaMessage = '额度或余额不足，请检查服务账户。';
   static const _rateLimitMessage = '请求过于频繁，请稍后重试。';
 
-  /// status 为非 2xx 的 HTTP 状态码，body 为响应正文（只读错误码，不回显），retryAfter 为 Retry-After 头；
-  /// 返回带错误类别的用户可读失败：额度或余额不足（402 或额度错误码）、认证失败与配置拒绝为服务级，
-  /// 频率受限（429 或限流错误码）稍后重试，服务端错误（5xx）为临时错误（#118）。
   _ApiFailure _statusFailure(int status, String body, String? retryAfter) {
-    // _errorCodes 从 JSON 错误正文取出 error.code、error.type 与 error.errors[].reason。
     final codes = _errorCodes(body);
     if (status == 402 || codes.any(_quotaCodes.contains)) {
       return const _ApiFailure(
@@ -642,7 +568,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     );
   }
 
-  /// body 为错误响应正文；返回其中的 error.code、error.type 与 error.errors[].reason，正文不是 JSON 时为空。
   static Set<String> _errorCodes(String body) {
     final Object? data;
     try {
@@ -662,10 +587,6 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     };
   }
 
-  /// data 为百度响应。返回按原文行顺序排列的译文；服务返回错误码时抛失败。
-  /// 52001（超时）与 52002（系统错误）属于临时错误，54003（访问频率受限）稍后重试，
-  /// 54005（长文本请求频繁）按文档「3s后再试」等待 3 秒后重试，
-  /// 54004（账户余额不足）与其余错误码为服务级明确错误（#118）。
   List<String> _baiduTranslations(Map data) {
     final code = data['error_code']?.toString();
     if (code != null && code != '52000') {
@@ -698,10 +619,8 @@ class ApiTranslationProvider implements BatchTranslationProvider {
     ];
   }
 
-  /// data 为 Google 响应。返回按请求顺序排列的译文，HTML 实体已解码一次。
   List<String> _googleTranslations(Map data) => [
     for (final item in data['data']['translations'] as List)
-      // Google 的文本字段可能包含 HTML 实体；单次解码，保留原文本来含有的转义结构。
       (item['translatedText'] as String).replaceAllMapped(
         RegExp(r'&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);'),
         (match) {
@@ -723,15 +642,12 @@ class ApiTranslationProvider implements BatchTranslationProvider {
       ),
   ];
 
-  /// response 为模型的流式响应。逐个返回新增译文；
-  /// 流中报错、模型拒绝、输出截断或未正常结束时抛失败。
   Stream<String> _modelAdditions(HttpClientResponse response) async* {
     var finished = false;
     String? stopReason;
     var dataLines = <String>[];
     await for (final line
         in response.transform(utf8.decoder).transform(const LineSplitter())) {
-      // SSE 以空行结束事件；一个 JSON 事件可以跨多条 data 行。
       if (line.isNotEmpty) {
         if (line.startsWith('data:')) {
           dataLines.add(line.substring(5).replaceFirst(RegExp(r'^ '), ''));
@@ -792,9 +708,7 @@ class ApiTranslationProvider implements BatchTranslationProvider {
   }
 }
 
-/// 仅承载由本应用定义的安全提示，区别于可能包含响应正文的解析异常。
 class _ApiFailure implements Exception {
-  /// message 为用户可读原因；kind 为错误类别，未指明时按临时错误处理；retryAfter 为服务要求的重试等待。
   const _ApiFailure(
     this.message, {
     this.kind = TranslationFailureKind.transient,

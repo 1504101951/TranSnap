@@ -1,15 +1,12 @@
 import Cocoa
 import FlutterMacOS
 
-/// 原生材料工厂；每个 Flutter 引擎独立注册，不保存业务或窗口生命周期状态。
 final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
-    /// 专用通道只传视觉快照，避免覆盖各窗口已有业务消息处理器。
     private let channel: FlutterMethodChannel
     private weak var controller: FlutterViewController?
     private var appearanceObserver: NSObjectProtocol?
     private var accentObserver: NSObjectProtocol?
 
-    /// controller 绑定当前引擎；监听保存成功广播并更新该引擎和原生窗口。
     init(controller: FlutterViewController) {
         self.controller = controller
         channel = FlutterMethodChannel(name: AppConstants.appearanceChannel, binaryMessenger: controller.engine.binaryMessenger)
@@ -23,23 +20,17 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
             self.channel.invokeMethod(AppConstants.appearanceChangedMethod, arguments: Self.appearanceSnapshot())
             if let window = self.controller?.view.window { Self.applyAppearance(to: window) }
         }
-        // 用户在系统设置里改强调色时系统颜色整体刷新；沿用外观广播把新强调色推给本引擎（#142）。
         accentObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.channel.invokeMethod(AppConstants.appearanceChangedMethod, arguments: Self.appearanceSnapshot())
         }
     }
 
-    /// 设置页拖动透明度或调色时尚未保存的视觉字段（glassOpacity、accentColor）；只覆盖外观快照，不写偏好。
-    /// 偏好保存成功或设置页清除预览时置空，各窗口随即回到已保存的值（#144）。
     static var preview: [String: Any] = [:]
 
-    /// 无参数；返回已保存偏好叠加预览字段后的视觉偏好，预览字段优先。
     private static var visualPreferences: [String: Any] {
         AppPreferences.current.merging(preview) { _, previewed in previewed }
     }
 
-    /// mode 为强调色偏好（预设名或 #RRGGBB）；返回浅、深外观的 sRGB ARGB，跟随系统或无法解析时为 nil。
-    /// 自定义色的深色值由浅色值向白混合 accentCustomDarkLift 得到（#144）。
     static func accentPair(_ mode: String) -> (light: Int, dark: Int)? {
         if let swatch = AppConstants.accentSwatches[mode] { return swatch }
         guard mode.count == 7, mode.hasPrefix("#"), let rgb = Int(mode.dropFirst(), radix: 16) else { return nil }
@@ -48,7 +39,6 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         return (0xFF00_0000 | rgb, 0xFF00_0000 | dark)
     }
 
-    /// 无参数；返回视觉字段（含预览）与当前解析强调色（浅、深外观各一份），固定或自定义强调色优先于系统强调色（#142、#144）。
     static func appearanceSnapshot() -> [String: Any] {
         let preferences = visualPreferences
         let pair = accentPair(preferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem)
@@ -59,7 +49,6 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
                 AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua)]
     }
 
-    /// appearance 为目标绘制外观；若用户在个性化选中预设或自定义强调色（含预览）则解析对应 sRGB 颜色，否则跟随系统强调色（#144）。
     static func resolvedAccentNSColor(for appearance: NSAppearance) -> NSColor {
         let accentMode = visualPreferences[AppConstants.accentColorKey] as? String ?? AppConstants.accentSystem
         guard let swatch = accentPair(accentMode) else {
@@ -73,10 +62,8 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
     }
 
-    /// name 为浅色或深色外观；在该外观下解析系统强调色，返回 sRGB ARGB 整数（如系统蓝浅色 0xFF007AFF）。
     static func accentARGB(_ name: NSAppearance.Name) -> Int {
         var argb = 0
-        // 强调色是动态颜色，必须在目标外观下解析才能得到浅、深两套值。
         NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
             let color = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
             let channel = { (value: CGFloat) in Int((value * 255).rounded()) }
@@ -86,7 +73,6 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         return argb
     }
 
-    /// 无参数；解析用户选择的原生窗口外观及系统高对比度配置，跟随系统时返回 nil。
     static func resolvedAppearance() -> NSAppearance? {
         let mode = appearanceSnapshot()[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem
         guard mode != AppConstants.appearanceSystem else { return nil }
@@ -98,29 +84,23 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         return NSAppearance(named: name)
     }
 
-    /// window 为实际原生窗口；应用手动明暗或系统继承，不改焦点及层级。
     static func applyAppearance(to window: NSWindow) {
         window.appearance = resolvedAppearance()
         if let content = window.contentViewController as? NativeGlassWindowContent {
-            // 标题与正文共用阅读底色；系统负责窗口唯一外轮廓，不制造另一条玻璃标题带。
             content.windowCanvas.updateReadingColor()
         }
     }
 
-    /// alert 为系统弹窗；将当前应用浅色/深色外观同步到弹窗窗口并返回自身，无副作用（#144）。
     @discardableResult
     static func applyAppearance(to alert: NSAlert) -> NSAlert {
         applyAppearance(to: alert.window)
         return alert
     }
 
-    /// content 为原生 AppKit 内容视图，size 为预期尺寸，cornerRadius 为玻璃裁切圆角；
-    /// 返回分层承载玻璃背景与不透明前景的容器视图，确保调节玻璃透明度时仅淡化底层材料而不淡化前景文字（#144）。
     static func makeGlassContainer(content: NSView, size: NSSize, cornerRadius: CGFloat) -> NativeGlassContainerView {
         NativeGlassContainerView(content: content, frame: NSRect(origin: .zero, size: size), cornerRadius: cornerRadius)
     }
 
-    /// controller为Flutter内容，window为面板或结果窗口，edgeToEdgeTop为真时Flutter内容延展到窗口最顶沿（供全高侧边栏避让红黄绿灯）；背景贯穿窗口，交互内容遵守视图或自定义安全区域。
     static func installContent(_ controller: FlutterViewController, in window: NSWindow, edgeToEdgeTop: Bool = false) {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
@@ -131,7 +111,6 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
         let view = controller.view
         view.translatesAutoresizingMaskIntoConstraints = false
         content.view.addSubview(view)
-        // 无标题面板也有视图安全区域；全高侧边栏窗口由 Flutter 自己留出顶部红黄绿灯安全区。
         let topAnchor = edgeToEdgeTop ? content.view.topAnchor : content.view.safeAreaLayoutGuide.topAnchor
         NSLayoutConstraint.activate([
             view.leadingAnchor.constraint(equalTo: content.view.leadingAnchor),
@@ -150,20 +129,16 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
 
     static let viewType = AppConstants.nativeGlassViewType
 
-    /// controller 为当前窗口的 Flutter 控制器；注册玻璃视图并允许原生材料透出。
     static func register(with controller: FlutterViewController) {
-        // FlutterView 默认黑色背景会挡住系统材料；只改承载透明度，不改窗口层级。
         controller.backgroundColor = .clear
         controller.registrar(forPlugin: "NativeGlass")
             .register(NativeGlassFactory(controller: controller), withId: viewType)
     }
 
-    /// 无参数；返回与 Dart creationParams 一致的标准编解码器。
     func createArgsCodec() -> (FlutterMessageCodec & NSObjectProtocol)? {
         FlutterStandardMessageCodec.sharedInstance()
     }
 
-    /// viewId 是引擎分配的视图身份，args 含非负 cornerRadius；返回真正的系统玻璃视图。
     func create(withViewIdentifier viewId: Int64, arguments args: Any?) -> NSView {
         guard let parameters = args as? [String: Any],
               let radius = parameters["cornerRadius"] as? NSNumber,
@@ -190,13 +165,10 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
     }
 }
 
-/// 只承载系统 Liquid Glass 材料；Flutter 上层控件负责点击、选字和键盘焦点。
 final class NativeGlassView: NSGlassEffectView {
-    /// 仅原生材料变淡；Flutter前景不属于此NSView，不受alpha影响。
     var materialOpacity = 0.8
     private var accessibilityObserver: NSObjectProtocol?
 
-    /// frame 是材料初始布局；监听系统减少透明度的即时变化。
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -204,10 +176,8 @@ final class NativeGlassView: NSGlassEffectView {
         ) { [weak self] _ in self?.updateTransparency() }
     }
 
-    /// 本视图仅由平台工厂创建，不支持归档解码。
     required init?(coder: NSCoder) { fatalError("NativeGlassView requires factory initialization") }
 
-    /// 无参数；系统辅助功能优先于用户透明度，返回void。
     func updateTransparency() {
         alphaValue = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
             || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : materialOpacity
@@ -217,19 +187,14 @@ final class NativeGlassView: NSGlassEffectView {
         if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
     }
 
-    /// point 为原生局部坐标；材料不拦截输入，返回 nil 让上层 Flutter 命中测试继续。
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    /// 材料本身不取得键盘焦点，避免干扰非激活翻译浮层及截图文字输入。
     override var acceptsFirstResponder: Bool { false }
 }
 
-/// 普通窗口共享整窗阅读背景；系统标题安全区只约束交互内容，不划分背景面板。
 final class NativeGlassWindowContent: NSViewController {
-    /// 整窗底色与Flutter surface相同；不覆盖红绿灯或截获内容事件。
     let windowCanvas = NativeReadingCanvas(frame: .zero)
 
-    /// 无参数；创建连续窗口背景，外轮廓由AppKit负责。
     override func loadView() {
         view = NSView()
         windowCanvas.wantsLayer = true
@@ -244,30 +209,22 @@ final class NativeGlassWindowContent: NSViewController {
     }
 }
 
-/// 整窗阅读底色；跟随系统外观变化，且不接收指针或键盘事件。
 final class NativeReadingCanvas: NSView {
-    /// 无参数；按当前实际外观同步与Flutter surface一致的背景色。
     func updateReadingColor() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        // 使用与Flutter颜色值一致的sRGB，避免calibratedWhite颜色空间造成接缝。
         let value = dark ? 23.0 / 255.0 : 247.0 / 255.0
         layer?.backgroundColor = NSColor(srgbRed: value, green: value, blue: value, alpha: 1).cgColor
     }
 
-    /// 系统明暗变化时更新整窗底色，无参数或返回值。
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateReadingColor()
     }
 
-    /// point为本地坐标；背景不命中，返回nil让交互内容处理事件。
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var acceptsFirstResponder: Bool { false }
 }
 
-/// 分层承载原生 AppKit 玻璃材料与前景交互控件的通用容器（#144 U-18）。
-/// 底层使用 `NativeGlassView` 同步 `glassOpacity` 与系统减少透明度/增强对比度降级；
-/// 顶层放置透明前景容器，确保前景文字与按钮始终保持 100% 不透明度。
 final class NativeGlassContainerView: NSView {
     let glassView: NativeGlassView
     let contentHolder: NSView
@@ -275,7 +232,6 @@ final class NativeGlassContainerView: NSView {
     private var appearanceObserver: NSObjectProtocol?
     private var accessibilityObserver: NSObjectProtocol?
 
-    /// content 为原生交互前景视图，frame 为初始容器边界，cornerRadius 为材质圆角半径。
     init(content: NSView, frame: NSRect, cornerRadius: CGFloat) {
         self.glassView = NativeGlassView(frame: .zero)
         self.contentHolder = content
@@ -327,13 +283,11 @@ final class NativeGlassContainerView: NSView {
         if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
     }
 
-    /// 无参数；系统或窗口外观改变时同步刷新材质色调与无障碍背板。
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         syncAppearanceAndMaterial()
     }
 
-    /// 无参数；按当前偏好（明暗模式、玻璃透明度）与系统无障碍开关同步底层材料与高对比背板。
     func syncAppearanceAndMaterial() {
         let snapshot = NativeGlassFactory.appearanceSnapshot()
         let mode = snapshot[AppConstants.glassAppearanceKey] as? String ?? AppConstants.appearanceSystem
@@ -354,7 +308,6 @@ final class NativeGlassContainerView: NSView {
             ? NSColor.black.withAlphaComponent(0.16)
             : NSColor.white.withAlphaComponent(0.16)
         glassView.updateTransparency()
-        // 开启「减少透明度」或「增强对比度」时补实底阅读色，避免底层背景花纹降低文字对比度。
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
             || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         if reduceTransparency {

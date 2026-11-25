@@ -37,7 +37,6 @@ import 'service_config.dart';
 import 'screenshot_toolbar_editor.dart';
 import 'service_editor.dart';
 
-/// 设置窗口子页（#67）；仅控制展示，不进入持久化偏好。
 enum SettingsPage {
   general,
   personalization,
@@ -53,9 +52,7 @@ enum SettingsPage {
   mcp,
 }
 
-/// 独立可激活窗口的设置 UI；所有偏好读写由主 Dart 引擎处理。
 class SettingsApp extends StatelessWidget {
-  /// createMcpService 按 helper 路径创建 MCP 接入平台服务；缺省执行真实 CLI 与读写真实配置。
   const SettingsApp({
     super.key,
     this.createMcpService = McpSettingsPage.defaultService,
@@ -63,7 +60,6 @@ class SettingsApp extends StatelessWidget {
 
   final McpPlatformService Function(String helperPath) createMcpService;
 
-  /// context 为设置引擎的构建上下文；返回完整设置应用。
   @override
   Widget build(BuildContext context) => NativeGlassApp(
     title: '权限与启动',
@@ -73,7 +69,6 @@ class SettingsApp extends StatelessWidget {
   );
 }
 
-/// 设置页有状态入口；将主题应用与草稿、保存事务生命周期分开。
 class _SettingsPage extends StatefulWidget {
   const _SettingsPage({required this.createMcpService});
 
@@ -82,7 +77,6 @@ class _SettingsPage extends StatefulWidget {
   State<_SettingsPage> createState() => _SettingsPageState();
 }
 
-/// 管理本地草稿、版本冲突和串行自动保存；旧回包不能覆盖新编辑。
 class _SettingsPageState extends State<_SettingsPage>
     with WidgetsBindingObserver {
   static const _channel = MethodChannel(ChannelNames.settings);
@@ -93,7 +87,6 @@ class _SettingsPageState extends State<_SettingsPage>
   bool _saving = false;
   Completer<bool>? _saveCompletion;
 
-  /// 当前正在录制的热键标题；null 表示未在录制，避免双快捷键共用同一布尔态（U-17）。
   String? _recordingTarget;
   bool _failed = false;
   bool _dirty = false;
@@ -105,13 +98,10 @@ class _SettingsPageState extends State<_SettingsPage>
   final Map<String, Map<String, String>?> _credentials = {};
   SettingsPage _page = SettingsPage.general;
 
-  /// 打开通用页时查询到的 Apple 系统翻译语言包状态说明；null 表示查询中。
   String? _languagePackStatus;
 
-  /// 侧边栏两级分组（#67）；通用与 MCP 没有子页，分组本身可选中。
   static const List<NativeGlassSidebarSection<SettingsPage>> _sidebarSections =
       [
-        // 「通用」为分组标签：权限与启动、个性化（外观、强调色、窗口透明度）两个子页（#1、#67）。
         (
           title: '通用',
           icon: LucideIcons.sliders,
@@ -152,7 +142,6 @@ class _SettingsPageState extends State<_SettingsPage>
         ),
       ];
 
-  /// page 为子页；返回右侧顶部显示的子页标题，与侧边栏名称一致。
   static String _pageTitle(SettingsPage page) {
     for (final section in _sidebarSections) {
       if (section.value == page) return section.title;
@@ -162,42 +151,32 @@ class _SettingsPageState extends State<_SettingsPage>
     throw StateError('侧边栏缺少子页 $page');
   }
 
-  /// page 为点选的子页；切换展示并同步原生窗口标题、中止未完成的热键录制、清理已提交页的非持久化提示，无返回值。
   void _openPage(SettingsPage page) {
     setState(() {
       _page = page;
       _recordingTarget = null;
-      // 离开已稳定页时清除一次性状态说明，避免跨子页残留误导；活跃校验失败与冲突仍保留（U-17）。
       if (!_dirty && !_conflicted) {
         _message = null;
         _failed = false;
       }
     });
-    // 窗口标题只写当前子页名，测试未注册该通道时静默忽略。
     unawaited(_syncWindowTitle(_pageTitle(page)));
-    // _checkLanguagePacks 按已提交的主次语言查询，语言设置改动后回到通用页即可看到新状态。
     if (page == SettingsPage.general) _checkLanguagePacks();
-    // _loadSystemShortcuts 每次进入工具栏页重新读取，系统设置中的修改随即生效（#141）。
     if (page == SettingsPage.toolbar) _loadSystemShortcuts();
   }
 
-  /// title 为当前子页标题；同步到原生设置窗口标题，忽略未实现的通道调用。
   Future<void> _syncWindowTitle(String title) async {
     try {
       await _channel.invokeMethod<void>(MethodNames.setWindowTitle, {
         'title': title,
       });
-    } on MissingPluginException {
-      // 无原生窗口或测试夹具未处理标题同步时保持静默。
-    } on PlatformException {
-      // 标题同步不影响子页浏览。
+    } on MissingPluginException catch (_) {
+    } on PlatformException catch (_) {
     }
   }
 
-  /// 已启用的系统快捷键落在截图工具栏网格上的格位；工具栏页打开时读取。
   Set<({int modifiers, int digit})> _systemShortcutSlots = const {};
 
-  /// 无参数；读取已启用的系统快捷键并换算为网格格位，非数字行 1–6 或带 ⇧ 的忽略，无返回值。
   Future<void> _loadSystemShortcuts() async {
     final entries =
         await _channel.invokeListMethod<Map<Object?, Object?>>(
@@ -216,9 +195,7 @@ class _SettingsPageState extends State<_SettingsPage>
     );
   }
 
-  /// 无参数；向主引擎查询 Apple 系统翻译语言包状态并显示说明，缺少或不支持时显示失败原因，无返回值。
   Future<void> _checkLanguagePacks() async {
-    // initState 调用时尚无状态可清空；再次进入通用页时先显示检查中。
     if (_languagePackStatus != null) {
       setState(() => _languagePackStatus = null);
     }
@@ -228,16 +205,13 @@ class _SettingsPageState extends State<_SettingsPage>
         MethodNames.checkSystemTranslation,
       ))!;
     } on PlatformException catch (error) {
-      // 主引擎以测试失败返回缺少或不支持的语言包说明。
       status = error.message!;
     }
     if (mounted) setState(() => _languagePackStatus = status);
   }
 
-  /// 翻译语言组正在编辑输入翻译（true）还是全局翻译（false）的语言；不保存，每次打开回到全局翻译（#99）。
   bool _inputLanguages = false;
 
-  /// 无参数；加载主引擎偏好，并监听菜单引起的偏好变化，无返回值。
   @override
   void initState() {
     super.initState();
@@ -246,19 +220,14 @@ class _SettingsPageState extends State<_SettingsPage>
       if (call.method == MethodNames.refreshSettings) await _load();
     });
     _load();
-    // 初始子页为通用页，同样查询语言包状态。
     _checkLanguagePacks();
-    // 贴纸缩略图按「目录/id.png」读取（#103）。
     _channel.invokeMethod<String>(MethodNames.stickerDirectory).then((path) {
       if (mounted) setState(() => _stickerDirectory = path);
     });
   }
 
-  /// 我的贴纸所在目录；读取完成前为 null（#103）。
   String? _stickerDirectory;
 
-  /// 无参数；选择图片并在上传框设定默认大小后写入贴纸文件，再把贴纸加入设置并自动保存；
-  /// 任一步取消则不添加，返回结束的 Future（#103）。
   Future<void> _addSticker() async {
     final picked = await _channel.invokeMapMethod<String, Object?>(
       MethodNames.importStickerImage,
@@ -276,7 +245,6 @@ class _SettingsPageState extends State<_SettingsPage>
     );
     if (size == null || !mounted) return;
     final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-    // saveSticker 先写文件，设置中只记录 id 与默认大小。
     await _channel.invokeMethod<String>(MethodNames.saveSticker, {
       'id': id,
       'bytes': bytes,
@@ -289,7 +257,6 @@ class _SettingsPageState extends State<_SettingsPage>
     );
   }
 
-  /// sticker 为要删除的贴纸；从设置中移除并自动保存，同时删除贴纸文件，无返回值（#103）。
   void _removeSticker(StickerEntry sticker) {
     _edit(
       () => _settings!.stickers.removeWhere((item) => item.id == sticker.id),
@@ -301,7 +268,6 @@ class _SettingsPageState extends State<_SettingsPage>
     );
   }
 
-  /// sticker 为待删除贴纸；经破坏性二次确认后再移除记录与本地 PNG 文件（U-11）。
   Future<void> _confirmRemoveSticker(StickerEntry sticker) async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
@@ -314,7 +280,6 @@ class _SettingsPageState extends State<_SettingsPage>
     _removeSticker(sticker);
   }
 
-  /// 无参数；解除引擎内的回调和生命周期监听，无返回值。
   @override
   void dispose() {
     _gifMaximumWidth.dispose();
@@ -323,13 +288,11 @@ class _SettingsPageState extends State<_SettingsPage>
     super.dispose();
   }
 
-  /// state 为窗口活动状态；从系统设置返回时刷新权限，不覆盖未保存表单。
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refreshStatus();
   }
 
-  /// 无参数；读取系统真实权限和登录项状态，完成后刷新界面。
   Future<void> _refreshStatus() async {
     final status = await _channel.invokeMapMethod<Object?, Object?>(
       MethodNames.systemStatus,
@@ -337,7 +300,6 @@ class _SettingsPageState extends State<_SettingsPage>
     if (mounted) setState(() => _status = status!);
   }
 
-  /// 无参数；读取主引擎偏好与系统状态，错误显示在窗口中。
   Future<void> _load() async {
     try {
       final map = (await _channel.invokeMapMethod<Object?, Object?>(
@@ -345,7 +307,6 @@ class _SettingsPageState extends State<_SettingsPage>
       ))!;
       await _refreshStatus();
       if (!mounted) return;
-      // 系统状态查询期间可能完成自动保存，旧加载快照不能回退表单及其版本。
       if ((map['revision'] as int) < _revision) return;
       if (_dirty) {
         if (map['revision'] != _revision) {
@@ -379,7 +340,6 @@ class _SettingsPageState extends State<_SettingsPage>
     }
   }
 
-  /// granted 为权限是否已开启，onGrant 为前往授权的动作；返回右侧状态，未开启时附带主要按钮「授权…」（#142 第 14 条）。
   Widget _permissionState({
     required bool granted,
     required VoidCallback onGrant,
@@ -394,7 +354,6 @@ class _SettingsPageState extends State<_SettingsPage>
     ],
   );
 
-  /// label 为按钮文字，onPressed 为动作；返回 28pt 高、强调色实底的紧凑主要按钮，用于需要用户处理的设置行。
   Widget _grantButton({
     required String label,
     required VoidCallback onPressed,
@@ -410,8 +369,6 @@ class _SettingsPageState extends State<_SettingsPage>
     child: Text(label),
   );
 
-  /// context 提供当前外观的强调色，settings 为草稿；前景色不是「自动」且与强调色对比度低于 4.5:1 时
-  /// 返回提示文字，否则返回 null（#144）。
   String? _foregroundWarning(BuildContext context, AppSettings settings) {
     final foreground = AccentForegrounds.colorOf(settings.accentForeground);
     if (foreground == null) return null;
@@ -423,31 +380,25 @@ class _SettingsPageState extends State<_SettingsPage>
     return '与当前强调色对比度 ${ratio.toStringAsFixed(1)}:1，低于 4.5:1，可能看不清';
   }
 
-  /// fields 为待预览的视觉字段（PreferenceKeys.glassOpacity / accentColor），null 清除预览；
-  /// 原生只广播到所有窗口、不写偏好，保存成功后原生自动清除。返回发送完成的 Future（#144）。
   Future<void> _previewAppearance(Map<String, Object>? fields) =>
       _channel.invokeMethod<void>(MethodNames.previewAppearance, fields);
 
-  /// 无参数；串行提交有效草稿并等待当前队列完成，返回是否全部提交成功；失败保留编辑和错误。
   Future<bool> _save() async {
     if (_saving) return _saveCompletion!.future;
     if (!_dirty || _conflicted || _adjustingOpacity) {
       return !_dirty && !_conflicted;
     }
-    // 显式导入与后台自动保存等待同一队列；导入不能把“正在保存”当成成功。
     final completion = Completer<bool>();
     _saveCompletion = completion;
     setState(() {
       _saving = true;
       _failed = false;
-      // 后台保存不改变布局；仅失败或冲突需要用户可见反馈。
       _message = null;
     });
     try {
       while (_dirty && !_conflicted && !_adjustingOpacity) {
         _settings!.validate();
         final generation = _editGeneration;
-        // 深拷贝本次事务；请求等待期间的新编辑不能修改已提交快照。
         final preferences = AppSettings.fromMap(_settings!.toMap()).toMap();
         final credentials = _credentials.map(
           (id, value) => MapEntry(
@@ -465,7 +416,6 @@ class _SettingsPageState extends State<_SettingsPage>
           _credentialIds = Set<String>.from(
             saved[MethodNames.credentialIds] as List? ?? [],
           );
-          // 只移除已确认的凭据变更；后续新密钥或删除操作仍留在下一笔事务。
           for (final entry in credentials.entries) {
             if (_credentials.containsKey(entry.key) &&
                 mapEquals(_credentials[entry.key], entry.value)) {
@@ -480,12 +430,10 @@ class _SettingsPageState extends State<_SettingsPage>
             _message = null;
           }
         });
-        // 状态查询期间也可能继续编辑；下一轮仍检查最新草稿，不遗漏尾部更改。
         await _refreshStatus();
       }
     } catch (error) {
       if (!mounted) return false;
-      // 保存失败时清除外观预览，各窗口回到上次已保存的透明度与强调色（#144）。
       unawaited(_previewAppearance(null));
       setState(() {
         if (error is PlatformException &&
@@ -506,8 +454,6 @@ class _SettingsPageState extends State<_SettingsPage>
     return !_dirty && !_conflicted;
   }
 
-  /// target 为正在录制的热键标题，apply 把录制到的键码、修饰键与显示名写入对应快捷键；
-  /// 切换页面后自动放弃迟到回包，避免覆盖其他快捷键（U-17）。
   Future<void> _recordShortcut(
     String target,
     void Function(
@@ -547,7 +493,6 @@ class _SettingsPageState extends State<_SettingsPage>
     }
   }
 
-  /// 无参数；使用 macOS 应用选择器添加一个排除项，取消不改变表单。
   Future<void> _addExclusion() async {
     final app = await _channel.invokeMapMethod<String, String>(
       MethodNames.chooseExcludedApp,
@@ -556,7 +501,6 @@ class _SettingsPageState extends State<_SettingsPage>
     _edit(() => _settings!.excludedApps[app['id']!] = app['name']!);
   }
 
-  /// 无参数；选择固定截图目录，取消保留当前草稿目录。
   Future<void> _chooseScreenshotDirectory() async {
     final path = await _channel.invokeMethod<String>(
       MethodNames.chooseScreenshotDirectory,
@@ -565,7 +509,6 @@ class _SettingsPageState extends State<_SettingsPage>
     _edit(() => _settings!.screenshotSaveDirectory = path);
   }
 
-  /// 无参数；由本进程向 TCC 申请屏幕录制，失败则打开系统屏幕录制页。
   Future<void> _requestScreenAccess() async {
     try {
       final status = await _channel.invokeMapMethod<Object?, Object?>(
@@ -589,18 +532,15 @@ class _SettingsPageState extends State<_SettingsPage>
     }
   }
 
-  /// change 修改当前草稿；submit 为 false 时由连续控件结束回调提交，返回 void。
   void _edit(VoidCallback change, {bool submit = true}) {
     setState(() {
       change();
       _editGeneration += 1;
       _dirty = true;
     });
-    // 同一时刻只有一个事务；正在保存时由回包后的循环提交最新草稿。
     if (submit) _save();
   }
 
-  /// service 为待删除翻译服务；经破坏性二次确认后从列表移除并标记删除对应钥匙串凭据（U-11）。
   Future<void> _confirmDeleteService(ServiceConfig service) async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
@@ -619,7 +559,6 @@ class _SettingsPageState extends State<_SettingsPage>
     });
   }
 
-  /// config 为已有配置或空；确认后自动提交完整服务事务，取消不写入配置或凭据。
   Future<void> _editService([ServiceConfig? config]) async {
     final draft =
         await showDialog<
@@ -649,11 +588,9 @@ class _SettingsPageState extends State<_SettingsPage>
     });
   }
 
-  /// 无参数；打开术语管理弹窗，单条增删改自动保存，整批导入等待事务，返回弹窗关闭的 Future。
   Future<void> _manageGlossary() => showDialog<void>(
     context: context,
     barrierDismissible: false,
-    // GlossaryManager 交回完整列表，单条编辑由 _edit 自动保存，文件导入由 _importGlossary 等待提交。
     builder: (_) => GlossaryManager(
       glossary: _settings!.glossary,
       defaultLanguage: _settings!.primaryLanguage,
@@ -667,21 +604,17 @@ class _SettingsPageState extends State<_SettingsPage>
     ),
   );
 
-  /// entries 为预览确认的完整术语列表；等待真实事务，失败恢复父页术语并抛出错误，文件草稿由预览保留。
   Future<void> _importGlossary(List<GlossaryEntry> entries) async {
-    // _save 先结束已有事务，再记录父页草稿，避免取消失败导入时回退已成功保存的字段。
     if (_saving) await _save();
     if (!mounted) return;
     final previous = [..._settings!.glossary];
     final wasDirty = _dirty;
-    // _edit 标记一次完整导入；不在回调外再发起一笔后台提交。
     _edit(
       () => _settings!.glossary
         ..clear()
         ..addAll(entries),
       submit: false,
     );
-    // _save 等待真实事务；失败仅由预览保留导入草稿，取消后其他设置保存不会夹带未成功导入的术语。
     if (!await _save()) {
       if (!mounted) return;
       setState(() {
@@ -690,14 +623,12 @@ class _SettingsPageState extends State<_SettingsPage>
           ..addAll(previous);
         _dirty = wasDirty;
       });
-      // 冲突要先刷新设置才能保存；其余失败沿用保存时的提示。
       throw FormatException(
         _conflicted ? '设置已在其他窗口修改，请关闭设置窗口后重新打开再导入。' : _message ?? '导入保存失败，请重试。',
       );
     }
   }
 
-  /// 无参数；打开提示词弹窗，保存后把提示词与思考开关写入草稿并自动提交，取消不改变，返回弹窗关闭的 Future（#100）。
   Future<void> _editPrompts() async {
     final saved =
         await showDialog<
@@ -717,7 +648,6 @@ class _SettingsPageState extends State<_SettingsPage>
     });
   }
 
-  /// label/value 为字段名和语言码；optional 允许空值，caption 为标题下方说明，onChanged 写回表单；返回下拉控件。
   Widget _language(
     String label,
     String value,
@@ -740,8 +670,6 @@ class _SettingsPageState extends State<_SettingsPage>
     );
   }
 
-  /// title 为按钮标题，code/label 为当前组合，apply 把录制结果写入对应快捷键，leading 为可选左侧语义图标锚点；
-  /// 只对当前正在录制的按钮展示等待文案与忙碌环，常规态以独立机械键帽渲染组合。
   List<Widget> _shortcutBlock({
     required String title,
     required int code,
@@ -752,7 +680,6 @@ class _SettingsPageState extends State<_SettingsPage>
     final isThisRecording = _recordingTarget == title;
     final tokens = shortcutTokens(code, label);
     return [
-      // 同一行保留图标、标题和录制命中区，不通过常驻说明增加页面高度。
       ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
         child: Row(
@@ -773,7 +700,6 @@ class _SettingsPageState extends State<_SettingsPage>
               busy: isThisRecording,
               child: OutlinedButton.icon(
                 key: ValueKey(title),
-                // 统一常规组合的按钮最小宽度，避免窄字符与宽字符快捷键左右不齐；录制提示文案超宽时仍自然撑开。
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(
                     GlassMetrics.shortcutButtonMinWidth,
@@ -795,7 +721,6 @@ class _SettingsPageState extends State<_SettingsPage>
     ];
   }
 
-  /// 无参数；就地校验 GIF 最大宽度输入框内容，留空或正整数返回 null，否则返回行内纠错文案（U-24）。
   String? get _gifWidthError {
     final text = _gifMaximumWidth.text.trim();
     if (text.isEmpty) return null;
@@ -835,7 +760,6 @@ class _SettingsPageState extends State<_SettingsPage>
       );
     }
     return Scaffold(
-      // 侧边栏在滚动视口之外，任何滚动位置都能切换子页（#67）。
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -850,7 +774,6 @@ class _SettingsPageState extends State<_SettingsPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 右侧顶部 28pt 为窗口拖动区：Flutter 盖住了系统标题栏，空白处拖动交给原生窗口（#67）。
                 WindowDragArea(
                   channel: _channel,
                   child: const SizedBox(height: GlassMetrics.titlebarHeight),
@@ -885,8 +808,6 @@ class _SettingsPageState extends State<_SettingsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (_page == SettingsPage.general) ...[
-                              // 权限与 Apple 离线翻译语言包集中在一张卡片，登录启动单独一张无眉标卡片放在最下方（#67）。
-                              // 已开启只显示状态；只有未开启的权限出现主要按钮，让唯一需要处理的那行跳出来（#142 第 14 条）。
                               NativeGlassGroup(
                                 title: '权限',
                                 children: [
@@ -916,11 +837,9 @@ class _SettingsPageState extends State<_SettingsPage>
                                       onGrant: _requestScreenAccess,
                                     ),
                                   ),
-                                  // Apple 系统翻译的离线语言包由系统下载，按钮只打开对应设置页（#98）。
                                   NativeGlassSettingRow(
                                     key: const ValueKey('离线翻译语言'),
                                     title: 'Apple 离线翻译语言包',
-                                    // 打开通用页时查询的语言包状态；查询完成前显示检查中。
                                     caption: _languagePackStatus ?? '正在检查语言包…',
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.languages,
@@ -1009,7 +928,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                       onChanged: (value) => _edit(
                                         () => settings.accentColor = value,
                                       ),
-                                      // 调色时只预览不保存；取消时清除预览，各窗口回到已保存的强调色。
                                       onPreview: (value) => _previewAppearance(
                                         value == null
                                             ? null
@@ -1020,7 +938,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                       ),
                                     ),
                                   ),
-                                  // 强调色实底上的前景（图标线条与文字）；非自动且对比度不足时说明行改为橙色提示（#144）。
                                   NativeGlassSettingRow(
                                     title: '前景色',
                                     caption:
@@ -1091,7 +1008,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                       icon: LucideIcons.droplet,
                                     ),
                                     caption: '系统开启“减少透明度”时此项不生效',
-                                    // 滑块仅绘制轨道和滑点，不创建整条玻璃外壳；数值用等宽数字放在滑块右侧。
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -1103,8 +1019,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                             min: 0,
                                             max: 0.8,
                                             divisions: 80,
-                                            // 按滑块的整数百分比换算，避免 1 - 0.8 略小于合法下限 0.2；
-                                            // 拖动中逐帧预览到所有窗口，松手才保存（#144）。
                                             onChanged: (value) {
                                               _edit(
                                                 () => settings.glassOpacity =
@@ -1153,7 +1067,6 @@ class _SettingsPageState extends State<_SettingsPage>
                               NativeGlassGroup(
                                 dividerIndent: 0,
                                 children: [
-                                  // 标题行右侧切换编辑哪一组语言；输入翻译与全局翻译各自保存（#99）。
                                   ConstrainedBox(
                                     constraints: const BoxConstraints(
                                       minHeight: GlassMetrics.rowHeight,
@@ -1236,7 +1149,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                     ),
                                   ),
 
-                                  // 术语表（#104）与润色、纠错、解释的处理提示词（#100）同属模型服务设置，共用一行，不增加翻译页高度。
                                   NativeGlassSettingRow(
                                     title: '术语与提示词',
                                     leading: const NativeGlassRowIcon(
@@ -1358,7 +1270,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                 ],
                               ),
                             ] else if (_page == SettingsPage.shortcuts) ...[
-                              // 只有一行的分组不加眉标（#67）。
                               NativeGlassGroup(
                                 children: [
                                   NativeGlassSwitchTile(
@@ -1389,7 +1300,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                               ..shortcutModifiers = modifiers
                                               ..shortcutLabel = label,
                                   ),
-                                  // 输入翻译把来源输入框的原文替换为译文（#99）。
                                   ..._shortcutBlock(
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.notebookPen,
@@ -1475,7 +1385,6 @@ class _SettingsPageState extends State<_SettingsPage>
                               ),
                             ] else if (_page ==
                                 SettingsPage.screenshotSave) ...[
-                              // 只有一行的分组不加眉标（#67）。
                               NativeGlassGroup(
                                 children: [
                                   ListTile(
@@ -1484,7 +1393,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.folder,
                                     ),
-                                    // 去掉眉标后由标题说明这是什么，当前路径放在说明行（#67）。
                                     title: const Text('截图目录'),
                                     subtitle: Text(
                                       settings.screenshotSaveDirectory.isEmpty
@@ -1543,7 +1451,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                         decoration: const InputDecoration(
                                           hintText: '不限制',
                                         ),
-                                        // 留空保留原宽；非法非空值进入统一设置校验，不能当作无限制保存。
                                         onChanged: (text) => _edit(
                                           () => settings.gifMaximumWidth =
                                               text.trim().isEmpty
@@ -1568,7 +1475,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                     onChanged: (v) =>
                                         _edit(() => settings.liveRecording = v),
                                   ),
-                                  // 只作用于区域截图的冻结帧（#105）。
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.mouse,
@@ -1580,7 +1486,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                           settings.screenshotIncludesCursor = v,
                                     ),
                                   ),
-                                  // 区域与全屏录制在鼠标点击处绘制对应特效（#143）。
                                   NativeGlassDropdown<RecordingClickEffect>(
                                     label: '录制点击特效',
                                     leading: const NativeGlassRowIcon(
@@ -1596,7 +1501,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                       () => settings.recordingClickEffect = v,
                                     ),
                                   ),
-                                  // 关闭点击特效时右键与拖动区分开关不生效，随动禁用以保持清晰因果（U-24）。
                                   NativeGlassSwitchTile(
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.penTool,
@@ -1617,7 +1521,6 @@ class _SettingsPageState extends State<_SettingsPage>
                               ),
                             ] else if (_page ==
                                 SettingsPage.screenshotActions) ...[
-                              // 区域截图快捷键、确认方式与长截图滚动方式各只有一行，合并为一张无眉标卡片（#67）。
                               NativeGlassGroup(
                                 children: [
                                   ..._shortcutBlock(
@@ -1636,7 +1539,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                                   modifiers
                                               ..screenshotShortcutLabel = label,
                                   ),
-                                  // 回车或双击确认截图时执行的动作（#111）。
                                   NativeGlassDropdown<ScreenshotConfirmAction>(
                                     label: '回车或双击确认时',
                                     leading: const NativeGlassRowIcon(
@@ -1653,7 +1555,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                           action,
                                     ),
                                   ),
-                                  // 长截图默认手动滚动；自动时由 App 滚动来源窗口，用户在选区内滚动即接管（#112）。
                                   NativeGlassDropdown<ScrollCaptureMode>(
                                     label: '滚动方式',
                                     leading: const NativeGlassRowIcon(
@@ -1671,7 +1572,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                 ],
                               ),
                             ] else if (_page == SettingsPage.stickers) ...[
-                              // 我的贴纸：缩略图、悬停删除与添加图片（#103）。
                               NativeGlassGroup(
                                 dividerIndent: 0,
                                 children: [
@@ -1742,14 +1642,12 @@ class _SettingsPageState extends State<_SettingsPage>
                                       () =>
                                           _settings!.screenshotToolbar = value,
                                     ),
-                                    // 全局快捷键占用的格位不可放入；系统快捷键冲突只提示（#141）。
                                     reserved: settings.globalShortcutSlots,
                                     systemSlots: _systemShortcutSlots,
                                   ),
                                 ],
                               ),
                             ] else if (_page == SettingsPage.mcp) ...[
-                              // McpSettingsPage 提供 MCP 开关、helper 路径、配置复制与接入平台列表；开关走同一自动保存。
                               McpSettingsPage(
                                 enabled: settings.mcpEnabled,
                                 onChanged: (v) =>
@@ -1761,7 +1659,6 @@ class _SettingsPageState extends State<_SettingsPage>
                                 createService: widget.createMcpService,
                               ),
                             ],
-                            // 只在有冲突、自动保存失败或一次性状态提示时渲染，正常无错误状态不占高度（#67）。
                             if (_conflicted ||
                                 (_failed && _dirty) ||
                                 (_message != null && !_saving)) ...[
@@ -1810,14 +1707,11 @@ class _SettingsPageState extends State<_SettingsPage>
   }
 }
 
-/// 设置子页可打断微距物理浮现（#67 方案 A、#144）：切页时以 8pt 微距淡入，依赖 ValueKey 切换即时重置并遵守减少动态效果设置。
 class _SubpageReveal extends StatelessWidget {
-  /// child 为当前选中的设置子页列。
   const _SubpageReveal({super.key, required this.child});
 
   final Widget child;
 
-  /// context 提供无障碍减动效偏好；返回轻量化物理浮现包裹后的子页内容。
   @override
   Widget build(BuildContext context) {
     if (AppMotion.reduced(context)) return child;
@@ -1840,8 +1734,6 @@ class _SubpageReveal extends StatelessWidget {
   }
 }
 
-/// 色点选择器中的一个预设：id 为偏好值，label 为提示与读屏名，colors 为浅/深外观实心色，
-/// sweep 为多色圆环，icon 为未选中时的中心图标；三者都为空时为中性底。
 typedef _SwatchOption = ({
   String id,
   String label,
@@ -1850,13 +1742,7 @@ typedef _SwatchOption = ({
   IconData? icon,
 });
 
-/// 个性化页色点选择器（#67、#144），强调色与前景色两行共用：若干预设与末位「自定义」调色盘，
-/// 支持鼠标悬停微放、按下微缩、键盘焦点环与选中白点指示。预设点击即保存；自定义在色点下方展开纯色调色盘，
-/// 调色时实时预览，「应用」保存，「取消」恢复。
 class _SwatchPicker extends StatefulWidget {
-  /// keyPrefix 为色点测试键前缀，options 为预设，value 为当前偏好（预设 id 或 #RRGGBB），
-  /// customColors 返回自定义值在浅/深外观下的显示色，onChanged 回传要保存的新值，
-  /// onPreview 回传调色中的 #RRGGBB 供全窗口预览，null 表示清除预览。
   const _SwatchPicker({
     required this.keyPrefix,
     required this.options,
@@ -1877,17 +1763,14 @@ class _SwatchPicker extends StatefulWidget {
   State<_SwatchPicker> createState() => _SwatchPickerState();
 }
 
-/// 持有自定义调色盘是否展开；颜色与保存状态由设置草稿承载。
 class _SwatchPickerState extends State<_SwatchPicker> {
   bool _editing = false;
 
-  /// context 提供明暗环境与强调色主题；返回 32×32pt 命中圆点行，自定义展开时在下方显示调色盘。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final custom = AccentColors.isCustom(widget.value);
     final customColors = custom ? widget.customColors(widget.value) : null;
-    // 调色盘初始色：已有自定义色用它，否则用当前生效的强调色。
     final initial = customColors?.light ?? NativeGlassTheme.accentOf(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1914,7 +1797,6 @@ class _SwatchPickerState extends State<_SwatchPicker> {
                   widget.onChanged(option.id);
                 },
               ),
-            // 「自定义」未选中时为中性底加取色笔图标，与多色圆环区分；选中后显示所选颜色。
             _AccentColorSwatch(
               id: 'custom',
               keyPrefix: widget.keyPrefix,
@@ -1955,11 +1837,7 @@ class _SwatchPickerState extends State<_SwatchPicker> {
   }
 }
 
-/// 单个可聚焦/可悬停的强调色色点按钮：swatchColor 为实心色，sweep 为多色圆环（跟随系统），
-/// 两者都为空时为中性底（未设置的自定义）；icon 为未选中时叠在中心的图标。
 class _AccentColorSwatch extends StatefulWidget {
-  /// id 为协议值，label 为提示与读屏名，selected 为选中态，swatchColor 为实心色值，
-  /// sweep 为多色圆环的颜色序列，icon 为中心图标，onSelected 为选中回调。
   const _AccentColorSwatch({
     required this.id,
     this.keyPrefix = 'accent-color',
@@ -1971,7 +1849,6 @@ class _AccentColorSwatch extends StatefulWidget {
     this.icon,
   });
 
-  /// 「跟随系统」的多色圆环，取 macOS 常见系统强调色。
   static const systemSweep = [
     Color(0xFF007AFF),
     Color(0xFFAF52DE),
@@ -1983,7 +1860,6 @@ class _AccentColorSwatch extends StatefulWidget {
 
   final String id;
 
-  /// 测试键前缀：强调色为 accent-color，前景色为 accent-foreground。
   final String keyPrefix;
   final String label;
   final bool selected;
@@ -2001,7 +1877,6 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
   bool _pressed = false;
   bool _focused = false;
 
-  /// context 提供外观与减动效设置；返回 32×32 命中区内的 22pt 立体色点。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -2016,7 +1891,6 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
         ? 1.08
         : 1.0;
 
-    // 实心色、多色圆环（跟随系统）或中性底（未设置的自定义）三选一，外加 0.5pt 浅描边。
     final sweep = widget.sweep;
     final fillDecoration = BoxDecoration(
       shape: BoxShape.circle,
@@ -2135,9 +2009,7 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
   }
 }
 
-/// 设置页的一张贴纸缩略图：48×48pt、圆角 6pt，悬停或键盘聚焦时右上角显示 24pt 删除命中区（#103、U-19）。
 class _StickerThumbnail extends StatefulWidget {
-  /// path 为贴纸文件路径（目录未读取时为 null），onDelete 为删除动作（为空时禁用）。
   const _StickerThumbnail({
     super.key,
     required this.path,
@@ -2146,17 +2018,14 @@ class _StickerThumbnail extends StatefulWidget {
   final String? path;
   final VoidCallback? onDelete;
 
-  /// 无参数；返回持有悬停与焦点状态的状态。
   @override
   State<_StickerThumbnail> createState() => _StickerThumbnailState();
 }
 
-/// 持有悬停与焦点状态，确保键鼠均可发现与删除贴纸，并在文件损坏时显示降级占位图（U-19、U-24）。
 class _StickerThumbnailState extends State<_StickerThumbnail> {
   bool _hovered = false;
   bool _focused = false;
 
-  /// context 为构建上下文；返回带焦点边框、损坏降级与 24pt 删除热区的缩略图。
   @override
   Widget build(BuildContext context) => Focus(
     onFocusChange: (value) => setState(() => _focused = value),

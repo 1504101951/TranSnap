@@ -4,8 +4,6 @@ import 'language_direction.dart';
 import 'translation_http.dart';
 import 'translation_types.dart';
 
-/// translate 处理一次服务请求；request 提供文本与方向；返回可取消的配对译文流。
-/// 不同语言时整片作为一次请求，保留模型语义上下文；已是目标语言时按行直通原文，不发请求。
 Stream<TranslationEvent> translateParagraphs(
   Stream<TranslationEvent> Function(TranslationRequest request) translate,
   TranslationRequest request,
@@ -16,20 +14,17 @@ Stream<TranslationEvent> translateParagraphs(
   output = StreamController<TranslationEvent>(
     onCancel: () {
       cancelled = true;
-      // 显式取消迭代器，连首个响应尚未到达的 HTTP 请求也能立即结束。
       return current?.cancel();
     },
     onListen: () async {
       final source = request.sourceText;
       final pairs = <TranslationPair>[];
-      // isTarget 判断原文是否已是目标语言。
       final sameLanguage = LanguageDirection.isTarget(
         request.detectedLanguage,
         request.targetLanguage,
       );
       var end = 0;
       try {
-        // 不同语言整片发送；已是目标语言时按行直通，空白行留在分隔符里。
         final pattern = sameLanguage ? r'[^\r\n]+' : r'[\s\S]+';
         for (final match in RegExp(pattern).allMatches(source)) {
           if (cancelled) return;
@@ -41,11 +36,9 @@ Stream<TranslationEvent> translateParagraphs(
           var semanticPairs = const <TranslationPair>[];
           var completed = sameLanguage;
           if (sameLanguage) {
-            // 已是目标语言时保留原文，避免未设置次要语言仍产生无意义的 API 请求。
             translated = paragraph;
             output.add(TranslationUpdate(paragraph));
           } else {
-            // Provider 负责网络和模型配对校验；当前迭代器也负责传播消费者的取消。
             current = StreamIterator(
               translate(
                 TranslationRequest(
@@ -73,7 +66,6 @@ Stream<TranslationEvent> translateParagraphs(
               }
             }
             if (cancelled) return;
-            // 外层分片只接受明确完成的段落；网络断流不能升级为全篇成功。
             if (!completed) {
               output.add(
                 const TranslationFailure(incompleteTranslationMessage),
@@ -84,7 +76,6 @@ Stream<TranslationEvent> translateParagraphs(
           final paragraphPairs = semanticPairs.isEmpty
               ? [TranslationPair(paragraph, translated)]
               : semanticPairs;
-          // 分隔符属于展示和复制内容；合并所有配对后仍须覆盖完整原文。
           final first = paragraphPairs.first;
           pairs.add(
             TranslationPair(gap + first.source, gap + first.translation),
@@ -114,9 +105,6 @@ Stream<TranslationEvent> translateParagraphs(
   return output.stream;
 }
 
-/// provider 为支持批量的服务，request 为一片原文与方向，maxItems/maxChars 为单次批量请求的段落数与字符数上限（maxItems 为空时只按字符数）；
-/// 按原文行切成段落，同语言直通，其余按阅读顺序装成批次逐批请求，一次翻译使用应用共享的 HTTP 客户端（#113）。
-/// 返回按原文顺序的分隔符与译文增量，以及覆盖完整原文的段落配对；任一批失败、或有段落没有译文（段落数对不上）时整片失败。
 Stream<TranslationEvent> translateParagraphBatches(
   BatchTranslationProvider provider,
   TranslationRequest request, {
@@ -129,17 +117,14 @@ Stream<TranslationEvent> translateParagraphBatches(
   output = StreamController<TranslationEvent>(
     onCancel: () {
       cancelled = true;
-      // 取消订阅即中止当前批量请求；共享客户端保持打开。
       return current?.cancel();
     },
     onListen: () async {
       final source = request.sourceText;
-      // isTarget 判断原文是否已是目标语言。
       final sameLanguage = LanguageDirection.isTarget(
         request.detectedLanguage,
         request.targetLanguage,
       );
-      // 普通接口没有对齐信息；以原文行作为段落边界，空白行留在分隔符里。
       final paragraphs = [
         for (final match in RegExp(r'[^\r\n]+').allMatches(source))
           if (match.group(0)!.trim().isNotEmpty) match,
@@ -147,7 +132,6 @@ Stream<TranslationEvent> translateParagraphBatches(
       final pairs = <TranslationPair>[];
       var end = 0;
 
-      /// index 为段落下标，translation 为其译文；按原文顺序输出前面的分隔符与译文并记下配对，无返回值。
       void publish(int index, String translation) {
         final match = paragraphs[index];
         final gap = source.substring(end, match.start);
@@ -159,14 +143,12 @@ Stream<TranslationEvent> translateParagraphBatches(
 
       try {
         if (sameLanguage) {
-          // 已是目标语言时保留原文，不产生网络请求。
           for (final (index, match) in paragraphs.indexed) {
             publish(index, match.group(0)!);
           }
         } else {
           var start = 0;
           while (start < paragraphs.length) {
-            // 按阅读顺序装满一批：段落数与字符数先到为准，单段超过字符上限时自成一批。
             var stop = start;
             var chars = 0;
             while (stop < paragraphs.length &&
@@ -183,12 +165,10 @@ Stream<TranslationEvent> translateParagraphBatches(
             final buffers = [for (final _ in texts) StringBuffer()];
             final done = Completer<String?>();
 
-            /// message 为失败原因，null 为整批完成；只记录第一次结果，无返回值。
             void settle(String? message) {
               if (!done.isCompleted) done.complete(message);
             }
 
-            // translateBatch 发出一次批量请求，增量带批次内下标。
             current = provider
                 .translateBatch(
                   BatchTranslationRequest(
@@ -222,7 +202,6 @@ Stream<TranslationEvent> translateParagraphBatches(
               output.add(TranslationFailure(failure));
               return;
             }
-            // 每段都必须有译文；缺少时说明返回的段落数与原文不一致，整片失败由用户重试。
             if (buffers.any((buffer) => buffer.toString().trim().isEmpty)) {
               output.add(
                 const TranslationFailure(paragraphCountMismatchMessage),

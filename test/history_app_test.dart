@@ -21,7 +21,6 @@ import 'support/line_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:transnap/src/common/constants/glass_metrics.dart';
 
-/// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
 Future<TestGesture> _startMouse(WidgetTester tester) async {
   final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
   await gesture.addPointer(location: Offset.zero);
@@ -29,7 +28,6 @@ Future<TestGesture> _startMouse(WidgetTester tester) async {
   return gesture;
 }
 
-/// tester 为测试驱动，mouse 为已登记鼠标，finder 为目标条目；移动鼠标到条目中心以显示悬停按钮。
 Future<void> _hoverRow(
   WidgetTester tester,
   TestGesture mouse,
@@ -39,7 +37,6 @@ Future<void> _hoverRow(
   await tester.pumpAndSettle();
 }
 
-/// 无参数；用真实 SQLite 驱动窗口，验证分组卡片、筛选标签、标题同步、空状态及保存失败反馈。
 void main() {
   const channel = MethodChannel('test/history-window');
   late Database database;
@@ -51,7 +48,6 @@ void main() {
       database,
       now: () => DateTime.fromMillisecondsSinceEpoch(0),
       onChanged: () {
-        // 用原生转发的同一协议连接真实SQLite写入与历史窗口，不手工重建窗口。
         unawaited(
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
               .handlePlatformMessage(
@@ -64,7 +60,6 @@ void main() {
         );
       },
     );
-    // 仅替代原生转发层；查询、游标和开关均使用真实数据库结果。
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           try {
@@ -84,8 +79,6 @@ void main() {
   });
 
   testWidgets('历史随外观切换保持来源和正文可读，标题栏居中分段且收到新增事件自动刷新', (tester) async {
-    // 作用：验证明暗外观下卡片正文可读性、标题栏居中分段与右侧记录开关位置，以及 historyChanged 自动刷新。
-    // 边界：切换亮暗外观时译文使用高对比主色，来源 · 时间使用次要色；新插入记录即时出现。
     final completedAt = DateTime(2026, 9, 19, 9, 30).millisecondsSinceEpoch;
     store.insert(
       sourceText: 'old source',
@@ -98,7 +91,6 @@ void main() {
     );
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
-    // 标题栏居中放分段、右侧放「记录」开关，不另外显示标题文字。
     expect(
       find.byWidgetPredicate((widget) => widget is NativeGlassSegments),
       findsOneWidget,
@@ -142,10 +134,6 @@ void main() {
   });
 
   testWidgets('分段与记录开关在 38pt 标题栏带内同排，空白处拖动转给原生窗口，窄窗口开关移到带下（#67）', (tester) async {
-    // 作用：验证窗口通顶后标题栏带的布局与拖动转发，以及筛选小标签移除按钮的命中尺寸。
-    // 边界：520pt 宽时分段与开关的垂直中心都在 19（38 的一半），开关右缘距窗口右缘 16；
-    // 在标题栏带左侧空白处拖动发出一次 startWindowDrag；480pt 宽（小于 520）时开关顶边低于 38；
-    // 筛选小标签的移除按钮命中区为 24×24。
     final calls = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -208,8 +196,6 @@ void main() {
   });
 
   testWidgets('按日期分组共用一张卡片，译文在原文上方，滚动可读第三页', (tester) async {
-    // 作用：验证按日期分组、同组共用 HistoryGroupCard、「来源 · HH:mm」在右上、译文 14/20 在上及触底分页。
-    // 边界：23 条跨越两次 10 条边界；520×640 与实际历史窗口一致，滚动后可见第 3 页记录及末尾提示。
     tester.view.physicalSize = const Size(520, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -258,8 +244,6 @@ void main() {
   });
 
   testWidgets('长文及窄窗口可阅读，关闭记录将文字改为「记录 · 已暂停」且不显示非错误横幅', (tester) async {
-    // 作用：验证 320pt 窄窗口无溢出、只读数据库触发保存失败不改开关状态，关闭记录后文案合并进开关旁且不弹非错误横幅。
-    // 边界：320×640 触发窄窗口标题栏换行；只读 SQLite 真实触发错误横幅；成功后「记录 · 已暂停」出现且无非错误横幅。
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -295,8 +279,6 @@ void main() {
   });
 
   testWidgets('刷新失败保留可见记录，恢复后重试首批替换而不重复追加', (tester) async {
-    // 作用：验证经「⋯」菜单触发刷新失败时保留既有列表并提示错误横幅，恢复后可重试替换。
-    // 边界：首批不足10条时已到末页；重命名真实表令刷新失败，重试仍需绕过末页状态。
     store.insert(
       sourceText: 'source',
       translatedText: '译文',
@@ -329,8 +311,6 @@ void main() {
   });
 
   testWidgets('悬停出现复制删除，筛选标签可单独移除，清空全部经「⋯」菜单确认覆盖全部记录', (tester) async {
-    // 作用：验证静息隐藏操作按钮、悬停显示复制删除、筛选生成可移除标签及「⋯」清空全部确认。
-    // 边界：11条跨页记录加1个其他来源；逐个移除标签恢复全量，清空全部仍覆盖全部11条。
     for (var index = 0; index < 11; index++) {
       store.insert(
         sourceText: 'source-$index',
@@ -354,7 +334,6 @@ void main() {
     await tester.pumpWidget(const HistoryApp(channel: channel));
     await tester.pumpAndSettle();
 
-    // 按来源筛选并在管理行下方显示可移除标签。
     await tester.tap(find.byKey(const ValueKey('history-filter-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Notes'));
@@ -363,7 +342,6 @@ void main() {
     expect(find.text('unique'), findsOneWidget);
     expect(find.text('source-10'), findsNothing);
 
-    // 悬停条目后才可点击删除，取消不修改数据，确认后删除。
     final mouse = await _startMouse(tester);
     await _hoverRow(tester, mouse, find.text('unique'));
     await tester.tap(find.byTooltip('删除翻译记录'));
@@ -377,7 +355,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.page(limit: 20), hasLength(11));
 
-    // 点选标签上的关闭图标移除来源筛选，列表恢复 Safari 记录。
     await tester.tap(find.byTooltip('移除来源：Notes筛选'));
     await tester.pumpAndSettle();
     expect(find.text('来源：Notes'), findsNothing);
@@ -412,8 +389,6 @@ void main() {
   });
 
   testWidgets('分页失败后重试原游标，保留已加载记录并追加剩余记录', (tester) async {
-    // 作用：验证 11 条记录跨 10 条分页失败后保留前 10 条，恢复数据库表后点击「重试加载」追加第 11 条。
-    // 边界：SQLite 真实缺表触发分页异常，恢复后不重新覆盖已加载的前 10 条。
     for (var index = 0; index < 11; index++) {
       store.insert(
         sourceText: 'source-$index',
@@ -447,8 +422,6 @@ void main() {
   });
 
   testWidgets('首次默认期限显示计数，未确认状态在「⋯」菜单标注，选择永久保留后持久生效', (tester) async {
-    // 作用：验证未确认保留期限时不再显示非错误横幅，而是在「⋯」菜单明确标注，且可在菜单内修改。
-    // 边界：过期 1 条且偏好未确认；首次弹窗取消不删，菜单可见「保留期限（未确认）」，改为永久保留后标注消失。
     store.insert(
       sourceText: 'old',
       translatedText: '旧记录',
@@ -490,8 +463,6 @@ void main() {
   });
 
   testWidgets('历史窗口切换记录历史等待期间开关外圈显示进度环，完成后收起（#142）', (tester) async {
-    // 作用：验证 setHistoryRecording 事务进行中时，记录开关的 BusyRing.active 为真、结束后为假。
-    // 边界：切换期间异步保存挂起，BusyRing.active=true；释放并回包后恢复为 false。
     final pending = Completer<void>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -520,8 +491,6 @@ void main() {
   });
 
   testWidgets('搜索防抖生效，支持输入框内清除并区分无匹配与空列表', (tester) async {
-    // 作用：验证 200ms 搜索防抖、清除按钮显隐及无筛选结果与空列表文案区分。
-    // 边界：未满 200ms 不触发远端查询；筛选无结果时显示「没有匹配的翻译历史」而非空状态。
     store.insert(
       sourceText: 'hello world',
       translatedText: '你好世界',
@@ -554,8 +523,6 @@ void main() {
   });
 
   testWidgets('分段切换同步窗口标题、延迟加载并保持搜索状态，支持悬停复制、键帽空状态与日期选择器', (tester) async {
-    // 作用：验证标题栏分段切换发送 setWindowTitle、空状态展示当前设置键帽快捷键、悬停后复制及筛选菜单打开系统日期选择。
-    // 边界：停留在翻译历史时不挂载 VocabularyPage；切换分段后依次发送对应标题且不带 App 名。
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final clipboard = <String>[];
@@ -621,14 +588,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     await tester.pumpAndSettle();
 
-    // 切去生词本时隐藏记录开关并同步窗口标题为「生词本」。
     await tester.tap(find.text('生词本').first);
     await tester.pumpAndSettle();
     expect(find.byType(VocabularyPage), findsOneWidget);
     expect(find.text('记录'), findsNothing);
     expect(find.text('还没有生词'), findsOneWidget);
 
-    // 切去截图历史时传入当前区域截图快捷键键帽并同步窗口标题为「截图历史」。
     await tester.tap(find.text('截图历史').first);
     await tester.pumpAndSettle();
     expect(find.text('还没有截图记录'), findsOneWidget);
@@ -648,7 +613,6 @@ void main() {
       'keep-filter',
     );
 
-    // 静息时复制按钮不可见（透明度 0），悬停后点击复制译文触发确认动效。
     final mouse = await _startMouse(tester);
     final rowFinder = find.byKey(ValueKey('history-$itemId'));
     final rowOpacity = find.descendant(
@@ -671,7 +635,6 @@ void main() {
       1,
     );
 
-    // 从「筛选」菜单打开起始日期系统选择器，选择后不崩且关闭弹窗。
     await tester.tap(find.byKey(const ValueKey('history-filter-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('起始日期…'));

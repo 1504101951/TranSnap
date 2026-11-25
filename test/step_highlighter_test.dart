@@ -14,13 +14,10 @@ import 'package:transnap/src/screenshot/screenshot_app.dart';
 
 import 'support/capture_pixels.dart';
 
-/// 无参数；验证步骤编号的推导、样式与放置，以及荧光笔的半透明叠加与默认样式（#107）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('编号按标注顺序推导：撤销、重做与删除中间标记后其余编号随顺序更新', () async {
-    // 边界：中间夹一个矩形不占编号；撤销最后一个后只剩 1、2，重做恢复 3；
-    // 删除第 2 个后第 3 个前移为 2，撤销删除后回到原位置与原编号。
     final doc = EditDocument()
       ..loadCapture(await decodePng(await _png(64, 64)));
     String step(double x) => doc.addAnnotation(
@@ -52,8 +49,6 @@ void main() {
   });
 
   test('编号为实心圆，数字按圆亮度取白或黑，三位数缩小后宽度不超过直径 80%', () async {
-    // 边界：蓝色（亮度低）配白字、黄色 #FFCC00（亮度约 0.66 > 0.5）配黑字；
-    // 第 100 个标记的三位数字原字号会超出 22.4px，缩小后像素宽度不超过 23px（含抗锯齿 1px）。
     final doc = EditDocument()
       ..loadCapture(await decodePng(await _png(96, 64)));
     final blue = Rect.fromCircle(center: const Offset(20, 32), radius: 14);
@@ -81,7 +76,6 @@ void main() {
     expect(_inside(yellow, pixels).any((p) => _dark(p.rgb)), isTrue);
     expect(_inside(yellow, pixels).any((p) => _light(p.rgb)), isFalse);
 
-    // 前 98 个标记叠在左侧圆下，最上层的第 100 个画在右侧。
     for (var i = 2; i < 99; i++) {
       doc.addAnnotation(
         EditAnnotation(
@@ -115,8 +109,6 @@ void main() {
   });
 
   test('荧光笔以 40% 不透明度叠加：同一笔重叠不加深，不同笔叠加加深，黑字仍为深色', () async {
-    // 边界：白底上黄色 #FFCC00 的 40% 混合为 (255,235,153)；同一笔来回经过同一像素结果不变；
-    // 第二笔交叉处再混合一次为 (255,223,92)；黑色区域只得到 (102,82,0)，仍远暗于高亮背景。
     final doc = EditDocument()
       ..loadCapture(await decodePng(await _png(40, 40, blackFrom: 20)));
     EditAnnotation highlight(List<Offset> points) => EditAnnotation(
@@ -142,7 +134,6 @@ void main() {
   });
 
   test('荧光笔与编号使用独立默认样式，修改后随偏好往返且不影响普通画笔', () {
-    // 边界：荧光笔未调整时为黄色 16pt，而非普通画笔的红色 3pt；编号默认红色且支持颜色、不支持粗细。
     final defaults = DrawingPreferences();
     final highlighter = defaults.styleFor(
       ScreenshotTool.brush,
@@ -189,8 +180,6 @@ void main() {
   });
 
   testWidgets('编号工具连续单击放置标记不触发双击复制，拖动在松开处放置，撤销移除最后一个', (tester) async {
-    // 边界：两次单击间不推进时间，若仍识别双击会复制并关闭截图；拖动从 (300,200) 到 (340,200)，
-    // 标记圆心在松开处，起点附近保持原图；⌘Z 只移除最后放置的标记。
     final channel = await _pumpEditor(tester, 'test/step-tool');
     await tester.tap(find.byKey(const Key(ScreenshotActions.step)));
     await tester.pumpAndSettle();
@@ -217,12 +206,10 @@ void main() {
     pixels = await _copyPixels(tester, channel);
     expect(pixels(330, 200), [255, 255, 255]);
     expect(pixels(210, 100), [255, 59, 48]);
-    // 等待复制反馈计时结束，避免遗留计时器。
     await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('画笔第二行选择荧光笔后按默认黄色 16pt 半透明绘制', (tester) async {
-    // 边界：16pt 轨迹半宽 8px，距中线 6px 已高亮、11px 仍为原图；高亮像素为白底 40% 黄色。
     final channel = await _pumpEditor(tester, 'test/highlighter');
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
@@ -245,10 +232,8 @@ void main() {
   });
 }
 
-/// 截图编辑测试通道及其收到的复制图片。
 typedef _Editor = ({MethodChannel channel, List<Uint8List> copies});
 
-/// tester 为测试驱动，name 为通道名；以 640×480 白色截图装载编辑器，返回通道与复制记录。
 Future<_Editor> _pumpEditor(WidgetTester tester, String name) async {
   tester.view.physicalSize = const Size(640, 480);
   tester.view.devicePixelRatio = 1;
@@ -277,20 +262,17 @@ Future<_Editor> _pumpEditor(WidgetTester tester, String name) async {
   });
   addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
   await tester.pumpWidget(ScreenshotApp(channel: channel));
-  // 源图异步建好后文档才有图。
   await awaitCaptureSource(tester);
   await tester.pumpAndSettle();
   return (channel: channel, copies: copies);
 }
 
-/// tester 为测试驱动，editor 为编辑器通道；点击复制并返回导出图的像素读取函数。
 Future<List<int> Function(int x, int y)> _copyPixels(
   WidgetTester tester,
   _Editor editor,
 ) async {
   final copy = find.byKey(const Key(ScreenshotActions.copy));
   await tester.ensureVisible(copy);
-  // 导出与 PNG 解码使用真实图像线程。
   final pixels = await tester.runAsync(() async {
     await tester.tap(copy);
     await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -300,7 +282,6 @@ Future<List<int> Function(int x, int y)> _copyPixels(
   return pixels!;
 }
 
-/// width/height 为像素尺寸，blackFrom 为从该列起涂黑（缺省全白）；返回合成 PNG。
 Future<Uint8List> _png(int width, int height, {int? blackFrom}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -324,7 +305,6 @@ Future<Uint8List> _png(int width, int height, {int? blackFrom}) async {
   return bytes!.buffer.asUint8List();
 }
 
-/// bytes 为 PNG，width 为图像宽度；返回按坐标读取 RGB 的函数。
 Future<List<int> Function(int x, int y)> _rgba(
   Uint8List bytes,
   int width,
@@ -338,7 +318,6 @@ Future<List<int> Function(int x, int y)> _rgba(
   return (x, y) => raw.sublist((y * width + x) * 4, (y * width + x) * 4 + 3);
 }
 
-/// circle 为编号标记外接正方形，pixels 为像素读取函数；返回圆内（内缩 2px 避开抗锯齿边）每个像素的列号与 RGB。
 Iterable<({int x, List<int> rgb})> _inside(
   Rect circle,
   List<int> Function(int x, int y) pixels,
@@ -353,13 +332,10 @@ Iterable<({int x, List<int> rgb})> _inside(
   }
 }
 
-/// rgb 为像素；返回是否接近白色（数字白字）。
 bool _light(List<int> rgb) => rgb.every((value) => value > 200);
 
-/// rgb 为像素；返回是否接近黑色（数字黑字）。
 bool _dark(List<int> rgb) => rgb.every((value) => value < 60);
 
-/// actual/expected 为 RGB；在 PNG 往返与混合舍入的 ±2 误差内断言一致。
 void _expectNear(List<int> actual, List<int> expected) {
   for (var i = 0; i < 3; i++) {
     expect(

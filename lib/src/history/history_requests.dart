@@ -3,13 +3,11 @@ import 'package:flutter/services.dart';
 import '../common/constants/method_names.dart';
 import 'translation_history.dart';
 
-/// history 为主引擎唯一存储，call 为查询或管理请求；返回记录、来源、偏好字典、布尔值或 null。
 Object? handleHistoryRequest(TranslationHistoryStore history, MethodCall call) {
   switch (call.method) {
     case MethodNames.historyPage:
       final map = Map<Object?, Object?>.from(call.arguments as Map? ?? {});
       final cursor = map['before'] as Map?;
-      // page使用固定10条和时间/ID双游标，新插入记录不会挤动已读页面。
       return [
         for (final row in history.page(
           query: map['query'] as String?,
@@ -36,7 +34,6 @@ Object? handleHistoryRequest(TranslationHistoryStore history, MethodCall call) {
           },
       ];
     case MethodNames.historySources:
-      // 来源菜单使用 Store 的同一期限和未知来源分组。
       return history.sources();
     case MethodNames.historyRetention:
       final map = Map<Object?, Object?>.from(call.arguments as Map? ?? {});
@@ -49,7 +46,6 @@ Object? handleHistoryRequest(TranslationHistoryStore history, MethodCall call) {
       };
     case MethodNames.setHistoryRetention:
       final map = Map<Object?, Object?>.from(call.arguments as Map);
-      // 请求只在窗口确认后发出，偏好与删除由 Store 原子提交。
       history.setRetention(map['days'] as int);
       return null;
     case MethodNames.deleteHistory:
@@ -63,7 +59,6 @@ Object? handleHistoryRequest(TranslationHistoryStore history, MethodCall call) {
       return history.recordingEnabled;
     case MethodNames.setHistoryRecording:
       final map = Map<Object?, Object?>.from(call.arguments as Map);
-      // Store在完整翻译落库时读取同一开关，不依赖设置提交或服务测试的进度。
       history.recordingEnabled = map['enabled'] == true;
       return null;
     default:

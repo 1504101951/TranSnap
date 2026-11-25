@@ -1,31 +1,24 @@
 import CoreGraphics
 import Foundation
 
-/// 垂直滚动图像拼接器；只消费本地位图，不读取屏幕或控制其他应用。
 final class ScrollStitcher {
-    /// 自动检测或用户指定的固定边缘，单位均为原图像素。
     struct Edges {
         let top: Int
         let bottom: Int
         let automatic: Bool
     }
 
-    /// 可展示的拼接失败；不把推测的接缝作为成功结果。
-    /// recoverable表示仅本帧接不上，已确认结果与参照帧不变，后续画面回到重叠范围即可继续。
     struct Failure: LocalizedError {
         let message: String
         var recoverable = false
         var errorDescription: String? { message }
     }
 
-    /// 图像、逐行采样与有效纹理；采样只用于配准，输出始终使用原始像素。
     private struct Frame {
         let image: CGImage
         let rows: [[Double]]
-        /// 纵向[1,2,1]平滑后的采样；分数像素重绘的文字按覆盖面积栅格化，平滑后才近似线性插值。
         let smoothed: [[Double]]
 
-        /// image 为同尺寸截图；返回统一RGB采样，失败抛出可读错误。
         init(_ image: CGImage) throws {
             self.image = image
             let width = image.width
@@ -44,7 +37,6 @@ final class ScrollStitcher {
                 return true
             }
             guard rendered else { throw Failure(message: "无法读取截图像素。") }
-            // 左右窄边不用于配准，避免滚动条拖偏；合成仍保留完整图宽。
             let inset = max(1, width / 20)
             let columns = stride(from: inset, to: width - inset, by: max(1, (width - inset * 2) / 32))
             let sampled = (0..<height).map { y in
@@ -64,35 +56,25 @@ final class ScrollStitcher {
 
     private let requested: Edges
     private var edges: Edges?
-    /// 首帧保留顶部固定区域，末帧提供底部固定区域。
     private var first: Frame?
     private var previous: Frame?
-    /// 参照帧（previous）的缩略探针；首帧与追加正文成功时更新（#119）。
     private var previousProbe: [Double]?
     private var strips: [CGImage] = []
     private(set) var acceptedFrames = 0
-    /// 已确认图像的总高度，包含固定首顶末底；每次追加正文成功后递增。
     private(set) var height = 0
-    /// 相对首帧的累计分数位移与已追加正文像素；按累计值取整，避免逐帧舍入误差累积成重复或缺行。
     private var scrolled = 0.0
     private var appended = 0
-    /// 最近一次追加的整数位移占单帧允许最大位移的比例；采集循环据此提示放慢滚动。
     private(set) var lastShiftRatio = 0.0
 
-    /// edges 为手动像素边界或自动检测意图；创建空会话，不分配图像缓冲。
     init(edges: Edges) { requested = edges }
 
-    /// frame 为新的同倍率截图；返回是否追加正文，静止帧返回false，失配抛错并保留已确认结果。
     @discardableResult
     func append(_ image: CGImage) throws -> Bool {
-        // probe 把整帧缩成 32×64 采样；与参照帧的探针几乎一致时视为静止，不做整幅解码（#119）。
-        // 已知限制：小于探针分辨率的细微变化在累计变大前被当作静止；需要逐帧捕捉这类变化时重新评估。
         let probe = try Self.probe(image)
         if let previousProbe, let old = previous, old.image.width == image.width, old.image.height == image.height,
            zip(previousProbe, probe).reduce(0, { $0 + abs($1.0 - $1.1) }) / Double(probe.count) < 0.8 {
             return false
         }
-        // Frame只为本次候选创建采样；校验完成之前不修改已接受的像素。
         let current = try Frame(image)
         guard let old = previous else {
             guard requested.top >= 0, requested.bottom >= 0,
@@ -109,17 +91,14 @@ final class ScrollStitcher {
         guard old.image.width == image.width, old.image.height == image.height else {
             throw Failure(message: "捕获尺寸或显示倍率发生变化，请重新框选。")
         }
-        // 差值是各RGB通道的平均误差；完全静止不触发底部判断。
         if difference(old, current, oldStart: 0, newStart: 0, count: image.height, samples: 64) < 0.8 {
             return false
         }
         var selected: Edges
         if let edges {
-            // 固定带采用首顶末底；局部动画不改变正文接缝，可靠性由下面的位移与重叠校验决定。
             selected = edges
         }
         else if requested.automatic {
-            // 相邻帧的静止边缘仅作为候选带；可靠位移确定后还须排除随正文移动的空白。
             let limit = image.height / 3
             var top = 0
             var bottom = 0
@@ -130,8 +109,6 @@ final class ScrollStitcher {
         var body = image.height - selected.top - selected.bottom
         let overlap = max(32, body / 4)
         guard body > overlap else { throw Failure(message: "正文区域不足以验证重叠，请调整固定边界。") }
-        // 先用平滑整数位移寻找候选，随后在更密集的正文重叠区做亚像素校验，拒绝歧义接缝。
-        // 粗筛64行：12行常落在段落空白里，真实位移可能挤不进前12个候选。
         var candidates: [(shift: Int, score: Double)] = []
         for shift in 1...(body - overlap) {
             let score = difference(old, current, oldStart: selected.top + shift,
@@ -143,8 +120,6 @@ final class ScrollStitcher {
                                      newStart: selected.top, count: body - candidate.shift, samples: 96)
             return (candidate.shift, match.score, match.phase)
         }.sorted { $0.score < $1.score }
-        // 相差2像素以内的整数候选经±0.75像素插值后属于同一接缝；更远的候选须明显更差，
-        // 稀疏文字的整体误差很低，只用固定下限1会把错位一两行的文字也当成歧义。
         guard let best = verified.first, best.score < 3,
               !verified.dropFirst().contains(where: {
                   abs($0.shift - best.shift) > 2 && $0.score < max(best.score * 1.8, best.score + 0.3)
@@ -155,11 +130,8 @@ final class ScrollStitcher {
         let shiftRatio = Double(best.shift) / Double(body - overlap)
         let estimate = scrolled + Double(best.shift) + best.phase
         let advance = Int(estimate.rounded()) - appended
-        // 不足半像素的移动不追加正文，也不替换参照帧，留给后续画面累计。
         guard advance >= 1 else { return false }
         if edges == nil && requested.automatic {
-            // 固定证据必须同位置稳定且不服从正文位移；连续三个采样点拒绝孤立巧合。
-            // 按像素块识别局部悬浮按钮，但合成仍保留完整横带，不推测被按钮遮挡的正文。
             let limit = image.height / 3
             var top = 0
             var bottom = 0
@@ -186,13 +158,11 @@ final class ScrollStitcher {
             }
             selected = Edges(top: top, bottom: bottom, automatic: true)
             body = image.height - selected.top - selected.bottom
-            // 收缩候选带后重新校验全部正文重叠，确保接缝可靠。
             guard body - best.shift >= 32, registration(old, current, oldStart: selected.top + best.shift,
                 newStart: selected.top, count: body - best.shift, samples: body).score < 3 else {
                 throw Failure(message: "无法可靠区分固定区域与正文，已保留确认部分。")
             }
         }
-        // 纹理不足的空白/重复色块不能凭低误差证明滚动；保留等待下一张可识别画面。
         let texture = old.rows[selected.top..<(image.height - selected.bottom)].map { row in
             (row.max() ?? 0) - (row.min() ?? 0)
         }.reduce(0, +) / Double(body)
@@ -201,7 +171,6 @@ final class ScrollStitcher {
         guard nextHeight <= 32768, image.width * nextHeight <= 33_554_432 else {
             throw Failure(message: "长图达到资源上限：最长边32768像素、总像素33554432。已保留确认部分。")
         }
-        // 首次可靠位移之后才提交自动边界；顶部只使用首帧，正文条带不携带固定区。
         if edges == nil, let first {
             strips.append(try copyStrip(first.image, y: selected.top, height: body))
             edges = selected
@@ -217,13 +186,11 @@ final class ScrollStitcher {
         return true
     }
 
-    /// 无参数；返回已确认图像的PNG及尺寸，首帧顶区和末帧底区各一次；没有帧时抛错。
     func finish() throws -> (png: Data, width: Int, height: Int, frames: Int) {
         guard let first, let last = previous else { throw Failure(message: "还没有捕获到图像。") }
         let image: CGImage
         if let edges {
             let width = first.image.width
-            // height在正文提交时更新，直接作为包含固定区域的最终图像高度。
             guard let context = CGContext(data: nil, width: width, height: height,
                 bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
@@ -245,20 +212,16 @@ final class ScrollStitcher {
         return (try PNGEncoding.data(image), image.width, image.height, acceptedFrames)
     }
 
-    /// 实时缩略图；target为下一帧必须重叠的正文段，坐标为缩略图像素、顶部原点。
     struct Preview {
         let image: CGImage
         let target: CGRect?
     }
 
-    /// width/maxHeight为缩略图像素上限，markTarget决定是否标出回退目标；返回已确认长图最下面一段的等比缩小图，
-    /// 不放大、不改动已确认条带。没有帧时返回nil。
     func preview(width: Int, maxHeight: Int, markTarget: Bool) -> Preview? {
         guard let first, let last = previous, width > 0, maxHeight > 0 else { return nil }
         let imageWidth = first.image.width
         let scale = min(1, Double(width) / Double(imageWidth))
         let outputWidth = max(1, Int((Double(imageWidth) * scale).rounded()))
-        // 只取能填满缩略图的底部行数，避免每帧合成整张长图。
         let rows = min(height, Int((Double(maxHeight) / scale).rounded(.down)))
         let outputHeight = max(1, min(maxHeight, Int((Double(rows) * scale).rounded())))
         var pieces: [CGImage] = []
@@ -276,7 +239,6 @@ final class ScrollStitcher {
             bytesPerRow: outputWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.interpolationQuality = .high
-        // 自底向上绘制，超出顶部的条带直接停止；CoreGraphics原点在左下。
         var bottom = 0.0
         for piece in pieces.reversed() {
             let pieceHeight = Double(piece.height) * scale
@@ -287,7 +249,6 @@ final class ScrollStitcher {
         guard let image = context.makeImage() else { return nil }
         var target: CGRect?
         if markTarget {
-            // 参照帧正文最下面的最小重叠段；与append的重叠下限一致。
             let fixed = edges ?? Edges(top: 0, bottom: 0, automatic: requested.automatic)
             let body = last.image.height - fixed.top - fixed.bottom
             let overlap = max(32, body / 4)
@@ -299,13 +260,11 @@ final class ScrollStitcher {
         return Preview(image: image, target: target)
     }
 
-    /// 无参数；返回已接受的首帧PNG。完整合成失败时仍能保存这一屏，没有帧时抛错。
     func confirmedFrame() throws -> (png: Data, width: Int, height: Int, frames: Int) {
         guard let first else { throw Failure(message: "还没有捕获到图像。") }
         return (try PNGEncoding.data(first.image), first.image.width, first.image.height, acceptedFrames)
     }
 
-    /// image/y/height描述顶部原点的完整宽度条带；复制像素以免裁剪对象长期持有整帧内存。
     private func copyStrip(_ image: CGImage, y: Int, height: Int) throws -> CGImage {
         guard let crop = image.cropping(to: CGRect(x: 0, y: y, width: image.width, height: height)),
               let context = CGContext(data: nil, width: image.width, height: height,
@@ -318,8 +277,6 @@ final class ScrollStitcher {
         return result
     }
 
-    /// image为新截图；返回去掉左右各 5% 窄边后缩放到 32 列 × 64 行的 RGB 采样，用于静止判断（#119）。
-    /// 窄边与配准一致地排除，避免滚动条的出现与淡出被当作内容变化。
     private static func probe(_ image: CGImage) throws -> [Double] {
         let (width, height) = (32, 64)
         let inset = max(1, image.width / 20)
@@ -337,17 +294,14 @@ final class ScrollStitcher {
         return stride(from: 0, to: rgba.count, by: 4).flatMap { [Double(rgba[$0]), Double(rgba[$0 + 1]), Double(rgba[$0 + 2])] }
     }
 
-    /// a/b为RGB采样行、column为RGB三元组起始位置；返回该采样点三通道平均绝对误差。
     private func sampleDifference(_ a: [Double], _ b: [Double], column: Int) -> Double {
         (abs(a[column] - b[column]) + abs(a[column + 1] - b[column + 1]) + abs(a[column + 2] - b[column + 2])) / 3
     }
 
-    /// a/b为等宽RGB采样行；返回通道平均绝对差，不分配差分图。
     private func rowDifference(_ a: [Double], _ b: [Double]) -> Double {
         zip(a, b).reduce(0) { $0 + abs($1.0 - $1.1) } / Double(a.count)
     }
 
-    /// 两帧及对应行范围、样本数；smoothed选择平滑采样，返回整数对齐的通道平均误差。
     private func difference(_ a: Frame, _ b: Frame, oldStart: Int, newStart: Int, count: Int,
                             samples: Int, smoothed: Bool = false) -> Double {
         let step = max(1, count / samples)
@@ -362,8 +316,6 @@ final class ScrollStitcher {
         return total / Double(used)
     }
 
-    /// 两帧及对应行范围、样本数；在平滑采样上允许整段一致的四分之一像素插值，
-    /// 返回最低平均误差及其分数位移（-0.75...0.75，叠加到整数位移上）。
     private func registration(_ a: Frame, _ b: Frame, oldStart: Int, newStart: Int, count: Int,
                               samples: Int) -> (score: Double, phase: Double) {
         let step = max(1, count / samples)
@@ -378,7 +330,6 @@ final class ScrollStitcher {
                 let delta = oldRow[index] - newRow[index]
                 for oldQuarter in 0...3 {
                     for newQuarter in 0...3 {
-                        // 两帧都可能已经落在亚像素位置；统一比较两侧插值，保留整段相同的相位组合。
                         totals[oldQuarter * 4 + newQuarter] += abs(delta
                             + (oldNext[index] - oldRow[index]) * Double(oldQuarter) / 4
                             - (newNext[index] - newRow[index]) * Double(newQuarter) / 4)
@@ -387,8 +338,6 @@ final class ScrollStitcher {
             }
             used += 1
         }
-        // 同一个插值方向和比例必须解释全部重叠区；不能逐像素挑最小差来掩盖内容变化。
-        // 并列时保留先出现的同相位组合，整数滚动因此得到0分数位移。
         var bestIndex = 0
         for index in totals.indices where totals[index] < totals[bestIndex] { bestIndex = index }
         let score = totals[bestIndex] / Double(used) / Double(a.rows[0].count)

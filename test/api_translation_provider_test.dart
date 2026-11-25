@@ -15,7 +15,6 @@ import 'package:transnap/src/translation/providers/api_translation_provider.dart
 import 'package:transnap/src/translation/providers/apple_translation_provider.dart';
 import 'package:transnap/src/translation/translation_types.dart';
 
-/// 无参数；用真实本地 HTTP 验证协议、流完整性及取消，不调用付费服务。
 void main() {
   const request = TranslationRequest(
     sourceText: 'Hello 世界 & +',
@@ -24,7 +23,6 @@ void main() {
   );
   const secrets = {'apiKey': 'test-secret', 'appId': 'test-app'};
 
-  /// kind 指定协议，server 为真实监听端，semantic 控制结构化结果，glossary 为术语表；返回测试 Provider。
   ApiTranslationProvider provider(
     String kind,
     HttpServer server, {
@@ -79,7 +77,6 @@ void main() {
         } else {
           expect(incoming.uri.path, '/language/translate/v2');
           expect(incoming.headers.value('x-goog-api-key'), secrets['apiKey']);
-          // 单篇翻译按段落分批调用批量接口，q 为段落数组（#113）。
           expect(jsonDecode(body), {
             'q': [request.sourceText],
             'target': 'zh-CN',
@@ -127,7 +124,6 @@ void main() {
         if (count++ == 0) {
           expect(incoming.uri.path, '/chat/completions');
           expect(incoming.headers.value('authorization'), 'Bearer test-secret');
-          // 未开双语对照的模型按编号分批发送（#113）。
           expect(
             jsonDecode(body['messages'][1]['content'])['paragraphs'],
             '[1] ${request.sourceText}',
@@ -167,8 +163,6 @@ void main() {
   });
 
   test('模型服务未填 API Key 时不发送认证头，Google 缺凭据时显示校验提示（#123）', () async {
-    // 边界：OpenAI 协议不带 Authorization、Anthropic 协议不带 x-api-key，且都正常完成；
-    // Google 空凭据不发请求，失败文案就是凭据校验原文，而不是通用失败。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final serving = () async {
@@ -198,7 +192,6 @@ void main() {
         if (count == 2) break;
       }
     }();
-    // 服务端处理完两个模型请求后停止监听，地址在发请求前取好。
     final baseUrl = 'http://127.0.0.1:${server.port}';
     for (final kind in ['openai', 'anthropic', 'google']) {
       final events = await ApiTranslationProvider(
@@ -321,7 +314,6 @@ void main() {
   });
 
   test('模型段落编号必须完整有序，原文及分隔空白只取本地内容', () {
-    // 多段、空行、缩进及尾部空白必须原样保留；缺段不能降为整篇高亮。
     const source = ' Hello.\r\n\r\n世界🌍! \n';
     final parsed = parseModelResult(
       jsonEncode({
@@ -369,8 +361,6 @@ void main() {
   });
 
   test('润色模式使用设置中的处理提示词整段发送纯文本，忽略段落对照，原文与目标同语言也发出请求', () async {
-    // 边界：服务开启了按段落双语对照、原文与目标语言都是英文；润色仍须整段请求并接受纯文本结果；
-    // 系统提示词原样等于传入的处理提示词（#100）。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     const source = 'helo world.\n\nsecond line';
@@ -422,7 +412,6 @@ void main() {
   });
 
   test('DeepSeek 禁用思考并按输入编号返回完整对照，不显示协议 JSON', () async {
-    // 本地真实 HTTP 同时验证协议输入和两段译文输出，无需账户或付费调用。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     const source = 'First.\n\nSecond.';
@@ -479,8 +468,6 @@ void main() {
   });
 
   test('输入翻译的 Provider 不使用双语段落对照，默认翻译 Provider 仍使用', () async {
-    // 边界：默认服务是开启双语段落对照的模型服务；同一配置经 providerForSettings 请求要求 segments JSON，
-    // 经 providerForInput 请求按普通段落协议（无 segments 指令，原文按“[编号] 原文”行传入）。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final bodies = <Map<String, Object?>>[];
@@ -522,12 +509,9 @@ void main() {
     expect(defaultBody, contains('segments'));
     expect(defaultBody, contains(r'{\"id\":0'));
     expect(inputBody, isNot(contains('segments')));
-    // 普通段落协议按“[编号] 原文”行传入。
     expect(inputBody, contains('[1] Hello'));
   });
 
-  /// kind/baseUrl 指定协议与地址（baseUrl 为空时用 server 本地地址），thinking 为思考开关，maxOutputTokens 为最大输出；
-  /// 向 server 发一次翻译并返回服务端收到的请求体 JSON，及客户端得到的全部事件。
   Future<(Map<String, Object?>?, List<TranslationEvent>)> sendOnce(
     String kind,
     HttpServer server, {
@@ -567,8 +551,6 @@ void main() {
   }
 
   test('DeepSeek 按思考开关发送 thinking.type 为 enabled 或 disabled', () async {
-    // 作用：思考开关决定 DeepSeek 请求体的 thinking 参数。
-    // 边界：开关只有 true/false 两个取值，两侧各验证一次。
     for (final thinking in [true, false]) {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -583,8 +565,6 @@ void main() {
   });
 
   test('Anthropic 开启思考发送 2048 预算，关闭不发送，最大输出不大于预算时连接前失败', () async {
-    // 作用：思考参数只在开启时发送，且预算必须小于最大输出。
-    // 边界：预算 2048；最大输出 4096 大于预算可发送，2048 等于预算必须失败，且服务端收不到连接。
     final on = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => on.close(force: true));
     final (onBody, onEvents) = await sendOnce('anthropic', on, thinking: true);
@@ -617,8 +597,6 @@ void main() {
   });
 
   test('OpenAI 官方端点即使开启思考也不发送思考参数', () async {
-    // 作用：OpenAI 协议不支持统一的思考参数，开关对其无请求体影响。
-    // 边界：thinking 为 true 的情形下，thinking 与 reasoning_effort 两个键都不得出现。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final (body, events) = await sendOnce('openai', server, thinking: true);
@@ -627,7 +605,6 @@ void main() {
     expect(body.containsKey('reasoning_effort'), isFalse);
   });
 
-  /// events 为一次批量翻译的全部事件；返回各下标累计的译文。
   Map<int, String> batchItems(List<BatchTranslationEvent> events) {
     final items = <int, String>{};
     for (final event in events.whereType<BatchItemUpdate>()) {
@@ -643,8 +620,6 @@ void main() {
   );
 
   test('批量翻译：模型按编号流式归属到段落，Google 一次请求携带多个原文', () async {
-    // 作用：一批段落只发一次请求，译文按批次内下标返回。
-    // 边界：模型先输出 [2] 再输出 [1]，且 [1] 的译文跨两个流式事件；Google 的实体只解码一次。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final client = HttpClient();
@@ -702,9 +677,6 @@ void main() {
   });
 
   test('批量失败带错误类别：认证、额度与配置拒绝为服务级，频率受限可重试，服务端错误为临时，输出截断为段落级（#118）', () async {
-    // 作用：会话依据类别决定停止发送、退避重试、放弃该段或重试。
-    // 边界：429 无额度错误码为频率受限并带回 Retry-After；429 带 insufficient_quota 与 402 为额度不足；
-    // 403 按 Google 的 reason 区分频率受限与日配额；499 仍为服务级，500 起为临时错误；finish_reason 为 length 时为段落级。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final client = HttpClient();
@@ -779,8 +751,6 @@ void main() {
   });
 
   test('百度错误码：54003、54005 频率受限可重试，54004 余额不足停止（#118）', () async {
-    // 边界：三种错误码都以 HTTP 200 的 JSON 返回；54003 为频率受限且不带等待，
-    // 54005 为长文本请求频繁，按文档「3s后再试」带 3 秒等待；54004 为服务级额度不足。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final client = HttpClient();
@@ -824,16 +794,12 @@ void main() {
   });
 
   test('术语表：模型请求只携带命中且目标语言一致的术语，未命中时请求与无术语表完全一致', () async {
-    // 作用：单篇与批量请求都按原文筛选术语写入用户消息，并在系统提示词说明 glossary。
-    // 边界：法语条目即使原文命中也不进入中文请求；保留原文的条目以原词作为译法；
-    // 原文不含任何术语时，请求正文与不配置术语表时逐字节相同。
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final bodies = <String>[];
     final serving = () async {
       await for (final incoming in server) {
         bodies.add(await utf8.decoder.bind(incoming).join());
-        // 第 5 个请求为批量翻译，译文须带行首编号。
         final content = bodies.length == 5 ? '[1] 译文' : '译文';
         incoming.response.write(
           'data: {"choices":[{"index":0,"delta":{"content":"$content"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
@@ -883,7 +849,6 @@ void main() {
         .toList();
     await serving;
 
-    /// index 为请求序号；返回该请求的系统提示词与解析后的用户消息。
     (String, Map) parts(int index) {
       final messages = (jsonDecode(bodies[index]) as Map)['messages'] as List;
       return (
@@ -911,8 +876,6 @@ void main() {
   });
 
   test('内置服务：菜单先列谷歌翻译与 Apple 系统翻译，Apple 对应本机 Provider 且不是模型服务', () {
-    // 边界：默认服务设为 Apple 时只有 Apple 项为默认；已配置的 OpenAI 服务排在两个内置项之后；
-    // Apple 的 Provider id 为内置 ID，润色、纠错、解释没有模型 Provider。
     const openai = ServiceConfig(
       id: 'saved',
       kind: 'openai',
@@ -966,8 +929,6 @@ void main() {
   });
 
   test('预热地址跟随默认服务：内置谷歌为接口地址，配置型服务为 API 地址，Apple 不预热（#68）', () {
-    // 作用：连接预热只连接默认服务实际请求的主机，换默认服务后预热目标随之切换。
-    // 边界：三类默认服务各取一次；Apple 系统翻译在本机运行没有地址，返回 null。
     final service = ServiceConfig(
       id: 'deepseek',
       kind: 'openai',
@@ -992,7 +953,6 @@ void main() {
   });
 }
 
-/// 只提供固定凭据的设置平台，供 Provider 选择测试读取密钥；不保存任何设置。
 class _SecretPlatform implements SettingsPlatform {
   @override
   Future<void> applySettings(

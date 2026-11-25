@@ -12,14 +12,7 @@ import '../common/constants/method_names.dart';
 import '../common/widgets/native_glass.dart';
 import 'mcp_platforms.dart';
 
-/// 设置窗口的 MCP 页（#96「设置」、#67「设置 MCP 页（#96）」）。
-/// 第一组为 MCP 开关、「允许操控电脑」开关（#140）、helper 路径与客户端配置复制；第二组按 [mcpPlatforms] 注册表列出接入平台，
-/// 提供检测、安装与删除。开关只回报新值，由设置页经主引擎提交队列持久化；
-/// helper 路径向原生读取 App 包内实际位置。
 class McpSettingsPage extends StatefulWidget {
-  /// enabled 为已加载草稿中的开关值；onChanged 接收用户切换后的新值；
-  /// controlEnabled、onControlChanged 为「允许操控电脑」的值与切换回调（#140）；channel 为设置窗口通道；
-  /// createService 按 helper 路径创建平台服务，缺省使用真实 CLI 与用户主目录。
   const McpSettingsPage({
     super.key,
     required this.enabled,
@@ -37,9 +30,6 @@ class McpSettingsPage extends StatefulWidget {
   final MethodChannel channel;
   final McpPlatformService Function(String helperPath) createService;
 
-  /// 作用：生成可直接粘贴到 MCP 客户端的配置。
-  /// 参数 helperPath：helper 完整路径。
-  /// 返回：缩进两格的 JSON 字符串 {"mcpServers": {"transnap": {"command": 路径, "args": []}}}。
   static String clientConfig(String helperPath) =>
       const JsonEncoder.withIndent('  ').convert({
         'mcpServers': {
@@ -47,7 +37,6 @@ class McpSettingsPage extends StatefulWidget {
         },
       });
 
-  /// 作用：创建执行真实 CLI、读写用户主目录配置的平台服务。参数 helperPath：helper 路径。返回：服务实例。
   static McpPlatformService defaultService(String helperPath) =>
       McpPlatformService(helperPath: helperPath);
 
@@ -66,33 +55,26 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
   bool _copied = false;
   Timer? _feedback;
 
-  /// 各平台状态；未出现的平台视为检测中。
   final Map<String, McpInstallState> _states = {};
 
-  /// 各平台最近一次失败的原文，保留到该平台下次操作。
   final Map<String, String> _errors = {};
 
-  /// 安装或删除成功后需提示重启客户端的配置文件式平台。
   final Set<String> _restartHints = {};
 
-  /// 正在安装（'install'）或删除（'remove'）的平台，期间禁用两个按钮并为当前按钮激活进度环（U-24）。
   final Map<String, String> _workingActions = {};
 
-  /// 无参数；读取 helper 路径后创建平台服务并检测全部平台。
   @override
   void initState() {
     super.initState();
     _loadHelper();
   }
 
-  /// 无参数；解除复制反馈计时器，防止页面销毁后回调触发 setState。
   @override
   void dispose() {
     _feedback?.cancel();
     super.dispose();
   }
 
-  /// 无参数；读取 MCP helper 路径并在成功时探测全部已注册平台，失败时提供可重试提示。
   Future<void> _loadHelper() async {
     setState(() {
       _loadingHelper = true;
@@ -128,8 +110,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     }
   }
 
-  /// 作用：检测一个平台并刷新该行。参数 platform：注册项。
-  /// 配置文件无法解析时状态记为未安装，并显示错误原文。
   Future<void> _detect(McpPlatform platform) async {
     setState(() => _states[platform.id] = McpInstallState.checking);
     McpInstallState state;
@@ -142,8 +122,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     if (mounted) setState(() => _states[platform.id] = state);
   }
 
-  /// 作用：执行安装或删除后重新检测。参数 platform：注册项；actionKey：操作类型（'install'/'remove'）；action：执行回调。
-  /// 失败原文显示在该行下方；配置文件式平台成功后提示重启客户端。
   Future<void> _perform(
     McpPlatform platform,
     String actionKey,
@@ -166,7 +144,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     await _detect(platform);
   }
 
-  /// 作用：二次确认后删除（使用破坏性主按钮样式）。参数 platform：注册项。
   Future<void> _confirmRemove(McpPlatform platform) async {
     final confirmed = await NativeGlassDialog.confirm(
       context: context,
@@ -180,7 +157,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     }
   }
 
-  /// 无参数；把客户端配置写入剪贴板，按钮文字显示「已复制」1000ms（#96 待确认值）。
   Future<void> _copy() async {
     await Clipboard.setData(
       ClipboardData(text: McpSettingsPage.clientConfig(_helperPath!)),
@@ -193,8 +169,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     });
   }
 
-  /// 作用：生成统一玻璃材料与忙碌进度环的文字按钮，避免外层额外 GestureDetector 导致重复语义节点（U-25）。
-  /// 参数 key：按钮键；label：按钮内容；onPressed：点击动作，null 为不可用；busy：是否显示 BusyRing 进度环。返回：按钮控件。
   Widget _textButton(
     Key key,
     Widget label,
@@ -206,7 +180,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     child: TextButton(key: key, onPressed: onPressed, child: label),
   );
 
-  /// 作用：生成一个平台行。参数 platform：注册项。返回：最小高 60 的行及其下方的失败原文。
   Widget _platformRow(McpPlatform platform) {
     final theme = Theme.of(context);
     final caption = theme.textTheme.bodySmall;
@@ -299,13 +272,11 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
               value: widget.enabled,
               onChanged: widget.onChanged,
             ),
-            // 操控依赖 MCP 接口；「允许 agent 截图」关闭时该行禁用（#67「设置 MCP 页」）。
             NativeGlassSwitchTile(
               title: '允许操控电脑',
               value: widget.controlEnabled,
               onChanged: widget.enabled ? widget.onControlChanged : null,
             ),
-            // 路径与复制按钮同行排布，让 MCP 页在 760×640 默认窗口内一屏完整展示无滚动条（#67）。
             ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: GlassMetrics.captionRowHeight,
@@ -323,7 +294,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                         children: [
                           const Text('helper 路径'),
                           const SizedBox(height: GlassMetrics.space4),
-                          // 完整路径可选中复制，超长换行，不截断、不缩小字号。
                           SelectableText(
                             _helperPath ?? '',
                             key: const ValueKey('mcp-helper-path'),
@@ -335,7 +305,6 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
                     const SizedBox(width: GlassMetrics.space12),
                     _textButton(
                       const ValueKey('mcp-copy-config'),
-                      // 隐藏的最长文案占位，反馈文字切换时按钮宽度不变。
                       Stack(
                         alignment: Alignment.center,
                         children: [

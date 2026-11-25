@@ -5,15 +5,11 @@ import '../common/constants/motion_metrics.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 
-/// 同一分组记录共用的纯色圆角卡片（#67「历史列表」「生词本」）：
-/// r12 圆角、0.5pt 外轮廓、左右内边距 16，组内条目之间以 0.5pt 细线分隔，不逐行创建玻璃材料。
 class HistoryGroupCard extends StatelessWidget {
-  /// children 为同组内按顺序排列的记录行；返回共用一张圆角卡片的列表容器。
   const HistoryGroupCard({super.key, required this.children});
 
   final List<Widget> children;
 
-  /// context 提供明暗外观；返回含组内 0.5pt 分隔线的 r12 卡片。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -52,11 +48,7 @@ class HistoryGroupCard extends StatelessWidget {
   }
 }
 
-/// 历史与生词条目右下角的普通图标按钮（#67「历史列表」）：
-/// 可见 24×24、r6 圆角、命中 32×32，不使用原生玻璃材料。
 class HistoryHoverIconButton extends StatefulWidget {
-  /// tooltip 为悬停提示，icon 为 16pt 图标，onPressed 为点击回调（为空表示禁用），
-  /// semanticsLabel 为读屏标签，busy 为真时显示禁用或进度状态。
   const HistoryHoverIconButton({
     super.key,
     required this.tooltip,
@@ -72,7 +64,6 @@ class HistoryHoverIconButton extends StatefulWidget {
   final String? semanticsLabel;
   final bool busy;
 
-  /// 无参数；返回维护悬停与按压视觉底块的状态。
   @override
   State<HistoryHoverIconButton> createState() => _HistoryHoverIconButtonState();
 }
@@ -82,7 +73,6 @@ class _HistoryHoverIconButtonState extends State<HistoryHoverIconButton> {
   bool _pressed = false;
   bool _focused = false;
 
-  /// context 提供主题色；返回 32×32 命中区与居中 24×24/r6 普通图标按钮。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -151,9 +141,7 @@ class _HistoryHoverIconButtonState extends State<HistoryHoverIconButton> {
   }
 }
 
-/// 历史与生词条目的悬停感知容器；静息隐藏操作按钮，鼠标悬停或键盘聚焦条目时在右下角显示。
 class HistoryHoverRow extends StatefulWidget {
-  /// builder 接收当前是否应展示悬停操作区；forceActionsVisible 为真时持续展示操作区。
   const HistoryHoverRow({
     super.key,
     required this.builder,
@@ -163,7 +151,6 @@ class HistoryHoverRow extends StatefulWidget {
   final Widget Function(BuildContext context, bool showActions) builder;
   final bool forceActionsVisible;
 
-  /// 无参数；返回维护悬停与焦点可见性的状态。
   @override
   State<HistoryHoverRow> createState() => _HistoryHoverRowState();
 }
@@ -172,7 +159,6 @@ class _HistoryHoverRowState extends State<HistoryHoverRow> {
   bool _hovered = false;
   bool _focused = false;
 
-  /// context 提供上下文与减少动态效果设置；构建上下 10pt 内边距的条目容器。
   @override
   Widget build(BuildContext context) {
     final visible = _hovered || _focused || widget.forceActionsVisible;
@@ -193,9 +179,7 @@ class _HistoryHoverRowState extends State<HistoryHoverRow> {
   }
 }
 
-/// 包裹悬停才出现的操作区；结合透明过渡与点击屏蔽，并遵循减少动态效果偏好。
 class HistoryHoverActions extends StatelessWidget {
-  /// visible 控制显隐，child 为并排的普通图标按钮。
   const HistoryHoverActions({
     super.key,
     required this.visible,
@@ -205,7 +189,6 @@ class HistoryHoverActions extends StatelessWidget {
   final bool visible;
   final Widget child;
 
-  /// context 提供无障碍动效偏好；返回显隐动画包裹的操作区。
   @override
   Widget build(BuildContext context) {
     final duration = AppMotion.reduced(context)
@@ -219,16 +202,12 @@ class HistoryHoverActions extends StatelessWidget {
   }
 }
 
-/// 历史管理行的扁平控件底（#67）：卡片底色（浅 #FFFFFF / 深 #232326）、0.5pt 细线、r8，不使用液态玻璃；
-/// busy 为真时外圈显示等待进度环。
 class HistoryFieldBox extends StatelessWidget {
-  /// child 为输入框或文字按钮，busy 为等待进度环开关。
   const HistoryFieldBox({super.key, required this.child, this.busy = false});
 
   final Widget child;
   final bool busy;
 
-  /// context 提供明暗外观与强调色；返回带细线与圆角的扁平底。
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;

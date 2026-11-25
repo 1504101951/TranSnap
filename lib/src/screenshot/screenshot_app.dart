@@ -42,7 +42,6 @@ import '../settings/screenshot_toolbar_preferences.dart';
 import '../common/constants/toolbar_grid.dart';
 import '../common/constants/screenshot_actions.dart';
 
-/// handle 为控制点方向，plusWhenIdle控制空白十字；channel为截图引擎，返回系统或原生对角光标。
 MouseCursor cursorForEditHandle(
   BoxHandle? handle, {
   required bool plusWhenIdle,
@@ -77,10 +76,8 @@ MouseCursor cursorForEditHandle(
   }
 }
 
-/// 工具栏下方可展开的设置行；录制与实时翻译为目标选择行，美化与比例为设置行（#103、#106）。
 enum _ExpandedRow { recording, live, beautify, ratio }
 
-/// 方向键对应的单位移动方向（#106）；LogicalKeyboardKey 重写了相等判断，不能作为常量映射的键。
 final _arrowDirections = <LogicalKeyboardKey, Offset>{
   LogicalKeyboardKey.arrowLeft: Offset(-1, 0),
   LogicalKeyboardKey.arrowRight: Offset(1, 0),
@@ -88,7 +85,6 @@ final _arrowDirections = <LogicalKeyboardKey, Offset>{
   LogicalKeyboardKey.arrowDown: Offset(0, 1),
 };
 
-/// 独立截图编辑入口；channel 连接原生内存截图、剪贴板、保存与贴图。
 class ScreenshotApp extends StatefulWidget {
   const ScreenshotApp({
     super.key,
@@ -97,37 +93,28 @@ class ScreenshotApp extends StatefulWidget {
 
   final MethodChannel channel;
 
-  /// 无参数；创建编辑窗口状态。
   @override
   State<ScreenshotApp> createState() => _ScreenshotAppState();
 }
 
-/// 管理当前捕获的编辑草稿与异步反馈，过期捕获不能影响新截图。
 class _ScreenshotAppState extends State<ScreenshotApp> {
   final EditDocument _document = EditDocument();
   final FocusNode _focusNode = FocusNode();
-  // 录制目标属于当前截图草稿；应用异步查询按截图身份和目标隔离。
-  /// 工具栏下方展开的设置行，同一时刻最多一行；收起美化或比例行后已选值仍生效（#103、#106）。
   _ExpandedRow? _expandedRow;
   bool get _recordingExpanded => _expandedRow == _ExpandedRow.recording;
   bool get _liveExpanded => _expandedRow == _ExpandedRow.live;
   bool get _beautifyExpanded => _expandedRow == _ExpandedRow.beautify;
 
-  /// 本次截图锁定的选区宽高比；null 为自由，新截图重置（#106）。
   double? _cropRatio;
 
-  /// 本次截图的美化参数；null 表示不美化，新截图重置。
   BeautifyStyle? _beautify;
   CaptureTarget _recordingTarget = CaptureTarget.region;
 
-  /// 我的贴纸与其文件目录，随快照与工具栏变更通知更新；目录读取前为 null（#103）。
   List<StickerEntry> _stickers = const [];
   String? _stickerDirectory;
 
-  /// 正在拖动的贴纸：控制点与拖动开始时的位置和角度；没有拖动时为 null（#103）。
   ({BoxHandle handle, BoxFrame start})? _stickerDrag;
 
-  /// 「录制选项」的已保存值：开始前倒计时秒数与鼠标点击特效样式，随快照与工具栏变更通知更新（#129、#143）。
   int _recordingDelay = 0;
   RecordingClickEffect _recordingClickEffect = RecordingClickEffect.off;
   Map<Object?, Object?>? _recordingApplication;
@@ -138,11 +125,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   final TextEditingController _textController = TextEditingController();
   final List<Offset> _strokePoints = [];
 
-  /// 正在画的笔迹的外接矩形；逐点扩展，供拖动预览直接使用（#68）。
   Rect _strokeBounds = Rect.zero;
 
   Map<Object?, Object?> _capture = {};
-  /// 打开图片结果窗口模式（#67、#145 第 38、41 条）：非屏幕采集且带 imageScale 时使用「标题栏 · 媒体 · 52pt 底部操作栏」骨架。
   bool get _isOpenedImage =>
       _capture['canCaptureMedia'] != true && _capture['imageScale'] != null;
   final GlobalKey _editorKey = GlobalKey();
@@ -156,45 +141,32 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   String? _selectedShapeId;
   bool _shapeSelecting = false;
 
-  /// 样式弹窗打开中：Esc 关闭弹窗、回车不导出、新截图先关闭弹窗。
   bool _dialogOpen = false;
 
-  /// 工具栏「贴纸」按钮的锚点；贴纸下拉框据此定位，按钮未显示时无锚点。
   final _stickerAnchor = GlobalKey();
 
-  /// 工具栏各按钮的全局键：液态展开据此找到父级按钮的位置；按钮换行时元素随键移动，原生材料不重建（#142）。
   final _buttonKeys = <String, GlobalKey>{};
 
-  /// 正在收起的二级菜单组：parent 为原锚点工具，kind 为 'children' 或 'attributes'，cells 为原子级或属性；快速收起播完后清空（#142）。
   ({String parent, String kind, List<String> cells})? _closing;
 
-  /// 上一次构建时展开着的二级菜单（子级或属性），用于检测收起并在同锚点重新展开时原位打断。
   ({String parent, String kind, List<String> cells})? _open;
 
-  /// 上一次构建时的活动功能标识；在收起尚未播完前切到其他工具时用于立即打断旧收起组。
   String? _lastActiveId;
 
-  /// 标尺两端（截图像素）；不进入标注与撤销，切换工具或新截图后清除（#111）。
   ({Offset start, Offset end})? _ruler;
 
-  /// 取色悬停点（截图像素），指针离开画布时为 null（#111）；悬停只通知取色标签层，不重建截图页面（#68）。
   final ValueNotifier<Offset?> _picker = ValueNotifier(null);
 
-  /// 当前截图的非预乘 RGBA 源像素及其解码任务；每张截图首次取色时解码一次（#111）。
   ByteData? _sourcePixels;
   Future<void>? _pixelLoad;
 
-  /// 确认截图（回车或双击）时的动作，来自截图快照与工具栏变更通知（#111）。
   ScreenshotConfirmAction _confirmAction = ScreenshotConfirmAction.copy;
 
   ScreenshotTool _tool = ScreenshotTool.crop;
   bool _busy = false;
 
-  /// 当前按住的修饰键位掩码（不含 Shift）；0 表示未按住，此时「无」组凸起（#67）。
   int _heldModifiers = 0;
 
-  /// 当前或最近一次等待对应的工具栏功能（复制、保存、贴图、识别文字、翻译文字、长截图、录制、实时翻译）；
-  /// 等待期间该按钮外显示进度环；没有对应按钮时为 null（#142）。
   String? _busyId;
   bool _failed = false;
   bool _feedbackHovered = false;
@@ -204,8 +176,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   Timer? _feedbackTimer;
   final ValueNotifier<Rect> _toolbarRect = ValueNotifier(Rect.zero);
 
-  /// value 为响应文案（null 时清空提示），isError 为 true 时采用错误样式并保持 2s、支持悬停暂停与手动关闭，
-  /// autoDismiss 为 false 时不自动倒计时关闭；无返回值（#138、#144）。
   void _setFeedback(
     String? value, {
     bool isError = false,
@@ -219,7 +189,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _startFeedbackTimer();
   }
 
-  /// 无参数；在非悬停且允许自动关闭时启动反馈计时（错误 2s、普通 1s），无返回值。
   void _startFeedbackTimer() {
     _feedbackTimer?.cancel();
     if (_feedbackMessage == null ||
@@ -240,7 +209,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// hovered 为鼠标是否停留在错误气泡上；悬停期间暂停倒计时，移开后重新计时 2s，无返回值（#144）。
   void _onFeedbackHoverChanged(bool hovered) {
     if (_feedbackHovered == hovered) return;
     _feedbackHovered = hovered;
@@ -252,7 +220,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；手动关闭当前错误提示气泡并取消计时器，无返回值（#144）。
   void _dismissFeedback() {
     if (_feedbackMessage == null) return;
     setState(() => _setFeedback(null));
@@ -261,47 +228,32 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   String? _savedPath;
   List<_OcrOverlay> _ocrOverlays = [];
 
-  /// 发起截图翻译时裁剪框在源图中的左上角；段落块坐标相对识别用的裁剪图，加上它换算为源图像素（#138）。
   Offset _translationOrigin = Offset.zero;
 
-  /// “识别文字”得到的文字 Markdown 与二维码/条码；非空时显示结果弹窗（#108）。
   ({String text, List<RecognizedCode> codes})? _recognition;
 
-  /// 结果弹窗相对窗口中心的拖动位移。
   final ValueNotifier<Offset> _recognizedOffset = ValueNotifier(Offset.zero);
-  // 双击位置只用于松开确认后的编辑/复制，第二次按下不能提前导出。
   Offset? _doubleTapPoint;
   Offset? _dragStart;
   Offset? _dragCurrent;
-  // 拖拽预览不进历史；松手后才 add/setCrop，保证一次手势一条撤销。
   EditAnnotation? _previewAnnotation;
 
-  /// 文字工具当前颜色。
-  // 输入草稿与已选文字不写入工具默认值；只有编辑新文字的属性才更新偏好。
-  /// 文字的颜色与可选渐变；新文字与正在编辑的文字共用（#103）。
   DrawingStyle _textStyle = const DrawingStyle();
   double _fontSize = ScreenshotDefaults.fontSize;
 
-  /// 已提交且当前选中的文字标注 id。
   String? _selectedTextId;
 
-  /// 文字工具下最近一次点中的文字框及时刻，用于识别双击进入编辑。
   String? _lastTextTapId;
   DateTime _lastTextTapAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// 正在改内容的文字标注 id；新建时为 null。
   String? _editingTextId;
 
-  /// 文本框拉伸时命中的控制点；空表示在画新框。
   BoxHandle? _resizeHandle;
 
-  /// 当前窗口 DPR；工具栏字号是点，标注里存图像素。
   double _pixelRatio = 1;
 
-  /// 裁剪控制点拖动时的预览框。
   Rect? _previewCrop;
 
-  /// 单击选中裁剪框后才允许拖；未选中保持默认窗口裁剪。
   ScreenshotToolbarPreferences _toolbar = ScreenshotToolbarPreferences();
   static const _toolIds = {
     ScreenshotActions.cursor: ScreenshotTool.cursor,
@@ -316,7 +268,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   };
   bool _cropSelected = false;
 
-  /// 无参数；返回当前正在使用的可拼接功能：展开中的实时翻译或录制，否则是当前工具。
   String get _activeId => _liveExpanded
       ? ScreenshotActions.live
       : _recordingExpanded
@@ -327,16 +278,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ? ScreenshotActions.ratio
       : _toolIds.entries.firstWhere((entry) => entry.value == _tool).key;
 
-  /// 无参数；返回第二行应展示其子级的一级工具。
-  /// 当前功能是子级时为它的父级；是一级工具时为它自己；是一级动作时没有子级可展示。
   String? get _group {
     final id = _activeId;
     return _toolbar.parentOf(id) ??
         (ScreenshotActions.composable[id]!.hostsChildren ? id : null);
   }
 
-  /// actions 为当前可用动作映射；返回当前工具的属性按钮标识列表（不含功能图标与在 Finder 中显示），
-  /// 供 _syncClosing 与 _toolbarLines 共用，确保判断唯一来源。
   List<String> _attributeIds(Map<String, VoidCallback?> actions) => actions.keys
       .where(
         (id) =>
@@ -345,9 +292,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       )
       .toList();
 
-  /// reduced 为是否减少动态效果，actions 为当前工具栏动作映射；统一追踪全部二级菜单的开合。
-  /// 只要当前存在任何二级菜单（子级、属性或附加行）、开启减少动态效果，或在收起尚未播完前再次切换工具，
-  /// 均立即打断并清空 _closing，确保新二级菜单不被旧收起组挤到第三行；仅在首次切至无二级菜单的工具时保留 _closing 快速收起，无返回值（#142）。
   void _syncClosing(bool reduced, Map<String, VoidCallback?> actions) {
     final active = _activeId;
     final children = _visibleChildren;
@@ -361,7 +305,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ? (parent: _group ?? active, kind: 'attributes', cells: attributes)
         : null;
     final previous = _closing == null ? _open : null;
-    // 原子级或属性若已回到一级或其他已显示位置（配置更新），不重复参与收起动画。
     final placed = {
       for (final column in _toolbar.columns) ...column.slots,
       ...children,
@@ -372,7 +315,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     } else if (_closing != null &&
         _lastActiveId != null &&
         _lastActiveId != active) {
-      // 上一轮快速收起尚未播完，用户又切到别的无二级菜单工具时立即打断旧收起组。
       _closing = null;
     } else if (previous != null &&
         previous.cells.any((id) => !placed.contains(id))) {
@@ -382,26 +324,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _lastActiveId = active;
   }
 
-  /// 无参数；返回第二行里按配置顺序排列、未隐藏的子级功能。
   List<String> get _visibleChildren => [
     for (final id in _toolbar.children[_group] ?? const <String>[])
       if (!_toolbar.hidden.contains(id)) id,
   ];
 
-  /// 网格中表示「忙碌」的占位格，显示沙漏而不是功能按钮。
   static const _busyCell = 'screenshot-busy';
 
-  /// actions 为当前可用动作，perLine 为每行并排的组数（工具栏放得下时为 ToolbarGrid.groupsPerLine，否则为 1）；
-  /// 返回工具栏的各行（竖放为各列，由 _buildToolbar 决定方向）（#141）：
-  /// 每种修饰键组合一组 6 格；配置组按格位放置功能，隐藏与空格为 null（留出空位），没有可见功能的组不显示；
-  /// 保存后的「在访达中显示」与忙碌沙漏为最后的状态组。当前父级的子级组与当前工具的属性组（各按 6 格分组，同样并排），
-  /// 以及美化参数、比例、录制目标、应用图标等三级托盘（附加行），依次插在父级（或当前工具）所在行之后，挤开后续行；托盘位置由 _placeTrays 计算。
-  /// 行内 groups 为各组（slots 为真表示配置组，按钮显示键位），strip 为附加行的键（见 _strips），两者只有一个非空。
   List<_ToolbarLine> _toolbarLines(
     Map<String, VoidCallback?> actions,
     int perLine,
   ) {
-    // pair 把组按每行 perLine 个切成行；anchor 为托盘挂靠的按钮（分区行为 null），位置由 _placeTrays 计算。
     List<_ToolbarLine> pair(List<_ToolbarCells> groups, {String? anchor}) => [
       for (var start = 0; start < groups.length; start += perLine)
         (
@@ -459,7 +392,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         modifiers: column.modifiers,
       ));
     }
-    // 等待中的功能按钮在工具栏可见时由它自己显示进度环；否则在末尾状态组显示同样的进度环格（#142）。
     final shown = {
       for (final group in [...groups, ...inserted]) ...group.cells,
     };
@@ -476,10 +408,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ));
     }
     final lines = pair(groups);
-    // extra 记录插在第 i 行之前的行。
     final extra = <int, List<_ToolbarLine>>{};
-    // 正在收起的子级组插在它原父级所在行之后，播完液态收起后移除（#142）。
-    // 配置更新后原子级可能已在别的组里显示，同一按钮只出现一次，这些按钮不参与收起。
     final leaving = [
       for (final id in closing?.cells ?? const <String>[])
         if (!shown.contains(id)) id,
@@ -499,7 +428,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ], anchor: closing.parent),
       );
     }
-    // 子级、属性与附加行紧跟父级所在行；父级不在可见组中时排在最后（#141）。
     final after = anchorGroup == null
         ? lines.length
         : anchorGroup ~/ perLine + 1;
@@ -515,7 +443,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           caret: null,
         ),
     ]);
-    // _placeTrays 按锚点按钮位置为各托盘计算缩进与三角位置。
     return _placeTrays([
       for (var index = 0; index <= lines.length; index++) ...[
         ...?extra[index],
@@ -524,14 +451,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     ], strips);
   }
 
-  /// lines 为按顺序排好、尚未定位的各行，strips 为当前三级托盘；返回定位后的各行（#67）：
-  /// 二级托盘首个按钮中心对齐锚点按钮中心；三级托盘同样对齐，但超出最长的分区行与二级托盘时向起点平移到恰好放下；
-  /// caret 均指向锚点按钮中心。锚点不在工具栏上时托盘从行首开始，三角指向首个按钮。
   static List<_ToolbarLine> _placeTrays(
     List<_ToolbarLine> lines,
     Map<String, _Strip> strips,
   ) {
-    // centers 记录已定位各行中按钮中心沿主轴的位置。
     final centers = <String, double>{};
     void record(_ToolbarLine line) {
       if (line.strip != null) {
@@ -551,7 +474,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       for (final group in line.groups) {
         final step = tray ? ToolbarGrid.trayButton + 4 : 36.0;
         final head = tray ? 0.0 : ToolbarGrid.blockPadding + _hintRun(group);
-        // 按钮中心＝组起点＋提示区＋格位×步长＋半个按钮（步长含 4pt 间距，减去 2）。
         for (final (slot, id) in group.cells.indexed) {
           if (id == null) continue;
           centers[id] = start + head + slot * step + step / 2 - 2;
@@ -564,7 +486,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       }
     }
 
-    // hang 返回挂到锚点下方的托盘：limit 为托盘末端不超出的长度（二级托盘不限制）。
     _ToolbarLine hang(_ToolbarLine line, double limit) {
       const first = ToolbarGrid.trayPadding + ToolbarGrid.trayButton / 2;
       final center = centers[line.anchor];
@@ -603,8 +524,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return placed;
   }
 
-  /// 无参数；返回当前展开的三级托盘（键到按钮数、唤起它的按钮与托盘内的下一级锚点），顺序即插入顺序：
-  /// 美化参数、比例、录制目标、窗口应用图标；下拉按 28pt 按钮加 4pt 间距折算格数（#67）。
   Map<String, _Strip> _strips() {
     const step = ToolbarGrid.trayButton + 4;
     return {
@@ -623,7 +542,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         anchor: ScreenshotActions.ratio,
         hosts: const {},
       ),
-    // 录制目标行：当前选区、窗口、全屏三个目标、录制选项、开始与取消共 6 个按钮，「窗口」唤起应用图标托盘（#129）。
     if ((_recordingExpanded || _liveExpanded) && _tool == ScreenshotTool.crop)
       'recording-targets-row': (
         count: 6,
@@ -643,32 +561,25 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     };
   }
 
-  /// count 为一组格数；返回分区块内一组按钮沿主轴的长度：格数 × 32 与 4pt 间距。
   static double _cellsLength(int count) =>
       count * 32.0 + math.max(0, count - 1) * 4;
 
-  /// count 为一组格数；返回二级托盘内一组按钮沿主轴的长度：格数 × 28 与 4pt 间距。
   static double _trayRun(int count) =>
       count * ToolbarGrid.trayButton + math.max(0, count - 1) * 4;
 
-  /// group 为分区行的一组；返回块内修饰键提示区加间距的长度，状态组没有提示区为 0（#67）。
   static double _hintRun(_ToolbarCells group) =>
       group.modifiers == null ? 0 : ToolbarGrid.hintExtent + 4;
 
-  /// group 为分区行的一组；返回该分区块沿主轴的长度：两侧内边距、提示区与按钮（#67）。
   static double _blockLength(_ToolbarCells group) =>
       ToolbarGrid.blockPadding * 2 +
       _hintRun(group) +
       _cellsLength(group.cells.length);
 
-  /// line 为工具栏一行；返回它是否为二级托盘（子级、属性或正在收起的子级）。
   static bool _isTray(_ToolbarLine line) =>
       line.groups.isNotEmpty &&
       line.groups.first.modifiers == null &&
       line.groups.first.key != 'screenshot-status-group';
 
-  /// line 为工具栏一行，strips 为当前三级托盘；返回该行沿主轴的长度（含缩进）（#67）：
-  /// 分区行为各块长度加块间距 8；二级与三级托盘均为内边距、28pt 按钮与组间短分隔。
   static double _lineLength(_ToolbarLine line, Map<String, _Strip> strips) {
     if (line.strip != null) {
       return line.indent +
@@ -688,15 +599,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (line.groups.length - 1) * ToolbarGrid.blockGap;
   }
 
-  /// line 为工具栏一行；返回它沿交叉方向的厚度：分区行 40、二级与三级托盘 32（#67）。
   static double _lineThickness(_ToolbarLine line) =>
       line.strip != null || _isTray(line)
       ? ToolbarGrid.trayThickness
       : ToolbarGrid.blockThickness;
 
-  /// actions 为当前可用动作，perLine 为每行并排的分区块数；返回供 _EditorSurface 计算工具栏尺寸的数值（pt）：
-  /// lengths 为各行沿主轴的长度，grouped 为分区行与二级托盘中最长的一行（三级托盘可滚动，不计入），
-  /// blocks 为分区行中最长的一行，供工具栏居中对齐选区（托盘展开不改变它），thickness 为各行厚度之和加行间距（#67）。
   ({List<double> lengths, double grouped, double blocks, double thickness})
   _lineLengths(Map<String, VoidCallback?> actions, int perLine) {
     final strips = _strips();
@@ -719,7 +626,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// event 为任意键盘事件；按住的修饰键组合变化时刷新工具栏凸起分区，不拦截事件，返回 false（#67）。
   bool _onModifierKey(KeyEvent event) {
     final held = ToolbarModifiers.pressed() & ~ToolbarModifiers.shift;
     if (held != _heldModifiers && mounted) {
@@ -728,7 +634,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return false;
   }
 
-  /// 无参数；先监听再拉取快照，首张截图无需等待引擎启动通知，无返回值。
   @override
   void initState() {
     super.initState();
@@ -736,9 +641,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     HardwareKeyboard.instance.addHandler(_onModifierKey);
     widget.channel.setMethodCallHandler((call) async {
       if (call.method == MethodNames.screenshotToolbarChanged) {
-        // 当前单一截图引擎是绘图属性的唯一编辑入口；旧保存回声不能回滚较新的本地输入。
-        // 新截图从完整快照恢复参数；若未来允许并行截图引擎，需改为按字段带版本合并。
-        // 工具配置独立更新，不替换正在编辑的图片、裁剪和标注草稿。
         final map = Map<Object?, Object?>.from(call.arguments as Map);
         final next = ScreenshotToolbarPreferences.fromMap(map);
         if (mounted) {
@@ -758,17 +660,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         _replace(Map<Object?, Object?>.from(call.arguments as Map));
       } else if (call.method == MethodNames.publishScreenshotTranslation) {
         final map = Map<Object?, Object?>.from(call.arguments as Map);
-        // 原生已按捕获身份转发；换图后排队的旧快照不能覆盖新截图（#138）。
         if (!mounted || map['id'] != _capture['id']) return;
         final status = map['status'] as String;
         setState(() {
-          // 快照只含已有译文的段落；未完成或不再发送的段落不覆盖，原图可见。
           _ocrOverlays = [
             for (final item in map['overlays'] as List)
               _OcrOverlay.fromMap(item as Map, _translationOrigin),
           ];
-          // 会话状态（正在翻译、等待翻译、已完成或错误原因）统一以普通样式提示；
-          // 失败原因不自动消失，保留到下一条提示或截图关闭（#138）。
           _setFeedback(
             status.isEmpty ? null : status,
             isError: false,
@@ -777,20 +675,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         });
       } else if (call.method == MethodNames.screenshotToolbarSlot) {
         final args = call.arguments as Map;
-        // 原生转来的格位快捷键只操作当前捕获；排队中的旧按键不能切走文字输入。
         if (_capture['id'] == null ||
             _capture['id'] != args['id'] ||
             _textInputOpen) {
           return;
         }
-        // actionAt 按网格把修饰键与数字解析为功能；空格或无此列时不执行。
         final action = _toolbar.actionAt(
           args['modifiers'] as int,
           args['digit'] as int,
         );
         if (action != null) _toolbarActions()[action]?.call();
       } else if (call.method == MethodNames.deleteScreenshotSelection) {
-        // 非激活截图面板的 Delete 由原生转发；只作用于当前捕获，文字输入时留给输入框（#103）。
         final id = (call.arguments as Map)['id'];
         if (_capture['id'] == null || _capture['id'] != id || _textInputOpen) {
           return;
@@ -798,7 +693,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         _deleteSelection();
       } else if (call.method == MethodNames.nudgeScreenshotCrop) {
         final args = call.arguments as Map;
-        // 非激活截图面板的方向键由原生转发；只作用于当前捕获，文字输入时留给输入框（#106）。
         if (_capture['id'] == null ||
             _capture['id'] != args['id'] ||
             _textInputOpen) {
@@ -815,7 +709,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       } else if (call.method == MethodNames.confirmScreenshot) {
         final id = (call.arguments as Map)['id'];
         if (_capture['id'] == null || _capture['id'] != id) return;
-        // 原生键路由与 Flutter 键盘共用确认语义，过期捕获不能触发导出。
         await _confirmScreenshot();
       } else if (call.method == MethodNames.escapePressed) {
         if (_expandedRow != null) {
@@ -830,13 +723,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           Navigator.of(_editorKey.currentContext!).pop();
           return;
         }
-        // 识别结果弹窗打开时，Esc 先关闭弹窗，不关闭截图。
         if (_recognition != null) {
           setState(() => _recognition = null);
           return;
         }
         if (_textInputOpen) {
-          // Esc 结束输入并保留文字。
           _commitText();
         } else {
           await _close();
@@ -848,29 +739,24 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       }
     });
     _load();
-    // 文字内容变化时让文字框高度跟随内容。
     _textController.addListener(_fitEditingText);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
   }
 
-  /// 无参数；文档变更时刷新叠加层，无返回值。
   void _onDocumentChanged() {
     if (!mounted) return;
     setState(() {});
   }
 
-  /// value 为原生截图快照；替换图片并清空上一张草稿，无返回值。
   void _replace(Map<Object?, Object?> value) {
     if (!mounted) return;
-    // 从收到快照到新画面首帧完成的耗时（#68「性能测量边界」）。
     final firstFrame = Stopwatch()..start();
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_perfMark('screenshot-dart-first-frame', firstFrame)),
     );
     _expandedRow = null;
-    // 每次截图默认不美化、比例自由。
     _beautify = null;
     _cropRatio = null;
     unawaited(_syncLivePreview());
@@ -930,23 +816,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _resizeHandle = null;
       _cropSelected = false;
       _previewCrop = null;
-      // 新源图异步建好后才装入；此前文档为空，画面由原生冻结视图显示。
       _document.clear();
     });
     unawaited(_loadSource(value));
   }
 
-  /// value 为原生截图快照；按 BGRA 原始像素（pixels、rowBytes、width、height）建一次源图，
-  /// 仍是同一捕获时装入文档并设置初始选区，无快照像素时不加载；建图失败时显示不自动消失的错误提示，
-  /// 并把原始异常与堆栈交给 FlutterError 上报。返回装入完成的 Future（#68 批次 A）。
   Future<void> _loadSource(Map<Object?, Object?> value) async {
     final pixels = value['pixels'] as Uint8List?;
     if (pixels == null) return;
     final width = (value['width'] as num).toInt();
     final height = (value['height'] as num).toInt();
-    // 建图计时（#68「性能测量边界」）。
     final watch = Stopwatch()..start();
-    // 不用 decodeImageFromPixels：它在解码失败时既不回调也不报错，编辑器会一直停在空白等待。
     final buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
     ui.ImageDescriptor? descriptor;
     ui.Codec? codec;
@@ -962,7 +842,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       codec = await descriptor.instantiateCodec();
       image = (await codec.getNextFrame()).image;
     } catch (error, stack) {
-      // 像素来自用户打开的文件、剪贴板或长截图，尺寸不受控；失败要让用户看见，原始异常保留堆栈上报。
       if (mounted && _capture['id'] == value['id']) {
         setState(
           () => _setFeedback(
@@ -1004,24 +883,20 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           cropH,
         ),
       );
-      // 打开图片默认进入光标编辑模式且不显示整图裁剪控制点；冻结截图按原生决定是否预选中选区（#105、#145）。
       _cropSelected = !_isOpenedImage && value['cropSelected'] == true;
     });
   }
 
-  /// stage 为固定阶段名，watch 为该阶段的计时器；把毫秒耗时交给原生性能日志，返回发送完成的 Future（#68）。
   Future<void> _perfMark(String stage, Stopwatch watch) =>
       widget.channel.invokeMethod<void>(MethodNames.perfMark, {
         'stage': stage,
         'ms': watch.elapsedMicroseconds / 1000,
       });
 
-  /// 返回当前被选中的标注；文字与非文字分别保留各自交互状态。
   EditAnnotation? get _styleSelection => _document.annotations
       .where((a) => a.id == (_selectedShapeId ?? _selectedTextId))
       .firstOrNull;
 
-  /// 当前样式目标工具；选中标注优先于下一次绘制工具。
   ScreenshotTool get _styleTool {
     final selected = _styleSelection;
     if (selected == null) return _tool;
@@ -1032,12 +907,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       AnnotationKind.text => ScreenshotTool.text,
       AnnotationKind.mask => ScreenshotTool.rect,
       AnnotationKind.step => ScreenshotTool.step,
-      // 贴纸没有颜色与线宽，选中时不显示样式控件（#103）。
       AnnotationKind.sticker => ScreenshotTool.cursor,
     };
   }
 
-  /// point为原图坐标；按绘制逆序命中形状，线条使用投影距离避免整块空白被选中。
   EditAnnotation? _hitShape(Offset point) {
     final tolerance = 6 * _pixelRatio;
     for (final a in _document.annotations.reversed) {
@@ -1046,7 +919,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         continue;
       }
       if (a.kind == AnnotationKind.mask) return a;
-      // 编号标记按圆形命中（#107）。
       if (a.kind == AnnotationKind.step) {
         if ((point - a.bounds.center).distance <=
             a.bounds.width / 2 + tolerance) {
@@ -1088,8 +960,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return null;
   }
 
-  /// 无参数；打开美化背景调色盘：应用后开启或更新美化（含阴影勾选），「无背景」关闭美化，取消不改变，
-  /// 返回弹窗关闭的 Future（#103）。弹窗期间原生按键按文字输入处理，避免 HEX 数字触发工具。
   Future<void> _editBeautifyBackground() async {
     final captureId = _capture['id'];
     final current = _beautify;
@@ -1101,7 +971,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       context: _editorKey.currentContext!,
       builder: (dialogContext) => Dialog(
         child: ColorPicker(
-          // 未开启美化时默认渐变「晨曦」。
           initial:
               current?.background ??
               (color: preset.from, gradient: FillGradient(end: preset.to)),
@@ -1145,13 +1014,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 弹出独立控件；返回前保持原生按键处于文字输入作用域，避免HEX数字触发工具。
   Future<void> _editDrawingStyle({required bool color}) async {
     final editingText = _textInputOpen;
     final selected = editingText ? _previewAnnotation : _styleSelection;
     final captureId = _capture['id'];
     final tool = _styleTool;
-    // 调色盘初值：选中标注的颜色与渐变，否则为当前工具下一笔的样式（#103）。
     final initialFill =
         selected?.style.fill ??
         (tool == ScreenshotTool.rect && _styleShape.filled
@@ -1238,7 +1105,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 显示图形模式选择；返回值在同一捕获内更新选中形状或后续绘制模式。
   void _chooseShape(ShapeVariant value) {
     final selected = _styleSelection;
     if (selected?.kind == AnnotationKind.rectangle) {
@@ -1254,7 +1120,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 模式作用于当前画笔对象或后续轨迹；确认时只产生一次编辑历史。
   void _chooseBrush(ShapeMode value) {
     final selected = _styleSelection;
     if (selected?.kind == AnnotationKind.stroke) {
@@ -1265,7 +1130,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 原图外接矩形取短边为直径，保证圆形而不是椭圆。
   Rect _circleBounds(Rect bounds) => Rect.fromLTWH(
     bounds.left,
     bounds.top,
@@ -1273,7 +1137,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     math.min(bounds.width, bounds.height),
   );
 
-  /// 捕获独立快照串行保存到主设置引擎；失败可见，不静默丢弃偏好。
   void _persistDrawing() {
     final snapshot = _drawing.toMap();
     _drawingSave = _drawingSave.then((_) async {
@@ -1290,10 +1153,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// 无参数；拉取内存截图，失败保留可见错误，无返回值。
   Future<void> _load() async {
     try {
-      // 原生截图窗口总返回快照字典；为空即协议错误，直接抛出（#132）。
       final snapshot = (await widget.channel.invokeMapMethod(
         MethodNames.getScreenshot,
       ))!;
@@ -1311,7 +1172,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；展开时显示可调整的空结果窗，收起时关闭尚未开始的预览。
   Future<void> _syncLivePreview() async {
     final id = _capture['id'];
     try {
@@ -1328,7 +1188,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；同步当前录制预览身份，原生仅负责其他显示器的穿透遮罩。
   Future<void> _syncRecordingPreview() async {
     final id = _capture['id'];
     try {
@@ -1351,7 +1210,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；返回所选应用在冻结显示器上的源像素窗口矩形，null表示尚未选择应用。
   List<Rect>? get _recordingWindows {
     if ((!_recordingExpanded && !_liveExpanded) ||
         _recordingTarget != CaptureTarget.application ||
@@ -1374,7 +1232,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }).toList();
   }
 
-  /// target为录制目标身份；切换时清空应用选择，应用列表迟到后不影响其他目标，无返回值。
   Future<void> _selectRecordingTarget(CaptureTarget target) async {
     final id = _capture['id'];
     final request = ++_applicationRequest;
@@ -1424,7 +1281,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// kind为region/display/application，scrolling指定长截图；提交当前源像素选区或应用身份，失败保留文档。
   Future<void> _prepareCapture(
     CaptureTarget kind, {
     bool scrolling = false,
@@ -1446,7 +1302,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         'kind': kind.name,
         'scrolling': scrolling,
         'live': live,
-        // 只有录制按「录制选项」延时，长截图与实时翻译立即开始（#129）。
         if (!scrolling && !live) 'delay': _recordingDelay,
         if (kind == CaptureTarget.application)
           'applicationID': _recordingApplication!['applicationID'],
@@ -1458,7 +1313,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         },
       });
       if (!mounted || _capture['id'] != id) return;
-      // 成功启动由原生关闭冻结画布；失败时保留当前裁剪和标注草稿。
       setState(() => _setFeedback(null));
     } on PlatformException catch (error) {
       if (mounted && _capture['id'] == id) {
@@ -1469,8 +1323,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// delay为开始前倒计时秒数，clickEffect为鼠标点击特效样式；经主引擎设置队列保存「录制选项」，
-  /// 保存期间禁止开始录制，成功后更新本地选项，失败显示错误并保留原选项，返回保存结束的 Future（#129、#143）。
   Future<void> _saveRecordingOptions({
     required int delay,
     required RecordingClickEffect clickEffect,
@@ -1478,7 +1330,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (_busy) return;
     setState(() {
       _busy = true;
-      // 录制选项在附加行的菜单里，没有对应的工具栏按钮。
       _busyId = null;
     });
     try {
@@ -1503,12 +1354,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// message为复制成功文案；经统一反馈入口显示一秒，不改变编辑和保存状态。
   void _showCopyFeedback(String message) {
     setState(() => _setFeedback(message));
   }
 
-  /// 无参数；确认当前文字、开始选区采集或复制截图，返回该操作结束的 Future。
   Future<void> _confirmScreenshot() async {
     if (_dialogOpen) return;
     if (_busy) return;
@@ -1517,7 +1366,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           _recordingApplication == null) {
         return;
       }
-      // 与开始按钮共用校验后的采集入口，回车不能误复制截图。
       await _prepareCapture(_recordingTarget, live: _liveExpanded);
       return;
     }
@@ -1525,7 +1373,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _commitText();
       return;
     }
-    // 确认动作由设置「回车或双击确认时」决定；只有导出事务成功才结束截图，失败保留当前编辑状态（#111）。
     switch (_confirmAction) {
       case ScreenshotConfirmAction.copy:
         await _export('copy', closeAfterCopy: true);
@@ -1534,14 +1381,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// action 为 copy/save/pin/copySave（先保存再复制）；先在 Dart 合成 PNG，再把 bytes 交给原生一次，
-  /// 原生完成保存、复制、贴图与截图历史记录（#68），无返回值。
   Future<void> _export(String action, {bool closeAfterCopy = false}) async {
     final id = _capture['id'];
     if (id == null || !_document.hasImage || _busy) return;
     setState(() {
       _busy = true;
-      // 「复制并保存」只由确认动作触发，没有对应按钮。
       _busyId = switch (action) {
         'copy' => ScreenshotActions.copy,
         'save' => ScreenshotActions.save,
@@ -1552,7 +1396,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
     String? saved;
     try {
-      // 复制与保存输出美化图；贴图沿用原图，不在屏幕上钉出背景。
       final render = Stopwatch()..start();
       final bytes = await _document.renderPng(
         beautify: action == 'pin' ? null : _beautify,
@@ -1566,7 +1409,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           {
             'id': id,
             'bytes': bytes,
-            // 复制并保存由原生在保存成功后写剪贴板，图片只传一次（#68）。
             'copy': action == 'copySave',
             'name': screenshotFilename(
               DateTime.fromMillisecondsSinceEpoch(
@@ -1581,7 +1423,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           _savedPath = saved;
           _setFeedback('已保存截图');
         });
-        // 复制并保存在保存成功后继续走复制反馈与关闭（#111）。
         if (action == 'save') return;
       }
       if (action == 'pin') {
@@ -1604,11 +1445,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           setState(() => _setFeedback('贴图失败', isError: true));
           return;
         }
-        // 贴图成功即结束编辑层，只留下独立置顶图。
         await widget.channel.invokeMethod<void>(MethodNames.closeScreenshot);
         return;
       }
-      // 复制并保存已由原生写入剪贴板；只有单独复制才再交一次图片。
       if (action == 'copy') {
         await widget.channel.invokeMethod<void>(MethodNames.copyScreenshot, {
           'id': id,
@@ -1616,7 +1455,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         });
         if (!mounted || _capture['id'] != id) return;
       }
-      // 只在系统剪贴板写入成功后展示反馈；新的成功操作重新计时。
       _showCopyFeedback('已复制图片');
       if (closeAfterCopy) {
         await widget.channel.invokeMethod<void>(MethodNames.closeScreenshot);
@@ -1632,7 +1470,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；返回解码当前源图非预乘 RGBA 的任务，同一张截图只解码一次；源图尚未解码完成时不缓存，下次取色重试（#111）。
   Future<void> _sourcePixelsReady() {
     final image = _document.source;
     if (image == null) return Future.value();
@@ -1645,7 +1482,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         });
   }
 
-  /// point 为截图像素坐标；返回该点的源像素颜色，像素尚未解码时返回 null（#111）。
   Color? _colorAt(Offset point) {
     final pixels = _sourcePixels;
     if (pixels == null) return null;
@@ -1660,20 +1496,17 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// point 为悬停处的截图像素坐标，null 表示指针离开画布；更新取色悬停点并按需解码源像素，无返回值（#111）。
   void _hoverPicker(Offset? point) {
     if (point == _picker.value) return;
     _picker.value = point;
     if (point != null) unawaited(_sourcePixelsReady());
   }
 
-  /// point 为单击处的截图像素坐标；等待源像素就绪后复制该点的 `#RRGGBB` 并提示，无返回值（#111）。
   Future<void> _pickColor(Offset point) async {
     _picker.value = point;
     await _sourcePixelsReady();
     final color = _colorAt(point);
     if (!mounted || color == null) return;
-    // colorHex 把源像素格式化为大写 #RRGGBB。
     final hex = colorHex(color);
     await widget.channel.invokeMethod<void>(MethodNames.copyText, {
       'text': hex,
@@ -1681,7 +1514,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (mounted) _showCopyFeedback('已复制 $hex');
   }
 
-  /// method 为非导出系统操作；关闭/重截/授权不改剪贴板，无返回值。
   Future<void> _command(String method) async {
     setState(() {
       _busy = true;
@@ -1709,11 +1541,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；识别截图中的文字与二维码/条码并打开结果弹窗，不写剪贴板；两者都没有时只提示（#108）。
   Future<void> _showRecognizedText() async {
-    // 识别可跨越换图；等待结束后必须仍是同一捕获身份。
     final id = _capture['id'];
-    // _recognizeOcr 返回识别文字与码，失败时为 null 并已显示错误。
     final recognition = await _recognizeOcr();
     if (!mounted || _capture['id'] != id || recognition == null) return;
     if (recognition.text.trim().isEmpty && recognition.codes.isEmpty) {
@@ -1726,7 +1555,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// text 为待复制内容，feedback 为成功提示；写入剪贴板后显示一秒提示，弹窗保持打开，无返回值。
   Future<void> _copyRecognized(String text, String feedback) async {
     final id = _capture['id'];
     try {
@@ -1741,7 +1569,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// url 为码中的 http/https 链接；交给默认浏览器打开，成功后关闭截图编辑，失败时保留截图并提示，无返回值（#108）。
   Future<void> _openLink(String url) async {
     final id = _capture['id'];
     try {
@@ -1750,7 +1577,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         {'id': id, 'url': url},
       );
       if (!mounted || _capture['id'] != id) return;
-      // 冻结画面会遮住浏览器，打开后结束截图编辑。
       if (opened == true) {
         await _close();
         return;
@@ -1763,9 +1589,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；识别当前合成图的段落后交主引擎分块翻译，无返回值（#138）。
-  /// 译文经 publishScreenshotTranslation 快照逐段浮在原位置；只在识别期间置忙，
-  /// 再次点击重新识别并开始新一次翻译。截图翻译不写翻译历史。
   Future<void> _translateOcr() async {
     final id = _capture['id'];
     if (id == null || !_document.hasImage || _busy) return;
@@ -1774,19 +1597,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _busyId = ScreenshotActions.ocrTranslate;
       _setFeedback(null);
     });
-    // 识别期间请主引擎预热翻译连接，握手与本地识别并行；不等待结果（#68）。
     unawaited(
       widget.channel.invokeMethod<void>(MethodNames.prewarmTranslation),
     );
     try {
-      // 识别图只含裁剪区域；记下裁剪框左上角，快照坐标据此换算回源图像素。
       final origin = _document.cropRect.topLeft;
       final bytes = await _document.renderPng();
       final blocks = await widget.channel.invokeListMethod<Object?>(
         MethodNames.recognizeBlocks,
         {'id': id, 'bytes': bytes},
       );
-      // OCR 等待期间可能关闭或替换截图，迟到的识别结果不开始翻译（#115）。
       if (!mounted || _capture['id'] != id) return;
       if (blocks!.isEmpty) {
         setState(() {
@@ -1799,7 +1619,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         _ocrOverlays = [];
         _translationOrigin = origin;
       });
-      // 主引擎开始会话后立即返回；分批、重试与退避都由会话负责。
       await widget.channel.invokeMethod<void>(
         MethodNames.translateScreenshotBlocks,
         {'id': id, 'blocks': blocks},
@@ -1813,8 +1632,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；合成当前编辑图并请求设备识别文字与二维码/条码。
-  /// 返回 text 为 OCR Markdown（可为空），codes 为按位置排序的码；失败时显示错误并返回 null。
   Future<({String text, List<RecognizedCode> codes})?> _recognizeOcr() async {
     final id = _capture['id'];
     if (id == null || !_document.hasImage || _busy) return null;
@@ -1849,17 +1666,13 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；Esc/关闭丢弃未导出草稿，不调用 copy，无返回值。
   Future<void> _close() => _command(MethodNames.closeScreenshot);
 
-  /// imagePoint 为源图像素坐标；按当前工具开始拖拽或打开文本输入，无返回值。
   void _onDragStart(Offset imagePoint) {
-    // 输入中在文字框外按下：结束输入并保留文字，这次按下不再创建新内容。
     if (_textInputOpen) {
       _commitText();
       return;
     }
-    // 光标工具先命中贴纸：选中贴纸的控制点与旋转手柄优先，其次最上层贴纸开始移动（#103）。
     if (_tool == ScreenshotTool.cursor && !_busy) {
       final sticker = _stickerHandleAt(imagePoint);
       if (sticker != null) {
@@ -1899,7 +1712,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _selectedShapeId = null;
 
     if (!_document.hasImage || _busy || _textInputOpen) return;
-    // 标尺只记录两点，新拖动替换上一条；取色只响应单击。二者都不产生标注（#111）。
     if (_tool == ScreenshotTool.ruler) {
       setState(() => _ruler = (start: imagePoint, end: imagePoint));
       return;
@@ -1910,7 +1722,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       return;
     }
     if (_tool == ScreenshotTool.crop || _tool == ScreenshotTool.cursor) {
-      // 光标先命中文字，再选择截图范围；裁剪工具未选中时仍可重新框选。
       if (_cropSelected || _tool == ScreenshotTool.cursor) {
         final handle = _handleAt(_document.cropRect, imagePoint);
         if (handle != null) {
@@ -1952,7 +1763,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// imagePoint 为拖拽中的源图像素坐标；只更新预览，不写历史，无返回值。
   void _onDragUpdate(Offset imagePoint) {
     if (_tool == ScreenshotTool.ruler && _ruler != null) {
       setState(() => _ruler = (start: _ruler!.start, end: imagePoint));
@@ -1964,7 +1774,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       _dragCurrent = imagePoint;
       final stickerDrag = _stickerDrag;
       if (stickerDrag != null) {
-        // dragBox 统一移动、缩放与旋转；⇧ 保持比例并按 15° 吸附（#103）。
         final shift = HardwareKeyboard.instance.isShiftPressed;
         final frame = dragBox(
           stickerDrag.start,
@@ -1986,7 +1795,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       }
       if (_previewCrop != null) {
         if (_resizeHandle != null) {
-          // dragBox 统一处理移动与拉伸；锁定比例时控制点按比例调整，移动不受比例影响（#106）。
           _previewCrop = dragBox(
             BoxFrame(_document.cropRect),
             _resizeHandle!,
@@ -2008,11 +1816,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             .where((item) => item.id == _selectedTextId)
             .firstOrNull;
         if (current != null) {
-          // _fittedTextBounds 只采纳宽度变化，高度按文字内容重新计算。
           _previewAnnotation = current.copyWith(
             bounds: _fittedTextBounds(
               current,
-              // dragBox 按文字框规则移动或拉伸，限制在截图范围内。
               dragBox(
                 BoxFrame(current.bounds),
                 _resizeHandle!,
@@ -2036,9 +1842,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// 无参数；结束拖拽并提交裁剪/标注，无返回值。
   void _onDragEnd() {
-    // 贴纸拖动结束时一次写入，进入撤销历史（#103）。
     if (_stickerDrag != null) {
       final preview = _previewAnnotation;
       setState(() {
@@ -2102,7 +1906,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
     if (_tool == ScreenshotTool.text) {
       final rect = Rect.fromPoints(start, end);
-      // 拖出的宽度够大时按该宽度创建，否则按点击创建默认宽度的文字框。
       if (rect.width < ScreenshotDefaults.textBoxMinWidth * _pixelRatio) {
         _openTextInput(start);
       } else {
@@ -2133,7 +1936,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         (preview.bounds.width < 1 || preview.bounds.height < 1)) {
       return;
     }
-    // 预览共用临时 id；提交时留空，由文档分配正式 id。
     _document.addAnnotation(
       EditAnnotation(
         id: '',
@@ -2152,7 +1954,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// imagePoint 为按下位置；返回是否命中文字或开始新文字框，未命中光标操作交给截图区域。
   bool _startTextGesture(Offset imagePoint) {
     final selected = _document.annotations
         .where((item) => item.id == _selectedTextId)
@@ -2203,7 +2004,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return true;
   }
 
-  /// annotation 为已提交文字；打开输入并选中该框。
   void _openExistingText(EditAnnotation annotation) {
     setState(() {
       _selectedTextId = annotation.id;
@@ -2221,7 +2021,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// point 为源图像素；返回最上层命中的文字标注。
   EditAnnotation? _hitText(Offset point) {
     for (final annotation in _document.annotations.reversed) {
       if (annotation.kind == AnnotationKind.text &&
@@ -2232,7 +2031,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return null;
   }
 
-  /// value 为快照或工具栏变更字典；读取我的贴纸与贴纸目录，无返回值（#103）。
   void _readStickers(Map<Object?, Object?> value) {
     _stickers = [
       for (final entry in value[PreferenceKeys.stickers] as List? ?? [])
@@ -2241,7 +2039,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _stickerDirectory = value[PreferenceKeys.stickerDirectory] as String?;
   }
 
-  /// 无参数；删除选中的标注并取消选中，没有选中时保持原状，无返回值（#103）。
   void _deleteSelection() {
     final id = _selectedShapeId;
     if (id == null) return;
@@ -2249,7 +2046,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _document.removeAnnotation(id);
   }
 
-  /// 无参数；贴纸可移动的范围：截图范围，开启美化时为选区向外扩出内边距（#103）。
   Rect get _stickerArea => switch (_beautify) {
     final beautify? => _document.cropRect.inflate(
       beautify.padding * _pixelRatio,
@@ -2257,8 +2053,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     null => _imageArea,
   };
 
-  /// point 为源图像素；返回命中的贴纸与控制点：选中贴纸的控制点与旋转手柄优先，其次最上层贴纸内部（移动），
-  /// 未命中为 null（#103）。
   ({EditAnnotation annotation, BoxHandle handle})? _stickerHandleAt(
     Offset point,
   ) {
@@ -2285,11 +2079,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return null;
   }
 
-  /// 无参数；在「贴纸」按钮下方打开贴纸下拉框：选中表情或我的贴纸则放到截图上并收起，
-  /// 「管理贴纸…」请原生结束本次截图并打开设置窗口，返回弹窗关闭的 Future（#103）。
   Future<void> _openStickerPanel() async {
     final captureId = _capture['id'];
-    // 取按钮的全局矩形作为锚点；按钮未挂载（经快捷动作打开）时为 null，下拉框居中。
     final anchorBox = _stickerAnchor.currentContext?.findRenderObject();
     final anchor = anchorBox is RenderBox && anchorBox.attached
         ? anchorBox.localToGlobal(Offset.zero) & anchorBox.size
@@ -2326,8 +2117,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// size 为贴纸默认大小（pt）；stickerId 为我的贴纸 id（按需加载位图），Emoji 贴纸为 null 且 text 为表情字符。
-  /// 以默认大小放在选区中央（超出选区时等比缩小），并切到光标工具选中它，返回放置完成的 Future（#103）。
   Future<void> _placeSticker(
     Size size, {
     String? stickerId,
@@ -2343,7 +2132,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
     if (!mounted) return;
     final crop = _document.cropRect;
-    // 默认大小为屏幕点，按像素倍率换算到源图像素。
     final width = size.width * _pixelRatio;
     final height = size.height * _pixelRatio;
     final fit = math.min(
@@ -2371,7 +2159,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// bounds 为文本框或裁剪框，point 为源图像素；返回命中的控制点（八角拉伸、框内移动），未命中为 null。
   BoxHandle? _handleAt(Rect bounds, Offset point) => hitBoxHandle(
     BoxFrame(bounds),
     point,
@@ -2379,7 +2166,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     edgePad: GlassMetrics.cropEdgeHitRadius * _pixelRatio,
   );
 
-  /// 无参数；返回截图源图像素范围，作为移动与比例修正的边界。
   Rect get _imageArea => Rect.fromLTWH(
     0,
     0,
@@ -2387,7 +2173,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _document.height.toDouble(),
   );
 
-  /// start/end 为拖出新选区的起止像素点；返回自由或锁定比例的新选区，比例下不强制最小边长（由松手时判断）。
   Rect _newSelection(Offset start, Offset end) => _cropRatio == null
       ? Rect.fromPoints(start, end)
       : ratioRect(
@@ -2399,7 +2184,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           minSide: 0,
         );
 
-  /// ratio 为选择的宽高比，null 为自由；锁定时以选区左上角为锚点保持宽度调整高度，超出截图则整体缩小，无返回值（#106）。
   void _chooseRatio(double? ratio) {
     setState(() {
       _cropRatio = ratio;
@@ -2419,8 +2203,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// direction 为方向键的单位方向，large 为 ⇧ 大步长，resize 为 ⌥ 以左上角为锚点调整宽高（锁定比例时另一边按比例推算）；
-  /// 在截图或光标工具、未选中标注时移动或调整选区，返回是否已处理该按键（#106）。
   bool _nudgeCrop(
     Offset direction, {
     required bool large,
@@ -2443,7 +2225,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
     final Rect next;
     if (!resize) {
-      // 移动保持尺寸，停在截图边缘。
       next = Rect.fromLTWH(
         (crop.left + step.dx).clamp(0, bounds.width - crop.width).toDouble(),
         (crop.top + step.dy).clamp(0, bounds.height - crop.height).toDouble(),
@@ -2476,7 +2257,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return true;
   }
 
-  /// start/end 为拖拽端点；返回对应工具的预览标注，裁剪/文字返回 null。
   EditAnnotation? _draftAnnotation(Offset start, Offset end) {
     final bounds = Rect.fromPoints(start, end);
     switch (_tool) {
@@ -2501,7 +2281,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           style: _nextStyle.copyWith(
             strokeWidth: _nextStyle.strokeWidth * _pixelRatio,
           ),
-          // 预览直接引用正在追加的笔迹点（只读视图）与逐点扩展的外接矩形，松手提交时才复制（#68）。
           bounds: _strokePoints.isEmpty
               ? boundsForPoints([start, end])
               : _strokeBounds,
@@ -2514,13 +2293,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           id: 'preview',
           kind: AnnotationKind.rectangle,
           shape: _drawing.shape,
-          // 图形工具的下一笔样式已按当前形状（含填充）取得，颜色与渐变一并沿用（#103）。
           style: _nextStyle.copyWith(
             strokeWidth: _nextStyle.strokeWidth * _pixelRatio,
           ),
           bounds: _drawing.shape.circular ? _circleBounds(bounds) : bounds,
         );
-      // 编号标记以指针所在处为圆心，拖动时跟随指针（#107）。
       case ScreenshotTool.step:
         return EditAnnotation(
           id: 'preview',
@@ -2545,7 +2322,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// point 为文字框左上角；width 为拖出的宽度，缺省用默认宽度。打开就地输入。
   void _openTextInput(Offset point, {double? width}) {
     _textStyle = _drawing.styles[ScreenshotTool.text]!;
     _fontSize = _drawing.fontSize;
@@ -2572,7 +2348,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// 无参数；提交文本标注并关闭输入框；再编辑时更新同一条。
   void _commitText() {
     if (!_textController.value.composing.isCollapsed &&
         _textController.value.composing.isValid) {
@@ -2590,13 +2365,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
     if (preview == null) return;
     if (text.isEmpty) {
-      // 空的文字框不保留；正在编辑的已有文字框一并删除。
       if (editingId != null) _document.removeAnnotation(editingId);
       setState(() => _selectedTextId = null);
       return;
     }
     final fontSize = _toImageFont(_fontSize);
-    // 提交时高度按最终文字计算，导出与编辑时的换行一致。
     final bounds = Rect.fromLTWH(
       preview.bounds.left,
       preview.bounds.top,
@@ -2636,8 +2409,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     setState(() => _selectedTextId = id);
   }
 
-  /// point 为文字框左上角，width 为拖出的宽度（源图像素），缺省用默认宽度。
-  /// 返回留在图内的一行高文字框；高度之后随文字内容增长。
   Rect _newTextBox(Offset point, {double? width}) {
     final image = _document.imageSize;
     final minWidth = ScreenshotDefaults.textBoxMinWidth * _pixelRatio;
@@ -2656,8 +2427,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return Rect.fromLTWH(left, top, boxWidth, height);
   }
 
-  /// annotation 为文字标注，raw 为拖动得到的矩形，moved 表示整体移动。
-  /// 移动时原样返回；拖手柄时只采纳左右边界，宽度不小于最小宽度，高度按文字内容计算。
   Rect _fittedTextBounds(
     EditAnnotation annotation,
     Rect raw, {
@@ -2666,7 +2435,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     if (moved) return raw;
     final minWidth = ScreenshotDefaults.textBoxMinWidth * _pixelRatio;
     final width = math.max(minWidth, raw.width);
-    // 拖左侧手柄时右边界不动；宽度被最小值限制时左边界跟着收住。
     final left = raw.left == annotation.bounds.left
         ? raw.left
         : annotation.bounds.right - width;
@@ -2682,7 +2450,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// 无参数；输入中文字或字号变化后，让文字框高度等于当前内容所需高度。
   void _fitEditingText() {
     final preview = _previewAnnotation;
     if (!_textInputOpen || preview == null) return;
@@ -2704,7 +2471,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// imagePoint 为点击位置；点在裁剪框内选中，点外面取消选中。未选中时仍可拖出新框。
   void _onCropTap(Offset imagePoint) {
     final inside = _document.cropRect
         .inflate(4 * _pixelRatio)
@@ -2715,10 +2481,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     });
   }
 
-  /// imagePoint 为点击位置；在该处放置下一个编号标记并记入撤销历史，无返回值（#107）。
   void _placeStep(Offset imagePoint) {
     if (!_document.hasImage || _busy) return;
-    // _draftAnnotation 生成以点击处为圆心的编号标记，文档分配正式 id。
     final draft = _draftAnnotation(imagePoint, imagePoint)!;
     _document.addAnnotation(
       EditAnnotation(
@@ -2730,9 +2494,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// imagePoint 为点击位置；点已有文字再编辑，点空白落默认文本框。
   void _onTextTap(Offset imagePoint) {
-    // 输入中点击文字框外：结束输入并保留文字。
     if (_textInputOpen) {
       _commitText();
       return;
@@ -2763,7 +2525,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       return;
     }
     if (hit != null) {
-      // 单击选中；在双击间隔内再次点击同一文字框才进入编辑。
       final now = DateTime.now();
       final again =
           _lastTextTapId == hit.id &&
@@ -2784,7 +2545,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     _openTextInput(imagePoint);
   }
 
-  /// active为文字编辑状态；原生按键路由必须让文本编辑/输入法优先处理组合键。
   void _setTextInput(bool active) {
     _textInputOpen = active;
     unawaited(
@@ -2795,7 +2555,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// 无参数；解除原生回调与文档监听，无返回值。
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onModifierKey);
@@ -2812,7 +2571,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     super.dispose();
   }
 
-  /// context 为编辑窗口上下文；返回无边框暗色叠加编辑界面。
   @override
   Widget build(BuildContext context) {
     final renderedTool = _tool;
@@ -2834,7 +2592,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               _focusNode.requestFocus();
               return KeyEventResult.handled;
             }
-            // 识别结果弹窗打开时隔离编辑器单键与确认键，避免误删除或关闭截图（#144）。
             return KeyEventResult.ignored;
           }
           if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -2847,23 +2604,19 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               return KeyEventResult.handled;
             }
             if (_textInputOpen) {
-              // Esc 结束输入并保留文字。
               _commitText();
             } else {
               _close();
             }
             return KeyEventResult.handled;
           }
-          // 文字输入中把 ⌘Z 与方向键留给输入框；否则与工具栏共用标注历史。
           if (_textInputOpen) return KeyEventResult.ignored;
-          // Delete 删除选中的标注（#103）。
           if ((event.logicalKey == LogicalKeyboardKey.delete ||
                   event.logicalKey == LogicalKeyboardKey.backspace) &&
               _selectedShapeId != null) {
             _deleteSelection();
             return KeyEventResult.handled;
           }
-          // _nudgeCrop 按方向键微调选区；⌘/⌃ 组合与不满足条件时交给后续处理（#106）。
           final direction = _arrowDirections[event.logicalKey];
           final keyboard = HardwareKeyboard.instance;
           if (direction != null &&
@@ -2878,7 +2631,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           }
           if (event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-            // 复用导出事务：复制成功才关闭，失败保留截图供重试。
             _confirmScreenshot();
             return KeyEventResult.handled;
           }
@@ -2897,13 +2649,11 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             }
             return KeyEventResult.handled;
           }
-          // 格位快捷键：数字行物理键 1–6 加当前修饰键定位网格中的功能（#141）。
           final digit = ToolbarGrid.digits[event.physicalKey];
           final action = digit == null
               ? null
               : _toolbar.actionAt(ToolbarModifiers.pressed(), digit);
           if (action != null) {
-            // 隐藏只影响按钮；动作自身仍检查忙碌、撤销历史等执行条件。
             _toolbarActions()[action]?.call();
             return KeyEventResult.handled;
           }
@@ -3025,7 +2775,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       (_recordingExpanded || _liveExpanded) &&
                       _recordingTarget != CaptureTarget.region,
                   pixelRatio: _pixelRatio,
-                  // 画笔光标与当前粗细、颜色一致；马赛克画笔没有颜色，显示空心圆。
                   brushCursor: NativeBrushCursor(
                     diameter: math.max(
                       NativeBrushCursor.minimumDiameter,
@@ -3056,7 +2805,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   onDragStart: _onDragStart,
                   onDragUpdate: _onDragUpdate,
                   onDragEnd: _onDragEnd,
-                  // 工具切换会释放旧手势的待处理单击；不得把它当成新工具的输入。
                   onTextTap: (point) {
                     if (_tool == renderedTool) _onTextTap(point);
                   },
@@ -3105,7 +2853,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                           (_capture['displayWidth'] as num).toDouble(),
                           (_capture['displayHeight'] as num).toDouble(),
                         ),
-                  // 各行长度（含插入的子级、属性、状态组与附加行）决定工具栏尺寸（#141）。
                   lines: (perLine) => _lineLengths(actions, perLine),
                   beautify: _beautify,
                   toolbarRect: _toolbarRect,
@@ -3134,7 +2881,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                                 fontSize: 15,
                               ),
                             ),
-                            // 普通图片的解码失败不要求屏幕权限，imageScale 标识普通图片画布。
                             if (_capture['screenAccess'] == false &&
                                 _capture['imageScale'] == null) ...[
                               const SizedBox(height: 16),
@@ -3170,7 +2916,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                     ),
                   ),
                 ),
-              // 识别结果弹窗浮在截图之上，初始居中，可拖动标题区移动；在窄视口下夹紧尺寸与位移。
               if (_recognition != null)
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -3203,7 +2948,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       value.dy.clamp(-maxDy, maxDy).toDouble(),
                     );
                     return Center(
-                      // 拖动只移动弹窗，不重建截图页面与弹窗内容（#68、#144）。
                       child: ValueListenableBuilder<Offset>(
                         valueListenable: _recognizedOffset,
                         builder: (context, offset, child) =>
@@ -3236,7 +2980,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               if (hasImage && _isOpenedImage)
                 ..._buildOpenedImageTray(context, actions),
-              // 反馈气泡置于识别结果弹窗之上，保证复制或打开链接失败时不被弹窗遮挡（#144）。
               if (hasImage && _feedbackMessage != null)
                 ValueListenableBuilder<Rect>(
                   valueListenable: _toolbarRect,
@@ -3263,20 +3006,16 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// visual 为工具栏点大小；乘 DPR 得到源图像素字号。
   double _toImageFont(double visual) => visual * _pixelRatio;
 
-  /// imageFont 为源图像素字号；除以 DPR 得到屏幕点大小。
   double _toVisualFont(double imageFont) => imageFont / _pixelRatio;
 
-  /// visual 为换算后的点大小；落到最近的字号档。
   double _nearestVisualFont(double visual) {
     return ScreenshotDefaults.fontSizes.reduce(
       (a, b) => (a - visual).abs() < (b - visual).abs() ? a : b,
     );
   }
 
-  /// 把当前颜色和字号写进选中或正在编辑的文本框。
   void _applyStyleToCurrent() {
     final imageFont = _toImageFont(_fontSize);
     if (_textInputOpen && _previewAnnotation != null) {
@@ -3307,7 +3046,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       current.copyWith(
         style: _textStyle,
         fontSize: imageFont,
-        // 字号变化后高度按内容重新计算，宽度不变。
         bounds: Rect.fromLTWH(
           current.bounds.left,
           current.bounds.top,
@@ -3322,7 +3060,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// delta 为档位步进，-1 更小、+1 更大；字号只落在预设列表，并立刻作用到当前框。
   void _nudgeFontSize(int delta) {
     final selected = _textInputOpen ? _previewAnnotation : _styleSelection;
     if (selected?.kind == AnnotationKind.text) {
@@ -3343,7 +3080,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     }
   }
 
-  /// 无参数；返回当前上下文可见动作及启用回调，鼠标与快捷键共用业务入口。
   Map<String, VoidCallback?> _toolbarActions() {
     final showDrawingAttributes = !_beautifyExpanded;
     final textControls =
@@ -3358,7 +3094,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final styleTool = _styleTool;
     final brushMode = _styleSelection?.shapeMode ?? _shapeMode;
     final actions = <String, VoidCallback?>{
-      // 录制用截图选区作为目标：无论它被拼在哪里，点击都切到截图工具并展开或收起目标选择行。
       ScreenshotActions.record: _capture['canCaptureMedia'] == true
           ? () {
               setState(() {
@@ -3392,11 +3127,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ScreenshotActions.width: () => _editDrawingStyle(color: false),
       for (final entry in _toolIds.entries)
         entry.key: () => setState(() {
-          // 切换工具前结束输入并保留文字。
           if (_textInputOpen) _commitText();
           _tool = entry.value;
           _expandedRow = null;
-          // 测量结果只属于当前工具，切换后清除（#111）。
           _ruler = null;
           _picker.value = null;
           unawaited(_syncRecordingPreview());
@@ -3405,7 +3138,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           _selectedShapeId = null;
           _selectedTextId = null;
         }),
-      // 实时翻译同样使用截图选区：切到截图工具并展开或收起目标选择行。
       ScreenshotActions.live: _capture['canCaptureMedia'] == true
           ? () {
               setState(() {
@@ -3418,7 +3150,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               unawaited(_syncLivePreview());
             }
           : null,
-      // 美化只改变导出外观：展开或收起设置行，与录制、实时翻译目标行互斥。
       ScreenshotActions.beautify: _document.hasImage
           ? () {
               setState(() {
@@ -3428,7 +3159,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               unawaited(_syncLivePreview());
             }
           : null,
-      // 比例作用于截图选区：切到截图工具并展开或收起比例行，与其他设置行互斥（#106）。
       ScreenshotActions.ratio: _document.hasImage
           ? () {
               setState(() {
@@ -3465,7 +3195,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     return _busy ? actions.map((id, _) => MapEntry(id, null)) : actions;
   }
 
-  /// context 为主题上下文，actions 为当前可用编辑动作；构建打开图片结果窗口的 52pt 底部操作栏（#67、#145）。
   Widget _buildOpenedImageBar(
     BuildContext context,
     Map<String, VoidCallback?> actions,
@@ -3595,7 +3324,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     );
   }
 
-  /// context 为主题上下文，actions 为当前动作；在底部工具栏上方展开指向锚点工具的属性托盘（#67、#145）。
   List<Widget> _buildOpenedImageTray(
     BuildContext context,
     Map<String, VoidCallback?> actions,
@@ -3605,7 +3333,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     final items = <Widget>[];
     var anchorIndex = -1;
 
-    /// id 为动作标识，icon 为图标，selected 控制高亮态；追加 28pt 紧凑托盘按钮。
     void addItem(String id, IconData icon, {bool selected = false}) {
       if (items.isNotEmpty) items.add(const SizedBox(width: 4));
       items.add(
@@ -3620,7 +3347,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    /// 组间分隔线：1×16 竖线。
     void addDivider() {
       if (items.isEmpty) return;
       final dark = Theme.of(context).brightness == Brightness.dark;
@@ -3717,8 +3443,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     ];
   }
 
-  /// context 为主题来源，axis 为横/竖方向，perLine 为每行并排的组数；返回透明容器中按行排列的独立按钮（#141）：
-  /// 横放时每组 6 格从左到右、各行自上而下，竖放时每组 6 格自上而下、各列从左到右；行的内容与顺序见 _toolbarLines。
   Widget _buildToolbar(BuildContext context, Axis axis, int perLine) {
     final actions = _toolbarActions();
     final cross = axis == Axis.horizontal ? Axis.vertical : Axis.horizontal;
@@ -3740,17 +3464,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
     };
     final dark = Theme.of(context).brightness == Brightness.dark;
     final reduced = AppMotion.reduced(context);
-    // 按钮静息无底，NativeGlassButtonFeedback 提供悬停叠层、按下微缩与 2pt 强调色焦点环；
-    // 选中工具及所属父级与当前图形/画笔模式为强调色实底配前景色（#67、#144）。
-    /// id 为功能；compact 为托盘内 28pt 按钮，raised 为所在分区处于凸起态（按住对应修饰键），
-    /// digit 为凸起时右上角显示的 1–6 键位；返回带等待进度环的按钮。
     Widget button(
       String id, {
       bool compact = false,
       bool raised = false,
       int? digit,
     }) {
-      // 高亮正在使用的功能，以及子级托盘所属的父级。
       final selected =
           id == _activeId ||
           id == _group ||
@@ -3788,12 +3507,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ),
         ),
       );
-      // 底色：选中为强调色实底；凸起为浅 #FFFFFF / 深 #3D3D41 实底加 0.5pt 细边与阴影、上移 1pt；其余无底。
       final face = AnimatedContainer(
         duration: reduced ? Duration.zero : GlassMetrics.transition,
         curve: Curves.easeOutCubic,
         transform: Matrix4.translationValues(0, raised && !reduced ? -1 : 0, 0),
-        // 细边放在前景装饰里：Container 会把 decoration 的边框宽度计入内边距，按钮会变宽。
         foregroundDecoration: raised && !selected
             ? ShapeDecoration(
                 shape: RoundedSuperellipseBorder(
@@ -3829,7 +3546,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               bezel: false,
               child: iconButton,
             ),
-            // 凸起时右上角显示键位 1–6（9pt w700），提示按下哪个数字键调用。
             if (raised && digit != null)
               Positioned(
                 top: 2,
@@ -3849,14 +3565,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ],
         ),
       );
-      // 等待中的按钮外圈显示进度环，结构不随等待变化（#142）。
       final ring = BusyRing(
         active: _busy && id == _busyId,
         color: NativeGlassTheme.accentOf(context),
         radius: radius + MotionMetrics.busyRingOutset,
         child: face,
       );
-      // 贴纸按钮挂锚点，供贴纸下拉框定位。
       final anchored = id == ScreenshotActions.sticker
           ? KeyedSubtree(key: _stickerAnchor, child: ring)
           : ring;
@@ -3866,12 +3580,9 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    // 工具栏没有整体背景板：分区块与托盘各自为实底块，分区块浅 #FBFBFC / 深 #2A2A2D，
-    // 托盘浅 #ECECED / 深 #1D1D1F，均带 0.5pt 描边与 0 4 12 / 20% 黑阴影（#67）。
     final blockColor = dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC);
     final trayColor = dark ? const Color(0xFF1D1D1F) : const Color(0xFFECECED);
 
-    /// color 为实底色，radius 为圆角；返回分区块与托盘共用的实底装饰。
     ShapeDecoration panel(Color color, double radius) => ShapeDecoration(
       color: color,
       shape: RoundedSuperellipseBorder(
@@ -3892,7 +3603,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ],
     );
 
-    /// child 为块内内容；返回分区块：实底、圆角 12、内边距 4（#67）。
     Widget block(Widget child) => DecoratedBox(
       decoration: panel(blockColor, ToolbarGrid.blockRadius),
       child: Padding(
@@ -3901,9 +3611,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ),
     );
 
-    /// group 为一组格，compact 为托盘内 28pt 尺寸；返回沿工具栏方向排列的格子：
-    /// 配置组按住对应修饰键时凸起并显示键位（未按修饰键时「无」组凸起），按住其他组合时降到 40%；
-    /// 插入的子级与属性组由 LiquidSplit 从锚点按钮液态展开（#67、#142）。
     Widget groupOf(_ToolbarCells group, {bool compact = false}) {
       final size = compact ? ToolbarGrid.trayButton : 32.0;
       final raised =
@@ -3927,7 +3634,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               digit: group.modifiers == null ? null : slot + 1,
             ),
       ];
-      // 子级组、工具属性组统一由 LiquidSplit 从锚点按钮液态分裂展开；收起中的组保持同一组件键以原位反向快速收回（#67、#142）。
       final isClosing = group.key.startsWith('screenshot-closing-group-');
       final isChildren = group.key.startsWith('screenshot-children-group-');
       final isAttributes = group.key.startsWith('screenshot-attributes-group-');
@@ -3946,7 +3652,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             : 'attributes';
         final chunkIndex = group.key.split('-').last;
         return LiquidSplit(
-          // 同锚点同类型二级菜单打开与收起复用同一状态键，实现展开中途原位快速打断或反向重开。
           key: ValueKey('liquid-$parent-$kind-$chunkIndex'),
           flexKey: Key(group.key),
           axis: axis,
@@ -3966,7 +3671,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         spacing: 4,
         children: cells,
       );
-      // 末尾状态组为无提示区的分区块，带弹簧入场。
       if (group.modifiers == null) {
         return BouncyPresence(
           key: ValueKey('presence-${group.key}'),
@@ -3974,12 +3678,10 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           child: block(row),
         );
       }
-      // 分区块先放修饰键提示（沿主轴 24pt、11pt w600 次要色，放不下时等比缩小），「无」分区为键盘图标（#67）。
       final label = ToolbarModifiers.label(group.modifiers!);
       final hint = SizedBox(
         width: axis == Axis.horizontal ? ToolbarGrid.hintExtent : 32,
         height: axis == Axis.horizontal ? 32 : ToolbarGrid.hintExtent,
-        // 「无」分区没有修饰键符号，显示 14pt 键盘图标，表示直接按数字键（#67）。
         child: label.isEmpty
             ? Center(
                 child: LineIcon(
@@ -4005,7 +3707,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               ),
       );
-      // 按住某个修饰键组合时，其余分区块（含「无」）的提示与按钮降到 40%，块底保持不变。
       return block(
         AnimatedOpacity(
           opacity: _heldModifiers != 0 && !raised ? 0.4 : 1,
@@ -4020,7 +3721,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    /// label 为提示与可访问名称，icon 为图标，selected 为选择状态；返回复用二级托盘样式的 28pt/r7 按钮（无逐按钮材料底）。
     Widget captureButton(
       String label,
       Widget icon,
@@ -4073,11 +3773,8 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    // stripSpecs 为当前三级托盘，与 _toolbarLines 同源，唤起按钮从这里取。
     final stripSpecs = _strips();
 
-    /// key 为三级托盘身份、children 为按钮；返回从唤起按钮液态展开的可滚动按钮行，
-    /// 全部三级托盘均复用 LiquidSplit 液态展开组件（#67 第 10 条、#142）。
     Widget captureRow(String key, List<Widget> children) {
       final anchorId = stripSpecs[key]!.anchor;
       return LiquidSplit(
@@ -4098,7 +3795,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         borderRadius: BorderRadius.circular(ToolbarGrid.trayButtonRadius),
       ),
     );
-    // 美化设置：背景调色盘按钮、内边距与圆角下拉，排在贴纸等子级之后同一行；未开启美化时下拉不可用（#103）。
     final beautifyControls = <Widget>[
       if (_beautifyExpanded) ...[
         captureButton(
@@ -4162,14 +3858,12 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ),
       ],
     ];
-    // 三级托盘（附加行）内容按键取用，键与条件和 _strips 一致，位置由 _toolbarLines 与 _placeTrays 决定。
     final strips = <String, Widget>{
       if (beautifyControls.isNotEmpty)
         'screenshot-beautify-row': captureRow(
           'screenshot-beautify-row',
           beautifyControls,
         ),
-      // 比例行：自由与固定宽高比，锁定后框选与调整保持比例（#106）。
       if (_expandedRow == _ExpandedRow.ratio)
         'ratio-row': captureRow('ratio-row', [
           for (final preset in CropMetrics.ratios)
@@ -4197,7 +3891,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 () => _selectRecordingTarget(target.key),
                 selected: _recordingTarget == target.key,
               );
-              // 窗口目标按钮同时作为应用列表行的液态展开锚点。
               return target.key == CaptureTarget.application
                   ? KeyedSubtree(
                       key: _buttonKeys.putIfAbsent(
@@ -4209,7 +3902,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                   : button;
             })(),
           if (!_liveExpanded)
-            // 录制选项：延时单选与点击特效单选，选择即保存并关闭菜单（#129、#143）。
             MenuAnchor(
               style: NativeGlassMenuPanel.anchorStyle,
               menuChildren: [
@@ -4231,7 +3923,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                             ? '点击特效：关闭'
                             : effect.label,
                         checked: effect == _recordingClickEffect,
-                        // 应用录制不含指针，不显示点击特效。
                         onPressed: _recordingTarget == CaptureTarget.application
                             ? null
                             : () => _saveRecordingOptions(
@@ -4309,7 +4000,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         ]),
     };
     final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
-    // separator 返回二级托盘内组间的分隔线：沿交叉方向 1pt×16、两侧各 4（#67）。
     Widget separator() => Padding(
       padding: axis == Axis.horizontal
           ? const EdgeInsets.symmetric(horizontal: ToolbarGrid.traySeparatorGap)
@@ -4323,8 +4013,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       ),
     );
 
-    // tray 返回挂在锚点按钮下方（竖放为右侧）的托盘：二级与三级托盘共用 28pt 按钮、r9；
-    // 起点缩进与三角位置由 _placeTrays 计算，顶部（竖放为左侧）4pt 高、12pt 宽、同托盘底色的三角指向锚点按钮中心（#67）。
     Widget tray(_ToolbarLine row) {
       final strip = row.strip != null;
       final children = <Widget>[];
@@ -4362,7 +4050,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           painter: _TrayCaretPainter(color: trayColor, axis: axis),
         ),
       );
-      // 三级托盘可能比剩余长度长，用 Flexible 限制在工具栏内，由内部 LiquidSplit 滚动。
       return Flex(
         direction: axis,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4378,8 +4065,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
       );
     }
 
-    // 工具栏没有整体背景板：各行沿交叉方向依次排列、行间距 4，分区行为并排的分区块（块间距 8），
-    // 托盘按 _placeTrays 的缩进挂在锚点下方；各行厚度见 _lineThickness（#67、#141）。
     return Flex(
       key: const Key('screenshot-toolbar'),
       direction: cross,
@@ -4404,7 +4089,6 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
   }
 }
 
-/// 源图、裁剪框、标注与工具栏的叠加绘制面。
 class _EditorSurface extends StatefulWidget {
   const _EditorSurface({
     super.key,
@@ -4452,15 +4136,11 @@ class _EditorSurface extends StatefulWidget {
     this.selectedShape,
   });
 
-  /// 长图来源像素倍率；为空表示整屏冻结画布，非空时保留选区逻辑宽度。
   final bool openedImage;
   final double? imageScale;
   final Rect? toolbarSafeArea;
   final Size? displaySize;
 
-  /// perLine 为每行并排的分区块数；返回工具栏各行（竖放为各列）沿主轴的长度（pt，含二级与三级托盘及状态组，
-  /// 空表示没有可见按钮）、分区行与二级托盘中最长一行的长度、分区行中最长一行的长度（居中用），以及各行厚度之和加行间距，
-  /// 用于决定工具栏尺寸与是否改为每行一块（#67、#141）。
   final ({
     List<double> lengths,
     double grouped,
@@ -4470,7 +4150,6 @@ class _EditorSurface extends StatefulWidget {
   Function(int perLine)
   lines;
 
-  /// 本次截图的美化参数；非 null 时在选区外预览背景与阴影。
   final BeautifyStyle? beautify;
   final ValueNotifier<Rect> toolbarRect;
   final MethodChannel channel;
@@ -4481,12 +4160,10 @@ class _EditorSurface extends StatefulWidget {
   final EditAnnotation? previewAnnotation;
   final Rect? previewCrop;
 
-  /// 应用预览窗口的源像素矩形；null表示使用普通区域遮罩。
   final List<Rect>? recordingWindows;
   final bool recordingPreview;
   final double pixelRatio;
 
-  /// 画笔工具在画布上使用的光标。
   final MouseCursor brushCursor;
   final bool busy;
   final bool textInputOpen;
@@ -4501,15 +4178,12 @@ class _EditorSurface extends StatefulWidget {
   final ValueChanged<Offset> onTextTap;
   final ValueChanged<Offset> onCropTap;
 
-  /// 编号工具下的单击位置（源图像素）；放置编号标记（#107）。
   final ValueChanged<Offset> onStepTap;
 
-  /// 标尺两端、取色悬停点（截图像素，变化时只重建取色标签层）与按坐标取源像素颜色；由 MeasureLayer 显示（#111）。
   final ({Offset start, Offset end})? ruler;
   final ValueListenable<Offset?> picker;
   final Color? Function(Offset point) pickerColor;
 
-  /// 取色工具下的悬停位置（截图像素，离开画布为 null）与单击位置（#111）。
   final ValueChanged<Offset?> onPickerHover;
   final ValueChanged<Offset> onPickerTap;
   final bool cropSelected;
@@ -4517,22 +4191,18 @@ class _EditorSurface extends StatefulWidget {
   final VoidCallback onDoubleTap;
   final ValueChanged<Offset> onDoubleTapDown;
 
-  /// axis 由可用空白决定，perLine 为每行并排的组数；返回具有相应方向的工具栏。
   final Widget Function(BuildContext context, Axis axis, int perLine)
   toolbarBuilder;
   final List<_OcrOverlay> ocrOverlays;
 
-  /// 无参数；每张图片独立管理滚动位置，替换图片不会继承旧长图偏移。
   @override
   State<_EditorSurface> createState() => _EditorSurfaceState();
 }
 
-/// 长图滚动仅改变预览坐标，编辑与导出始终使用原图像素。
 class _EditorSurfaceState extends State<_EditorSurface> {
   final _vertical = ScrollController();
   final _horizontal = ScrollController();
 
-  /// 无参数；释放两轴预览滚动资源。
   @override
   void dispose() {
     _vertical.dispose();
@@ -4540,7 +4210,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
     super.dispose();
   }
 
-  /// context 为布局上下文；返回按图片像素映射手势的编辑画布。
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -4548,7 +4217,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
           final imageSize = widget.document.imageSize;
-          // 长图与打开图片以采集倍率恢复逻辑尺寸；打开图片四周保留 24pt 衬底边距并居中对齐（#67、#145）。
           final imageScale = widget.imageScale;
           final resultSize = imageScale == null ? null : imageSize / imageScale;
           final canvasPad = widget.openedImage
@@ -4576,9 +4244,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   resultSize.width,
                   resultSize.height,
                 );
-          // 只按已提交选区定位；拖动过程中保持同一个图片坐标系。
-          // 工具栏没有整体背景板：长度取最长一行，至少容纳一个按钮；按分区行长度居中对齐选区；厚度为各行厚度之和加行间距（#67、#141）。
-          // placeFor 按各行长度与总厚度计算图片与工具栏位置。
           ScreenshotEditorLayout placeFor(
             ({
               List<double> lengths,
@@ -4616,7 +4281,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
           var perLine = ToolbarGrid.groupsPerLine;
           var lines = widget.lines(perLine);
           var layout = placeFor(lines);
-          // 可用长度放不下两组并排时改为每行一组重新布局（#141）。
           final length = layout.axis == Axis.horizontal
               ? layout.toolbar.width
               : layout.toolbar.height;
@@ -4625,7 +4289,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             lines = widget.lines(perLine);
             layout = placeFor(lines);
           }
-          // 工具栏已提升至根 Stack，同步最新工具栏矩形供反馈气泡锚定（#144）。
           final toolbarRect = layout.toolbar;
           if (widget.toolbarRect.value != toolbarRect) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -4650,7 +4313,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               fitted,
             );
           }
-          // local 相对已定位的图片子组件，不能再减 fitted 原点。
           Offset toImage(Offset local) {
             final x = (local.dx / fitted.width) * imageSize.width;
             final y = (local.dy / fitted.height) * imageSize.height;
@@ -4660,7 +4322,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
             );
           }
 
-          // 文字、编号、取色与标尺的连续单击不能被识别为双击复制，也不等待双击超时。
           final singleTapTool = const {
             ScreenshotTool.text,
             ScreenshotTool.step,
@@ -4669,14 +4330,12 @@ class _EditorSurfaceState extends State<_EditorSurface> {
           }.contains(widget.tool);
           final canvasContent = MouseRegion(
             opaque: false,
-            // 取色工具悬停时报告指针处的截图像素（#111）。
             onHover: widget.tool == ScreenshotTool.eyedropper
                 ? (event) => widget.onPickerHover(toImage(event.localPosition))
                 : null,
             onExit: (_) => widget.onPickerHover(null),
             child: GestureDetector(
               key: const Key('screenshot-canvas'),
-              // 裁剪起点就是按下点，不能被手势识别阈值移动。
               dragStartBehavior: DragStartBehavior.down,
               behavior: HitTestBehavior.opaque,
               onDoubleTapDown:
@@ -4701,7 +4360,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               onTapUp: !widget.busy
                   ? (details) {
                       final point = toImage(details.localPosition);
-                      // 输入中的点击只用于结束输入，由文字入口统一处理。
                       if (widget.textInputOpen) {
                         widget.onTextTap(point);
                       } else if (widget.tool == ScreenshotTool.crop) {
@@ -4719,14 +4377,12 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 直接绘制文档源图，与马赛克预览及导出共用。
                   RawImage(
                     image: widget.document.source,
                     fit: BoxFit.fill,
                     filterQuality: FilterQuality.none,
                     isAntiAlias: false,
                   ),
-                  // 标注绘制层单独成层，页面其他部分重绘时不连带重画标注（#68）。
                   RepaintBoundary(
                     child: CustomPaint(
                       painter: _OverlayPainter(
@@ -4741,7 +4397,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                  // 测量线与取色标签在标注之上，不进入导出（#111）；取色悬停只重建本层（#68）。
                   ValueListenableBuilder<Offset?>(
                     valueListenable: widget.picker,
                     builder: (context, picker, _) =>
@@ -4759,7 +4414,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                   ...[
                     for (final overlay in widget.ocrOverlays)
                       Positioned.fromRect(
-                        // 按段落位置保持身份：流式追加的译文只显影新到达的字（#142）。
                         key: ValueKey(overlay.rect),
                         rect: mapRectToFitted(
                           overlay.rect,
@@ -4769,7 +4423,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         child: IgnorePointer(
                           child: ColoredBox(
                             color: const Color(0xCCFFFFFF),
-                            // _FitText 把整段译文换行缩进浮层矩形（#67 截图译文浮层）。
                             child: _FitText(overlay.text),
                           ),
                         ),
@@ -4783,7 +4436,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
           return _CornerCursor(
             cursorFor: (local) {
               if (widget.textInputOpen) return SystemMouseCursors.text;
-              // 拖动过程中维持起始控制点方向，不因越过中线变成移动光标。
               if (widget.activeHandle != null) {
                 return cursorForEditHandle(
                   widget.activeHandle,
@@ -4793,7 +4445,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               }
               final point = toImage(local - fitted.topLeft);
               final pad = GlassMetrics.cropHandleHitRadius * widget.pixelRatio;
-              // 光标与文字先检查选中文字的控制点，再检查最上层文字，避免穿透到截图。
               if (widget.tool == ScreenshotTool.cursor ||
                   widget.tool == ScreenshotTool.text) {
                 final box =
@@ -4862,7 +4513,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
               if (widget.tool == ScreenshotTool.brush) {
                 return widget.brushCursor;
               }
-              // 取色与标尺需要对准像素（#111）。
               if (widget.tool == ScreenshotTool.eyedropper ||
                   widget.tool == ScreenshotTool.ruler) {
                 return SystemMouseCursors.precise;
@@ -4919,7 +4569,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 打开图片使用中性衬底且无外部暗角遮罩；冻结截图的选区外暗角保留在独立层（#67、#145）。
                 if (!widget.openedImage)
                   IgnorePointer(
                     child: CustomPaint(
@@ -4929,7 +4578,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                         recordingPreview: widget.recordingPreview,
                         cropDisplay: cropDisplay,
                         beautify: widget.beautify,
-                        // 显示坐标中每个屏幕点的长度，使预览内边距与导出一致。
                         beautifyUnit:
                             fitted.width / (imageSize.width / widget.pixelRatio),
                         showHandles: widget.cropSelected,
@@ -4941,7 +4589,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 选区像素尺寸标签：冻结截图显示在选区左上角；打开图片改由原生标题栏显示尺寸（#67、#145）。
                 if (!widget.openedImage &&
                     (widget.tool == ScreenshotTool.crop ||
                         widget.tool == ScreenshotTool.cursor) &&
@@ -5025,7 +4672,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                               focusNode: widget.textFocus,
                               autofocus: true,
                               maxLines: null,
-                              // 回车是换行；结束输入靠点击框外、Esc 或切换工具。
                               textInputAction: TextInputAction.newline,
                               style: TextStyle(
                                 color:
@@ -5042,7 +4688,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                                     imageSize.width,
                               ),
                               cursorColor: NativeGlassTheme.accentOf(context),
-                              // 无边框无内边距：输入时的文字位置与提交后一致，边框由文字框描边绘制。
                               decoration: InputDecoration.collapsed(
                                 hintText: '输入文字',
                                 hintStyle: TextStyle(
@@ -5057,9 +4702,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
                       ),
                     ),
                   ),
-                // 拖动时不让工具栏遮住正在变化的选区，但保持挂载以保留 LiquidSplit/BouncyPresence 状态、避免松手后重播（#142）；
-                // Visibility 默认 maintainSize 为 false（底层 Offstage），隐藏时不绘制也不接收点击。
-                // 工具栏叠在文字输入框之上：网格工具栏较厚，放进选区内时仍要可以点击（#141）。
                 if (!widget.openedImage && lines.lengths.isNotEmpty)
                   Positioned.fromRect(
                     rect: layout.toolbar,
@@ -5099,7 +4741,6 @@ class _EditorSurfaceState extends State<_EditorSurface> {
   }
 }
 
-/// cursorFor 根据本地坐标返回四角拉伸光标；child 为画布手势层。
 class _CornerCursor extends StatefulWidget {
   const _CornerCursor({required this.cursorFor, required this.child});
 
@@ -5110,26 +4751,22 @@ class _CornerCursor extends StatefulWidget {
   State<_CornerCursor> createState() => _CornerCursorState();
 }
 
-/// 维护当前鼠标光标；按子画布指针位置切换拉伸光标，离开时恢复默认。
 class _CornerCursorState extends State<_CornerCursor> {
   MouseCursor _cursor = SystemMouseCursors.basic;
   Offset? _position;
 
-  /// oldWidget 为先前画布状态；裁剪完成时鼠标可能静止，仍需刷新方向。
   @override
   void didUpdateWidget(covariant _CornerCursor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_position != null) _cursor = widget.cursorFor(_position!);
   }
 
-  /// position 为画布局部位置；保存悬停位置并按当前裁剪状态更新系统光标。
   void _update(Offset position) {
     _position = position;
     final next = widget.cursorFor(position);
     if (next != _cursor) setState(() => _cursor = next);
   }
 
-  /// context 为画布上下文；鼠标悬停与按住移动均使用同一命中规则。
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -5151,7 +4788,6 @@ class _CornerCursorState extends State<_CornerCursor> {
   }
 }
 
-/// box 为显示坐标下的文本框，accent 为系统强调色（控制点描边）；画出可拉伸控制点。
 class _TextBoxPainter extends CustomPainter {
   _TextBoxPainter({required this.box, required this.accent});
 
@@ -5172,7 +4808,6 @@ class _TextBoxPainter extends CustomPainter {
       oldDelegate.box != box || oldDelegate.accent != accent;
 }
 
-/// 选区外遮罩；只负责变暗，不参与命中。
 class _DimPainter extends CustomPainter {
   _DimPainter({
     required this.cropDisplay,
@@ -5184,7 +4819,6 @@ class _DimPainter extends CustomPainter {
     this.beautifyUnit = 1,
   });
 
-  /// 美化参数与显示坐标中每屏幕点的长度；非 null 时在选区外画出背景与阴影预览。
   final BeautifyStyle? beautify;
   final double beautifyUnit;
 
@@ -5194,7 +4828,6 @@ class _DimPainter extends CustomPainter {
   final Rect cropDisplay;
   final bool showHandles;
 
-  /// 系统强调色：窗口录制预览的边框与控制点描边（#142）。
   final Color accent;
 
   @override
@@ -5213,7 +4846,6 @@ class _DimPainter extends CustomPainter {
     }
     final shade = Path.combine(PathOperation.difference, outer, visible);
     canvas.drawPath(shade, Paint()..color = const Color(0x99000000));
-    // paintBeautifyBackdrop 与导出共用，预览即导出外观；窗口录制预览不显示美化。
     if (beautify != null && windows == null) {
       paintBeautifyBackdrop(canvas, cropDisplay, beautify!, unit: beautifyUnit);
     }
@@ -5229,7 +4861,6 @@ class _DimPainter extends CustomPainter {
     paintHandles(canvas);
   }
 
-  /// canvas为显示坐标画布；绘制边框及八个控制点，不绘制遮罩，文本框共用。
   void paintHandles(Canvas canvas) {
     final border = Paint()
       ..color = recordingPreview ? accent : Colors.white
@@ -5272,9 +4903,7 @@ class _DimPainter extends CustomPainter {
       oldDelegate.accent != accent;
 }
 
-/// 在源图坐标系绘制已提交标注与拖拽预览。
 class _OverlayPainter extends CustomPainter {
-  /// annotations 为已提交标注，previewAnnotation 为拖拽中预览，imageSize 为源图像素尺寸，accent 为当前强调色（#144）。
   _OverlayPainter({
     required this.annotations,
     required this.previewAnnotation,
@@ -5293,7 +4922,6 @@ class _OverlayPainter extends CustomPainter {
   final ui.Image? sourceImage;
   final EditAnnotation? selectedShape;
 
-  /// 贴纸位图（#103）与源图像素对屏幕点的倍率（用于旋转手柄距离）。
   final Map<String, ui.Image> stickers;
   final double pixelRatio;
 
@@ -5304,10 +4932,8 @@ class _OverlayPainter extends CustomPainter {
     canvas.save();
     canvas.scale(scaleX, scaleY);
     final draggingId = previewAnnotation?.id;
-    // stepNumbers 按标注顺序编号，与导出一致；拖动中的新标记排在最后（#107）。
     final numbers = stepNumbers(annotations);
     for (final annotation in annotations) {
-      // 拖动中只画预览，避免文字留在原地、松手再瞬移。
       if (draggingId != null &&
           draggingId != 'preview' &&
           annotation.id == draggingId) {
@@ -5330,7 +4956,6 @@ class _OverlayPainter extends CustomPainter {
         stickers: stickers,
       );
     }
-    // 拖动中的贴纸以预览为准，选中框跟随预览（#103）。
     final selected = previewAnnotation?.id == selectedShape?.id
         ? previewAnnotation
         : selectedShape;
@@ -5348,8 +4973,6 @@ class _OverlayPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// canvas 为源图坐标画布，sticker 为选中贴纸，stroke 为 1pt 蓝色描边，scale 为源图到屏幕的缩放；
-  /// 在贴纸旋转后的坐标系中画外框、八个控制点与上方旋转手柄（#103）。
   void _paintStickerSelection(
     Canvas canvas,
     EditAnnotation sticker,
@@ -5358,7 +4981,6 @@ class _OverlayPainter extends CustomPainter {
   ) {
     final rect = sticker.bounds;
     final center = rect.center;
-    // 控制点 8pt、旋转手柄直径 10pt，按屏幕尺寸换算到源图坐标。
     final handle = GlassMetrics.cropHandle / scale;
     final knob = StickerMetrics.rotateHandle / scale;
     final knobCenter = Offset(
@@ -5397,7 +5019,6 @@ class _OverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _OverlayPainter oldDelegate) {
-    // annotations 只在文档变更时换新对象（#68）；贴纸位图在加入对应标注前载入，随标注变更一起重绘。
     return oldDelegate.annotations != annotations ||
         oldDelegate.previewAnnotation != previewAnnotation ||
         oldDelegate.selectedShape != selectedShape ||
@@ -5408,13 +5029,8 @@ class _OverlayPainter extends CustomPainter {
   }
 }
 
-/// 截图工具栏的一组格：key 为组身份，cells 为按顺序的功能（null 为空位），
-/// modifiers 为配置组的修饰键位掩码（无修饰为 0），插入的子级、属性与状态组为 null（#141）。
 typedef _ToolbarCells = ({String key, List<String?> cells, int? modifiers});
 
-/// 截图工具栏的一行（竖放为一列）：groups 为并排的组，strip 为附加行的键，两者只有一个非空；
-/// anchor 为托盘挂靠的按钮标识（分区行为 null）；indent 为沿主轴的起点缩进，托盘用它对齐锚点按钮，分区行为 0；
-/// caret 为托盘三角中心距托盘起点的距离，分区行为 null（#141、#67）。
 typedef _ToolbarLine = ({
   List<_ToolbarCells> groups,
   String? strip,
@@ -5423,16 +5039,11 @@ typedef _ToolbarLine = ({
   double? caret,
 });
 
-/// 截图工具栏的一条三级托盘（附加行）：count 为按钮数，anchor 为唤起它的按钮标识，
-/// hosts 为托盘内还会唤起下一级托盘的按钮标识到其格位（从 0 起）（#67）。
 typedef _Strip = ({int count, String anchor, Map<String, int> hosts});
 
-/// 一块截图译文浮层；text 为段落译文，rect 为该段在源图中的像素矩形（#138）。
 class _OcrOverlay {
   const _OcrOverlay({required this.text, required this.rect});
 
-  /// map 为会话快照的盖层 {text, x, y, width, height}，坐标相对识别用的裁剪图；
-  /// origin 为发起翻译时的裁剪框左上角。返回换算到源图像素的浮层。
   factory _OcrOverlay.fromMap(Map<Object?, Object?> map, Offset origin) =>
       _OcrOverlay(
         text: map['text'] as String,
@@ -5448,14 +5059,11 @@ class _OcrOverlay {
   final Rect rect;
 }
 
-/// 截图译文浮层的文字样式：黑色半粗体，字号由 fitOverlayFontSize 决定（#67 截图译文浮层）。
 const _overlayTextStyle = TextStyle(
   color: Colors.black,
   fontWeight: FontWeight.w600,
 );
 
-/// text 为段落译文，box 为浮层矩形（逻辑像素），style 为不含字号的文字样式。
-/// 返回整段水平居中、按词换行后高度不超过矩形的最大字号：在 1 至矩形高度之间二分查找，精度 0.5（#67）。
 double fitOverlayFontSize({
   required String text,
   required Size box,
@@ -5476,7 +5084,6 @@ double fitOverlayFontSize({
         style: style.copyWith(fontSize: size),
       )
       ..layout(maxWidth: box.width);
-    // 超长单词按字符折行，宽度不会超出矩形，只需比较高度。
     if (painter.height <= box.height + 0.5) {
       best = size;
       low = size;
@@ -5488,22 +5095,17 @@ double fitOverlayFontSize({
   return best;
 }
 
-/// 浮层内的整段译文：水平居中、按词换行、整体垂直居中，字号取能放进浮层的最大值（#67 截图译文浮层）。
 class _FitText extends StatelessWidget {
   const _FitText(this.text);
 
-  /// 段落译文。
   final String text;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final box = constraints.biggest;
-      // 宽或高不超过 1pt 时只画底色。
       if (box.width <= 1 || box.height <= 1) return const SizedBox.shrink();
-      // 测量与绘制使用同一合并样式，字体族与 Text 实际渲染一致。
       final style = DefaultTextStyle.of(context).style.merge(_overlayTextStyle);
-      // CharReveal 让新到达的译文逐字显影；字号按完整文字计算，显影不改变排版（#142）。
       return Center(
         child: CharReveal(
           text: text,
@@ -5521,7 +5123,6 @@ class _FitText extends StatelessWidget {
   );
 }
 
-/// 托盘指向锚点按钮的三角：横放时尖朝上，竖放时尖朝左；color 为托盘底色（#67）。
 class _TrayCaretPainter extends CustomPainter {
   const _TrayCaretPainter({required this.color, required this.axis});
 

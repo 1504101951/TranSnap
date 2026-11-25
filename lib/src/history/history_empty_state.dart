@@ -4,11 +4,7 @@ import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/widgets/native_glass.dart';
 
-/// 历史窗口三个分段共用的空状态视图（#67「历史空状态」）：
-/// 列表区居中依次展示 32pt 线性图标、15/22 粗体标题与 13/18 次要说明（可选内嵌键帽快捷键）。
 class HistoryEmptyState extends StatelessWidget {
-  /// icon 为 32pt 线性图标，title 为 15/22 粗体标题，prefix 为说明前缀（或完整说明），
-  /// shortcutTokens 为可选键帽按键列表，suffix 为键帽后的说明后缀。
   const HistoryEmptyState({
     super.key,
     required this.icon,
@@ -24,7 +20,6 @@ class HistoryEmptyState extends StatelessWidget {
   final List<String> shortcutTokens;
   final String suffix;
 
-  /// context 提供明暗文字色；返回居中的空状态图标、标题及说明。
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;

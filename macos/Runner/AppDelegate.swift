@@ -2,7 +2,6 @@ import Cocoa
 import FlutterMacOS
 
 @main
-/// 应用启动协调器；持有主引擎、辅助窗口、浮层及选区监听，将AppKit生命周期连接到平台桥。
 class AppDelegate: FlutterAppDelegate {
     private let settingsWindow = SettingsWindowController()
     private let permissionWizard = AuxiliaryWindowController(
@@ -25,22 +24,18 @@ class AppDelegate: FlutterAppDelegate {
         compactTitlebar: true
     )
     private var launchedAtLogin = false
-    /// 翻译历史变更通知的观察者；新记录写入后刷新已打开的历史窗口（#126）。
     private var historyObserver: NSObjectProtocol?
 
-    /// notification 为应用启动通知；从系统 AppleEvent 识别登录项启动，无返回值。
     override func applicationWillFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
         launchedAtLogin = event?.eventID == kAEOpenApplication &&
             event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
-    /// 主引擎的视图控制器没有挂到窗口上，由此字段保持存活。
     private var flutterViewController: FlutterViewController?
     private let overlay = OverlayPanelController()
     private let selectionMonitor = SelectionMonitor()
 
     override func applicationDidFinishLaunching(_ notification: Notification) {
-        // 启动耗时：主引擎运行与整个启动回调分别记录（#68「性能测量边界」）。
         let launchStart = ContinuousClock.now
         defer { PerformanceLog.record("launch-finish", since: launchStart) }
         let flutter = FlutterViewController()
@@ -49,7 +44,6 @@ class AppDelegate: FlutterAppDelegate {
         _ = flutter.engine.run(withEntrypoint: nil)
         PerformanceLog.record("launch-engine-run", since: launchStart)
         RegisterGeneratedPlugins(registry: flutter)
-        // 平台视图工厂按引擎注册，避免独立窗口缺少原生玻璃材料。
         NativeGlassFactory.register(with: flutter)
         overlay.attachFlutter(flutter)
         let bridge = MacPlatformBridge.register(
@@ -58,7 +52,6 @@ class AppDelegate: FlutterAppDelegate {
             selectionMonitor: selectionMonitor
         )
 
-        // Info.plist 的 LSUIElement 使 App 以菜单栏应用启动；之后的激活策略只由 DockPresence 写入。
         hideMainWindowOnly()
         StatusBarController.shared.showSettings = { [weak self] in self?.settingsWindow.show() }
         StatusBarController.shared.refreshSettings = { [weak self] in self?.settingsWindow.refresh() }
@@ -69,7 +62,6 @@ class AppDelegate: FlutterAppDelegate {
             forName: AppConstants.historyChangedNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.historyWindow.refresh() }
         bridge.onReady = { [weak self, weak bridge] in
-            // 主界面就绪后预热截图引擎，首次截图直接复用已启动的引擎（#68 批次 A）。
             bridge?.screenshot.prewarm()
             let access = AccessibilitySelection.isTrusted(prompt: false)
             let screen = ScreenCaptureService.isAuthorized()
@@ -78,27 +70,19 @@ class AppDelegate: FlutterAppDelegate {
                 if self?.launchedAtLogin == false { self?.settingsWindow.show() }
                 return
             }
-            // 缺权限就弹向导；稍后只关这一次，下次启动仍要检查实际 TCC。
             self?.permissionWizard.show()
         }
         selectionMonitor.start()
-        // 清空上次运行残留的剪贴板临时视频，后台执行以免拖慢应用启动（#68 第 10 条、#142）。
         Task.detached(priority: .utility) {
             CaptureWindowController.clearRecordingClipboardDirectory()
         }
-        // MCP socket 随 App 常驻监听；开关关闭时由服务返回「MCP 未开启」，helper 不会误报未运行。
         bridge.mcp.start(path: MCPSocket.defaultURL.path)
-        // 不调用 super.applicationDidFinishLaunching：FlutterAppDelegate 未实现该方法，
-        // Swift super 会进入嵌套 run loop 且永不返回。AppKit 因此认为启动未结束，
-        // 选区监听起不来，浮层窗口也合成不到屏幕上。
     }
 
-    /// notification为激活通知；从系统设置返回后刷新权限状态。
     override func applicationDidBecomeActive(_ notification: Notification) {
         permissionWizard.refresh()
     }
 
-    /// sender为退出请求；已有采集结果先明确丢弃，等待原生资源清理后退出。
     override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let capture = MacPlatformBridge.Shared.instance?.capture else { return .terminateNow }
         if capture.hasPendingCapture {
@@ -108,29 +92,24 @@ class AppDelegate: FlutterAppDelegate {
             alert.addButton(withTitle: "返回采集")
             alert.addButton(withTitle: "退出并丢弃")
             guard alert.runModal() == .alertSecondButtonReturn else {
-                // 用户返回正在进行的采集或结果，直接恢复该窗口，不重新发起选区。
                 capture.present(force: true)
                 return .terminateCancel
             }
         }
-        // 用户已确认退出；先撤销附属窗口启动，媒体清理等待期间不能再出现迟到窗口。
         settingsWindow.shutdown()
         permissionWizard.close()
         historyWindow.close()
         Task { @MainActor in
-            // 不能在进程退出后期待流、编码器和临时目录的清理回调执行。
             await capture.shutdown()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
     }
 
-    /// notification 为 App 退出通知；关闭截图窗口及贴图，无返回值。
     override func applicationWillTerminate(_ notification: Notification) {
         MacPlatformBridge.Shared.instance?.screenshot.shutdown()
     }
 
-    /// sender 为当前应用，flag 为窗口可见性；Finder 再次打开时展示设置并返回 false。
     override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         settingsWindow.show()
         return false
@@ -144,7 +123,6 @@ class AppDelegate: FlutterAppDelegate {
         false
     }
 
-    /// 只藏 xib 主窗口，绝不碰 NSStatusItem 自己的窗口。
     private func hideMainWindowOnly() {
         for window in NSApp.windows where window is MainFlutterWindow {
             window.orderOut(nil)

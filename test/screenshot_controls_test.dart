@@ -25,10 +25,8 @@ import 'package:transnap/src/screenshot/screenshot_editor_layout.dart';
 import 'support/capture_pixels.dart';
 import 'package:transnap/src/common/widgets/line_icon.dart';
 
-/// 无参数；验证工具栏避让的几何边界及硬件回车的真实编辑/导出结果。
 void main() {
   test('工具栏依次使用下、上、右、左侧空白，完整位于窗口且不与选区相交', () {
-    // 四个选区分别只允许纵向下方、上方或横向单侧放置。
     const viewport = Size(960, 740);
     final cases = [
       (crop: const Rect.fromLTWH(200, 100, 400, 200), side: 'bottom'),
@@ -67,7 +65,6 @@ void main() {
   });
 
   test('全屏和近全屏选区将工具栏放在内侧边缘，不移动或缩放画布', () {
-    // 普通、窄屏及 Retina 场景：无外侧空白时允许覆盖选区，画布必须保持整屏。
     for (final viewport in [const Size(960, 740), const Size(320, 600)]) {
       const image = Size(1920, 1480);
       for (final crop in [
@@ -93,9 +90,6 @@ void main() {
   });
 
   test('三四行工具栏在全屏贴边与横竖布局中保持屏幕内且不改变画布', () {
-    // 作用：多行工具栏无论横放竖放都完整位于视口内，厚度按传入的各行厚度之和计算。
-    // 边界：三行＝分区行 40＋二级托盘 32＋三级托盘 32＋2 个行间距 4＝112；
-    // 四行再加一个分区行与行间距＝156（#67）；源图倍率1/2及负原点显示器归一化后的视口使用相同局部几何。
     for (final size in [const Size(960, 740), const Size(320, 600)]) {
       for (final thickness in [112.0, 156.0]) {
         for (final scale in [1.0, 2.0]) {
@@ -137,15 +131,7 @@ void main() {
   });
 
   test('工具栏居中对齐选区；居中被屏幕左右边挡住时竖放到另一侧，边角与全屏保持横放（#67）', () {
-    // 作用：验证放置规则把选区、工具栏长度与厚度转换成工具栏矩形与方向。
-    // 边界：视口 1000×640、边距与间距 8；两块并排的分区行长 504、两行厚 84。
-    // 选区中心 x=500 时横栏左缘＝500−252＝248；托盘展开使工具栏长到 560 时居中仍按 504 计算，左缘不变；
-    // 选区中心 x=140 时居中起点 −112 被左边挡住，竖直中心 260 使竖栏上缘恰为 8（能居中），改为竖放在选区右侧 x=240+8；
-    // 选区中心 x=860 时居中末端 1112 超过 992，竖放在选区左侧 x=760−8−84；
-    // 左上角选区竖直中心 110 使竖栏上缘 −142 越界（不能居中），保持横放并收回到左缘 8；
-    // 全屏选区四周没有空白，放进选区内距底边 8 并水平居中。
     const viewport = Size(1000, 640);
-    // place 按选区 crop 与工具栏长度 length 计算布局，居中长度固定为分区行 504。
     ScreenshotEditorLayout place(Rect crop, {double length = 504}) =>
         ScreenshotEditorLayout.place(
           viewport: viewport,
@@ -177,7 +163,6 @@ void main() {
   });
 
   testWidgets('默认窗口仅预览可重新框选，手动选区八点和边框可拉伸', (tester) async {
-    // 初始窗口预览不能拦截新框选；用户框选后才显示八点和边线拉伸光标。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -204,7 +189,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -215,7 +199,6 @@ void main() {
       RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
       SystemMouseCursors.precise,
     );
-    // 从预览框内部画更小矩形：旧错误会将原框整体拖动，无法得到下述八个新边界。
     await tester.dragFrom(const Offset(280, 220), const Offset(240, 180));
     await tester.pumpAndSettle();
     final cases = <Offset, MouseCursor>{
@@ -259,8 +242,6 @@ void main() {
   });
 
   testWidgets('整屏初始选区直接选中：控制点可拉伸，内部可拖动', (tester) async {
-    // 边界：与窗口预览相同的初始矩形，cropSelected 为 true 时角点立即是拉伸光标、内部为抓手，
-    // 拖动右下角后新角点仍可拉伸（#105）。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -288,13 +269,11 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(20, 20));
 
-    /// position 为窗口坐标；移动鼠标并返回当前光标。
     Future<MouseCursor?> cursorAt(Offset position) async {
       await mouse.moveTo(position);
       await tester.pumpAndSettle();
@@ -310,14 +289,11 @@ void main() {
     await tester.dragFrom(const Offset(600, 480), const Offset(-100, -80));
     await tester.pumpAndSettle();
     expect(await cursorAt(const Offset(500, 400)), resize);
-    // 选区外的空白处仍是框选光标（工具栏位于新选区下方，避开其位置）。
     expect(await cursorAt(const Offset(100, 100)), SystemMouseCursors.precise);
     await mouse.removePointer();
   });
 
   test('比例矩形朝指针方向生长，较短边不小于下限，空间不足时整体缩小', () {
-    // 边界：宽度由 dx 驱动时忽略 dy；指针在锚点左上方时向左上生长；byHeight 由 dy 推算宽度；
-    // 下方只剩 40、右侧只剩 60 时分别被对应方向限制；横向与纵向比例下较短边各自不小于 8；minSide 为 0 时允许空矩形（#106）。
     const bounds = Size(960, 740);
     Rect rect(
       Offset anchor,
@@ -366,8 +342,6 @@ void main() {
   });
 
   testWidgets('方向键移动选区 1 像素、⇧ 10 像素，⌥ 调整大小，限制在截图内且最小边长 8', (tester) async {
-    // 边界：移动与 ⌥ 调整均停在截图四边；⌥⇧← 连按后宽度停在 8；
-    // 尺寸标签上方空间足够时贴在选区左上角外侧，选区贴顶时放进选区内 4pt；导出图与记住的区域和标签一致（#106）。
     final calls = (await _pumpSelectedCrop(tester, 'test/crop-nudge')).calls;
     final label = find.byKey(const Key('crop-size-label'));
     expect(find.text('400 × 300'), findsOneWidget);
@@ -448,13 +422,10 @@ void main() {
       );
     }
     expect(find.text('960 × 740'), findsOneWidget);
-    // 等待复制反馈计时结束，避免遗留计时器。
     await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('原生转发的方向键微调当前选区，⇧ 10 像素、⌥ 调整大小，过期捕获忽略（#106）', (tester) async {
-    // 作用：非激活截图面板收不到方向键，原生按键路由以 nudgeScreenshotCrop 转发；验证该入口与键盘入口结果一致。
-    // 边界：→ 移动 1、⇧↓ 移动 10、⌥⇧→ 加宽 10；id 不是当前捕获时选区不变。
     final pumped = await _pumpSelectedCrop(tester, 'test/crop-native-nudge');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -494,8 +465,6 @@ void main() {
   });
 
   testWidgets('文字输入中与选中标注时方向键不移动选区，取消选中后恢复', (tester) async {
-    // 边界：输入框打开时隐藏尺寸标签且方向键留给输入框；光标工具选中矩形后方向键无效；
-    // 点击空白取消选中后同一按键移动 1 像素，证明前两次是被条件拦下（#106）。
     final calls = (await _pumpSelectedCrop(
       tester,
       'test/crop-nudge-ignore',
@@ -520,7 +489,6 @@ void main() {
     await tester.tap(find.byKey(const Key('screenshot-tool-cursor')));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(350, 300));
-    // 画布同时识别双击，单击要等双击超时后才生效。
     await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
     await _arrow(tester, LogicalKeyboardKey.arrowRight);
@@ -530,7 +498,6 @@ void main() {
     );
 
     await tester.tapAt(const Offset(100, 100));
-    // 画布同时识别双击，单击要等双击超时后才生效。
     await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
     await _arrow(tester, LogicalKeyboardKey.arrowRight);
@@ -542,8 +509,6 @@ void main() {
   });
 
   testWidgets('锁定比例后新框选、控制点与 ⌥ 方向键保持比例；自由与新截图解除', (tester) async {
-    // 边界：选择 1:1/16:9 以左上角为锚点保持宽度；角点由宽度驱动、上边由高度驱动；
-    // Esc 先收起比例行但比例仍生效；选择自由后 ⌥↓ 只改高度；新截图恢复自由（#106）。
     final pumped = await _pumpSelectedCrop(tester, 'test/crop-ratio');
     await tester.tap(find.byKey(const Key(ScreenshotActions.ratio)));
     await tester.pumpAndSettle();
@@ -604,7 +569,6 @@ void main() {
           );
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
-    // 换图后源图重新异步建好，选区与画布才会恢复。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ratio-row')), findsNothing);
@@ -617,7 +581,6 @@ void main() {
   });
 
   testWidgets('光标优先操作文字并可选中移动拉伸截图，空白拖动不重新框选', (tester) async {
-    // 使用与视口1:1的图像，实际鼠标坐标应对应导出像素和文本框几何。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -648,7 +611,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
@@ -671,7 +633,6 @@ void main() {
       ),
     );
     await mouse.removePointer();
-    // 在截图内部添加文字；光标拖文字不能连带移动截图。
     await tester.tap(find.byKey(const Key(ScreenshotActions.text)));
     await tester.pumpAndSettle();
     await tester.dragFrom(const Offset(300, 260), const Offset(200, 60));
@@ -680,7 +641,6 @@ void main() {
       find.byKey(const Key('screenshot-text-field')),
       '来源与译文',
     );
-    // Esc 结束输入并保留文字。文字框宽 200（拖出的宽度），高度为一行文字的高度。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     final lineHeight = textBoxHeight(
@@ -690,19 +650,16 @@ void main() {
     );
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
     await tester.pumpAndSettle();
-    // 框内拖动是移动：左上角从 (300,260) 到 (330,290)。
     await tester.dragFrom(
       Offset(400, 260 + lineHeight / 2),
       const Offset(30, 30),
     );
     await tester.pumpAndSettle();
-    // 拖右边把宽度从 200 加到 240；纵向位移不改变高度。
     await tester.dragFrom(
       Offset(530, 290 + lineHeight / 2),
       const Offset(40, 20),
     );
     await tester.pumpAndSettle();
-    // 文本四角与截图采用相同原生轴；离开对象后必须归还普通箭头。
     final textMouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await textMouse.addPointer(location: const Offset(40, 40));
     for (final corner in <Offset, String>{
@@ -725,14 +682,12 @@ void main() {
       SystemMouseCursors.basic,
     );
     await textMouse.removePointer();
-    // 双击文字重新编辑，几何来自实际TextField，不能只检验状态字段。
     await tester.tapAt(Offset(440, 290 + lineHeight / 2));
     await tester.pump(const Duration(milliseconds: 80));
     await tester.tapAt(Offset(440, 290 + lineHeight / 2));
     await tester.pumpAndSettle();
     final field = find.byKey(const Key('screenshot-text-field'));
     expect(field, findsOneWidget);
-    // 文字框高度随内容：一行文字时等于一行的高度，宽度为拖动后的 240。
     final textBox = find
         .ancestor(of: field, matching: find.byType(Positioned))
         .first;
@@ -761,9 +716,6 @@ void main() {
   });
 
   testWidgets('工具栏按组排列：隐藏工具留空位，整组隐藏不显示，组左侧标注组合（#141）', (tester) async {
-    // 作用：位置与快捷键对应关系在截图编辑器中保持不变。
-    // 边界：工具栏横放在选区下方；⌘ 组第 2 格隐藏时，第 1 格与第 3 格水平相隔两格（72pt）；⌥ 组全部隐藏时该组不显示；
-    // 无修饰组标签为「无」、⌘ 组为「⌘」，标签在组内第一格左侧；按钮不再有键位角标。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     final defaults = ScreenshotToolbarPreferences();
@@ -805,7 +757,6 @@ void main() {
     );
     expect(find.byKey(const Key('screenshot-grid-group-1')), findsOneWidget);
     expect(find.byKey(const Key('screenshot-grid-group-2')), findsNothing);
-    // 工具栏不显示组合标签；未按修饰键时「无」组凸起并在按钮角上显示 1–6，⌘ 组不显示键位（#67）。
     expect(
       find.byKey(const Key('toolbar-group-label-screenshot-grid-group-0')),
       findsNothing,
@@ -830,12 +781,6 @@ void main() {
   testWidgets('工具栏每行两个分区块并带修饰键提示，三级托盘对齐唤起按钮，放不下时每行一块（#141、#67）', (
     tester,
   ) async {
-    // 作用：两块并排节省厚度；每块前有修饰键提示；录制目标等三级托盘紧跟父级所在行，首个按钮对齐唤起它的「录制」。
-    // 边界：默认 3 组时无修饰块与 ⌘ 块同行，工具栏无整体背景板，⌘ 块按钮右缘距工具栏右缘为块内边距 4；
-    // 两块按钮之间隔着 4（块内边距）＋8（块间距）＋4（块内边距）＋24（提示区）＋4（提示与按钮间距）＝44；
-    // ⌘ 块有「⌘」提示，「无」块提示为键盘图标；⌥ 块在下一行；
-    // 截图（无修饰第 2 格）的子级托盘与录制目标托盘依次插在第一行与 ⌥ 块之间，录制目标首个按钮中心与「录制」中心同列；
-    // 视口宽 400pt 时横栏可用长度 384pt 小于两块并排所需的 504pt，改为每行一块。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-lines');
@@ -862,7 +807,6 @@ void main() {
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    // rect 取某个键的全局矩形。
     Rect rect(String key) => tester.getRect(find.byKey(Key(key)));
     final toolbar = rect('screenshot-toolbar');
     final group0 = rect('screenshot-grid-group-0');
@@ -933,9 +877,6 @@ void main() {
   });
 
   testWidgets('子级组从父级按钮液态展开，收起时融合回父级后移除（#142）', (tester) async {
-    // 作用：展开与收起都以父级按钮为起止点，而不是在格位上直接出现或消失。
-    // 边界：切到无二级菜单的光标工具后，「截图」的子级进入快速收起中的组，动画结束即移除；
-    // 切回截图后第 2 帧时「录制」仍在离格位较远处（靠近父级），动画结束后回到格位。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-liquid');
@@ -987,8 +928,6 @@ void main() {
   });
 
   testWidgets('切换父级时，新子级组紧跟新父级所在行，旧子级组直接移除（#142）', (tester) async {
-    // 作用：验证从「截图」直接切到「美化」时不保留收起中的「截图」子级，新子级不被挤到第三行。
-    // 边界：切换后首帧无 screenshot-closing-group-0，且「美化」子级托盘紧跟「美化」所在分区块（块内边距 4＋行间距 4＋托盘内边距 2）。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-switch-parent');
@@ -1062,8 +1001,6 @@ void main() {
   });
 
   testWidgets('拖动选区并松手后，没有新的收起组，展开中的组也不再重新从父级位置开始（#142）', (tester) async {
-    // 作用：验证拖动选区期间工具栏仅隐藏不卸载，松手后直接保留已展开的子级位置。
-    // 边界：拖动期间工具栏不可见且不可命中；松手后第 2 帧无收起组，「录制」相对「截图」偏移保持稳定不变。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-drag-no-replay');
@@ -1114,10 +1051,6 @@ void main() {
   });
 
   testWidgets('收起未完成时快速切换带二级菜单的工具立即打断，不挤压新属性组或附加行到第三行（#67、#1）', (tester) async {
-    // 作用：覆盖“切换到带二级菜单的新工具”及“收起动画进行中再切换”两大防挤压场景。
-    // 边界：从「截图」切「光标」推进 48ms 后收起仍在进行（screenshot-closing-group-0 存在），
-    // 此时立刻点「图形」，首帧立即打断清除收起组，属性组紧跟「图形」所在行（间距 4pt），
-    // 且「图形」「画笔」「比例」「美化」「录制目标」均复用 LiquidSplit。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-fast-interrupt');
@@ -1145,13 +1078,11 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
 
-    // 1. 切到「光标」启动快速收起，推进 48ms 确认收起组仍在动画中。
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 48));
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
 
-    // 2. 在收起未结束时立即切到「图形」：旧收起组必须首帧清零，新属性组紧贴工具主行且复用 LiquidSplit。
     await tester.tap(find.byKey(const Key(ScreenshotActions.rect)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
@@ -1175,7 +1106,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 3. 验证其余工具与附加行全部统一复用 LiquidSplit 且无第三行挤压。
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
@@ -1225,9 +1155,6 @@ void main() {
   });
 
   testWidgets('展开与收起中途反向切换原位平滑接续，快速收起在短时内完成移除（#67）', (tester) async {
-    // 作用：验证 LiquidSplit 在展开半程打断时从当前位置快速收回，并在收起半程切回原工具时平滑弹回。
-    // 边界：从「光标」点开「截图」64ms 后未到位，切回「光标」时按钮不跳回终态、直接往锚点回收，
-    // 并在 350ms 内完成快速收起移除；再次打开收起 48ms 时切回「截图」，最终完整回到 settled 位置。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-reverse-interrupt');
@@ -1259,11 +1186,9 @@ void main() {
     final crop = find.byKey(const Key(ScreenshotActions.crop));
     final settledOffset = tester.getCenter(record) - tester.getCenter(crop);
 
-    // 先收起到「光标」状态。
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
     await tester.pumpAndSettle();
 
-    // 点开「截图」展开 32ms（240ms 周期下中途尚未到终态），立刻点「光标」原位打断快速收起。
     await tester.tap(crop);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 16));
@@ -1276,7 +1201,6 @@ void main() {
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
     await tester.pump();
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsOneWidget);
-    // 打断首帧按钮仍在中断位置，不跳回已展开终态。
     expect(
       (tester.getCenter(record) - tester.getCenter(crop)).distance,
       closeTo(midDistance, 2.0),
@@ -1284,7 +1208,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     expect(find.byKey(const Key('screenshot-closing-group-0')), findsNothing);
 
-    // 再次展开 -> 收起 32ms 时中途点回「截图」，最终完整落位。
     await tester.tap(crop);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key(ScreenshotActions.cursor)));
@@ -1299,8 +1222,6 @@ void main() {
   });
 
   testWidgets('画笔工具下展开美化不漏出画笔属性，且次级行靠起点排列不左右分散（#67、#141）', (tester) async {
-    // 作用：验证处于绘图工具时展开「美化」只显示美化自身子级（贴纸）与美化参数行，收起美化后恢复绘图属性；
-    // 同时验证子级与属性同在一个托盘：托盘起点对齐锚点按钮，组间为 4 + 1 + 4 = 9pt 短分隔线（#67）。
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
     const channel = MethodChannel('test/toolbar-beautify-isolation');
@@ -1328,7 +1249,6 @@ void main() {
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
 
-    // 1. 切到画笔确认存在画笔属性组，再点「美化」不应漏出画笔属性，贴纸托盘起点对齐「美化」按钮（#67）。
     await tester.tap(find.byKey(const Key(ScreenshotActions.brush)));
     await tester.pumpAndSettle();
     expect(
@@ -1352,7 +1272,6 @@ void main() {
           ToolbarGrid.trayPadding,
     );
 
-    // 2. 再次点「美化」关闭美化行后，当前画笔工具的属性组恢复展示。
     await tester.tap(find.byKey(const Key(ScreenshotActions.beautify)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-beautify-row')), findsNothing);
@@ -1361,7 +1280,6 @@ void main() {
       findsOneWidget,
     );
 
-    // 3. 自定义同时带子级与属性的工具（如把箭头放到图形下），两者在同一托盘内以短分隔线隔开。
     final columns = [
       for (final column in ScreenshotToolbarPreferences().columns)
         ToolbarColumn(column.modifiers, [
@@ -1425,7 +1343,6 @@ void main() {
   testWidgets('工具顺序与局部快捷键生效，文字编辑不切换工具，更新配置保留画布', (tester) async {
     final png = await tester.runAsync(_image);
     final capture = await tester.runAsync(() => capturePixels(png!));
-    // 全部功能为一级、按注册表倒序排列：文字放在裸数字 1，截图放在 ⌘2，其余依序填满（#141）。
     final rest = [
       for (final id in ScreenshotActions.icons.keys.toList().reversed)
         if (id != ScreenshotActions.text && id != ScreenshotActions.crop) id,
@@ -1466,12 +1383,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
-    // 关闭在无修饰组第 2 格、截图在 ⌘ 组第 2 格：同一格序号，所在组先后决定位置（#141）。
-    // 两组并排时横放关闭在截图左侧、竖放在上方；改为每行一组时横放在上方、竖放在左侧。
     final close = tester.getTopLeft(
       find.byKey(const Key(ScreenshotActions.close)),
     );
@@ -1492,13 +1406,11 @@ void main() {
     final paired = horizontal
         ? group0.top == group1.top
         : group0.left == group1.left;
-    // 横放并排与竖放单列都沿水平方向比较，其余沿竖直方向比较。
     expect(
       horizontal == paired ? close.dx < crop.dx : close.dy < crop.dy,
       isTrue,
     );
     expect(find.byKey(const Key(ScreenshotActions.text)), findsNothing);
-    // 原生非激活面板转来格位按键（修饰键 + 数字）；必须看到实际文字控件出现，旧捕获不能切换工具。
     Future<void> nativeSlot(String id, int modifiers, int digit) async {
       await messenger.handlePlatformMessage(
         channel.name,
@@ -1578,7 +1490,6 @@ void main() {
           clipboard = (call.arguments as Map)['bytes'] as Uint8List;
           return null;
         case MethodNames.closeScreenshot:
-          // 原生窗口关闭后会释放捕获；模拟该状态通知，而非断言方法调用次数。
           await messenger.handlePlatformMessage(
             channel.name,
             codec.encodeMethodCall(
@@ -1602,13 +1513,11 @@ void main() {
     ]) {
       clipboard = null;
       ended = Completer<void>();
-      // 原生截图引擎逐次创建；先销毁旧实例，避免旧 dispose 清除新通道监听。
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       await tester.pumpWidget(
         ScreenshotApp(key: ValueKey(key), channel: channel),
       );
-      // 源图异步建好后文档才有图。
       await awaitCaptureSource(tester);
       await tester.pumpAndSettle();
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
@@ -1617,7 +1526,6 @@ void main() {
       );
       expect(canvas, const Rect.fromLTWH(0, 0, 960, 740));
       expect(canvas.overlaps(toolbar), isTrue);
-      // PNG 编码使用真实图像线程，随后由测试队列接收原生窗口状态通知。
       await tester.runAsync(() async {
         await tester.sendKeyEvent(key);
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -1632,7 +1540,6 @@ void main() {
           frame.image.width.toDouble(),
           frame.image.height.toDouble(),
         );
-        // 工具栏覆盖屏幕中的图片，导出右下角仍必须是原图蓝色，而非工具栏背景。
         final pixels = await frame.image.toByteData(
           format: ui.ImageByteFormat.rawRgba,
         );
@@ -1649,7 +1556,6 @@ void main() {
       expect(size, const Size(320, 240));
     }
 
-    // 文字输入优先级：Shift+Enter 保留编辑，普通 Enter 提交，下一次 Enter 才复制退出。
     clipboard = null;
     ended = Completer<void>();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1657,7 +1563,6 @@ void main() {
     await tester.pumpWidget(
       const ScreenshotApp(key: ValueKey('text-enter'), channel: channel),
     );
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('screenshot-tool-text')));
@@ -1668,7 +1573,6 @@ void main() {
       find.byKey(const Key('screenshot-text-field')),
       'Hello',
     );
-    // 原生确认也必须保留输入法组词状态，不能把未确认的拼音当成最终标注。
     tester.testTextInput.updateEditingValue(
       const TextEditingValue(
         text: 'ni',
@@ -1695,7 +1599,6 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.pump();
     expect(find.byKey(const Key('screenshot-text-field')), findsOneWidget);
-    // 输入中回车是换行，不结束输入也不复制截图；Esc 才结束输入。
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('screenshot-text-field')), findsOneWidget);
@@ -1746,11 +1649,8 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
-    // 占满纵向、只在左或右留白的两个选区，必须实际切换为竖向工具栏，分别放在右侧与左侧。
-    // 边界：竖向网格厚 228pt（6 格），选区宽为截图一半，留白足以放下（#141）。
     for (final x in [0, 160]) {
       await messenger.handlePlatformMessage(
         channel.name,
@@ -1759,7 +1659,6 @@ void main() {
         ),
         (_) {},
       );
-      // 换图后源图重新异步建好，选区与画布才会恢复。
       await awaitCaptureSource(tester);
       await tester.pumpAndSettle();
       final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
@@ -1771,7 +1670,6 @@ void main() {
       final toolbar = tester.getRect(
         find.byKey(const Key('screenshot-toolbar')),
       );
-      // 竖放在选区一侧：每组为一列，6 格自上而下（#141）。
       expect(
         tester
             .widget<Flex>(find.byKey(const Key('screenshot-grid-group-0')))
@@ -1806,7 +1704,6 @@ void main() {
       });
       expect(size, const Size(160, 240));
     }
-    // 拖动期间只改变预览，不移动/缩放已建立的画布坐标系。
     final canvas = tester.getRect(find.byKey(const Key('screenshot-canvas')));
     final gesture = await tester.startGesture(canvas.center);
     await gesture.moveBy(const Offset(80, 80));
@@ -1846,13 +1743,11 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     final feedback = find.byKey(const Key('toolbar-feedback-bubble'));
     final copyButton = find.byKey(const Key('screenshot-copy'));
 
-    /// 无参数；真实图像线程完成复制后返回，计时器保持在 Widget 测试时钟内。
     Future<void> copy() async {
       await tester.ensureVisible(copyButton);
       await tester.tap(copyButton);
@@ -1881,7 +1776,6 @@ void main() {
       ),
       findsNothing,
     );
-    // 500ms 后再次复制，检查新反馈的 999ms/1000ms 边界，旧定时器不得提前清除。
     await tester.pump(const Duration(milliseconds: 500));
     await copy();
     await tester.pump(const Duration(milliseconds: 999));
@@ -1891,7 +1785,6 @@ void main() {
     expect(find.text('已复制图片'), findsNothing);
     expect(find.byKey(const Key('screenshot-canvas')), findsOneWidget);
 
-    // 工具栏贴近屏幕顶边时仍需保证提示在屏幕内，且不盖住工具栏。
     await messenger.handlePlatformMessage(
       channel.name,
       codec.encodeMethodCall(
@@ -1906,7 +1799,6 @@ void main() {
       ),
       (_) {},
     );
-    // 换图后源图重新异步建好，选区与画布才会恢复。
     await awaitCaptureSource(tester);
     await copy();
     final toastRect = tester.getRect(feedback);
@@ -1931,14 +1823,12 @@ void main() {
       ),
       (_) {},
     );
-    // 换图后源图重新异步建好，选区与画布才会恢复。
     await awaitCaptureSource(tester);
     expect(feedback, findsNothing);
     await tester.pump(const Duration(seconds: 4));
     expect(tester.takeException(), isNull);
   });
   testWidgets('识别文字后复制的迟到成功不能在替换后的截图显示提示', (tester) async {
-    // 复制请求已发出但回复尚未到达时换图；反馈必须属于发起请求的那张截图。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1972,7 +1862,6 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const ScreenshotApp(channel: channel));
-    // 源图异步建好后文档才有图。
     await awaitCaptureSource(tester);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('screenshot-ocr-copy')));
@@ -1981,7 +1870,6 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await tester.pump();
-    // 识别结果弹窗里点“复制全部”才发起剪贴板请求。
     await tester.tap(find.byTooltip('复制全部'));
     await tester.pump();
     await copyPending.future;
@@ -1995,7 +1883,6 @@ void main() {
       ),
       (_) {},
     );
-    // 换图后源图重新异步建好，选区与画布才会恢复。
     await awaitCaptureSource(tester);
     copyReply.complete();
     await tester.pumpAndSettle();
@@ -2005,8 +1892,6 @@ void main() {
   });
 
   test('极窄与零尺寸视口下 ScreenshotEditorLayout.place 安全夹紧且不抛异常（#144）', () {
-    // 作用：验证最小及零宽高窗口边界下工具栏与画布布局数值非负且不触发 clamp ArgumentError。
-    // 边界：分别覆盖 Size.zero 与极小窗口 Size(12, 12)。
     for (final viewport in const [Size.zero, Size(12, 12)]) {
       final layout = ScreenshotEditorLayout.place(
         viewport: viewport,
@@ -2021,8 +1906,6 @@ void main() {
   });
 
   testWidgets('ColorPicker 非法 HEX 后点击渐变预设清除错误并恢复应用按钮（#144）', (tester) async {
-    // 作用：验证调色盘渐变预设重选能重置输入校错标志并重新启用主操作。
-    // 边界：输入非法字符禁用 apply-color；点击 gradient-preset-1 后错误提示消失且重新可用。
     final results = <Object>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -2062,8 +1945,6 @@ void main() {
   });
 
   testWidgets('截图错误提示停留 2 秒并支持悬停暂停与手动关闭（#144）', (tester) async {
-    // 作用：验证截图工具栏错误反馈与采集窗口共享一致的 2000ms 停读及关闭语义。
-    // 边界：1s 后仍可见；悬停 3s 不消失；移开鼠标 1999ms 仍在、满 2000ms 消失；手动关闭立即消失。
     tester.view.physicalSize = const Size(960, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -2140,8 +2021,6 @@ void main() {
   });
 
   testWidgets('识别结果弹窗隔离 Enter/Esc 快捷键、夹紧窄视口并在顶层显示反馈（#144）', (tester) async {
-    // 作用：验证识别弹窗打开时不误触截图确认导出、窄视口下完整容纳弹窗，以及反馈气泡位于弹窗之上。
-    // 边界：520×420 窄视口下弹窗宽度 <= 504pt；Enter 不触发复制关闭，Esc 仅关闭识别弹窗。
     tester.view.physicalSize = const Size(520, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -2210,7 +2089,6 @@ void main() {
   });
 }
 
-/// width/height为图像像素尺寸，默认320×240；返回合成截图PNG。
 Future<Uint8List> _image({int width = 320, int height = 240}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
@@ -2223,8 +2101,6 @@ Future<Uint8List> _image({int width = 320, int height = 240}) async {
   return bytes!.buffer.asUint8List();
 }
 
-/// tester 为测试驱动，name 为通道名；以 960×740 截图、已选中的选区 (200,180,400,300) 装载编辑器。
-/// 返回通道、记录全部调用的列表与截图快照，供导出后读取选区或发送新截图（#106）。
 Future<
   ({
     MethodChannel channel,
@@ -2263,13 +2139,11 @@ _pumpSelectedCrop(WidgetTester tester, String name) async {
   });
   addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
   await tester.pumpWidget(ScreenshotApp(channel: channel));
-  // 源图异步建好后文档才有图。
   await awaitCaptureSource(tester);
   await tester.pumpAndSettle();
   return (channel: channel, calls: calls, snapshot: snapshot);
 }
 
-/// tester 为测试驱动，key 为方向键，modifiers 为按住的修饰键，times 为连按次数；发送按键并刷新，无返回值。
 Future<void> _arrow(
   WidgetTester tester,
   LogicalKeyboardKey key, {
@@ -2288,8 +2162,6 @@ Future<void> _arrow(
   await tester.pumpAndSettle();
 }
 
-/// width/height 为像素尺寸；返回每个像素以颜色编码自身坐标的 PNG：R 为 x 低 8 位、G 为 y 低 8 位、
-/// B 低 4 位为 x 高位、高 4 位为 y 高位，导出图左上角像素即可还原选区位置。
 Future<Uint8List> _coordinateImage({
   required int width,
   required int height,
@@ -2318,7 +2190,6 @@ Future<Uint8List> _coordinateImage({
   return bytes!.buffer.asUint8List();
 }
 
-/// tester 为测试驱动，calls 为通道调用记录；点击复制，返回导出图像素尺寸与按左上角像素坐标还原的选区。
 Future<(Size, Rect)> _copyCrop(
   WidgetTester tester,
   List<MethodCall> calls,
@@ -2326,7 +2197,6 @@ Future<(Size, Rect)> _copyCrop(
   calls.clear();
   final copy = find.byKey(const Key(ScreenshotActions.copy));
   await tester.ensureVisible(copy);
-  // 导出与 PNG 解码使用真实图像线程。
   final rect = await tester.runAsync(() async {
     await tester.tap(copy);
     await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -2340,7 +2210,6 @@ Future<(Size, Rect)> _copyCrop(
             as Uint8List;
     final codec = await ui.instantiateImageCodec(bytes);
     final frame = await codec.getNextFrame();
-    // 左上角像素按 _coordinateImage 的编码还原截图坐标。
     final rgba = (await frame.image.toByteData(
       format: ui.ImageByteFormat.rawRgba,
     ))!;

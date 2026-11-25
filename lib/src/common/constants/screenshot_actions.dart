@@ -3,7 +3,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'screenshot_enums.dart';
 
-/// 截图内局部动作的稳定ID及名称；同一注册表用于设置、布局与快捷键分派。
 abstract final class ScreenshotActions {
   static const shapePrefix = 'screenshot-shape-';
   static const brushPrefix = 'screenshot-brush-';
@@ -36,12 +35,6 @@ abstract final class ScreenshotActions {
   static const reveal = 'screenshot-reveal';
   static const colorPrefix = 'screenshot-text-color-';
 
-  /// 可拼接功能的注册表：用户可以在设置里排序、隐藏、绑定快捷键，并拼成父子两级。
-  ///
-  /// 新增可拼接功能时必须在这里登记，并声明 hostsChildren：
-  /// 点击后停留在该功能上的“工具”为 true，可以作为父级；
-  /// 点击即执行或展开自己目标选择的“动作”为 false，只能作为一级或子级。
-  /// 工具属性（颜色、粗细、字号、形状、画笔模式）不在此表，始终跟随所属工具显示。
   static const composable = <String, ({IconData icon, bool hostsChildren})>{
     cursor: (icon: LucideIcons.mousePointer, hostsChildren: true),
     crop: (icon: LucideIcons.crop, hostsChildren: true),
@@ -49,18 +42,13 @@ abstract final class ScreenshotActions {
     scrolling: (icon: LucideIcons.unfoldVertical, hostsChildren: false),
     rect: (icon: LucideIcons.square, hostsChildren: true),
     arrow: (icon: LucideIcons.arrowUpRight, hostsChildren: true),
-    // 编号点击放置自动递增的数字标记（#107）。
     step: (icon: LucideIcons.listOrdered, hostsChildren: true),
     text: (icon: LucideIcons.type, hostsChildren: true),
     brush: (icon: LucideIcons.brush, hostsChildren: true),
-    // 取色复制指针处源像素色值，标尺测量两点像素距离；均不产生标注（#111）。
     eyedropper: (icon: LucideIcons.pipette, hostsChildren: true),
     ruler: (icon: LucideIcons.ruler, hostsChildren: true),
-    // 美化展开自己的设置行，并承载子级，「贴纸」默认是其子级（#103）。
     beautify: (icon: LucideIcons.sparkles, hostsChildren: true),
-    // 贴纸打开贴纸面板，把我的贴纸或 Emoji 放到截图上（#103）。
     sticker: (icon: LucideIcons.smile, hostsChildren: false),
-    // 比例展开比例行，锁定后续框选与调整的宽高比（#106）。
     ratio: (icon: LucideIcons.ratio, hostsChildren: false),
     pin: (icon: LucideIcons.pin, hostsChildren: false),
     save: (icon: LucideIcons.save, hostsChildren: false),
@@ -71,19 +59,15 @@ abstract final class ScreenshotActions {
     close: (icon: LucideIcons.x, hostsChildren: false),
   };
 
-  /// 默认的父子结构：键为父级，值为按顺序排列的子级；未列出的功能默认是一级。
-  /// 取色与标尺默认是截图的子级，一级共 16 项，默认网格为 6+6+4（#111、#141）。
   static const defaultChildren = <String, List<String>>{
     crop: [record, scrolling, eyedropper, ruler],
     beautify: [sticker],
   };
 
-  /// 可拼接功能的图标；键的顺序即默认顺序。
   static final Map<String, IconData> icons = {
     for (final entry in composable.entries) entry.key: entry.value.icon,
   };
 
-  /// 无参数；返回包括条件出现按钮的完整有序动作名称表。
   static final Map<String, String> labels = {
     '${shapePrefix}rectangle': '矩形框',
     '${shapePrefix}circle': '圆形框',

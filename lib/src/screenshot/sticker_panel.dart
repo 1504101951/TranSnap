@@ -11,36 +11,27 @@ import '../common/constants/glass_metrics.dart';
 import '../common/widgets/native_glass.dart';
 import 'stickers.dart';
 
-/// 贴纸下拉框的选择结果：选中一个表情、选中一张我的贴纸，或去设置管理贴纸（#103）。
 sealed class StickerChoice {
   const StickerChoice();
 }
 
-/// 选中一个表情，放置为 Emoji 贴纸。
 final class PickedEmoji extends StickerChoice {
-  /// emoji 为选中的表情字符。
   const PickedEmoji(this.emoji);
   final String emoji;
 }
 
-/// 选中「我的贴纸」中的 entry。
 final class PickedSticker extends StickerChoice {
-  /// entry 为选中的贴纸。
   const PickedSticker(this.entry);
   final StickerEntry entry;
 }
 
-/// 点了「管理贴纸…」。
 final class ManageStickers extends StickerChoice {
   const ManageStickers();
 }
 
-/// 下拉框顶部分段：应用内表情目录，或我的贴纸。
 enum _StickerTab { emoji, mine }
 
-/// 贴纸下拉框：顶部「Emoji」「贴纸」分段，其下为固定高度的可滚动网格；选择后以 StickerChoice 关闭弹窗（#103）。
 class StickerPanel extends StatefulWidget {
-  /// stickers 为我的贴纸，directory 为贴纸文件目录（文件为「目录/id.png」）。
   const StickerPanel({
     super.key,
     required this.stickers,
@@ -54,17 +45,14 @@ class StickerPanel extends StatefulWidget {
 }
 
 class _StickerPanelState extends State<StickerPanel> {
-  /// 当前分段，默认 Emoji。
   _StickerTab _tab = _StickerTab.emoji;
 
-  /// 6 列、间距 4pt 的正方形网格；下拉框宽度使格子正好 40×40pt，Emoji 与我的贴纸共用。
   static const _gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
     crossAxisCount: StickerMetrics.panelColumns,
     mainAxisSpacing: StickerMetrics.panelGap,
     crossAxisSpacing: StickerMetrics.panelGap,
   );
 
-  /// 无参数；返回 Emoji 段网格：每个类别一个标题加网格，SliverGrid 只构建可见格子（懒加载）。
   Widget _buildEmoji(BuildContext context) {
     final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
     return CustomScrollView(
@@ -109,7 +97,6 @@ class _StickerPanelState extends State<StickerPanel> {
     );
   }
 
-  /// 无参数；返回「贴纸」段内容：无贴纸时居中提示，否则可滚动的懒构建网格。
   Widget _buildMine(BuildContext context) {
     if (widget.stickers.isEmpty) {
       return Center(
@@ -143,7 +130,6 @@ class _StickerPanelState extends State<StickerPanel> {
     );
   }
 
-  /// context 为弹窗上下文；返回宽 284pt 的玻璃菜单层：分段、260pt 高网格区与「管理贴纸…」，两段都显示，切换分段时高度不变。
   @override
   Widget build(BuildContext context) {
     final mine = _tab == _StickerTab.mine;
@@ -175,7 +161,6 @@ class _StickerPanelState extends State<StickerPanel> {
                   height: StickerMetrics.gridHeight,
                   child: mine ? _buildMine(context) : _buildEmoji(context),
                 ),
-                // 「管理贴纸…」两段都显示，切换分段时下拉框高度不变。
                 const SizedBox(height: StickerMetrics.actionGap),
                 SizedBox(
                   height: GlassMetrics.hitSize,
@@ -198,26 +183,20 @@ class _StickerPanelState extends State<StickerPanel> {
   }
 }
 
-/// 贴纸下拉框的定位：左边对齐「贴纸」按钮，优先放在按钮下方，放不下时放到上方；无锚点时居中。
 class StickerPanelLayout extends SingleChildLayoutDelegate {
-  /// anchor 为「贴纸」按钮的全局矩形；按钮未显示（经快捷动作打开）时为 null。
   const StickerPanelLayout(this.anchor);
   final Rect? anchor;
 
-  /// constraints 为可用区域约束；返回放宽到 0 起的子约束，让下拉框取自身大小。
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       constraints.loosen();
 
-  /// size 为可用区域大小，childSize 为下拉框大小；返回下拉框左上角偏移：
-  /// 横向左对齐按钮并夹在窗口左右各留 4pt 内，纵向在按钮下方 4pt，下方放不下则在上方 4pt。
   @override
   Offset getPositionForChild(Size size, Size childSize) {
     const gap = StickerMetrics.anchorGap;
     final maxLeft = math.max(gap, size.width - childSize.width - gap);
     final maxTop = math.max(gap, size.height - childSize.height - gap);
     final anchor = this.anchor;
-    // 无锚点时居中，并在窄视口下夹紧不越出边界。
     if (anchor == null) {
       return Offset(
         ((size.width - childSize.width) / 2).clamp(0.0, maxLeft).toDouble(),

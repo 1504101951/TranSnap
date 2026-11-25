@@ -17,11 +17,8 @@ import 'package:transnap/src/settings/service_editor.dart';
 import 'package:transnap/src/settings/sticker_upload_dialog.dart';
 import 'package:transnap/src/translation/glossary.dart';
 
-/// 无参数；验证设置页各独立弹窗子编辑器的 UI/UX 规范加固项（#144）。
 void main() {
   testWidgets('PromptEditor 消除重复标题、报错内联归属，恢复默认需二次确认（#144）', (tester) async {
-    // 作用：验证各字段只渲染单份标题，清空后错误落在 NativeGlassField.errorText 内，恢复默认有二次确认防误触。
-    // 边界：「润色」修改过时「恢复默认」可点；取消确认保持修改，点击「恢复默认」确认后归位默认。
     await tester.pumpWidget(
       NativeGlassApp(
         home: Scaffold(
@@ -82,8 +79,6 @@ void main() {
   });
 
   testWidgets('PromptEditor 矮窗可滚动且隐藏滚动条避免遮挡右侧操作按钮（#67）', (tester) async {
-    // 作用：验证提示词弹窗隐藏默认桌面滚动条，避免覆盖右侧「恢复默认」按钮，同时在矮窗内保持可滚动访问。
-    // 边界：视口高 480pt 时无 Scrollbar/RawScrollbar 实例，向上拖动表单滚动视图后底部「解释」输入框仍可达。
     tester.view.physicalSize = const Size(700, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -101,7 +96,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 弹窗外层表单不挂载滚动条（避免遮挡右侧「恢复默认」按钮）；仅多行输入框内部保留 Flutter 自身 EditableText 的 Scrollbar。
     expect(
       find.ancestor(
         of: find.byKey(const ValueKey('恢复默认-翻译')),
@@ -144,8 +138,6 @@ void main() {
   testWidgets('StickerUploadDialog 480pt 矮窗可滚动无溢出、24pt 手柄命中区且支持滑块缩放与深色棋盘格（#144）', (
     tester,
   ) async {
-    // 作用：验证设置窗最小高度（480pt）内弹窗滚动不溢出，手柄命中 ≥ 24pt，Slider 支持等比调整且深色不抛异常。
-    // 边界：视口高 480pt 时无 RenderFlex overflow；200×100 原图滑块设为 100 时默认大小更新为 100 × 50 pt。
     tester.view.physicalSize = const Size(700, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -190,8 +182,6 @@ void main() {
   testWidgets('ServiceEditor 保留自定义名称、支持密钥显隐切换及测试连接忙碌态与横幅展示（#144）', (
     tester,
   ) async {
-    // 作用：验证切服务类型不覆盖手填名称、密钥可见性切换及连接测试期间 BusyRing 与横幅反馈。
-    // 边界：手填「自建名称」保留，未改动的默认 Base URL 随类型切换；testService 挂起时 BusyRing.active=true。
     const channel = MethodChannel(ChannelNames.settings);
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -255,8 +245,6 @@ void main() {
   testWidgets('GlossaryEditor 重复术语内联报错且 GlossaryManager 删除需二次确认（#144）', (
     tester,
   ) async {
-    // 作用：验证术语查重结果直接呈现在「原文术语」NativeGlassField 内，管理页删除需弹窗确认。
-    // 边界：同语言忽略大小写重复「api」触发内联 errorText；取消删除保留原词，确认后显示「暂无术语」。
     const channel = MethodChannel(ChannelNames.settings);
     await tester.pumpWidget(
       NativeGlassApp(

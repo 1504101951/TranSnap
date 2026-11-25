@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-/// 共享控件尺寸与数值范围，全部对应样式Spec #67。
 abstract final class DrawingMetrics {
   static const paletteWidth = 280.0;
   static const padding = 12.0;
@@ -13,13 +12,10 @@ abstract final class DrawingMetrics {
   static const maxWidth = 20.0;
   static const mosaicPixels = 12.0;
 
-  /// 荧光笔（#107）：默认黄色与 16pt 粗细，绘制时施加 40% 不透明度。
   static const highlighterColor = Color(0xFFFFCC00);
   static const highlighterWidth = 16.0;
   static const highlighterOpacity = 0.4;
 
-  /// 步骤编号标记（#107）：圆直径（pt），数字字号占直径比例，数字最大宽度占直径比例；
-  /// 圆的相对亮度超过阈值时数字用黑色，否则用白色。
   static const stepDiameter = 28.0;
   static const stepFontRatio = 0.55;
   static const stepTextMaxRatio = 0.8;
@@ -35,7 +31,6 @@ abstract final class DrawingMetrics {
     Color(0xFF000000),
   ];
 
-  /// 渐变预设（#103）：名称与左上到右下的两色，调色盘渐变页签与美化背景共用。
   static const gradients = <({String name, Color from, Color to})>[
     (name: '晨曦', from: Color(0xFFFF9A8B), to: Color(0xFFFF6A88)),
     (name: '海洋', from: Color(0xFF4FACFE), to: Color(0xFF00F2FE)),
@@ -45,7 +40,6 @@ abstract final class DrawingMetrics {
     (name: '石墨', from: Color(0xFF434343), to: Color(0xFF000000)),
   ];
 
-  /// 渐变页签：起始色/结束色色块按钮尺寸、选中边框宽、方向按钮边长与预览条高度。
   static const wellWidth = 48.0;
   static const wellHeight = 24.0;
   static const wellSelectedBorder = 2.0;
@@ -53,46 +47,35 @@ abstract final class DrawingMetrics {
   static const previewHeight = 24.0;
 }
 
-/// 截图美化的预设与数值（#103），全部对应样式Spec #67；长度单位为屏幕点。
 abstract final class BeautifyMetrics {
-  /// 内边距下拉的选项（pt）与默认值。
   static const paddings = <double>[32, 64, 96];
   static const defaultPadding = 64.0;
 
-  /// 美化行下拉宽度：内边距 112pt、圆角 88pt，高 32pt（#103）。
   static const paddingMenuWidth = 112.0;
   static const radiusMenuWidth = 88.0;
 
-  /// 圆角选项：直角与圆角。
   static const squareRadius = 0.0;
   static const roundRadius = 12.0;
 
-  /// 阴影：黑色 35%、模糊 24pt、下移 8pt。
   static const shadowColor = Color(0x59000000);
   static const shadowBlur = 24.0;
   static const shadowOffset = 8.0;
 }
 
-/// 取色与标尺的点尺寸（#111）；标签底色、高度、内边距、圆角与字号沿用 [CropMetrics]。
 abstract final class MeasureMetrics {
-  /// 标签与指针（取色）或终点（标尺）在两个方向上的距离。
   static const labelOffset = 12.0;
 
-  /// 取色色块边长、白边宽度、圆角与到文字的间距。
   static const swatchSize = 10.0;
   static const swatchBorder = 1.0;
   static const swatchRadius = 2.0;
   static const swatchGap = 4.0;
 
-  /// 标尺白线宽、黑色 60% 描边宽与两端垂直端点线的长度。
   static const lineWidth = 1.0;
   static const outlineWidth = 3.0;
   static const tickLength = 8.0;
 }
 
-/// 框选精确控制的预设与数值（#106），全部对应样式Spec #67；长度单位标注在各字段。
 abstract final class CropMetrics {
-  /// 比例行的预设：按钮文字与宽高比，null 为自由。
   static const ratios = <({String label, double? ratio})>[
     (label: '自由', ratio: null),
     (label: '1:1', ratio: 1),
@@ -102,17 +85,13 @@ abstract final class CropMetrics {
     (label: '9:16', ratio: 9 / 16),
   ];
 
-  /// 比例按钮文字字号（点），四字符比例放进 32pt 按钮。
   static const ratioFontSize = 11.0;
 
-  /// 方向键每次移动或调整的截图像素；按住 ⇧ 时使用大步长。
   static const nudgeStep = 1.0;
   static const nudgeLargeStep = 10.0;
 
-  /// 选区与文字框的最小边长（截图像素），拖动、比例与方向键调整共用。
   static const minSide = 8.0;
 
-  /// 尺寸标签（点）：字号、固定高度、左右内边距、与选区的间距、圆角及黑色 60% 背景。
   static const labelFontSize = 12.0;
   static const labelHeight = 18.0;
   static const labelPadding = 6.0;
@@ -121,40 +100,31 @@ abstract final class CropMetrics {
   static const labelBackground = Color(0x99000000);
 }
 
-/// 截图贴纸的数值（#103），对应样式Spec #67「截图贴纸」；长度单位为屏幕点。
 abstract final class StickerMetrics {
-  /// 我的贴纸默认大小的长边上限，与 Emoji 贴纸的默认长边。
   static const maxDefaultSize = 512.0;
   static const emojiDefaultSize = 96.0;
 
-  /// 贴纸面板格子圆角、每行格数与间距；设置页缩略图边长与间距。
   static const cellRadius = 6.0;
   static const panelColumns = 6;
   static const panelGap = 4.0;
   static const thumbnail = 48.0;
   static const thumbnailGap = 8.0;
 
-  /// 贴纸下拉框：分段、网格区、「管理贴纸…」之间的间距。
   static const actionGap = 8.0;
 
-  /// 贴纸下拉框宽度：6 格 40pt 加 5 个 4pt 间距，再加两侧 12pt 内边距，格子保持 40×40pt。
   static const panelWidth = 284.0;
 
-  /// 贴纸下拉框网格区高度（6 行）、表情字号、类别标题字号与上下留白。
   static const gridHeight = 260.0;
   static const emojiFontSize = 24.0;
   static const categoryFontSize = 12.0;
   static const categoryPadding = 4.0;
 
-  /// 贴纸下拉框与「贴纸」按钮、窗口边缘的间距。
   static const anchorGap = 4.0;
 
-  /// 上传框预览区尺寸与棋盘格边长。
   static const previewWidth = 480.0;
   static const previewHeight = 320.0;
   static const checker = 12.0;
 
-  /// 旋转手柄距上边的距离与直径。
   static const rotateDistance = 20.0;
   static const rotateHandle = 10.0;
 }

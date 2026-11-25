@@ -2,10 +2,7 @@ import AppKit
 import FlutterMacOS
 import QuartzCore
 
-/// 实时翻译盖层的逐字显影计算（#142）：批内追加仅显影新字、错峰受总长上限约束，与 Dart CharReveal 一致。
 enum CharRevealBatch {
-    /// previous 为上一帧译文，current 为当前帧译文；返回本帧已完整显示的前缀字数（Character 粒度）。
-    /// 内容不变时返回全长，紧跟上次前缀追加时保留已显示部分，首次或整段替换时从头显影。
     static func batchBase(previous: String, current: String) -> Int {
         guard !current.isEmpty else { return 0 }
         if previous == current { return current.count }
@@ -13,7 +10,6 @@ enum CharRevealBatch {
         return 0
     }
 
-    /// revealingCount 为本批待显影字数，baseStagger 为基准字间隔，maxSpread 为整段错峰总长上限；返回单个字符间的错峰时长。
     static func stagger(
         revealingCount: Int,
         baseStagger: TimeInterval = AppConstants.charRevealStagger,
@@ -23,7 +19,6 @@ enum CharRevealBatch {
         return min(baseStagger, maxSpread / Double(revealingCount))
     }
 
-    /// revealingCount 为本批待显影字数，charDuration 为单字显现时长，其余为错峰上限；返回本批显影总时长（秒）。
     static func totalDuration(
         revealingCount: Int,
         charDuration: TimeInterval = AppConstants.charRevealDuration,
@@ -35,7 +30,6 @@ enum CharRevealBatch {
         return charDuration + step * Double(revealingCount - 1)
     }
 
-    /// elapsed 为本批已经过时间（秒），index 为本批内字符序号，stagger 为字间错峰，charDuration 为单字显影时长；返回 0...1 进度。
     static func progress(
         elapsed: TimeInterval,
         index: Int,
@@ -48,23 +42,19 @@ enum CharRevealBatch {
         return CGFloat(min(1, max(0, ratio)))
     }
 
-    /// progress 为单字 0...1 显影进度，maxBlur 为初始模糊半径（pt）；返回当前同色阴影近似模糊半径。
     static func blurRadius(progress: CGFloat, maxBlur: CGFloat = AppConstants.charRevealBlur) -> CGFloat {
         let clamped = min(1, max(0, progress))
         return maxBlur * (1 - clamped)
     }
 }
 
-/// 逐帧显影定时器代理；以弱引用连接视图，视图销毁时自动释放显示链路，避免循环引用与跨线程清理冲突。
 private final class LiveRevealLinkTarget: NSObject {
     weak var owner: LiveFitTextView?
 
-    /// owner 为驱动逐帧显影的段落视图；保存弱引用，不延长视图寿命。
     init(owner: LiveFitTextView) {
         self.owner = owner
     }
 
-    /// link 为显示器刷新信号；宿主视图已销毁时立即停止链路，否则触发下一帧显影重绘。
     @objc func step(_ link: CADisplayLink) {
         MainActor.assumeIsolated {
             guard let owner else {
@@ -76,12 +66,9 @@ private final class LiveRevealLinkTarget: NSObject {
     }
 }
 
-/// 把整段译文缩进段落块矩形并在矩形内换行。字号可以很小，绘制不超出该矩形，并按批次逐字显现（#142）。
 final class LiveFitTextView: NSView {
-    /// 读取系统「减少动态效果」设置；测试可覆写以隔离系统偏好。
     var isReduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
-    /// 段落译文；内容不变时不重画，追加新字仅显影后缀，替换则整段重播（减少动态效果下直接显示）。
     var text = "" {
         didSet {
             guard text != oldValue else { return }
@@ -101,16 +88,13 @@ final class LiveFitTextView: NSView {
         }
     }
 
-    /// 本批开始前已完整显示的字符数；显影区间为 [revealedBase, text.count)。
     private var revealedBase = 0
     private var batchStagger: TimeInterval = 0
     private var batchDuration: TimeInterval = 0
     private var batchStartedAt: TimeInterval?
     private var displayLink: CADisplayLink?
-    /// 最近一次适配的结果：同一段文字在同一尺寸下不重复计算字号。
     private var fitted: (text: String, size: NSSize, font: NSFont)?
 
-    /// 无参数；视图挂入或移出窗口时同步维护显影刷新链路，离窗即停，无返回值。
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
@@ -120,7 +104,6 @@ final class LiveFitTextView: NSView {
         }
     }
 
-    /// 无参数；停止显影刷新并清空段落内容，在段落槽位复用前或盖层关闭时调用，无返回值。
     func reset() {
         stopReveal()
         revealedBase = 0
@@ -128,7 +111,6 @@ final class LiveFitTextView: NSView {
         text = ""
     }
 
-    /// 无参数；确认显示刷新链路已激活，用于显影期间逐帧重绘，无返回值。
     private func ensureDisplayLink() {
         guard window != nil, displayLink == nil else { return }
         let link = displayLink(target: LiveRevealLinkTarget(owner: self), selector: #selector(LiveRevealLinkTarget.step(_:)))
@@ -136,14 +118,12 @@ final class LiveFitTextView: NSView {
         displayLink = link
     }
 
-    /// 无参数；停止当前显影链路并清理计时起点，无返回值。
     private func stopReveal() {
         displayLink?.invalidate()
         displayLink = nil
         batchStartedAt = nil
     }
 
-    /// 无参数；处理每次屏幕刷新：未到总时长时请求重绘，完成后停表并固化全段，无返回值。
     fileprivate func stepReveal() {
         guard !isReduceMotion(),
               revealedBase < text.count,
@@ -160,7 +140,6 @@ final class LiveFitTextView: NSView {
         needsDisplay = true
     }
 
-    /// dirtyRect 为需要重画的区域。按当前外观与高对比度配置绘制圆角半透阅读底板并保持最小可读字号与内边距，逐字显影期用透明度与同色阴影柔和渐入（#144 U-31）。
     override func draw(_ dirtyRect: NSRect) {
         let colors = overlayColors()
         let radius = min(AppConstants.liveOverlayCornerRadius, min(bounds.width, bounds.height) / 2)
@@ -179,7 +158,6 @@ final class LiveFitTextView: NSView {
         let contentRect = bounds.insetBy(dx: padX, dy: padY)
         guard !text.isEmpty, contentRect.width > 1, contentRect.height > 1 else { return }
 
-        // 字号与居中边界始终按完整文本测算，避免显影期间文字换行跳动。
         let fitted = fittedFont(in: contentRect.size)
         let style = NSMutableParagraphStyle()
         style.alignment = .center
@@ -204,7 +182,6 @@ final class LiveFitTextView: NSView {
                 height: max(1, contentRect.maxY - originY)
             )
         } else {
-            // 达到可读字号下限仍超框时从内容顶部绘制并允许末行截断，防止缩成 1pt 细线。
             drawRect = contentRect
         }
 
@@ -258,13 +235,11 @@ final class LiveFitTextView: NSView {
         attributed.draw(with: drawRect, options: drawOptions)
     }
 
-    /// 无参数；随系统或窗口有效外观切换即时重绘，无返回值（#144 U-31）。
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
     }
 
-    /// 无参数；按当前有效明暗外观与系统无障碍设置返回高对比背景、前景色与轻描边色（#144 U-31）。
     private func overlayColors() -> (background: NSColor, text: NSColor, border: NSColor) {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let highContrast = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -284,7 +259,6 @@ final class LiveFitTextView: NSView {
         )
     }
 
-    /// availableSize 为扣除内边距后的可用绘制区域；返回兼顾框高与最低可读下限的半粗体字号（#144 U-31）。
     private func fittedFont(in availableSize: NSSize) -> NSFont {
         if let fitted, fitted.text == text, fitted.size == availableSize { return fitted.font }
         let floorSize = min(AppConstants.liveOverlayMinFontSize, max(6, availableSize.height * 0.85))
@@ -314,8 +288,6 @@ final class LiveFitTextView: NSView {
     }
 }
 
-/// 点击穿透的译文盖层。每个显示器一个透明窗口，段落块是窗口里的子视图。
-/// 窗口属于本应用，识别用的捕获流不会再次捕获它；同步录制只排除采集控制窗口，盖层自然进入录制画面。
 @MainActor
 final class LiveTextOverlay {
     private var panels: [(screen: NSRect, panel: NSPanel)] = []
@@ -327,7 +299,6 @@ final class LiveTextOverlay {
         }
     }
 
-    /// 无参数。在每个显示器上铺一个空的透明窗口并监听外观切换，会话开始时调用。
     func open() {
         close()
         for screen in NSScreen.screens {
@@ -342,7 +313,6 @@ final class LiveTextOverlay {
         }
     }
 
-    /// 无参数；将应用手动浅/深模式变更实时推送给全部盖层面板并重绘文本块（#144 U-31）。
     private func syncAppearance() {
         for item in panels {
             NativeGlassFactory.applyAppearance(to: item.panel)
@@ -352,8 +322,6 @@ final class LiveTextOverlay {
         }
     }
 
-    /// previousFrames/previousTexts 为当前可见段落槽位状态，newItems 为新一帧段落列表；
-    /// 按文本相关性与空间距离做一对一稳定匹配，避免 OCR 重排触发无关段落重播 CharReveal，返回每项命中的旧槽位下标（#144 U-31）。
     nonisolated static func matchSlots(
         previousFrames: [NSRect],
         previousTexts: [String],
@@ -367,7 +335,6 @@ final class LiveTextOverlay {
                 let overlaps = !oldFrame.intersection(item.rect).isEmpty
                 guard overlaps || dist <= threshold else { continue }
                 let oldText = oldIdx < previousTexts.count ? previousTexts[oldIdx] : ""
-                // 优先保留相同或续写前缀段落，其次选几何中心最贴近的旧槽位。
                 let textBonus: Double
                 if !oldText.isEmpty && oldText == item.text {
                     textBonus = 10_000
@@ -390,7 +357,6 @@ final class LiveTextOverlay {
         return assigned
     }
 
-    /// chips 为已归属译文的屏幕矩形。按矩形中心所在的显示器放进对应窗口并稳定复用视图槽位；空列表撤掉全部译文（#144 U-31）。
     func apply(_ chips: [[String: Any]]) {
         var grouped: [[(text: String, rect: NSRect)]] = panels.map { _ in [] }
         for chip in chips {
@@ -403,7 +369,6 @@ final class LiveTextOverlay {
             let rect = NSRect(x: x, y: y, width: width, height: height)
             let center = NSPoint(x: rect.midX, y: rect.midY)
             guard let index = panels.firstIndex(where: { $0.screen.contains(center) }) else { continue }
-            // 屏幕坐标换成该窗口内的坐标。
             grouped[index].append((text, rect.offsetBy(dx: -panels[index].screen.minX, dy: -panels[index].screen.minY)))
         }
         for (index, items) in grouped.enumerated() {
@@ -443,12 +408,10 @@ final class LiveTextOverlay {
         }
     }
 
-    /// 无参数。撤掉全部译文，窗口保持显示。
     func clear() {
         apply([])
     }
 
-    /// 无参数。关闭全部盖层窗口并停止显影链路；会话结束时调用。
     func close() {
         if let observer = appearanceObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -463,7 +426,6 @@ final class LiveTextOverlay {
         panels = []
     }
 
-    /// frame 为显示器的屏幕矩形。返回铺满该显示器、同步应用外观、不接收鼠标、不成为 key 的透明窗口（#144 U-31）。
     private func makePanel(frame: NSRect) -> NSPanel {
         let panel = NSPanel(
             contentRect: frame,
@@ -486,7 +448,6 @@ final class LiveTextOverlay {
     }
 }
 
-/// 连接译文盖层、采集悬浮条、未编码捕获和主引擎会话。不保存译文。
 @MainActor
 final class LiveRegionCoordinator {
     private let bridge: MacPlatformBridge
@@ -499,10 +460,8 @@ final class LiveRegionCoordinator {
     private var busy = false
     private var source: [String: Any] = [:]
     private var region: MediaCaptureService.Region?
-    /// 本次实时翻译是否同步录制。
     private var recording = false
 
-    /// bridge 转发主引擎命令，controls 复用采集悬浮条。
     init(bridge: MacPlatformBridge, controls: CaptureWindowController) {
         self.bridge = bridge
         self.controls = controls
@@ -526,15 +485,12 @@ final class LiveRegionCoordinator {
         }
     }
 
-    /// screen 为截图显示器。准备阶段先建好录制同款控制条，开始前不显示。
     func preview(on screen: NSScreen?) {
         controls.prepareControls()
     }
 
-    /// 无参数。准备阶段没有预览窗可关。
     func cancelPreview() {}
 
-    /// source 为截图确认的目标，region 为区域选区。锁定预览并开始识别。
     func begin(source: [String: Any], region: MediaCaptureService.Region?) async throws {
         guard !running, !controls.hasPendingCapture else {
             throw GIFExporter.ExportError(message: "请先结束或放弃当前采集。")
@@ -547,7 +503,6 @@ final class LiveRegionCoordinator {
         ended = false
         let displayID = (source["sourceID"] as? NSNumber)?.uint32Value
         let screen = NSScreen.screens.first { $0.displayID == displayID }
-        // 是否同步录制取自已保存的设置，对区域、窗口和全屏目标都生效。
         let preferences = AppPreferences.current
         recording = preferences[AppConstants.liveRecordingKey] as? Bool == true
         overlay.open()
@@ -560,9 +515,7 @@ final class LiveRegionCoordinator {
             try await command(.start, generation: token)
             try await capture.start(source: source, region: region, generation: token)
             if recording {
-                // 录制与识别各用一路捕获；录制只排除采集控制窗口，译文盖层自然进入画面。
                 if let region { try controls.service.select(region) }
-                // 实时翻译的同步录制随翻译立即开始，不延时（#129）。
                 try await controls.service.startRecording(source, delay: 0)
             }
         } catch {
@@ -617,7 +570,6 @@ final class LiveRegionCoordinator {
         ended = true
         running = false
         await capture.stop()
-        // 先结束录制再撤控制条；控制条随后按媒体阶段显示完成进度与录制结果。
         await stopRecording()
         controls.hideLiveControls()
         controls.setLiveShade(nil)
@@ -649,7 +601,6 @@ final class LiveRegionCoordinator {
         running = false
         ended = true
         await capture.stop()
-        // 采集失效时保留已经录到的内容，交给录制结果窗口处理。
         await stopRecording()
         controls.hideLiveControls()
         controls.setLiveShade(nil)
@@ -658,7 +609,6 @@ final class LiveRegionCoordinator {
         try? await command(.captureFailed, generation: generation, failure: message)
     }
 
-    /// paused 为真暂停录制，为假继续录制。未同步录制时不做任何事；失败写入排查日志。
     private func pauseRecording(_ paused: Bool) async {
         guard recording else { return }
         do {
@@ -668,7 +618,6 @@ final class LiveRegionCoordinator {
         }
     }
 
-    /// 无参数。结束同步录制并保留结果；未同步录制时不做任何事，失败写入排查日志。
     private func stopRecording() async {
         guard recording else { return }
         recording = false
@@ -679,7 +628,6 @@ final class LiveRegionCoordinator {
         }
     }
 
-    /// 无参数。丢弃同步录制及其临时文件；未同步录制时不做任何事。
     private func cancelRecording() async {
         guard recording else { return }
         recording = false
@@ -688,7 +636,6 @@ final class LiveRegionCoordinator {
 
     private var windowVisible: Bool { running || ended }
 
-    /// action/generation 交给主引擎。failure 只用于采集失效。
     private func command(_ action: LiveRegionAction, generation: Int, failure: String? = nil) async throws {
         var arguments: [String: Any] = ["action": action.rawValue, "generation": generation]
         if let failure { arguments["failure"] = failure }
@@ -713,17 +660,13 @@ final class LiveRegionCoordinator {
         bridge.requestApplication(AppConstants.liveRegionOcrMethod, arguments: arguments) { _ in }
     }
 
-    /// state 为主引擎快照。只在运行中把已归属译文盖到段落块上。
     func publish(_ state: [String: Any]) {
-        // 主引擎快照总带 phase、status、overlays、metrics 四个字段（LiveRegionView.toMap）；
-        // 缺少或类型不符即两端协议不一致，直接终止，不补默认值（#127、#132）。
         guard let raw = state["phase"] as? String, let phase = LiveRegionPhase(rawValue: raw),
               let status = state["status"] as? String,
               let overlays = state["overlays"] as? [[String: Any]],
               let metrics = state["metrics"] as? [[String: Any]] else {
             preconditionFailure("实时翻译快照缺少可识别的字段")
         }
-        // metrics 为主引擎给出的批次计时，每个批次只出现一次；字段固定由主引擎写入，逐项记入日志。
         for item in metrics {
             let fields = ["blocks", "chars", "waitMs", "firstMs", "totalMs", "inflight", "outcome"]
                 .map { "\($0)=\(item[$0]!)" }

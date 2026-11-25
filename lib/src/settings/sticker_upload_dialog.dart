@@ -8,10 +8,7 @@ import '../common/constants/glass_metrics.dart';
 import '../common/widgets/native_glass.dart';
 import '../screenshot/stickers.dart';
 
-/// 添加贴纸的上传框：预览图片并拖动四角等比设定默认大小（长边上限 512pt）；
-/// 「添加」返回默认宽高（pt），取消返回 null（#103）。
 class StickerUploadDialog extends StatefulWidget {
-  /// bytes 为规范化后的 PNG，pixelWidth/pixelHeight 为其像素尺寸。
   const StickerUploadDialog({
     super.key,
     required this.bytes,
@@ -22,25 +19,21 @@ class StickerUploadDialog extends StatefulWidget {
   final int pixelWidth;
   final int pixelHeight;
 
-  /// 预览按长边 512pt 能完整放下的比例显示，四周留 12pt 给控制点。
   static final previewScale = math.min(
     (StickerMetrics.previewWidth - 24) / StickerMetrics.maxDefaultSize,
     (StickerMetrics.previewHeight - 24) / StickerMetrics.maxDefaultSize,
   );
 
-  /// 无参数；返回持有当前默认大小的状态。
   @override
   State<StickerUploadDialog> createState() => _StickerUploadDialogState();
 }
 
-/// 持有默认大小（pt）；拖动四角时按指针到中心的距离等比更新。
 class _StickerUploadDialogState extends State<StickerUploadDialog> {
   late (double, double) _size = initialStickerSize(
     widget.pixelWidth,
     widget.pixelHeight,
   );
 
-  /// targetLong 为目标长边尺寸（pt）；按当前宽高比等比缩放并钳位到 16–512pt。
   void _setLongSide(double targetLong) {
     final (width, height) = _size;
     final currentLong = math.max(width, height);
@@ -50,7 +43,6 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
     setState(() => _size = (width * ratio, height * ratio));
   }
 
-  /// local 为指针在预览区内的位置；按到中心的横纵距离取较大的放大倍数，长边限制在 16–512pt。
   void _drag(Offset local) {
     final scale = StickerUploadDialog.previewScale;
     final center = const Offset(
@@ -65,7 +57,6 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
     _setLongSide(math.max(width, height) * factor);
   }
 
-  /// context 为弹窗上下文；返回适配深浅外观的棋盘格预览、键盘滑块及可滚动默认大小设置。
   @override
   Widget build(BuildContext context) {
     final scale = StickerUploadDialog.previewScale;
@@ -101,7 +92,6 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
                       rect: rect,
                       child: Image.memory(widget.bytes, fit: BoxFit.fill),
                     ),
-                    // 四角控制点扩展至 24×24pt 命中区（U-19）；SizedBox 置于 GestureDetector 内以维持测试祖先查找顺序。
                     for (final (index, corner) in [
                       rect.topLeft,
                       rect.topRight,
@@ -139,7 +129,6 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
               ),
             ),
             const SizedBox(height: GlassMetrics.space12),
-            // 键盘与高精度调参替代方案：允许不依赖指针拖放微调长边尺寸（U-19）。
             Row(
               children: [
                 Text('默认长边', style: Theme.of(context).textTheme.bodySmall),
@@ -191,23 +180,18 @@ class _StickerUploadDialogState extends State<StickerUploadDialog> {
     );
   }
 
-  /// 预览区的键，用于把全局指针位置换算到预览区坐标。
   final _previewKey = GlobalKey();
 
-  /// global 为全局指针位置；返回其在预览区内的坐标。
   Offset _previewLocal(Offset global) =>
       (_previewKey.currentContext!.findRenderObject() as RenderBox)
           .globalToLocal(global);
 }
 
-/// 预览区的棋盘格背景，随深浅外观切换格子对比度，显示贴纸透明区域。
 class _CheckerPainter extends CustomPainter {
-  /// dark 决定浅色或深色棋盘格配对。
   const _CheckerPainter({required this.dark});
 
   final bool dark;
 
-  /// canvas/size 为绘制目标与尺寸；按 12pt 方格交替绘制。
   @override
   void paint(Canvas canvas, Size size) {
     const cell = StickerMetrics.checker;
@@ -227,7 +211,6 @@ class _CheckerPainter extends CustomPainter {
     }
   }
 
-  /// oldDelegate 为旧绘制器；仅当深浅主题变化时重绘。
   @override
   bool shouldRepaint(_CheckerPainter oldDelegate) => oldDelegate.dark != dark;
 }

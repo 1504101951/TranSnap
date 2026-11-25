@@ -4,10 +4,8 @@ import 'package:transnap/src/common/constants/bridge_event_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transnap/src/platform/platform_event.dart';
 
-/// 无参数；验证原生事件到Dart事件的字段转换，不创建或修改翻译会话。
 void main() {
   test('parses selectionCaptured with sessionId', () {
-    // 原生事件携带会话、手势与坐标，解析结果必须保留这些业务字段。
     final event = PlatformEvent.fromMap({
       'type': BridgeEventTypes.selectionCaptured,
       'sessionId': 's1',
@@ -26,7 +24,6 @@ void main() {
   });
 
   test('parses escapePressed', () {
-    // Escape事件仍携带所属会话，供实际调用方拒绝过期关闭请求。
     final event = PlatformEvent.fromMap({
       'type': MethodNames.escapePressed,
       'sessionId': 's2',

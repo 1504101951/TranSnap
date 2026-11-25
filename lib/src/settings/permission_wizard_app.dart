@@ -9,39 +9,30 @@ import '../common/constants/channel_names.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/permission_utils.dart';
 
-/// 首次启动权限窗口；一页同时申请辅助功能与录屏，不写 TCC.db。
 class PermissionWizardApp extends StatefulWidget {
   const PermissionWizardApp({
     super.key,
     this.channel = const MethodChannel(ChannelNames.settings),
   });
 
-  /// 与原生设置桥共用的方法通道。
   final MethodChannel channel;
 
-  /// 无参数；创建向导状态。
   @override
   State<PermissionWizardApp> createState() => _PermissionWizardAppState();
 }
 
-/// 管理授权状态刷新和申请中的交互；不直接修改系统权限数据库。
 class _PermissionWizardAppState extends State<PermissionWizardApp>
     with WidgetsBindingObserver {
-  /// 辅助功能是否已授权。
   bool _accessibility = false;
 
-  /// 屏幕录制是否已授权。
   bool _screenAccess = false;
 
-  /// 正在向系统申请的权限方法名；非空时禁用按钮，避免重复弹系统框。
   String? _busyMethod;
 
   bool get _busy => _busyMethod != null;
 
-  /// 系统 API 失败时的可读说明。
   String? _message;
 
-  /// 无参数；两项都授权后才能进入应用。
   bool get _canEnter => canEnterApp(
     accessibilityGranted: _accessibility,
     screenRecordingGranted: _screenAccess,
@@ -66,7 +57,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     }
   }
 
-  /// 无参数；读取当前授权，异常时展示提示；不因未点「进入应用」而关窗。
   Future<void> _refresh() async {
     try {
       final status = await widget.channel.invokeMapMethod<Object?, Object?>(
@@ -76,7 +66,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
       setState(() {
         _accessibility = status['accessibility'] == true;
         _screenAccess = status['screenAccess'] == true;
-        // 两项权限均就绪后清除残留错误横幅，保持完成态清晰。
         if (_accessibility && _screenAccess) _message = null;
       });
     } on PlatformException catch (error) {
@@ -85,7 +74,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     }
   }
 
-  /// alreadyGranted 为该项当前状态，method 为对应系统申请；申请前清空旧错误并锁定并发点击。
   Future<void> _request(bool alreadyGranted, String method) async {
     if (_busy) return;
     if (alreadyGranted) {
@@ -107,14 +95,12 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     }
   }
 
-  /// 无参数；关闭向导，下次启动若仍缺权限会再弹出。
   Future<void> _skip() async {
     if (_busy) return;
     await widget.channel.invokeMethod<void>(MethodNames.finishPermissionWizard);
     await widget.channel.invokeMethod<void>(MethodNames.closePermissionWizard);
   }
 
-  /// 无参数；两项都成功后进入菜单栏使用。
   Future<void> _enter() async {
     if (_busy || !_canEnter) return;
     await widget.channel.invokeMethod<void>(MethodNames.finishPermissionWizard);
@@ -128,7 +114,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
     super.dispose();
   }
 
-  /// context 为窗口上下文；返回主体可滚动且底部操作固定的单页双按钮向导。
   @override
   Widget build(BuildContext context) {
     return NativeGlassApp(
@@ -140,7 +125,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 矮窗口或大字号下仅正文区滚动，底部取消与主操作保持固定可达（U-14）。
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
@@ -219,7 +203,6 @@ class _PermissionWizardAppState extends State<PermissionWizardApp>
   }
 }
 
-/// title 为权限名，granted 为当前状态，buttonLabel 为申请按钮文案，busy 为当前行正在申请。
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
     required this.title,
@@ -235,7 +218,6 @@ class _PermissionRow extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool busy;
 
-  /// context 为布局上下文；返回一行状态与次级申请按钮（主行动留给底部「进入应用」）。
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -250,7 +232,6 @@ class _PermissionRow extends StatelessWidget {
             ],
           ),
         ),
-        // 单行申请使用描边次级按钮，避免与底部「进入应用」主按钮视觉平级冲突（U-21）。
         NativeGlassSurface(
           material: true,
           busy: busy,

@@ -8,17 +8,12 @@ import '../common/constants/screenshot_enums.dart';
 import '../common/widgets/native_glass.dart';
 import 'drawing_style.dart';
 
-/// 解析用户输入的6位不透明sRGB值；text允许#前缀，非法输入返回null。
 Color? parseDrawingColor(String text) {
   final hex = text.trim().replaceFirst(RegExp(r'^#'), '');
   if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)) return null;
   return Color(0xFF000000 | int.parse(hex, radix: 16));
 }
 
-/// 通用调色盘：纯色或双色渐变，所有带颜色的工具、美化背景与自定义强调色共用（#103、#144）。
-/// initial 为当前颜色与渐变，onApply 返回确认的值，onCancel 关闭不改变；footer 为附加在操作按钮之上的内容
-/// （美化背景放「阴影」与「无背景」）；allowGradient 为 false 时只显示纯色编辑；
-/// onPreview 在纯色变化时回传当前颜色，供调用方实时预览。不接触画布或历史。
 class ColorPicker extends StatefulWidget {
   const ColorPicker({
     super.key,
@@ -39,7 +34,6 @@ class ColorPicker extends StatefulWidget {
   State<ColorPicker> createState() => _ColorPickerState();
 }
 
-/// 持有页签、起止两色、正在编辑的颜色与方向；色域、色相与 HEX 编辑当前选中的颜色。
 class _ColorPickerState extends State<ColorPicker> {
   late bool _gradient = widget.initial.gradient != null;
   late HSVColor _start = HSVColor.fromColor(widget.initial.color);
@@ -49,23 +43,19 @@ class _ColorPickerState extends State<ColorPicker> {
   late GradientDirection _direction =
       widget.initial.gradient?.direction ?? GradientDirection.downRight;
 
-  /// 渐变页签中是否正在编辑结束色；纯色页签始终编辑起始色。
   bool _editingEnd = false;
   late final TextEditingController _hex = TextEditingController(
     text: _hexString(widget.initial.color),
   );
   bool _invalid = false;
 
-  /// 无参数；返回色域、色相与 HEX 正在编辑的颜色。
   HSVColor get _hsv => _gradient && _editingEnd ? _end : _start;
 
-  /// color为sRGB；返回6位大写HEX，不包含alpha。
   String _hexString(Color color) => (color.toARGB32() & 0xFFFFFF)
       .toRadixString(16)
       .padLeft(6, '0')
       .toUpperCase();
 
-  /// value 为调色结果；写入正在编辑的颜色并同步 HEX 输入，纯色时回传预览，返回空。
   void _setColor(HSVColor value) {
     setState(() {
       if (_gradient && _editingEnd) {
@@ -79,21 +69,18 @@ class _ColorPickerState extends State<ColorPicker> {
     if (!_gradient) widget.onPreview?.call(value.toColor());
   }
 
-  /// end 为是否改为编辑结束色；切换渐变页签中正在编辑的颜色并同步 HEX，返回空。
   void _selectWell(bool end) => setState(() {
     _editingEnd = end;
     _invalid = false;
     _hex.text = _hexString(_hsv.toColor());
   });
 
-  /// point为色域内坐标；夹紧边缘并映射饱和度/亮度，返回空。
   void _pickField(Offset point) => _setColor(
     _hsv
         .withSaturation((point.dx / DrawingMetrics.fieldWidth).clamp(0, 1))
         .withValue((1 - point.dy / DrawingMetrics.fieldHeight).clamp(0, 1)),
   );
 
-  /// 无参数；返回当前页签对应的调色盘值，纯色时不带渐变。
   ColorFill get _value => (
     color: _start.toColor(),
     gradient: _gradient
@@ -107,8 +94,6 @@ class _ColorPickerState extends State<ColorPicker> {
     super.dispose();
   }
 
-  /// color 为色块颜色，selected 为是否选中，key/label 为测试键与可访问名，onTap 为点击动作，
-  /// gradient 为渐变色块的结束色；返回 24×24（或指定尺寸）的圆角色块。
   Widget _swatch({
     required Key key,
     required String label,
@@ -174,7 +159,6 @@ class _ColorPickerState extends State<ColorPicker> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                // 页签切换只改变编辑方式；纯色页签应用时不带渐变。只允许纯色时不显示页签。
                 if (widget.allowGradient)
                   NativeGlassSegments<bool>(
                     value: _gradient,
@@ -364,7 +348,6 @@ class _ColorPickerState extends State<ColorPicker> {
                 ],
               )
             else ...[
-              // 方向按钮：→ ↓ ↘ ↗，选中为系统蓝底白图标。
               Row(
                 children: [
                   for (final (direction, icon, label) in const [
@@ -444,7 +427,6 @@ class _ColorPickerState extends State<ColorPicker> {
                       _start = HSVColor.fromColor(color);
                     }
                   });
-                  // 合法的纯色 HEX 与拖动色域一样实时预览。
                   if (color != null && !_gradient) {
                     widget.onPreview?.call(color);
                   }
@@ -494,7 +476,6 @@ class _ColorPickerState extends State<ColorPicker> {
   }
 }
 
-/// 独立线宽选择器；initial是逻辑pt，onApply返回已确认值，取消不改变外部状态。
 class StrokeWidthPicker extends StatefulWidget {
   const StrokeWidthPicker({
     super.key,

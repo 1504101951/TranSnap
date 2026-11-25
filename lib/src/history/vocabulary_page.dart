@@ -13,9 +13,7 @@ import 'history_empty_state.dart';
 import 'history_list_card.dart';
 import 'vocabulary.dart';
 
-/// 历史窗口的生词本分段；只展示主引擎生词本，删除与导出都经通道交给主引擎和系统保存面板（#102）。
 class VocabularyPage extends StatefulWidget {
-  /// channel 为历史窗口通道，version 递增时重新读取（主引擎通知变更后由窗口传入）。
   const VocabularyPage({
     super.key,
     required this.channel,
@@ -24,12 +22,10 @@ class VocabularyPage extends StatefulWidget {
   final MethodChannel channel;
   final int version;
 
-  /// 无参数；返回维护生词列表与导出状态的界面状态。
   @override
   State<VocabularyPage> createState() => _VocabularyPageState();
 }
 
-/// 持有最近一次读取的生词与错误状态；数据以主引擎为准，不在窗口内另存。
 class _VocabularyPageState extends State<VocabularyPage> {
   List<VocabularyEntry>? _entries;
   String? _loadError;
@@ -39,21 +35,18 @@ class _VocabularyPageState extends State<VocabularyPage> {
   final Set<String> _deletingWords = {};
   final Map<String, int> _copyTriggers = {};
 
-  /// 无参数；首次读取生词本，无返回值。
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  /// old 为上一版组件；主引擎通知变更（version 变化）时重新读取，无返回值。
   @override
   void didUpdateWidget(VocabularyPage old) {
     super.didUpdateWidget(old);
     if (old.version != widget.version) _load();
   }
 
-  /// 无参数；读取全部生词，首次加载失败时展示可重试错误，刷新失败时以错误横幅保留原列表。
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -83,7 +76,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
     }
   }
 
-  /// word 为待删除单词；经危险操作确认后删除并重新读取，防止同一词条重复提交。
   Future<void> _delete(String word) async {
     if (_deletingWords.contains(word)) return;
     final confirmed = await NativeGlassDialog.confirm(
@@ -114,7 +106,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
     }
   }
 
-  /// entry 为生词条目；复制单词、译文与释义到剪贴板并触发图标确认动效。
   Future<void> _copyEntry(VocabularyEntry entry) async {
     final content = [
       entry.word,
@@ -128,7 +119,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
     });
   }
 
-  /// 无参数；取得 CSV 后经系统保存面板保存，仅在失败时显示错误横幅，返回结束的 Future。
   Future<void> _export() async {
     if (_exporting) return;
     setState(() {
@@ -157,7 +147,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
     }
   }
 
-  /// context 为当前上下文，entry 为单条生词记录；返回沿用历史列表样式的悬停感知行。
   Widget _buildEntryRow(BuildContext context, VocabularyEntry entry) {
     final colors = Theme.of(context).colorScheme;
     final date = DateTime.fromMillisecondsSinceEpoch(entry.addedAt);
@@ -174,7 +163,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: Text(
                   entry.word,
                   style: TextStyle(
-                    // 历史与生词条目主文字 14/20（#67「历史列表」）。
                     fontSize: 14,
                     height: 20 / 14,
                     color: colors.onSurface,
@@ -265,7 +253,6 @@ class _VocabularyPageState extends State<VocabularyPage> {
     );
   }
 
-  /// context 提供主题；返回顶栏操作、错误横幅、空状态及共享卡片生词列表。
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

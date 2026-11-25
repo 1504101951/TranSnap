@@ -10,7 +10,6 @@ import 'package:transnap/src/screenshot/edit_document.dart';
 
 import 'support/capture_pixels.dart';
 
-/// width/height/color 为纯色原图参数；返回 PNG 字节。
 Future<Uint8List> solidPng(int width, int height, Color color) async {
   final recorder = ui.PictureRecorder();
   Canvas(recorder).drawRect(
@@ -25,7 +24,6 @@ Future<Uint8List> solidPng(int width, int height, Color color) async {
   return bytes!.buffer.asUint8List();
 }
 
-/// bytes 为 PNG；返回 (宽, 高, 逐像素 RGBA)，用于断言实际输出像素。
 Future<(int, int, Uint8List)> decode(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
   final frame = await codec.getNextFrame();
@@ -37,19 +35,16 @@ Future<(int, int, Uint8List)> decode(Uint8List bytes) async {
   return result;
 }
 
-/// 无参数；验证美化导出的尺寸、背景、圆角、阴影，以及不美化时与原图逐像素一致（#103）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const blue = Color(0xFF0000FF);
 
-  /// image 为解码结果，x/y 为像素坐标；返回该像素 RGB。
   (int, int, int) pixel((int, int, Uint8List) image, int x, int y) {
     final offset = (y * image.$1 + x) * 4;
     return (image.$3[offset], image.$3[offset + 1], image.$3[offset + 2]);
   }
 
   test('不美化时导出与原图逐像素一致', () async {
-    // 边界：background 为 null 是关闭美化的唯一状态，输出必须与原截图完全相同。
     final source = await solidPng(40, 30, blue);
     final doc = EditDocument()..loadCapture(await decodePng(source));
     final plain = await decode(await doc.renderPng(unit: 2));
@@ -59,7 +54,6 @@ void main() {
   });
 
   test('美化按像素倍率扩出内边距，背景从首色开始，圆角外为背景，阴影只加深背景', () async {
-    // 边界：倍率 2、内边距 10pt → 每侧 20px；圆角 6pt → 12px，内容左上角像素落在圆角外。
     final source = await solidPng(40, 30, blue);
     final doc = EditDocument()..loadCapture(await decodePng(source));
     final preset = DrawingMetrics.gradients[1];
@@ -75,11 +69,8 @@ void main() {
     final corner = pixel(framed, 0, 0);
     expect((corner.$1 - (start.r * 255).round()).abs(), lessThan(4));
     expect((corner.$2 - (start.g * 255).round()).abs(), lessThan(4));
-    // 内容中心保持原图蓝色。
     expect(pixel(framed, 40, 35), (0, 0, 255));
-    // 内容左上角像素在 12px 圆角之外，被背景（绿色分量明显）覆盖。
     expect(pixel(framed, 20, 20).$2, greaterThan(100));
-    // 内容下沿外 4px：开启阴影后比不开时更暗，内容中心不受影响。
     final shadowed = await decode(
       await doc.renderPng(beautify: style.copyWith(shadow: true), unit: 2),
     );

@@ -12,10 +12,8 @@ import 'package:transnap/src/settings/settings_app.dart';
 
 import 'support/settings_pages.dart';
 
-/// 无参数；验证真实编辑得到的持久化状态、并发边界及本地校验失败后的修正。
 void main() {
   testWidgets('保存期间继续修改时，旧回包不覆盖新选择', (tester) async {
-    // 第一笔事务未完成时再改变另一字段；最终配置必须同时包含两次编辑。
     final gate = Completer<void>();
     var first = true;
     var saved = <String, Object?>{'revision': 0};
@@ -57,7 +55,6 @@ void main() {
     await openSettingsPage(tester, '个性化');
     await tester.tap(find.text('深色'));
     await tester.pumpAndSettle();
-    // 持久化事务仍挂起：后台保存也不能出现文字或占位。
     expect(find.text('正在自动保存…'), findsNothing);
     expect(find.text('已自动保存'), findsNothing);
     gate.complete();
@@ -74,7 +71,6 @@ void main() {
   });
 
   testWidgets('无效语言组合保留草稿，修正后自动保存', (tester) async {
-    // 主次语言相同是业务不允许的真实边界；不伪造底层异常或丢弃错误输入。
     var saved = <String, Object?>{
       ...AppSettings(primaryLanguage: 'zh-CN', secondaryLanguage: 'en').toMap(),
       'revision': 0,
@@ -140,7 +136,6 @@ void main() {
     expect(find.text('主要语言和次要语言必须不同。'), findsNothing);
   });
   testWidgets('延迟返回的加载快照不回退已自动保存的设置版本', (tester) async {
-    // 状态查询跨越一次完整保存，是旧快照覆盖新草稿的真实异步边界。
     final statusGate = Completer<void>();
     var delayStatus = false;
     var saved = <String, Object?>{'revision': 0};
@@ -162,7 +157,6 @@ void main() {
       if (call.method == MethodNames.saveSettings) {
         final draft = Map<String, Object?>.from(call.arguments as Map)
           ..remove('credentials');
-        // 检查保存版本与模拟持久化状态一致，而非只检查调用次数。
         expect(draft['revision'], saved['revision']);
         saved = {...draft, 'revision': (saved['revision'] as int) + 1};
         return saved;

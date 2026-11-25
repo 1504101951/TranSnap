@@ -1,7 +1,6 @@
 import AppKit
 import FlutterMacOS
 
-/// 菜单栏入口，提供设置、仅使用快捷键开关、辅助功能授权和退出操作。
 @MainActor
 final class StatusBarController: NSObject, NSMenuDelegate {
     static let shared = StatusBarController()
@@ -13,23 +12,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var screenRecordingItem: NSMenuItem?
     private var screenshotItem: NSMenuItem?
     private var stopCaptureItem: NSMenuItem?
-    /// 显示器子菜单在菜单打开时重建（#105）。
     private var displayMenu: NSMenu?
-    /// 录制倒计时的剩余秒数；没有倒计时时为 nil（#129）。
     private var countdown: Int?
     private var liveAbort = false
     private var captureActive = false
     private var automaticEnabled = true
-    /// 执行中或仍在最短保持时间内的 MCP 截图数；大于 0 时显示采集图标。
     private var mcpCaptures = 0
-    /// MCP 操控会话进行中时的终止回调；非 nil 时显示操控图标，菜单首项为「停止操控」（#140）。
     private var stopControl: (() -> Void)?
     private var abortLiveTranslation: (() -> Void)?
     var showSettings: (() -> Void)?
     var refreshSettings: (() -> Void)?
     var showHistory: (() -> Void)?
 
-    /// 无参数；首次调用创建菜单栏图标与菜单，重复调用保持现有实例，无返回值。
     func install() {
         if installed { return }
         installed = true
@@ -37,24 +31,20 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.isVisible = true
         item.button?.imagePosition = .imageOnly
-        // 图标独占菜单栏方形位置，名称仍通过悬停与辅助功能提供。
         item.button?.title = ""
         statusItem = item
         syncStatusButton()
         reloadMenu()
-        // 刚创建时窗口高度可能是 0，下一拍再强制显示。
         DispatchQueue.main.async { [weak self] in
             self?.statusItem?.isVisible = true
         }
     }
 
-    /// 无参数；按实时翻译、操控会话、双权限授权及快捷键配置重建菜单并始终挂载（#144 U-30）。
     func reloadMenu() {
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
         if liveAbort {
-            // 实时翻译运行期间保留精简应急菜单，确保「停止操控」「设置」「历史」「退出」均可触达。
             automaticItem = nil
             accessItem = nil
             screenRecordingItem = nil
@@ -90,7 +80,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
 
         if stopControl != nil {
-            // 操控期间菜单首项为「停止操控」（#67「电脑操控提示」）。
             let stop = NSMenuItem(title: "停止操控", action: #selector(stopComputerControl), keyEquivalent: "")
             stop.target = self
             stop.image = NSImage(systemSymbolName: AppConstants.controlSymbol, accessibilityDescription: "停止操控")
@@ -102,7 +91,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(settings)
 
         menu.addItem(.separator())
-        // 截图编辑工具栏承载媒体工具，菜单栏保留普通截图、捕获选项和采集停止。
         let screenshot = NSMenuItem(title: "区域截图…", action: #selector(captureScreenshot), keyEquivalent: "")
         screenshot.target = self
         screenshotItem = screenshot
@@ -158,7 +146,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         statusItem?.menu = menu
     }
 
-    /// active 为实时翻译正在运行，abort 为结束并保留结果回调；保留精简菜单并将图标切换为停止样式，无返回值（#144 U-30）。
     func setLiveAbort(_ active: Bool, abort: (() -> Void)? = nil) {
         liveAbort = active
         abortLiveTranslation = abort
@@ -166,10 +153,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         reloadMenu()
     }
 
-    /// 无参数。菜单栏中止执行结束语义，不放弃本次结果。
-    /// 作用：MCP 截图开始，菜单栏图标换为采集图标（#96 待确认值：camera.viewfinder，至少保持 1000ms）。
-    /// 实时翻译的中止图标优先，期间不切换图标。
-    /// 返回：截图结束时调用的回调；到达最短保持时间后计数减一，无进行中截图时恢复普通图标。
     func beginMCPCapture() -> () -> Void {
         mcpCaptures += 1
         syncStatusButton()
@@ -184,7 +167,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// active 为 MCP 操控会话是否进行中，stop 为「停止操控」执行的终止；更新图标与菜单，无返回值（#140）。
     func setControlActive(_ active: Bool, stop: (() -> Void)?) {
         stopControl = active ? stop : nil
         syncStatusButton()
@@ -195,7 +177,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         stopControl?()
     }
 
-    /// 无参数；统一根据当前优先级状态同步菜单栏图标、悬停提示与无障碍名称，避免状态切换遗漏（#144 U-30）。
     private func syncStatusButton() {
         guard let button = statusItem?.button else { return }
         button.title = ""
@@ -238,19 +219,15 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         abortLiveTranslation?()
     }
 
-    /// enabled 为主 Dart 已成功保存的自动按钮设置；更新菜单状态，无返回值。
     func updateAutomatic(_ enabled: Bool) {
         automaticEnabled = enabled
-        // 菜单勾选表示仅使用快捷键，与底层自动捕获状态相反。
         automaticItem?.state = enabled ? .off : .on
     }
 
-    /// menu 为即将展示的菜单；即时读取双权限、快捷键、采集停止能力与显示器列表，无返回值（#144 U-30）。
     func menuWillOpen(_ menu: NSMenu) {
         guard !liveAbort else { return }
         stopCaptureItem?.isEnabled = MacPlatformBridge.Shared.instance?.capture.canStop == true
         applyScreenshotShortcut()
-        // 显示器可能在两次打开菜单之间接入或断开，按当前系统顺序重建。
         displayMenu?.removeAllItems()
         for screen in NSScreen.screens {
             guard let id = screen.displayID else { continue }
@@ -265,19 +242,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         if let screenRecordingItem { applyScreenCaptureState(to: screenRecordingItem, authorized: screenAuthorized) }
     }
 
-    /// item 为辅助功能菜单项，trusted 为是否已获得辅助功能权限；已授权时显示已开启且不可点，无返回值。
     private func applyAccessState(to item: NSMenuItem, trusted: Bool) {
         item.title = trusted ? "辅助功能已开启" : "授予辅助功能权限…"
         item.isEnabled = !trusted
     }
 
-    /// item 为屏幕录制菜单项，authorized 为是否已获得屏幕录制权限；已授权时显示已开启且不可点，无返回值（#144 U-30）。
     private func applyScreenCaptureState(to item: NSMenuItem, authorized: Bool) {
         item.title = authorized ? "屏幕录制已开启" : "授予屏幕录制权限…"
         item.isEnabled = !authorized
     }
 
-    /// 无参数；将已保存的区域截图快捷键同步到菜单项标题或原生键等效符，刷新前先还原基础标题避免重复拼接。
     private func applyScreenshotShortcut() {
         guard let screenshotItem else { return }
         screenshotItem.title = "区域截图…"
@@ -294,53 +268,42 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 无参数；打开普通设置窗口，无返回值。
     @objc private func openSettings() { showSettings?() }
 
-    /// 无参数；打开翻译历史窗口，无返回值。
     @objc private func openHistory() { showHistory?() }
 
-    /// 无参数；菜单关闭后进入系统区域框选，不触发翻译，无返回值。
     @objc private func captureScreenshot() {
         DispatchQueue.main.async { MacPlatformBridge.Shared.instance?.screenshot.capture() }
     }
 
-    /// 无参数；菜单关闭后选择图片并交给现有编辑器，无返回值。
     @objc private func openImage() {
         DispatchQueue.main.async { MacPlatformBridge.Shared.instance?.screenshot.openImage() }
     }
 
-    /// 无参数；菜单关闭后把剪贴板图片交给现有编辑器，无返回值。
     @objc private func openClipboardImage() {
         DispatchQueue.main.async { MacPlatformBridge.Shared.instance?.screenshot.openClipboardImage() }
     }
 
-    /// sender 的 tag 为显示器 ID；冻结该显示器并选中整屏，无返回值（#105）。
     @objc private func captureDisplay(_ sender: NSMenuItem) {
         let id = CGDirectDisplayID(sender.tag)
         DispatchQueue.main.async { MacPlatformBridge.Shared.instance?.screenshot.capture(.display(id)) }
     }
 
-    /// remaining 为录制倒计时剩余秒数，nil 表示没有倒计时；同步更新图标、悬停提示与无障碍文本，无返回值（#129、#144 U-30）。
     func showCountdown(_ remaining: Int?) {
         guard countdown != remaining else { return }
         countdown = remaining
         syncStatusButton()
     }
 
-    /// active 为连续采集状态；记录采集标志并经统一出口更新图标提示与停止能力，保持入口宽度不变（#144 U-30）。
     func setCaptureActive(_ active: Bool) {
         captureActive = active
         syncStatusButton()
         stopCaptureItem?.isEnabled = MacPlatformBridge.Shared.instance?.capture.canStop == true
     }
 
-    /// 无参数；请求当前采集正常结束，编码完成前不发布文件。
     @objc private func stopCapture() { MacPlatformBridge.Shared.instance?.capture.stop() }
 
-    /// 无参数；经主 Dart 修改全局开关，成功后刷新设置窗口，失败弹窗继承当前应用明暗外观（#144 U-18）。
     @objc private func toggleAutomatic() {
-        // requestApplication把菜单开关交给主引擎唯一设置队列。
         MacPlatformBridge.Shared.instance?.requestApplication(AppConstants.toggleAutomaticMethod) { [weak self] value in
             if let error = value as? FlutterError {
                 let alert = NativeGlassFactory.applyAppearance(to: NSAlert())
@@ -354,7 +317,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 无参数；已授权则只刷新菜单，未授权才弹出系统提示并打开设置。
     @objc private func requestAccess() {
         if AccessibilitySelection.isTrusted(prompt: false) {
             reloadMenu()
@@ -364,7 +326,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         AccessibilitySelection.openSettings()
     }
 
-    /// 无参数；申请或打开系统「屏幕录制」授权设置，并刷新菜单项状态（#144 U-30）。
     @objc private func requestScreenCapture() {
         if ScreenCaptureService.isAuthorized() {
             reloadMenu()
