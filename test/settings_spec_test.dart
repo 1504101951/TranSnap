@@ -14,6 +14,7 @@ import 'package:transnap/src/settings/settings_app.dart';
 import 'package:transnap/src/settings/service_config.dart';
 
 import 'support/settings_pages.dart';
+import 'support/line_icons.dart';
 
 /// 验证设置窗口的侧边栏、权限位置、服务类型、分段、开关与布局等可见行为，边界为760×640默认窗口内容区（含200宽侧边栏）与滚动后侧边栏仍固定。
 void main() {
@@ -253,10 +254,10 @@ void main() {
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '服务列表');
     final edit = tester.getRect(
-      find.widgetWithIcon(IconButton, LucideIcons.pencil),
+      find.ancestor(of: findLineIcon(LucideIcons.pencil), matching: find.byType(IconButton)),
     );
     final delete = tester.getRect(
-      find.widgetWithIcon(IconButton, LucideIcons.trash2),
+      find.ancestor(of: findLineIcon(LucideIcons.trash2), matching: find.byType(IconButton)),
     );
     expect(edit.size, const Size(32, 32));
     expect(delete.left - edit.right, 8);

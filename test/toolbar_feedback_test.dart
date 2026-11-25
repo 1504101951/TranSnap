@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:transnap/src/common/constants/glass_metrics.dart';
 import 'package:transnap/src/common/widgets/native_glass.dart';
 import 'package:transnap/src/common/widgets/toolbar_feedback.dart';
+import 'support/line_icons.dart';
 
 /// 验证工具栏反馈气泡的错误语义图标、鼠标悬停暂停通知、关闭按钮、liveRegion 开关及极窄视口夹紧保护。
 void main() {
@@ -36,7 +37,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byIcon(LucideIcons.circleAlert), findsOneWidget);
+    expect(findLineIcon(LucideIcons.circleAlert), findsOneWidget);
     expect(find.byKey(const Key('toolbar-feedback-dismiss')), findsOneWidget);
     expect(GlassMetrics.errorFeedbackDuration, const Duration(milliseconds: 2000));
 

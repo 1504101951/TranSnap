@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
@@ -173,8 +174,9 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: Text(
                   entry.word,
                   style: TextStyle(
-                    fontSize: 15,
-                    height: 22 / 15,
+                    // 历史与生词条目主文字 14/20（#67「历史列表」）。
+                    fontSize: 14,
+                    height: 20 / 14,
                     color: colors.onSurface,
                   ),
                 ),
@@ -248,7 +250,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
                       semanticsLabel: '删除生词 ${entry.word}',
                       busy: deleting,
                       onPressed: deleting ? null : () => _delete(entry.word),
-                      icon: const Icon(
+                      icon: const LineIcon(
                         LucideIcons.trash2,
                         size: GlassMetrics.icon,
                       ),
@@ -293,7 +295,7 @@ class _VocabularyPageState extends State<VocabularyPage> {
                 child: IconButton(
                   tooltip: '刷新生词本',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(
+                  icon: const LineIcon(
                     LucideIcons.refreshCw,
                     size: GlassMetrics.icon,
                   ),

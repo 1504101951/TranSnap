@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../common/constants/glass_metrics.dart';
+import '../common/constants/motion_metrics.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/native_glass.dart';
 
 /// 同一分组记录共用的纯色圆角卡片（#67「历史列表」「生词本」）：
 /// r12 圆角、0.5pt 外轮廓、左右内边距 16，组内条目之间以 0.5pt 细线分隔，不逐行创建玻璃材料。
@@ -213,6 +215,42 @@ class HistoryHoverActions extends StatelessWidget {
       opacity: visible ? 1 : 0,
       duration: duration,
       child: IgnorePointer(ignoring: !visible, child: child),
+    );
+  }
+}
+
+/// 历史管理行的扁平控件底（#67）：卡片底色（浅 #FFFFFF / 深 #232326）、0.5pt 细线、r8，不使用液态玻璃；
+/// busy 为真时外圈显示等待进度环。
+class HistoryFieldBox extends StatelessWidget {
+  /// child 为输入框或文字按钮，busy 为等待进度环开关。
+  const HistoryFieldBox({super.key, required this.child, this.busy = false});
+
+  final Widget child;
+  final bool busy;
+
+  /// context 提供明暗外观与强调色；返回带细线与圆角的扁平底。
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return BusyRing(
+      active: busy,
+      color: NativeGlassTheme.accentOf(context),
+      radius: GlassMetrics.controlRadius + MotionMetrics.busyRingOutset,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: dark ? const Color(0xFF232326) : Colors.white,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+            side: BorderSide(
+              color: (dark ? Colors.white : Colors.black).withValues(
+                alpha: 0.10,
+              ),
+              width: GlassMetrics.groupBorderWidth,
+            ),
+          ),
+        ),
+        child: Material(type: MaterialType.transparency, child: child),
+      ),
     );
   }
 }

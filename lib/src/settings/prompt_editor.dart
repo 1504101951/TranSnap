@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/text_mode.dart';
 import '../common/widgets/native_glass.dart';
@@ -162,7 +163,7 @@ class _PromptEditorState extends State<PromptEditor> {
                       child: SizedBox.square(
                         dimension: 24,
                         child: Center(
-                          child: Icon(
+                          child: LineIcon(
                             icon,
                             size: 13,
                             color: Colors.white,

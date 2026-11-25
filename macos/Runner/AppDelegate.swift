@@ -21,7 +21,8 @@ class AppDelegate: FlutterAppDelegate {
         size: NSSize(width: 520, height: 640),
         minSize: AppConstants.historyWindowMinSize,
         autosaveName: AppConstants.historyWindowAutosaveName,
-        refreshMethod: AppConstants.historyChangedMethod
+        refreshMethod: AppConstants.historyChangedMethod,
+        compactTitlebar: true
     )
     private var launchedAtLogin = false
     /// 翻译历史变更通知的观察者；新记录写入后刷新已打开的历史窗口（#126）。

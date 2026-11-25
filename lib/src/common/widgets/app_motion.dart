@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 
+import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
 import '../constants/motion_metrics.dart';
 import '../constants/translation_phase.dart';
@@ -877,7 +878,7 @@ class _SpeechWaveIconState extends State<SpeechWaveIcon>
     if (!widget.speaking) {
       return AppMotion.iconSwitcher(
         context,
-        Icon(
+        LineIcon(
           LucideIcons.volume2,
           key: const ValueKey('speech-idle'),
           size: widget.size,
@@ -986,7 +987,7 @@ class _VocabularyBookmarkIconState extends State<VocabularyBookmarkIcon>
   @override
   Widget build(BuildContext context) {
     final reduced = AppMotion.reduced(context);
-    final icon = Icon(
+    final icon = LineIcon(
       widget.saved ? LucideIcons.bookmarkCheck : LucideIcons.bookmarkPlus,
       size: widget.size,
       color: widget.saved ? Theme.of(context).colorScheme.primary : null,
@@ -1138,7 +1139,7 @@ class _CopyConfirmIconState extends State<CopyConfirmIcon>
     if (!active) {
       return AppMotion.iconSwitcher(
         context,
-        Icon(
+        LineIcon(
           LucideIcons.copy,
           key: const ValueKey('copy-idle'),
           size: widget.size,

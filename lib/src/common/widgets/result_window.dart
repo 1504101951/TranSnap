@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
 import '../constants/motion_metrics.dart';
 import 'app_motion.dart';
@@ -23,8 +26,13 @@ abstract final class ResultWindowColors {
   static Color hairline(bool dark) =>
       (dark ? Colors.white : Colors.black).withValues(alpha: 0.12);
 
-  /// 媒体外框 0.5pt 描边与阴影色（18% 黑）。
-  static const mediaBorder = Color(0x2E000000);
+  /// dark 为当前外观；返回媒体外框 0.5pt 描边色：浅 18% 黑，深 10% 白（深色衬底上黑边看不见，#67）。
+  static Color mediaBorder(bool dark) =>
+      dark ? const Color(0x1AFFFFFF) : const Color(0x2E000000);
+
+  /// dark 为当前外观；返回媒体外框阴影色：浅 18% 黑，深 45% 黑。
+  static Color mediaShadow(bool dark) =>
+      dark ? const Color(0x73000000) : const Color(0x2E000000);
 }
 
 /// 统一结果窗口中部媒体衬底：填充中性衬底色并在需要时挂载内部滚动视图（#67、#145）。
@@ -53,33 +61,39 @@ class ResultWindowCanvas extends StatelessWidget {
   }
 }
 
-/// 媒体展示外框：附带 0.5pt 描边（18% 黑）与 0 6 20 / 18% 黑投影（#67）。
+/// 媒体展示外框：附带 0.5pt 描边与 0 6 20 投影，颜色随外观（见 ResultWindowColors，#67）。
 class ResultMediaFrame extends StatelessWidget {
   /// child 为等比缩放后的视频、长图或可标注图片画布。
   const ResultMediaFrame({super.key, required this.child});
 
   final Widget child;
 
-  /// context 为主题上下文；用 foregroundDecoration 描边避免挤压子视图尺寸。
+  /// context 为主题上下文；用前景装饰描边避免挤压子视图尺寸，返回带描边与投影的媒体框。
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: const BoxDecoration(
-      boxShadow: [
-        BoxShadow(
-          color: ResultWindowColors.mediaBorder,
-          blurRadius: 20,
-          offset: Offset(0, 6),
-        ),
-      ],
-    ),
-    child: DecoratedBox(
-      position: DecorationPosition.foreground,
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: ResultWindowColors.mediaBorder, width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: ResultWindowColors.mediaShadow(dark),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      child: child,
-    ),
-  );
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: ResultWindowColors.mediaBorder(dark),
+            width: 0.5,
+          ),
+        ),
+        child: child,
+      ),
+    );
+  }
 }
 
 /// 统一结果窗口底部操作栏：高 52pt、实底、顶部 0.5pt 细线，左右分组以 4pt 间距排布（#67、#145）。
@@ -262,7 +276,7 @@ class ResultTextButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 14, color: effectiveFg),
+                  LineIcon(icon, size: 14, color: effectiveFg),
                   const SizedBox(width: GlassMetrics.iconGap),
                 ],
                 Text(
@@ -276,7 +290,7 @@ class ResultTextButton extends StatelessWidget {
                 ),
                 if (trailing != null) ...[
                   const SizedBox(width: 2),
-                  Icon(trailing, size: 14, color: effectiveFg),
+                  LineIcon(trailing, size: 14, color: effectiveFg),
                 ],
               ],
             ),
@@ -378,7 +392,7 @@ class ResultIconButton extends StatelessWidget {
                     ),
                   ),
                 ),
-                icon: Icon(icon, size: iconSize, color: effectiveFg),
+                icon: LineIcon(icon, size: iconSize, color: effectiveFg),
               ),
             ),
           ),
@@ -429,12 +443,25 @@ class ResultUpwardTray extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: children),
           ),
         ),
-        Positioned(
-          left: (anchorCenterX - 6).clamp(8.0, 400.0).toDouble(),
-          bottom: -4,
-          child: CustomPaint(
-            size: const Size(12, 4),
-            painter: _DownCaretPainter(trayColor),
+        // 三角按托盘实际宽度夹紧（两端各留 8），锚点在托盘范围内时始终对准锚点中心（#67）。
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: (anchorCenterX - 6).clamp(
+                    8.0,
+                    math.max(8.0, constraints.maxWidth - 8 - 12),
+                  ),
+                  bottom: -4,
+                  child: CustomPaint(
+                    size: const Size(12, 4),
+                    painter: _DownCaretPainter(trayColor),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],

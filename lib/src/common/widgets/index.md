@@ -9,3 +9,5 @@
 5. [native_brush_cursor.dart](native_brush_cursor.dart)：通过截图通道设置与画笔粗细、颜色一致的原生圆点光标。
 6. [app_motion.dart](app_motion.dart)：提供物理弹簧进场、舒缓链式入场、玻璃骨架扫光、光学棱镜着色器装饰层、纯 Dart 矢量状态机图标、等待进度环、译文逐字显影、选区流光与工具栏液态展开。
 7. [result_window.dart](result_window.dart)：提供录制、长截图与打开图片共用的结果窗口衬底、媒体框、52pt 底部操作栏、按钮与向上展开属性托盘。
+8. [window_drag_area.dart](window_drag_area.dart)：让通顶窗口标题栏带的空白处可以拖动原生窗口。
+9. [line_icon.dart](line_icon.dart)：按显示尺寸选用 Lucide 字重，使各尺寸图标的屏幕线宽接近 1.6pt。

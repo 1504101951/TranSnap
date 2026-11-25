@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/mcp_constants.dart';
 import '../common/constants/method_names.dart';
@@ -263,7 +264,7 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
+                LineIcon(
                   LucideIcons.circleAlert,
                   size: GlassMetrics.icon,
                   color: theme.colorScheme.error,

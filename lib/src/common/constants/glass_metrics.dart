@@ -32,6 +32,11 @@ abstract final class GlassMetrics {
   static const sidebarSectionHeight = 32.0;
   static const sidebarItemHeight = 28.0;
   static const sidebarItemIndent = 28.0;
+  // 通顶窗口的标题栏（#67）：系统标题栏高 28，侧边栏顶部避让红黄绿按钮的留白为 28＋10；
+  // 历史窗口紧凑工具栏标题栏高 38，分段在该带内与红黄绿按钮同一行居中。
+  static const titlebarHeight = 28.0;
+  static const sidebarTopInset = titlebarHeight + 10;
+  static const compactTitlebarHeight = 38.0;
   // 设置子页标题字号。
   static const pageTitleFont = 20.0;
   static const switchWidth = 36.0;

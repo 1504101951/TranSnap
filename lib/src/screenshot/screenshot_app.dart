@@ -1,4 +1,5 @@
 import 'drawing_preferences.dart';
+import '../common/widgets/line_icon.dart';
 import '../common/constants/motion_metrics.dart';
 import '../common/constants/preference_keys.dart';
 
@@ -3165,7 +3166,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       key: const Key(ScreenshotActions.close),
                       tooltip: '关闭',
                       onPressed: _busy ? null : _close,
-                      icon: const Icon(LucideIcons.x),
+                      icon: const LineIcon(LucideIcons.x),
                     ),
                   ),
                 ),
@@ -3783,7 +3784,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                 ),
               ),
             ),
-            icon: Icon(icons[id] ?? LucideIcons.circleDot, size: compact ? 14 : 16),
+            icon: LineIcon(icons[id] ?? LucideIcons.circleDot, size: compact ? 14 : 16),
           ),
         ),
       );
@@ -3981,7 +3982,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         // 「无」分区没有修饰键符号，显示 14pt 键盘图标，表示直接按数字键（#67）。
         child: label.isEmpty
             ? Center(
-                child: Icon(
+                child: LineIcon(
                   LucideIcons.keyboard,
                   key: Key('toolbar-hint-${group.key}'),
                   size: 14,
@@ -4103,7 +4104,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
         captureButton(
           '背景',
           beautify == null
-              ? const Icon(LucideIcons.ban, size: 14)
+              ? const LineIcon(LucideIcons.ban, size: 14)
               : Container(
                   width: 14,
                   height: 14,
@@ -4192,7 +4193,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             (() {
               final button = captureButton(
                 target.value.$1,
-                Icon(target.value.$2, size: 14),
+                LineIcon(target.value.$2, size: 14),
                 () => _selectRecordingTarget(target.key),
                 selected: _recordingTarget == target.key,
               );
@@ -4243,7 +4244,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
               ],
               builder: (context, controller, _) => captureButton(
                 _recordingDelay == 0 ? '录制选项' : '录制选项：延时 $_recordingDelay 秒',
-                const Icon(LucideIcons.sliders, size: 14),
+                const LineIcon(LucideIcons.sliders, size: 14),
                 () =>
                     controller.isOpen ? controller.close() : controller.open(),
                 selected:
@@ -4253,7 +4254,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             ),
           captureButton(
             _liveExpanded ? '开始实时翻译' : '开始录制',
-            const Icon(LucideIcons.circleDot, size: 14),
+            const LineIcon(LucideIcons.circleDot, size: 14),
             _loadingApplications ||
                     (_recordingTarget == CaptureTarget.application &&
                         _recordingApplication == null)
@@ -4262,7 +4263,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
           ),
           captureButton(
             _liveExpanded ? '取消实时翻译' : '取消录制',
-            const Icon(LucideIcons.x, size: 14),
+            const LineIcon(LucideIcons.x, size: 14),
             () => setState(() {
               _expandedRow = null;
               unawaited(_syncRecordingPreview());
@@ -4279,7 +4280,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
             const SizedBox(
               width: ToolbarGrid.trayButton,
               height: ToolbarGrid.trayButton,
-              child: Icon(LucideIcons.hourglass, size: 14),
+              child: LineIcon(LucideIcons.hourglass, size: 14),
             ),
           for (final app in _recordingApplications)
             captureButton(
@@ -4290,7 +4291,7 @@ class _ScreenshotAppState extends State<ScreenshotApp> {
                       width: 14,
                       height: 14,
                     )
-                  : const Icon(
+                  : const LineIcon(
                       LucideIcons.layoutGrid,
                       size: 14,
                       semanticLabel: '应用图标不可用',

@@ -23,6 +23,7 @@ import 'package:transnap/src/common/widgets/native_resize_cursor.dart';
 import 'package:transnap/src/screenshot/screenshot_editor_layout.dart';
 
 import 'support/capture_pixels.dart';
+import 'package:transnap/src/common/widgets/line_icon.dart';
 
 /// 无参数；验证工具栏避让的几何边界及硬件回车的真实编辑/导出结果。
 void main() {
@@ -890,7 +891,7 @@ void main() {
     );
     expect(
       tester
-          .widget<Icon>(
+          .widget<LineIcon>(
             find.byKey(const Key('toolbar-hint-screenshot-grid-group-0')),
           )
           .icon,

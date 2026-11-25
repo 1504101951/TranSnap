@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/capture_phase.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/glass_metrics.dart';
@@ -278,7 +279,7 @@ class _CaptureAppState extends State<CaptureApp> {
           IconButton(
             onPressed: action,
             padding: EdgeInsets.zero,
-            icon: Icon(
+            icon: LineIcon(
               icon,
               size: GlassMetrics.icon,
               semanticLabel: description,

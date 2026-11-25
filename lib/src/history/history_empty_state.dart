@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/widgets/native_glass.dart';
 
@@ -40,7 +41,7 @@ class HistoryEmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: colors.onSurfaceVariant),
+              LineIcon(icon, size: 32, color: colors.onSurfaceVariant),
               const SizedBox(height: GlassMetrics.space8),
               Text(
                 title,

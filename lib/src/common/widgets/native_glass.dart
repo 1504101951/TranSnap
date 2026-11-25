@@ -1,3 +1,4 @@
+import 'line_icon.dart';
 import '../constants/method_names.dart';
 import '../constants/channel_names.dart';
 import '../constants/preference_keys.dart';
@@ -517,7 +518,7 @@ class _NativeGlassFieldState extends State<NativeGlassField> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
+                  child: LineIcon(
                     LucideIcons.circleAlert,
                     size: 13,
                     color: colors.error,
@@ -725,7 +726,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(LucideIcons.unfoldVertical, size: 12),
+                      const LineIcon(LucideIcons.unfoldVertical, size: 12),
                     ],
                   ),
                 ),
@@ -774,7 +775,7 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
                 ),
               ),
               const SizedBox(width: GlassMetrics.space4),
-              const Icon(LucideIcons.chevronDown, size: 12),
+              const LineIcon(LucideIcons.chevronDown, size: 12),
             ],
           ),
         ),
@@ -868,7 +869,7 @@ class NativeGlassMenuItem extends StatelessWidget {
           : SizedBox.square(
               dimension: GlassMetrics.icon,
               child: checked!
-                  ? const Icon(LucideIcons.check, size: GlassMetrics.icon)
+                  ? const LineIcon(LucideIcons.check, size: GlassMetrics.icon)
                   : null,
             ),
       style: ButtonStyle(
@@ -901,7 +902,7 @@ class NativeGlassRowIcon extends StatelessWidget {
   /// context 提供主题配色；返回次要色的 16pt 图标。
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-    child: Icon(
+    child: LineIcon(
       icon,
       size: GlassMetrics.rowIconSize,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1095,7 +1096,7 @@ class NativeGlassStatus extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            LineIcon(
               granted ? LucideIcons.check : LucideIcons.triangleAlert,
               size: GlassMetrics.statusIcon,
               color: color,
@@ -1480,7 +1481,7 @@ class _NativeGlassSegmentsState<T> extends State<NativeGlassSegments<T>> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       if (widget.icons[option.key] != null) ...[
-                                        Icon(
+                                        LineIcon(
                                           widget.icons[option.key],
                                           size: GlassMetrics.icon,
                                         ),
@@ -1705,7 +1706,7 @@ class NativeGlassSidebar<T> extends StatelessWidget {
             ),
             child: SizedBox.square(
               dimension: GlassMetrics.sidebarIconBox,
-              child: Icon(
+              child: LineIcon(
                 icon,
                 size: GlassMetrics.sidebarIconSize,
                 color: onAccent,
@@ -2096,7 +2097,7 @@ class NativeGlassBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
+            LineIcon(
               isError ? LucideIcons.circleAlert : LucideIcons.info,
               size: GlassMetrics.icon,
               color: foreground,

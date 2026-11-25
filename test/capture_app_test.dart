@@ -18,6 +18,7 @@ import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:transnap/src/common/constants/toolbar_grid.dart';
 
 import 'support/capture_pixels.dart';
+import 'support/line_icons.dart';
 
 /// 无参数；验证工具状态、实际选区与媒体结果中的输入输出和边界。
 void main() {
@@ -122,13 +123,13 @@ void main() {
       expect(find.text('正在完成采集…'), findsOneWidget);
       expect(
         tester
-            .widget<IconButton>(find.widgetWithIcon(IconButton, LucideIcons.squareStop))
+            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.squareStop), matching: find.byType(IconButton)))
             .onPressed,
         isNull,
       );
       expect(
         tester
-            .widget<IconButton>(find.widgetWithIcon(IconButton, LucideIcons.pause))
+            .widget<IconButton>(find.ancestor(of: findLineIcon(LucideIcons.pause), matching: find.byType(IconButton)))
             .onPressed,
         isNull,
       );
@@ -766,7 +767,7 @@ void main() {
     expect(find.byTooltip('当前应用').hitTestable(), findsOneWidget);
     expect(find.byTooltip('应用1'), findsOneWidget);
     expect(
-      find.descendant(of: apps, matching: find.byIcon(LucideIcons.layoutGrid)),
+      find.descendant(of: apps, matching: findLineIcon(LucideIcons.layoutGrid)),
       findsOneWidget,
     );
 

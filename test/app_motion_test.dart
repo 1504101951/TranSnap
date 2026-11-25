@@ -6,6 +6,7 @@ import 'package:transnap/src/common/constants/motion_metrics.dart';
 import 'package:transnap/src/common/constants/translation_phase.dart';
 import 'package:transnap/src/common/widgets/app_motion.dart';
 import 'package:transnap/src/common/widgets/native_glass.dart';
+import 'support/line_icons.dart';
 
 /// 无参数；验证公共动效基座的无障碍降级、光学高光安全回退、五组纯 Dart 矢量状态机与侧边栏弹簧滑块（#142）。
 void main() {
@@ -117,9 +118,9 @@ void main() {
         ),
       ),
     );
-    expect(find.byIcon(LucideIcons.volume2), findsOneWidget);
-    expect(find.byIcon(LucideIcons.bookmarkPlus), findsOneWidget);
-    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
+    expect(findLineIcon(LucideIcons.volume2), findsOneWidget);
+    expect(findLineIcon(LucideIcons.bookmarkPlus), findsOneWidget);
+    expect(findLineIcon(LucideIcons.copy), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
 
     update(() {
@@ -132,17 +133,17 @@ void main() {
       elapsed = 1;
     });
     await tester.pump();
-    expect(find.byIcon(LucideIcons.bookmarkCheck), findsOneWidget);
+    expect(findLineIcon(LucideIcons.bookmarkCheck), findsOneWidget);
     // 交叉过渡进行中旧图标仍在淡出；200ms 后过渡结束，旧图标移除。
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byIcon(LucideIcons.volume2), findsNothing);
-    expect(find.byIcon(LucideIcons.bookmarkPlus), findsNothing);
-    expect(find.byIcon(LucideIcons.copy), findsNothing);
+    expect(findLineIcon(LucideIcons.volume2), findsNothing);
+    expect(findLineIcon(LucideIcons.bookmarkPlus), findsNothing);
+    expect(findLineIcon(LucideIcons.copy), findsNothing);
 
     // 等满复制确认停留时长后复原，再等交叉过渡结束。
     await tester.pump(MotionMetrics.copyConfirmDuration);
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
+    expect(findLineIcon(LucideIcons.copy), findsOneWidget);
 
     update(() {
       phase = TranslationPhase.failed;
@@ -150,7 +151,7 @@ void main() {
       elapsed = 2;
     });
     await tester.pumpAndSettle();
-    expect(find.byIcon(LucideIcons.volume2), findsOneWidget);
+    expect(findLineIcon(LucideIcons.volume2), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -409,16 +410,16 @@ void main() {
         ),
       ),
     );
-    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
+    expect(findLineIcon(LucideIcons.copy), findsOneWidget);
 
     setHostState(() => trigger = 1);
     await tester.pump();
-    expect(find.byIcon(LucideIcons.copy), findsNothing);
+    expect(findLineIcon(LucideIcons.copy), findsNothing);
     expect(find.bySemanticsLabel('已复制'), findsOneWidget);
 
     await tester.pump(MotionMetrics.copyConfirmDuration);
     await tester.pump();
-    expect(find.byIcon(LucideIcons.copy), findsOneWidget);
+    expect(findLineIcon(LucideIcons.copy), findsOneWidget);
 
     // 边界：再次触发后未到期前直接卸载组件，FakeAsync 中不得残留待处理 Timer。
     setHostState(() => trigger = 2);

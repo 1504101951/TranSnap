@@ -1,3 +1,4 @@
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/motion_metrics.dart';
 import '../common/constants/text_mode.dart';
@@ -259,7 +260,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(LucideIcons.languages, size: 16),
+                    LineIcon(LucideIcons.languages, size: 16),
                     SizedBox(width: 6),
                     Text('翻译', textAlign: TextAlign.center),
                   ],
@@ -310,7 +311,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             action: widget.session.canRetry
                 ? FilledButton.tonalIcon(
                     onPressed: widget.onActivate,
-                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    icon: const LineIcon(LucideIcons.refreshCw, size: 16),
                     label: const Text('重试'),
                   )
                 : null,
@@ -446,19 +447,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         child: Row(
           spacing: GlassMetrics.space4,
           children: [
-            // 查到释义且翻译完成后可加入生词本；本卡片加入后改为已加入并禁用（#102）。
-            if (definition != null && snap.phase == TranslationPhase.completed)
-              _FooterAction(
-                key: const ValueKey('card-vocabulary'),
-                icon: VocabularyBookmarkIcon(
-                  saved: widget.session.savedToVocabulary,
-                  size: 14,
-                ),
-                label: widget.session.savedToVocabulary ? '已加入生词本' : '加入生词本',
-                onPressed: widget.session.savedToVocabulary
-                    ? null
-                    : widget.onAddVocabulary,
-              ),
+            // 左侧为当前结果（译文或润色等）的复制与朗读，命名成对；原文已是目标语言时作用于原文（#67、#101）。
             _FooterAction(
               key: const ValueKey('card-copy'),
               icon: CopyConfirmIcon(
@@ -473,27 +462,62 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             _FooterAction(
               key: const ValueKey('card-speak'),
               icon: SpeechWaveIcon(speaking: _speaking(sourceOnly), size: 14),
-              label: _speaking(sourceOnly) ? '停止朗读' : '朗读',
+              label: _speaking(sourceOnly)
+                  ? '停止朗读'
+                  : sourceOnly
+                  ? '朗读原文'
+                  : '朗读$resultLabel',
               onPressed: primaryText.isEmpty ? null : () => _speak(sourceOnly),
             ),
+            // 查到释义且翻译完成后可加入生词本；本卡片加入后改为已加入并禁用（#102）。
+            if (definition != null && snap.phase == TranslationPhase.completed)
+              _FooterAction(
+                key: const ValueKey('card-vocabulary'),
+                icon: VocabularyBookmarkIcon(
+                  saved: widget.session.savedToVocabulary,
+                  size: 14,
+                ),
+                label: widget.session.savedToVocabulary ? '已加入生词本' : '加入生词本',
+                onPressed: widget.session.savedToVocabulary
+                    ? null
+                    : widget.onAddVocabulary,
+              ),
+            // 右侧原文组：11pt 组名「原文」与两个只有图标的按钮，悬停提示说明作用（#67）。
             if (!sourceOnly) ...[
               const Spacer(),
-              _FooterAction(
+              Text(
+                '原文',
+                key: const ValueKey('card-source-group'),
+                style: TextStyle(
+                  fontSize: GlassMetrics.statusFont,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 2),
+              _CardButton(
                 key: const ValueKey('card-copy-source'),
+                tooltip: '复制原文',
                 icon: CopyConfirmIcon(
                   trigger: _copyTriggers['source'] ?? 0,
                   size: 14,
                 ),
-                label: '复制原文',
                 onPressed: snap.sourceText.isEmpty
                     ? null
                     : () => _copy('source', snap.sourceText),
+                visual: 24,
+                radius: GlassMetrics.menuItemRadius,
+                iconSize: 14,
+                material: false,
               ),
-              _FooterAction(
+              _CardButton(
                 key: const ValueKey('card-speak-source'),
+                tooltip: _speaking(true) ? '停止朗读' : '朗读原文',
                 icon: SpeechWaveIcon(speaking: _speaking(true), size: 14),
-                label: _speaking(true) ? '停止朗读' : '朗读原文',
                 onPressed: snap.sourceText.isEmpty ? null : () => _speak(true),
+                visual: 24,
+                radius: GlassMetrics.menuItemRadius,
+                iconSize: 14,
+                material: false,
               ),
             ],
           ],
@@ -572,7 +596,10 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                         if (widget.session.canRetry && !statusInBanner)
                           TextButton.icon(
                             onPressed: widget.onActivate,
-                            icon: const Icon(LucideIcons.refreshCw, size: 14),
+                            icon: const LineIcon(
+                              LucideIcons.refreshCw,
+                              size: 14,
+                            ),
                             label: const Text('重试'),
                           ),
                         // 服务菜单为次级文字菜单；润色、纠错、解释只列模型服务与当前服务，处理中禁用（#100）。
@@ -591,7 +618,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                         const SizedBox(width: GlassMetrics.space4),
                         _CardButton(
                           tooltip: '关闭',
-                          icon: const Icon(LucideIcons.x),
+                          icon: const LineIcon(LucideIcons.x),
                           onPressed: widget.onDismiss,
                           visual: 28,
                           radius: GlassMetrics.controlRadius,
@@ -802,6 +829,7 @@ class _CardButton extends StatelessWidget {
   /// tooltip 为提示与可访问名，icon 为图标组件，onPressed 为空表示禁用；
   /// visual、radius、iconSize 为可见尺寸、圆角与图标边长。
   const _CardButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onPressed,

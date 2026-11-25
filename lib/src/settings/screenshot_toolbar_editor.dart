@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_actions.dart';
 import '../common/constants/toolbar_grid.dart';
@@ -299,7 +300,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                       onPressed: () => Navigator.pop(dialogContext, id),
                       child: Row(
                         children: [
-                          Icon(
+                          LineIcon(
                             ScreenshotActions.icons[id],
                             size: GlassMetrics.icon,
                           ),
@@ -609,7 +610,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
       width: GlassMetrics.hitSize,
       height: GlassMetrics.hitSize,
       child: Builder(
-        builder: (context) => Icon(
+        builder: (context) => LineIcon(
           LucideIcons.gripVertical,
           size: GlassMetrics.icon,
           color: Focus.of(context).hasFocus
@@ -718,7 +719,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                     height: GlassMetrics.hitSize,
                   ),
                   padding: EdgeInsets.zero,
-                  icon: Icon(
+                  icon: LineIcon(
                     _columnHidden(column)
                         ? LucideIcons.eyeOff
                         : LucideIcons.eye,
@@ -735,7 +736,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                     height: GlassMetrics.hitSize,
                   ),
                   padding: EdgeInsets.zero,
-                  icon: const Icon(LucideIcons.x, size: GlassMetrics.icon),
+                  icon: const LineIcon(LucideIcons.x, size: GlassMetrics.icon),
                   onPressed: () => _removeColumn(index),
                 ),
             ],
@@ -856,7 +857,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
     final body = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
+        LineIcon(
           ScreenshotActions.icons[id],
           size: GlassMetrics.icon,
           color: visible ? null : colors.onSurfaceVariant,
@@ -1043,7 +1044,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                 _ => null,
               },
             ),
-            Icon(ScreenshotActions.icons[id], size: GlassMetrics.icon),
+            LineIcon(ScreenshotActions.icons[id], size: GlassMetrics.icon),
             const SizedBox(width: GlassMetrics.actionGap),
             Expanded(
               child: Text(
@@ -1061,7 +1062,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
               child: IconButton(
                 key: ValueKey('promote-child-$id'),
                 tooltip: '移出到一级工具栏',
-                icon: const Icon(LucideIcons.arrowUp, size: GlassMetrics.icon),
+                icon: const LineIcon(LucideIcons.arrowUp, size: GlassMetrics.icon),
                 visualDensity: VisualDensity.standard,
                 onPressed: () => _promoteChild(id),
               ),
@@ -1102,7 +1103,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             ),
           ),
           child:
-              child ?? const Icon(LucideIcons.gripHorizontal, size: GlassMetrics.icon),
+              child ?? const LineIcon(LucideIcons.gripHorizontal, size: GlassMetrics.icon),
         );
       },
     );
@@ -1133,7 +1134,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
                     color: Colors.transparent,
                     child: Opacity(
                       opacity: ScreenshotToolbarEditor.draggingOpacity,
-                      child: Icon(ScreenshotActions.icons[id], size: 24),
+                      child: LineIcon(ScreenshotActions.icons[id], size: 24),
                     ),
                   ),
                   childWhenDragging: Opacity(
@@ -1172,7 +1173,7 @@ class _ScreenshotToolbarEditorState extends State<ScreenshotToolbarEditor> {
             ? NativeGlassTheme.accentOf(context)
             : const Color(0xFF929292),
       ),
-      icon: Icon(visible ? LucideIcons.eye : LucideIcons.eyeOff, size: size),
+      icon: LineIcon(visible ? LucideIcons.eye : LucideIcons.eyeOff, size: size),
       onPressed: () => _toggleVisible(id),
     ),
   );

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
 import 'native_glass.dart';
 
@@ -51,7 +52,7 @@ class ToolbarFeedback extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (isError) ...[
-                Icon(
+                LineIcon(
                   LucideIcons.circleAlert,
                   size: 14,
                   color: colors.error,
@@ -79,7 +80,7 @@ class ToolbarFeedback extends StatelessWidget {
                       height: GlassMetrics.minTouchTarget,
                     ),
                     iconSize: 14,
-                    icon: const Icon(LucideIcons.x),
+                    icon: const LineIcon(LucideIcons.x),
                   ),
                 ),
               ],

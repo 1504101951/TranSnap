@@ -17,6 +17,9 @@ import 'package:transnap/src/history/history_list_card.dart';
 import 'package:transnap/src/history/history_requests.dart';
 import 'package:transnap/src/history/translation_history.dart';
 import 'package:transnap/src/history/vocabulary_page.dart';
+import 'support/line_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
 
 /// tester 为测试驱动；创建并登记一个复用的鼠标指针用于触发悬停状态。
 Future<TestGesture> _startMouse(WidgetTester tester) async {
@@ -136,6 +139,72 @@ void main() {
     expect(find.text('new translation'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     GlassAppearance.current.value = const GlassAppearance();
+  });
+
+  testWidgets('分段与记录开关在 38pt 标题栏带内同排，空白处拖动转给原生窗口，窄窗口开关移到带下（#67）', (tester) async {
+    // 作用：验证窗口通顶后标题栏带的布局与拖动转发，以及筛选小标签移除按钮的命中尺寸。
+    // 边界：520pt 宽时分段与开关的垂直中心都在 19（38 的一半），开关右缘距窗口右缘 16；
+    // 在标题栏带左侧空白处拖动发出一次 startWindowDrag；480pt 宽（小于 520）时开关顶边低于 38；
+    // 筛选小标签的移除按钮命中区为 24×24。
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call.method);
+          if (call.method == MethodNames.startWindowDrag) return null;
+          return handleHistoryRequest(store, call);
+        });
+    tester.view.physicalSize = const Size(520, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    store.insert(
+      sourceText: 'hello',
+      translatedText: '你好',
+      detectedLanguage: 'en',
+      targetLanguage: 'zh',
+      providerId: 'test',
+      completedAt: 1,
+      sourceLabel: 'Notes',
+    );
+    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpAndSettle();
+    final segments = find.byWidgetPredicate(
+      (widget) => widget is NativeGlassSegments,
+    );
+    final toggle = find.byType(NativeGlassSwitch);
+    expect(tester.getCenter(segments).dy, GlassMetrics.compactTitlebarHeight / 2);
+    expect(tester.getCenter(segments).dx, 260);
+    expect(tester.getCenter(toggle).dy, GlassMetrics.compactTitlebarHeight / 2);
+    expect(tester.getRect(toggle).right, 520 - GlassMetrics.space16);
+
+    await tester.dragFrom(const Offset(90, 19), const Offset(40, 30));
+    await tester.pumpAndSettle();
+    expect(
+      calls.where((method) => method == MethodNames.startWindowDrag),
+      hasLength(1),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('history-filter-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notes').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(
+        find.ancestor(
+          of: findLineIcon(LucideIcons.x),
+          matching: find.byType(InkWell),
+        ).first,
+      ),
+      const Size.square(GlassMetrics.minTouchTarget),
+    );
+
+    tester.view.physicalSize = const Size(480, 640);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(toggle).top,
+      greaterThan(GlassMetrics.compactTitlebarHeight),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('按日期分组共用一张卡片，译文在原文上方，滚动可读第三页', (tester) async {

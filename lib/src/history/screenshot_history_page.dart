@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/utils/date_text.dart';
@@ -367,7 +368,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       child: IconButton(
                         tooltip: '刷新截图历史',
                         onPressed: _loading ? null : _load,
-                        icon: const Icon(
+                        icon: const LineIcon(
                           LucideIcons.refreshCw,
                           size: GlassMetrics.icon,
                         ),
@@ -598,7 +599,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       if (record.exists) ...[
                         action(
                           '打开',
-                          const Icon(
+                          const LineIcon(
                             LucideIcons.externalLink,
                             size: GlassMetrics.icon,
                           ),
@@ -616,7 +617,7 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                         ),
                         action(
                           '在 Finder 中显示',
-                          const Icon(
+                          const LineIcon(
                             LucideIcons.folderOpen,
                             size: GlassMetrics.icon,
                           ),
@@ -627,7 +628,10 @@ class _ScreenshotHistoryPageState extends State<ScreenshotHistoryPage> {
                       ],
                       action(
                         '删除截图',
-                        const Icon(LucideIcons.trash2, size: GlassMetrics.icon),
+                        const LineIcon(
+                          LucideIcons.trash2,
+                          size: GlassMetrics.icon,
+                        ),
                         _busyAction == null
                             ? () => _deleteRecord(record)
                             : null,

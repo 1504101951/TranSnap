@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/emoji_catalog.dart';
 import '../common/constants/glass_metrics.dart';
@@ -129,7 +130,7 @@ class _StickerPanelState extends State<StickerPanel> {
             child: Image.file(
               File('${widget.directory}/${sticker.id}.png'),
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Icon(
+              errorBuilder: (context, error, stackTrace) => LineIcon(
                 LucideIcons.imageOff,
                 size: GlassMetrics.icon,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

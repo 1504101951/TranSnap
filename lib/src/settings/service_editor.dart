@@ -1,3 +1,4 @@
+import '../common/widgets/line_icon.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
@@ -151,7 +152,7 @@ class _ServiceEditorState extends State<ServiceEditor> {
       tooltip: tooltip,
       padding: EdgeInsets.zero,
       iconSize: GlassMetrics.icon,
-      icon: Icon(
+      icon: LineIcon(
         obscure ? LucideIcons.eye : LucideIcons.eyeOff,
       ),
       onPressed: _testing ? null : onToggle,

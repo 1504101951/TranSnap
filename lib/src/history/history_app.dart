@@ -1,14 +1,18 @@
 import 'dart:async';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
+import '../common/constants/motion_metrics.dart';
 import '../common/constants/preference_keys.dart';
 import '../common/utils/date_text.dart';
 import '../common/utils/shortcut_tokens.dart';
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/window_drag_area.dart';
 import '../common/widgets/native_glass.dart';
 
+import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -440,7 +444,7 @@ class _HistoryAppState extends State<HistoryApp> {
     await _loadMore(reset: true);
   }
 
-  /// context 为窗口上下文；构建标题栏居中分段与仅在翻译历史显示的记录开关（#67）。
+  /// context 为窗口上下文；构建 38pt 标题栏带内居中的分段与仅在翻译历史显示的记录开关（#67）。
   Widget _buildHeader(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final segments = NativeGlassSegments<_HistorySection>(
@@ -478,48 +482,52 @@ class _HistoryAppState extends State<HistoryApp> {
       ],
     );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GlassMetrics.pagePadding,
-        GlassMetrics.space12,
-        GlassMetrics.pagePadding,
-        GlassMetrics.space8,
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // 520pt 及以上窗口下居中分段与右侧「记录 · 已暂停」开关互不重叠；窄窗口自动退让避免溢出。
-          if (constraints.maxWidth >= 472) {
-            return SizedBox(
-              width: constraints.maxWidth,
-              height: GlassMetrics.hitSize + 4,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Center(child: segments),
-                  if (_section == _HistorySection.history)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: recordingControl,
-                    ),
-                ],
+    // 标题栏带：窗口通顶且隐藏标题文字，分段在 38pt 紧凑标题栏内与红黄绿按钮同一行居中，空白处可拖动窗口（#67）。
+    // 520pt 以下时「记录 · 已暂停」会碰到居中分段，开关移到标题栏下方右对齐。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final inBand =
+            _section == _HistorySection.history && constraints.maxWidth >= 520;
+        final below =
+            _section == _HistorySection.history && constraints.maxWidth < 520;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            WindowDragArea(
+              channel: widget.channel,
+              child: SizedBox(
+                height: GlassMetrics.compactTitlebarHeight,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    segments,
+                    if (inBand)
+                      Positioned(
+                        right: GlassMetrics.space16,
+                        top: 0,
+                        bottom: 0,
+                        child: recordingControl,
+                      ),
+                  ],
+                ),
               ),
-            );
-          }
-          return SizedBox(
-            width: constraints.maxWidth,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: GlassMetrics.space8,
-              runSpacing: GlassMetrics.space8,
-              children: [
-                segments,
-                if (_section == _HistorySection.history) recordingControl,
-              ],
             ),
-          );
-        },
-      ),
+            if (below)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  GlassMetrics.pagePadding,
+                  GlassMetrics.space4,
+                  GlassMetrics.space16,
+                  0,
+                ),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: recordingControl,
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -598,13 +606,16 @@ class _HistoryAppState extends State<HistoryApp> {
       ],
       builder: (context, controller, _) => SizedBox(
         height: GlassMetrics.hitSize,
-        child: NativeGlassSurface(
-          material: true,
+        // 「筛选」与搜索框同为扁平底，不使用液态玻璃（#67）。
+        child: HistoryFieldBox(
           child: TextButton.icon(
             key: const ValueKey('history-filter-button'),
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
-            icon: const Icon(LucideIcons.listFilter, size: GlassMetrics.icon),
+            icon: const LineIcon(
+              LucideIcons.listFilter,
+              size: GlassMetrics.icon,
+            ),
             label: const Text('筛选'),
           ),
         ),
@@ -668,16 +679,26 @@ class _HistoryAppState extends State<HistoryApp> {
       ],
       builder: (context, controller, _) => SizedBox.square(
         dimension: GlassMetrics.hitSize,
-        child: NativeGlassSurface(
-          material: true,
-          busy: _loading && _items.isNotEmpty,
+        // 「⋯」静息无底、悬停 6% onSurface，刷新等待时外圈显示进度环（#67）。
+        child: BusyRing(
+          active: _loading && _items.isNotEmpty,
+          color: NativeGlassTheme.accentOf(context),
+          radius: GlassMetrics.controlRadius + MotionMetrics.busyRingOutset,
           child: IconButton(
             key: const ValueKey('history-more-button'),
             tooltip: '更多操作',
             padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              hoverColor: colors.onSurface.withValues(
+                alpha: GlassMetrics.hoverOpacity,
+              ),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
+              ),
+            ),
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
-            icon: const Icon(LucideIcons.ellipsis, size: GlassMetrics.icon),
+            icon: const LineIcon(LucideIcons.ellipsis, size: GlassMetrics.icon),
           ),
         ),
       ),
@@ -704,8 +725,9 @@ class _HistoryAppState extends State<HistoryApp> {
           width: GlassMetrics.groupBorderWidth,
         ),
       ),
+      // 标签高 24：文字上下各留 3.5，移除按钮可见 14pt、命中 24×24（#67）。
       child: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 4, top: 3, bottom: 3),
+        padding: const EdgeInsets.only(left: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -717,7 +739,7 @@ class _HistoryAppState extends State<HistoryApp> {
                 color: colors.onSurface,
               ),
             ),
-            const SizedBox(width: GlassMetrics.space4),
+            const SizedBox(width: 2),
             Tooltip(
               message: '移除$label筛选',
               child: InkWell(
@@ -725,9 +747,9 @@ class _HistoryAppState extends State<HistoryApp> {
                 borderRadius: BorderRadius.circular(
                   GlassMetrics.menuItemRadius,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(
+                child: SizedBox.square(
+                  dimension: GlassMetrics.minTouchTarget,
+                  child: LineIcon(
                     LucideIcons.x,
                     size: 14,
                     color: colors.onSurfaceVariant,
@@ -759,18 +781,20 @@ class _HistoryAppState extends State<HistoryApp> {
               Expanded(
                 child: SizedBox(
                   height: GlassMetrics.hitSize,
-                  child: NativeGlassSurface(
-                    material: true,
+                  // 搜索框为扁平底，与「筛选」、筛选小标签和记录卡片同一材质（#67）。
+                  child: HistoryFieldBox(
                     child: TextField(
                       key: const ValueKey('history-search'),
                       controller: _search,
                       decoration: InputDecoration(
+                        // 静息细线由扁平底提供，只保留聚焦时的强调色框。
+                        enabledBorder: InputBorder.none,
                         hintText: '搜索原文或译文',
                         prefixIconConstraints: const BoxConstraints(
                           minWidth: GlassMetrics.hitSize,
                           minHeight: GlassMetrics.hitSize,
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: const LineIcon(
                           LucideIcons.search,
                           size: GlassMetrics.icon,
                         ),
@@ -792,7 +816,7 @@ class _HistoryAppState extends State<HistoryApp> {
                                   minHeight: GlassMetrics.hitSize,
                                 ),
                                 padding: EdgeInsets.zero,
-                                icon: const Icon(
+                                icon: const LineIcon(
                                   LucideIcons.x,
                                   size: GlassMetrics.icon,
                                 ),
@@ -914,8 +938,9 @@ class _HistoryAppState extends State<HistoryApp> {
                 child: SelectableText(
                   item.translatedText,
                   style: TextStyle(
-                    fontSize: 15,
-                    height: 22 / 15,
+                    // 历史与生词条目主文字 14/20（#67「历史列表」）。
+                    fontSize: 14,
+                    height: 20 / 14,
                     color: colors.onSurface,
                   ),
                 ),
@@ -966,7 +991,7 @@ class _HistoryAppState extends State<HistoryApp> {
                       onPressed: _managing
                           ? null
                           : () => _deleteHistory(context, id: item.id),
-                      icon: const Icon(
+                      icon: const LineIcon(
                         LucideIcons.trash2,
                         size: GlassMetrics.icon,
                       ),
@@ -992,7 +1017,26 @@ class _HistoryAppState extends State<HistoryApp> {
 
   /// 无参数；返回列表末尾的加载、重试或完成提示组件。
   Widget _buildFooter() {
-    if (_loading) return const CircularProgressIndicator();
+    // 加载下一批：16pt 次要色系统小转圈与 12pt 说明，与应用其他等待状态同族（#67）。
+    if (_loading) {
+      final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+      return Row(
+        key: const ValueKey('history-loading-more'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoActivityIndicator(radius: 8, color: muted),
+          const SizedBox(width: GlassMetrics.space8),
+          Text(
+            '正在加载更早的记录',
+            style: TextStyle(
+              fontSize: GlassMetrics.captionFont,
+              height: GlassMetrics.captionLine / GlassMetrics.captionFont,
+              color: muted,
+            ),
+          ),
+        ],
+      );
+    }
     if (_pageError != null) {
       return NativeGlassBanner(
         message: _pageError!,

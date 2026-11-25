@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_enums.dart';
@@ -384,7 +385,7 @@ class _ColorPickerState extends State<ColorPicker> {
                           iconSize: 16,
                           onPressed: () =>
                               setState(() => _direction = direction),
-                          icon: Icon(icon),
+                          icon: LineIcon(icon),
                           style: IconButton.styleFrom(
                             backgroundColor: _direction == direction
                                 ? NativeGlassTheme.accentFillOf(context)
@@ -456,7 +457,7 @@ class _ColorPickerState extends State<ColorPicker> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    LineIcon(
                       LucideIcons.circleAlert,
                       size: 13,
                       color: Theme.of(context).colorScheme.error,

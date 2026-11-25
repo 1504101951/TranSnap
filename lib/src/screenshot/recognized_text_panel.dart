@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/screenshot_enums.dart';
 import '../common/widgets/app_motion.dart';
@@ -85,7 +86,7 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
                                 widget.onDrag(details.delta),
                             child: Row(
                               children: [
-                                Icon(
+                                LineIcon(
                                   LucideIcons.gripVertical,
                                   size: GlassMetrics.icon,
                                   color: colors.onSurfaceVariant,
@@ -124,7 +125,7 @@ class _RecognizedTextPanelState extends State<RecognizedTextPanel> {
                         child: IconButton(
                           onPressed: widget.onClose,
                           tooltip: '关闭',
-                          icon: const Icon(
+                          icon: const LineIcon(
                             LucideIcons.x,
                             size: GlassMetrics.icon,
                           ),
@@ -262,7 +263,7 @@ class _CodeRow extends StatelessWidget {
               child: IconButton(
                 onPressed: onOpen,
                 tooltip: '打开链接',
-                icon: const Icon(LucideIcons.externalLink, size: GlassMetrics.icon),
+                icon: const LineIcon(LucideIcons.externalLink, size: GlassMetrics.icon),
                 visualDensity: VisualDensity.standard,
               ),
             ),

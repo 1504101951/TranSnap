@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../common/widgets/line_icon.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/preference_keys.dart';
 import '../common/constants/drawing_metrics.dart';
@@ -20,6 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
 
 import '../common/widgets/app_motion.dart';
+import '../common/widgets/window_drag_area.dart';
 import '../common/widgets/native_glass.dart';
 
 import 'app_settings.dart';
@@ -781,7 +783,7 @@ class _SettingsPageState extends State<_SettingsPage>
                 onPressed: _recordingTarget != null
                     ? null
                     : () => _recordShortcut(title, apply),
-                icon: const Icon(LucideIcons.keyboard),
+                icon: const LineIcon(LucideIcons.keyboard),
                 label: isThisRecording
                     ? const Text('请按下组合键，Esc 取消…')
                     : NativeGlassKeycaps(tokens: tokens),
@@ -841,17 +843,22 @@ class _SettingsPageState extends State<_SettingsPage>
             key: const ValueKey('settings-sidebar'),
             value: _page,
             sections: _sidebarSections,
-            topPadding: 38,
+            topPadding: GlassMetrics.sidebarTopInset,
             onChanged: _openPage,
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // 右侧顶部 28pt 为窗口拖动区：Flutter 盖住了系统标题栏，空白处拖动交给原生窗口（#67）。
+                WindowDragArea(
+                  channel: _channel,
+                  child: const SizedBox(height: GlassMetrics.titlebarHeight),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     GlassMetrics.pagePadding,
-                    GlassMetrics.space24,
+                    GlassMetrics.space8,
                     GlassMetrics.pagePadding,
                     GlassMetrics.space16,
                   ),
@@ -1284,7 +1291,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           material: true,
                                           child: TextButton.icon(
                                             onPressed: () => _editService(),
-                                            icon: const Icon(
+                                            icon: const LineIcon(
                                               LucideIcons.plus,
                                               size: 18,
                                             ),
@@ -1321,7 +1328,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                             child: IconButton(
                                               tooltip:
                                                   '编辑 ${service.displayName}',
-                                              icon: const Icon(
+                                              icon: const LineIcon(
                                                 LucideIcons.pencil,
                                               ),
                                               onPressed: () =>
@@ -1340,7 +1347,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                                   _confirmDeleteService(
                                                     service,
                                                   ),
-                                              icon: const Icon(
+                                              icon: const LineIcon(
                                                 LucideIcons.trash2,
                                               ),
                                             ),
@@ -1422,7 +1429,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                           material: true,
                                           child: TextButton.icon(
                                             onPressed: _addExclusion,
-                                            icon: const Icon(
+                                            icon: const LineIcon(
                                               LucideIcons.plus,
                                               size: 18,
                                             ),
@@ -1453,7 +1460,7 @@ class _SettingsPageState extends State<_SettingsPage>
                                         material: true,
                                         child: IconButton(
                                           tooltip: '移除排除项',
-                                          icon: const Icon(
+                                          icon: const LineIcon(
                                             LucideIcons.circleMinus,
                                           ),
                                           onPressed: () => _edit(
@@ -2090,7 +2097,7 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
                         child: DecoratedBox(
                           decoration: fillDecoration,
                           child: !widget.selected && widget.icon != null
-                              ? Icon(
+                              ? LineIcon(
                                   widget.icon,
                                   size: 12,
                                   color: Theme.of(context)
@@ -2198,7 +2205,7 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
                                   .colorScheme
                                   .surfaceContainerHighest,
                               child: const Center(
-                                child: Icon(
+                                child: LineIcon(
                                   LucideIcons.imageOff,
                                   size: GlassMetrics.icon,
                                 ),
@@ -2231,7 +2238,7 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
                             ),
                             child: SizedBox.square(
                               dimension: 16,
-                              child: Icon(
+                              child: LineIcon(
                                 LucideIcons.x,
                                 size: 12,
                                 color: Colors.white,

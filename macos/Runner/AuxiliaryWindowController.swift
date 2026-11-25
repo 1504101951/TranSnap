@@ -16,14 +16,16 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
     private let autosaveName: NSWindow.FrameAutosaveName?
     private let refreshMethod: String?
     private let refreshesOnFocus: Bool
+    private let compactTitlebar: Bool
 
     /// engineName/entrypoint 标识第二引擎；title/size 为窗口外观；
     /// minSize 为最小宽高限制（可选）；autosaveName 为几何位置与尺寸持久化键名（可选）；
     /// refreshMethod 为请 Dart 重新读取数据的方法名，重开已存在的窗口或调用 refresh() 时发送，为空表示不需要（#126）；
-    /// refreshesOnFocus 为真时窗口每次成为 key 也发送，供权限向导在用户点回时重读授权。
+    /// refreshesOnFocus 为真时窗口每次成为 key 也发送，供权限向导在用户点回时重读授权；
+    /// compactTitlebar 为真时隐藏标题文字、内容通顶并使用 38pt 紧凑工具栏标题栏，供历史窗口把分段放进标题栏（#67）。
     init(engineName: String, entrypoint: String, title: String, size: NSSize,
          minSize: NSSize? = nil, autosaveName: NSWindow.FrameAutosaveName? = nil,
-         refreshMethod: String? = nil, refreshesOnFocus: Bool = false) {
+         refreshMethod: String? = nil, refreshesOnFocus: Bool = false, compactTitlebar: Bool = false) {
         self.engineName = engineName
         self.entrypoint = entrypoint
         self.title = title
@@ -32,6 +34,7 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
         self.autosaveName = autosaveName
         self.refreshMethod = refreshMethod
         self.refreshesOnFocus = refreshesOnFocus
+        self.compactTitlebar = compactTitlebar
         super.init()
     }
 
@@ -58,6 +61,12 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
                     result(nil)
                     return
                 }
+                if call.method == AppConstants.startWindowDragMethod {
+                    // 历史窗口标题栏带空白处由 Flutter 转发拖动（#67）。
+                    WindowEngine.beginDrag(self?.window)
+                    result(nil)
+                    return
+                }
                 let bridge = MacPlatformBridge.Shared.instance!
                 // routeWindowRequest负责跨引擎分发，辅助窗口不保存业务方法表。
                 bridge.routeWindowRequest(call, result: result)
@@ -74,7 +83,8 @@ final class AuxiliaryWindowController: NSObject, NSWindowDelegate {
                 // makeWindow 建出普通窗口；附属窗口关闭即停止引擎。
                 let window = WindowEngine.makeWindow(
                     flutter: started.flutter, title: self.title, size: self.size,
-                    minSize: self.minSize, delegate: self, autosaveName: self.autosaveName)
+                    minSize: self.minSize, delegate: self, autosaveName: self.autosaveName,
+                    fullSizeTitlebar: self.compactTitlebar, compactToolbar: self.compactTitlebar)
                 self.window = window
                 // present 激活并前置已经就绪的附属窗口。
                 WindowEngine.present(window)

@@ -326,6 +326,8 @@ enum AppConstants {
     static let retainOverlayMethod = "retainOverlay"
     /// setWindowTitle 协议值；设置或历史等独立窗口同步更新所属 NSWindow 标题，参数 title（#144），与 Dart 常量同步。
     static let setWindowTitleMethod = "setWindowTitle"
+    /// startWindowDrag 协议值；通顶窗口在标题栏带空白处按下拖动时，由所属窗口执行原生 performDrag（#67），与 Dart 常量同步。
+    static let startWindowDragMethod = "startWindowDrag"
     /// replaceSelection 协议值；输入翻译完成后把译文粘贴回来源应用，与Dart常量同步。
     static let replaceSelectionMethod = "replaceSelection"
     /// showInputFailure 协议值；输入翻译失败时 Dart 发送 sessionId 与 message，原生在选中区域附近显示失败气泡（#99），与Dart常量同步。

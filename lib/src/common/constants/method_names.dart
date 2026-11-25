@@ -212,6 +212,9 @@ abstract final class MethodNames {
   /// 设置当前附属窗口的原生窗口标题；参数 {'title': String}，由窗口所在引擎发给所属原生窗口控制器（#144）。
   static const setWindowTitle = 'setWindowTitle';
 
+  /// 通顶窗口的标题栏带空白处按下拖动时，请所属原生窗口执行 performDrag；无参数（#67）。
+  static const startWindowDrag = 'startWindowDrag';
+
   static const showOverlay = 'showOverlay';
 
   static const systemStatus = 'systemStatus';

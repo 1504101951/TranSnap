@@ -108,14 +108,23 @@ enum WindowEngine {
         Startup(name: name, entrypoint: entrypoint, channel: channel, handler: handler, completion: completion)
     }
 
+    /// window 为通顶窗口；Flutter 在标题栏带空白处识别到拖动时调用，用当前鼠标事件交给 AppKit 拖动窗口，无返回值（#67）。
+    /// Flutter 视图覆盖了标题栏区域，系统不会自动拖动；消息经通道异步到达时 currentEvent 仍是同一次按下拖动中的鼠标事件。
+    static func beginDrag(_ window: NSWindow?) {
+        guard let window, let event = NSApp.currentEvent else { return }
+        window.performDrag(with: event)
+    }
+
     /// flutter 为已运行引擎的视图控制器，title/size 为窗口标题与内容尺寸，minSize 为最小尺寸（为空不限制），
     /// delegate 接收窗口事件，autosaveName 为可选的窗口位置与尺寸记忆键（首次无记录时居中），
-    /// fullSizeTitlebar 为真时隐藏系统标题栏文字并让 Flutter 内容通顶承载全高侧边栏（#67）；
+    /// fullSizeTitlebar 为真时隐藏系统标题栏文字并让 Flutter 内容通顶承载全高侧边栏（#67），
+    /// compactToolbar 为真时挂空工具栏并使用 unifiedCompact 样式，标题栏高 38pt、红黄绿按钮垂直居中，供 Flutter 在标题栏带内放置分段（#67）；
     /// 返回关闭时不释放、透明承载原生玻璃内容但尚未显示的普通窗口（#126、#144）。
     static func makeWindow(flutter: FlutterViewController, title: String, size: NSSize, minSize: NSSize?,
                            delegate: NSWindowDelegate,
                            autosaveName: NSWindow.FrameAutosaveName? = nil,
-                           fullSizeTitlebar: Bool = false) -> NSWindow {
+                           fullSizeTitlebar: Bool = false,
+                           compactToolbar: Bool = false) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -125,6 +134,11 @@ enum WindowEngine {
         window.title = title
         if fullSizeTitlebar {
             window.titleVisibility = .hidden
+        }
+        // 空工具栏只用来撑高标题栏并让红黄绿按钮居中，工具栏内容由 Flutter 绘制。
+        if compactToolbar {
+            window.toolbar = NSToolbar()
+            window.toolbarStyle = .unifiedCompact
         }
         if let minSize { window.minSize = minSize }
         window.isReleasedWhenClosed = false

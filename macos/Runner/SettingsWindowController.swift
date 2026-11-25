@@ -37,6 +37,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                     // 切换设置子页时同步更新原生窗口标题，不重复 App 名（#1、#144）。
                     self?.window?.title = title
                     result(nil)
+                case AppConstants.startWindowDragMethod:
+                    // 设置窗口右侧顶部 28pt 拖动区由 Flutter 转发拖动（#67）。
+                    WindowEngine.beginDrag(self?.window)
+                    result(nil)
                 default:
                     // routeWindowRequest统一区分主引擎业务和系统操作，窗口仅保留快捷键录制与标题同步。
                     bridge.routeWindowRequest(call, result: result)
