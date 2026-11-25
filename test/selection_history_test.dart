@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:transnap/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:transnap/src/overlay/translation_overlay.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:transnap/src/selection/selection_translation_app.dart'
     show TranSnapApp;
@@ -309,7 +310,9 @@ void main() {
     expect(history.page(), hasLength(1));
 
     Future<void> choose(TextMode mode) async {
-      await tester.tap(find.byKey(ValueKey('mode-tab-${mode.name}')));
+      await tester.tap(find.byKey(const ValueKey('card-mode-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(TranslationOverlay.modeLabels[mode]!).last);
       await tester.pumpAndSettle();
     }
 

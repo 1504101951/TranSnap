@@ -87,6 +87,8 @@ class SelectionSession extends ChangeNotifier {
   ];
 
   String? serviceOverride;
+  String? sourceOverride;
+  String? targetOverride;
 
   static const assistUnavailable =
       '润色、纠错与解释需要模型服务（OpenAI、DeepSeek 或 Anthropic）；可在卡片上切换服务，或把默认翻译服务设为模型服务。';
@@ -145,6 +147,8 @@ class SelectionSession extends ChangeNotifier {
     _cancelTranslation();
     mode = TextMode.translate;
     serviceOverride = null;
+    sourceOverride = null;
+    targetOverride = null;
     if (!awaitSelection && (text == null || text.trim().isEmpty)) {
       snapshot = TranslationSnapshot.idle;
       notifyListeners();
@@ -210,6 +214,18 @@ class SelectionSession extends ChangeNotifier {
 
   Future<void> switchService(String serviceId) => _reprocess(mode, serviceId);
 
+  Future<void> switchLanguages({
+    required String? source,
+    required String target,
+  }) {
+    if (!isExpanded || snapshot.phase == TranslationPhase.translating) {
+      return Future.value();
+    }
+    sourceOverride = source;
+    targetOverride = target;
+    return _reprocess(mode, serviceOverride);
+  }
+
   Future<void> _reprocess(TextMode mode, String? serviceId) async {
     if (!isExpanded || snapshot.phase == TranslationPhase.translating) return;
     final source = snapshot.sourceText;
@@ -272,7 +288,7 @@ class SelectionSession extends ChangeNotifier {
     }
     final String? detected;
     try {
-      detected = await detectLanguage(source);
+      detected = sourceOverride ?? await detectLanguage(source);
     } catch (error) {
       if (generation != _generation) return;
       snapshot = snapshot.copyWith(
@@ -289,7 +305,7 @@ class SelectionSession extends ChangeNotifier {
       sourceText: source,
       detectedLanguage: direction.detectedLanguage,
       targetLanguage: switch (mode) {
-        TextMode.translate => direction.targetLanguage,
+        TextMode.translate => targetOverride ?? direction.targetLanguage,
         TextMode.explain => language.primaryCode,
         TextMode.polish || TextMode.correct =>
           direction.detectedLanguage ??
@@ -390,6 +406,8 @@ class SelectionSession extends ChangeNotifier {
     _cancelTranslation();
     sessionId = null;
     serviceOverride = null;
+    sourceOverride = null;
+    targetOverride = null;
     snapshot = TranslationSnapshot.idle;
     notifyListeners();
   }

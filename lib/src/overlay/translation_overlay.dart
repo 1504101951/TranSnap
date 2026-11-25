@@ -11,6 +11,7 @@ import '../common/widgets/app_motion.dart';
 import '../common/widgets/native_glass.dart';
 
 import '../selection/selection_session.dart';
+import '../settings/app_settings.dart';
 import 'dictionary_definition.dart';
 import '../translation/translation_types.dart';
 
@@ -23,6 +24,7 @@ class TranslationOverlay extends StatefulWidget {
     required this.onDrag,
     required this.onMode,
     required this.onService,
+    required this.onLanguages,
     required this.onSpeak,
     required this.onAddVocabulary,
     this.speakingSource,
@@ -37,6 +39,7 @@ class TranslationOverlay extends StatefulWidget {
   final ValueChanged<TextMode> onMode;
 
   final ValueChanged<String> onService;
+  final void Function(String? source, String target) onLanguages;
 
   final ValueChanged<bool> onSpeak;
 
@@ -51,81 +54,14 @@ class TranslationOverlay extends StatefulWidget {
     TextMode.explain: '解释',
   };
 
-  static const singleWidth = 560.0;
-  static const compareWidth = 720.0;
-  static const maxHeight = 420.0;
+  static const cardSize = Size(720, 420);
+  static const autoLanguage = 'auto';
 
-  static const singleChromeHeight =
-      44 +
-      0.5 +
-      GlassMetrics.space16 +
-      GlassMetrics.space4 * 2 +
-      GlassMetrics.hitSize;
-
-  static TextStyle textStyleFor({
-    required bool translated,
-    required bool dictionary,
-    required bool single,
-  }) {
-    if (single && !translated) {
-      return const TextStyle(
-        fontSize: GlassMetrics.captionFont,
-        height: GlassMetrics.captionLine / GlassMetrics.captionFont,
-      );
-    }
-    return TextStyle(
-      fontSize: 15,
-      height: 22 / 15,
-      fontWeight: dictionary
-          ? FontWeight.w600
-          : single
-          ? FontWeight.w500
-          : null,
-    );
-  }
-
-  static ({bool single, Size size}) layoutFor(
-    SelectionSession session,
-    TextScaler scaler,
-  ) {
-    const compare = (single: false, size: Size(compareWidth, maxHeight));
-    final snap = session.snapshot;
-    if (session.definition != null || snap.pairs.length > 1) return compare;
-    const textWidth = singleWidth - GlassMetrics.space16 * 2;
-    double measure(String text, TextStyle style, double width) {
-      final painter = TextPainter(
-        text: TextSpan(text: text, style: style),
-        textDirection: TextDirection.ltr,
-        textScaler: scaler,
-      )..layout(maxWidth: width);
-      final height = painter.height;
-      painter.dispose();
-      return height;
-    }
-
-    final lead = textStyleFor(
-      translated: true,
-      dictionary: false,
-      single: true,
-    );
-    final double content;
-    if (session.sourceIsTarget) {
-      content = measure(snap.sourceText, lead, textWidth);
-    } else {
-      final translated = snap.translatedText.isEmpty
-          ? lead.height! * lead.fontSize! * 2
-          : measure(snap.translatedText, lead, textWidth);
-      final source = measure(
-        snap.sourceText,
-        textStyleFor(translated: false, dictionary: false, single: true),
-        textWidth,
-      );
-      content = translated + GlassMetrics.space8 + source;
-    }
-    final height = (singleChromeHeight + content).ceilToDouble();
-    if (height > maxHeight) return compare;
-    return (single: true, size: Size(singleWidth, height));
-  }
+  static TextStyle textStyleFor({required bool dictionary}) => TextStyle(
+    fontSize: 15,
+    height: 22 / 15,
+    fontWeight: dictionary ? FontWeight.w600 : null,
+  );
 
   @override
   State<TranslationOverlay> createState() => _TranslationOverlayState();
@@ -269,10 +205,6 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
         widget.session.serviceOverride ??
         choices.firstWhere((choice) => choice.isDefault).id;
     final resultLabel = mode == TextMode.translate ? '译文' : modeLabel;
-    final single = TranslationOverlay.layoutFor(
-      widget.session,
-      MediaQuery.textScalerOf(context),
-    ).single;
     final resultBody = busy && snap.translatedText.isEmpty
         ? const GentleShimmerSkeleton(lines: 2)
         : statusInBanner
@@ -314,35 +246,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
     final sourceOnly = widget.session.sourceIsTarget;
     final Widget body;
-    if (single) {
-      body = Padding(
-        padding: const EdgeInsets.fromLTRB(
-          GlassMetrics.space16,
-          GlassMetrics.space16,
-          GlassMetrics.space16,
-          0,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (sourceOnly)
-              _paragraphs(
-                pairs,
-                translated: false,
-                dictionary: false,
-                failed: false,
-                lead: true,
-              )
-            else ...[
-              revealedResult,
-              const SizedBox(height: GlassMetrics.space8),
-              sourceBody,
-            ],
-          ],
-        ),
-      );
-    } else if (definition != null) {
+    if (definition != null) {
       body = Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -382,6 +286,17 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
             ),
           ),
         ],
+      );
+    } else if (sourceOnly) {
+      body = _pane(
+        title: '原文',
+        body: _paragraphs(
+          pairs,
+          translated: false,
+          dictionary: false,
+          failed: false,
+          lead: true,
+        ),
       );
     } else {
       body = Row(
@@ -471,6 +386,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                 radius: GlassMetrics.menuItemRadius,
                 iconSize: 14,
                 material: false,
+                tooltipAbove: true,
               ),
               _CardButton(
                 key: const ValueKey('card-speak-source'),
@@ -481,6 +397,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                 radius: GlassMetrics.menuItemRadius,
                 iconSize: 14,
                 material: false,
+                tooltipAbove: true,
               ),
             ],
           ],
@@ -509,10 +426,20 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                     ),
                     child: Row(
                       children: [
-                        _ModeTabs(
+                        NativeGlassMenuButton<TextMode>(
+                          key: const ValueKey('card-mode-menu'),
+                          quiet: true,
+                          quietTextStyle: TextStyle(
+                            fontSize: GlassMetrics.bodyFont,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
                           value: mode,
+                          items: TranslationOverlay.modeLabels,
                           onChanged: busy ? null : widget.onMode,
                         ),
+                        const SizedBox(width: GlassMetrics.space4),
+                        ..._languageMenus(busy),
                         Expanded(
                           child: MouseRegion(
                             cursor: SystemMouseCursors.move,
@@ -601,14 +528,7 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: single
-                              ? SingleChildScrollView(
-                                  primary: false,
-                                  child: body,
-                                )
-                              : body,
-                        ),
+                        Expanded(child: body),
                         footer,
                       ],
                     ),
@@ -694,6 +614,56 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     );
   }
 
+  List<Widget> _languageMenus(bool busy) {
+    final session = widget.session;
+    final detected = session.snapshot.detectedLanguage;
+    final detectedName = detected == null
+        ? null
+        : AppSettings.languages[detected] ?? detected;
+    final target =
+        session.outputLanguage ??
+        session.activeLanguage.resolve(detected).targetLanguage;
+    final onChanged = busy || !session.isExpanded
+        ? null
+        : (String? source, String target) => widget.onLanguages(source, target);
+    return [
+      NativeGlassMenuButton<String>(
+        key: const ValueKey('card-source-language'),
+        quiet: true,
+        value: session.sourceOverride ?? TranslationOverlay.autoLanguage,
+        items: {
+          TranslationOverlay.autoLanguage: detectedName == null || session.sourceOverride != null
+              ? '自动检测'
+              : '自动检测（$detectedName）',
+          ...AppSettings.languages,
+        },
+        onChanged: onChanged == null
+            ? null
+            : (value) =>
+                  onChanged(value == TranslationOverlay.autoLanguage ? null : value, target),
+      ),
+      Text(
+        '→',
+        style: TextStyle(
+          fontSize: GlassMetrics.captionFont,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      NativeGlassMenuButton<String>(
+        key: const ValueKey('card-target-language'),
+        quiet: true,
+        value: target,
+        items: {
+          if (!AppSettings.languages.containsKey(target)) target: target,
+          ...AppSettings.languages,
+        },
+        onChanged: onChanged == null
+            ? null
+            : (value) => onChanged(session.sourceOverride, value),
+      ),
+    ];
+  }
+
   Widget _paragraphs(
     List<TranslationPair> pairs, {
     required bool translated,
@@ -702,15 +672,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     bool lead = false,
   }) {
     final colors = Theme.of(context).colorScheme;
-    final style =
-        TranslationOverlay.textStyleFor(
-          translated: translated || lead,
-          dictionary: dictionary,
-          single: TranslationOverlay.layoutFor(
-            widget.session,
-            MediaQuery.textScalerOf(context),
-          ).single,
-        ).copyWith(
+    final style = TranslationOverlay.textStyleFor(dictionary: dictionary)
+        .copyWith(
           color: translated || lead
               ? colors.onSurface
               : colors.onSurfaceVariant,
@@ -756,9 +719,10 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                         key: ValueKey('source-paragraph-$index'),
                         decoration: BoxDecoration(
                           color:
-                              _hoveredParagraph ==
-                                  (widget.session.sessionId, index)
-                              ? colors.primaryContainer
+                              pairs.length > 1 &&
+                                  _hoveredParagraph ==
+                                      (widget.session.sessionId, index)
+                              ? colors.onSurface.withValues(alpha: 0.08)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -781,6 +745,7 @@ class _CardButton extends StatelessWidget {
     required this.radius,
     required this.iconSize,
     this.material = true,
+    this.tooltipAbove = false,
   });
   final String tooltip;
   final Widget icon;
@@ -790,6 +755,7 @@ class _CardButton extends StatelessWidget {
   final double iconSize;
 
   final bool material;
+  final bool tooltipAbove;
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
@@ -809,69 +775,22 @@ class _CardButton extends StatelessWidget {
           child: NativeGlassSurface(
             material: material,
             radius: radius,
-            child: IconButton(
-              tooltip: tooltip,
-              onPressed: onPressed,
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints.tight(Size.square(visual)),
-              iconSize: iconSize,
-              icon: icon,
+            child: Tooltip(
+              message: tooltip,
+              preferBelow: !tooltipAbove,
+              child: IconButton(
+                onPressed: onPressed,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tight(Size.square(visual)),
+                iconSize: iconSize,
+                icon: icon,
+              ),
             ),
           ),
         ),
       ],
     ),
   );
-}
-
-class _ModeTabs extends StatelessWidget {
-  const _ModeTabs({required this.value, required this.onChanged});
-
-  final TextMode value;
-  final ValueChanged<TextMode>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final colors = theme.colorScheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: 2,
-      children: [
-        for (final entry in TranslationOverlay.modeLabels.entries)
-          Semantics(
-            selected: entry.key == value,
-            child: TextButton(
-              key: ValueKey('mode-tab-${entry.key.name}'),
-              onPressed: onChanged == null ? null : () => onChanged!(entry.key),
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, GlassMetrics.buttonHeight),
-                fixedSize: const Size.fromHeight(GlassMetrics.buttonHeight),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: GlassMetrics.space8,
-                ),
-                shape: RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.circular(
-                    GlassMetrics.controlRadius,
-                  ),
-                ),
-                backgroundColor: entry.key == value
-                    ? colors.onSurface.withValues(alpha: dark ? 0.08 : 0.05)
-                    : Colors.transparent,
-                foregroundColor: entry.key == value
-                    ? colors.onSurface
-                    : colors.onSurfaceVariant,
-                textStyle: theme.textTheme.bodyMedium!.copyWith(
-                  fontWeight: entry.key == value ? FontWeight.w600 : null,
-                ),
-              ),
-              child: Text(entry.value),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 class _FooterAction extends StatelessWidget {

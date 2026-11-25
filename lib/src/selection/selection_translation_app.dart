@@ -83,6 +83,7 @@ class _TranSnapAppState extends State<TranSnapApp> {
         if (widget.session.isExpanded && !explicit) {
           return;
         }
+        Tooltip.dismissAllToolTips();
         _sourceAppName = sourceAppName;
         _resetSpeech();
         _replaceSessionId = gesture == SelectionGestureTypes.inputHotkey
@@ -130,10 +131,7 @@ class _TranSnapAppState extends State<TranSnapApp> {
     }
   }
 
-  Size _resultSize() => TranslationOverlay.layoutFor(
-    widget.session,
-    MediaQuery.textScalerOf(context),
-  ).size;
+  Size _resultSize() => TranslationOverlay.cardSize;
 
   void _syncOverlaySize() {
     final id = widget.session.sessionId;
@@ -313,6 +311,20 @@ class _TranSnapAppState extends State<TranSnapApp> {
     );
   }
 
+  Future<void> _switchLanguages(String? source, String target) async {
+    final id = widget.session.sessionId;
+    if (id == null) return;
+    _resetSpeech();
+    final sourceLabel = _sourceAppName;
+    await widget.session.switchLanguages(source: source, target: target);
+    _record(
+      id,
+      widget.session.activeProvider,
+      widget.session.activeLanguage,
+      sourceLabel,
+    );
+  }
+
   void _record(
     String id,
     TranslationProvider provider,
@@ -328,9 +340,11 @@ class _TranSnapAppState extends State<TranSnapApp> {
       sourceText: widget.session.snapshot.sourceText,
       translatedText: widget.session.snapshot.translatedText,
       detectedLanguage: widget.session.snapshot.detectedLanguage ?? '',
-      targetLanguage: language
-          .resolve(widget.session.snapshot.detectedLanguage)
-          .targetLanguage,
+      targetLanguage:
+          widget.session.outputLanguage ??
+          language
+              .resolve(widget.session.snapshot.detectedLanguage)
+              .targetLanguage,
       providerId: provider.id,
       model: translationHistoryModel(provider),
       sourceLabel: sourceLabel,
@@ -339,6 +353,7 @@ class _TranSnapAppState extends State<TranSnapApp> {
   }
 
   void _dismiss() {
+    Tooltip.dismissAllToolTips();
     final id = widget.session.sessionId;
     _resetSpeech(rebuild: false);
     widget.session.dismiss();
@@ -358,6 +373,8 @@ class _TranSnapAppState extends State<TranSnapApp> {
         onDismiss: _dismiss,
         onMode: (mode) => unawaited(_switchMode(mode)),
         onService: (serviceId) => unawaited(_switchService(serviceId)),
+        onLanguages: (source, target) =>
+            unawaited(_switchLanguages(source, target)),
         onSpeak: (source) => unawaited(_speak(source)),
         onAddVocabulary: _addVocabulary,
         onDrag: () {

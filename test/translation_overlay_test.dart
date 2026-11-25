@@ -209,6 +209,7 @@ void main() {
             onDrag: () => drags += 1,
             onMode: session.switchMode,
             onService: session.switchService,
+            onLanguages: (_, _) {},
             onSpeak: (_) {},
             onAddVocabulary: () {},
           ),
@@ -234,12 +235,12 @@ void main() {
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('你好')).dy,
-        lessThan(tester.getTopLeft(find.text('Hello')).dy),
+        tester.getTopLeft(find.text('你好')).dx,
+        lessThan(tester.getTopLeft(find.text('Hello')).dx),
       );
       expect(
-        tester.getTopLeft(find.text('你好')).dx,
-        tester.getTopLeft(find.text('Hello')).dx,
+        tester.getTopLeft(find.text('你好')).dy,
+        tester.getTopLeft(find.text('Hello')).dy,
       );
       expect(find.byKey(const ValueKey('card-copy-source')), findsOneWidget);
       expect(find.text('复制原文'), findsNothing);
@@ -260,7 +261,10 @@ void main() {
       final dragArea = find.byKey(const ValueKey('result-drag-area'));
       expect(tester.getSize(dragArea).height, 44);
       await tester.dragFrom(
-        tester.getTopLeft(dragArea) + const Offset(180, 40),
+        Offset(
+          tester.getRect(dragArea).center.dx,
+          tester.getRect(dragArea).top + 40,
+        ),
         const Offset(40, 0),
       );
       await tester.pumpAndSettle();
@@ -275,7 +279,9 @@ void main() {
     },
   );
 
-  testWidgets('底部操作行左侧「朗读译文」朗读译文、右侧原文组朗读图标朗读原文，空内容禁用（#101、#134、#67）', (tester) async {
+  testWidgets('底部操作行左侧「朗读译文」朗读译文、右侧原文组朗读图标朗读原文，空内容禁用（#101、#134、#67）', (
+    tester,
+  ) async {
     final session = SelectionSession(
       provider: _Provider(),
       detectLanguage: (_) async => 'en',
@@ -296,6 +302,7 @@ void main() {
           onDrag: () {},
           onMode: (_) {},
           onService: (_) {},
+          onLanguages: (_, _) {},
           onSpeak: spoken.add,
           onAddVocabulary: () {},
         ),
@@ -327,62 +334,6 @@ void main() {
     expect(spoken, [false, true]);
   });
 
-  testWidgets('卡片布局：单栏按内容定高，多段配对、词典或超过 420pt 改为 720×420 对照（#134）', (
-    tester,
-  ) async {
-    final session = SelectionSession(
-      provider: _Provider(),
-      detectLanguage: (_) async => 'en',
-    );
-    addTearDown(session.dispose);
-    ({bool single, Size size}) layout(TranslationSnapshot snapshot) {
-      session.snapshot = snapshot;
-      return TranslationOverlay.layoutFor(session, TextScaler.noScaling);
-    }
-
-    expect(
-      layout(
-        const TranslationSnapshot(
-          phase: TranslationPhase.completed,
-          sourceText: 'Hello',
-          translatedText: '你好',
-        ),
-      ),
-      (single: true, size: const Size(560, 148)),
-    );
-    expect(
-      layout(
-        const TranslationSnapshot(
-          phase: TranslationPhase.translating,
-          sourceText: 'Hello',
-          translatedText: '',
-        ),
-      ).size,
-      const Size(560, 170),
-    );
-    expect(
-      layout(
-        const TranslationSnapshot(
-          phase: TranslationPhase.completed,
-          sourceText: 'A. B.',
-          translatedText: '甲。乙。',
-          pairs: [TranslationPair('A.', '甲。'), TranslationPair('B.', '乙。')],
-        ),
-      ),
-      (single: false, size: const Size(720, 420)),
-    );
-    expect(
-      layout(
-        TranslationSnapshot(
-          phase: TranslationPhase.completed,
-          sourceText: 'Hello',
-          translatedText: '很长的译文' * 200,
-        ),
-      ),
-      (single: false, size: const Size(720, 420)),
-    );
-  });
-
   testWidgets('已验证的语义段落按译文原文成对展示', (tester) async {
     final session = SelectionSession(
       provider: _Provider(),
@@ -407,6 +358,7 @@ void main() {
           onDrag: () {},
           onMode: (_) {},
           onService: (_) {},
+          onLanguages: (_, _) {},
           onSpeak: (_) {},
           onAddVocabulary: () {},
         ),
@@ -463,6 +415,7 @@ void main() {
           onDrag: () {},
           onMode: session.switchMode,
           onService: session.switchService,
+          onLanguages: (_, _) {},
           onSpeak: (_) {},
           onAddVocabulary: () {},
         ),
@@ -471,6 +424,88 @@ void main() {
     await session.activate();
     await tester.pumpAndSettle();
   }
+
+  testWidgets('单段结果也是左右对照，悬停译文只在多段时以浅灰底高亮对应原文段落（#134、#67）', (tester) async {
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+    );
+    addTearDown(session.dispose);
+    session.begin(sessionId: 'one', text: 'Hello');
+    await pumpCard(tester, session);
+    expect(
+      tester.getTopLeft(find.text('你好')).dx,
+      lessThan(tester.getTopLeft(find.text('Hello')).dx),
+    );
+    expect(TranslationOverlay.cardSize, const Size(720, 420));
+    BoxDecoration sourceDecoration(int index) =>
+        tester
+                .widget<Container>(
+                  find.byKey(ValueKey('source-paragraph-$index')),
+                )
+                .decoration!
+            as BoxDecoration;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('你好')));
+    await tester.pumpAndSettle();
+    expect(sourceDecoration(0).color, Colors.transparent);
+
+    session.snapshot = const TranslationSnapshot(
+      phase: TranslationPhase.completed,
+      sourceText: 'A.\nB.',
+      translatedText: '甲。\n乙。',
+      pairs: [TranslationPair('A.', '甲。'), TranslationPair('\nB.', '\n乙。')],
+    );
+    session.notifyListeners();
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('甲。')));
+    await tester.pumpAndSettle();
+    final onSurface = Theme.of(tester.element(find.text('甲。')))
+        .colorScheme
+        .onSurface;
+    expect(sourceDecoration(0).color, onSurface.withValues(alpha: 0.08));
+    expect(sourceDecoration(1).color, Colors.transparent);
+  });
+
+  testWidgets('顶栏模式与语言下拉：选目标语言后回传当前源语言覆盖与所选目标语言', (tester) async {
+    final session = SelectionSession(
+      provider: _Provider(),
+      detectLanguage: (_) async => 'en',
+    );
+    addTearDown(session.dispose);
+    session.begin(sessionId: 'lang', text: 'Hello');
+    final picks = <(String?, String)>[];
+    tester.view.physicalSize = const Size(720, 420);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TranslationOverlay(
+          session: session,
+          onActivate: session.activate,
+          onDismiss: session.dismiss,
+          onDrag: () {},
+          onMode: session.switchMode,
+          onService: session.switchService,
+          onLanguages: (source, target) => picks.add((source, target)),
+          onSpeak: (_) {},
+          onAddVocabulary: () {},
+        ),
+      ),
+    );
+    await session.activate();
+    await tester.pumpAndSettle();
+    expect(find.text('翻译'), findsOneWidget);
+    expect(find.text('自动检测（English）'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('card-target-language')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日本語').last);
+    await tester.pumpAndSettle();
+    expect(picks, [(null, 'ja')]);
+  });
 
   testWidgets('查到词典：左 2/5 上译文下原文 15pt 半粗，右 3/5 词典；生词本在底部，复制词典在悬停词典时出现（#134）', (
     tester,
@@ -568,6 +603,7 @@ void main() {
           onDrag: () {},
           onMode: (_) {},
           onService: chosen.add,
+          onLanguages: (_, _) {},
           onSpeak: (_) {},
           onAddVocabulary: () {},
         ),
@@ -645,6 +681,7 @@ void main() {
           onDrag: () {},
           onMode: (_) {},
           onService: (_) {},
+          onLanguages: (_, _) {},
           onSpeak: (_) {},
           onAddVocabulary: () {},
         ),
@@ -692,6 +729,7 @@ void main() {
         onDrag: () {},
         onMode: session.switchMode,
         onService: session.switchService,
+        onLanguages: (_, _) {},
         onSpeak: spoken.add,
         onAddVocabulary: () {},
       ),

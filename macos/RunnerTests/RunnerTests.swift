@@ -1065,6 +1065,18 @@ class RunnerTests: XCTestCase {
             axText: "•",
             copiedText: ""
         ))
+        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
+            axText: "Adding tests.已运行 1 个命令已运行 1 个命令The three new tests pass.",
+            copiedText: "Adding tests.\n已运行 1 个命令\nThe three new tests pass."
+        ))
+        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
+            axText: "Adding tests for batching, ordering, and failure in the provider.",
+            copiedText: "Adding tests."
+        ))
+        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
+            axText: "Adding tests.",
+            copiedText: "Tests adding."
+        ))
     }
 
     @MainActor

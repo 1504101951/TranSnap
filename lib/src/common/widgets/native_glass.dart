@@ -589,6 +589,7 @@ class NativeGlassMenuButton<T> extends StatefulWidget {
     this.dense = false,
     this.flat,
     this.quiet = false,
+    this.quietTextStyle,
   });
   final T value;
   final Map<T, String> items;
@@ -596,6 +597,7 @@ class NativeGlassMenuButton<T> extends StatefulWidget {
   final bool dense;
   final Decoration? flat;
   final bool quiet;
+  final TextStyle? quietTextStyle;
 
   @override
   State<NativeGlassMenuButton<T>> createState() =>
@@ -685,7 +687,8 @@ class _NativeGlassMenuButtonState<T> extends State<NativeGlassMenuButton<T>> {
   }
 
   Widget _quietTrigger(BuildContext context, MenuController controller) {
-    final style = Theme.of(context).textTheme.bodySmall!;
+    final style =
+        widget.quietTextStyle ?? Theme.of(context).textTheme.bodySmall!;
     final onChanged = widget.onChanged;
     return ConstrainedBox(
       constraints: const BoxConstraints(

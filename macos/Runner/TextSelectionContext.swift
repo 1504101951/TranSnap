@@ -36,8 +36,18 @@ enum TextSelectionContext {
         let strippedCopied = copiedText.filter { !$0.isWhitespace && !invisibleCharacters.contains($0) }
         guard !strippedCopied.isEmpty else { return false }
         if strippedAX == strippedCopied { return true }
-        let normalizedAX = strippedAX.filter { !listMarkerCharacters.contains($0) }
-        let normalizedCopied = strippedCopied.filter { !listMarkerCharacters.contains($0) }
-        return !normalizedCopied.isEmpty && normalizedAX == normalizedCopied
+        let normalizedAX = Array(strippedAX.filter { !listMarkerCharacters.contains($0) })
+        let normalizedCopied = Array(strippedCopied.filter { !listMarkerCharacters.contains($0) })
+        guard !normalizedCopied.isEmpty, !normalizedAX.isEmpty else { return false }
+        if normalizedAX == normalizedCopied { return true }
+        let (shorter, longer) = normalizedAX.count <= normalizedCopied.count
+            ? (normalizedAX, normalizedCopied) : (normalizedCopied, normalizedAX)
+        guard shorter.count * 2 >= longer.count else { return false }
+        var index = longer.startIndex
+        for character in shorter {
+            guard let found = longer[index...].firstIndex(of: character) else { return false }
+            index = longer.index(after: found)
+        }
+        return true
     }
 }
