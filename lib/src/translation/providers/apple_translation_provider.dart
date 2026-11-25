@@ -37,31 +37,95 @@ class AppleTranslationProvider implements BatchTranslationProvider {
     return translateParagraphs(_translateSegment, request);
   }
 
+  static const batchMinChars = 400;
+  static const batchesInFlight = 3;
+
+  static List<List<int>> paragraphBatches(List<String> paragraphs) {
+    final batches = <List<int>>[];
+    var current = <int>[];
+    var chars = 0;
+    for (final (index, paragraph) in paragraphs.indexed) {
+      current.add(index);
+      chars += paragraph.trim().length;
+      if (batches.isEmpty || chars >= batchMinChars) {
+        batches.add(current);
+        current = <int>[];
+        chars = 0;
+      }
+    }
+    if (current.isNotEmpty) batches.add(current);
+    return batches;
+  }
+
   Stream<TranslationEvent> _translateSegment(TranslationRequest request) {
     final paragraphs = modelSourceParagraphs(request.sourceText);
-    final requestId = 'apple-${_nextRequest++}';
+    final batches = paragraphBatches(paragraphs);
+    final inFlight = <String>{};
     final events = StreamController<TranslationEvent>();
     var active = true;
     events.onListen = () async {
+      final results = List<List<String>?>.filled(batches.length, null);
+      final pairs = <TranslationPair>[];
+      var next = 0;
+      var published = 0;
+      _SystemFailure? failure;
+
+      void publishReady() {
+        while (published < batches.length && results[published] != null) {
+          final batch = batches[published];
+          final translations = results[published]!;
+          final batchPairs = [
+            for (final (offset, index) in batch.indexed)
+              pairParagraph(paragraphs[index], translations[offset]),
+          ];
+          pairs.addAll(batchPairs);
+          events.add(
+            TranslationUpdate(
+              batchPairs.map((pair) => pair.translation).join(),
+            ),
+          );
+          published++;
+        }
+      }
+
+      Future<void> worker() async {
+        while (active && failure == null && next < batches.length) {
+          final batch = next++;
+          final requestId = 'apple-${_nextRequest++}';
+          inFlight.add(requestId);
+          try {
+            results[batch] = await _translateTexts(
+              requestId,
+              [for (final index in batches[batch]) paragraphs[index].trim()],
+              source: request.detectedLanguage,
+              target: request.targetLanguage,
+              strategy: SystemTranslationStrategy.highFidelity,
+            );
+          } on _SystemFailure catch (error) {
+            failure ??= error;
+            for (final other in inFlight.where((id) => id != requestId)) {
+              _cancelNative(other);
+            }
+          } finally {
+            inFlight.remove(requestId);
+          }
+          if (!active || failure != null) return;
+          publishReady();
+        }
+      }
+
       try {
-        final translations = await _translateTexts(
-          requestId,
-          [for (final paragraph in paragraphs) paragraph.trim()],
-          source: request.detectedLanguage,
-          target: request.targetLanguage,
-          strategy: SystemTranslationStrategy.highFidelity,
-        );
+        await Future.wait([
+          for (var i = 0; i < batchesInFlight && i < batches.length; i++)
+            worker(),
+        ]);
         if (!active) return;
-        final pairs = [
-          for (final (index, paragraph) in paragraphs.indexed)
-            pairParagraph(paragraph, translations[index]),
-        ];
-        events.add(
-          TranslationUpdate(pairs.map((pair) => pair.translation).join()),
-        );
+        final error = failure;
+        if (error != null) {
+          events.add(TranslationFailure(error.message));
+          return;
+        }
         events.add(TranslationCompleted(pairs: pairs));
-      } on _SystemFailure catch (failure) {
-        if (active) events.add(TranslationFailure(failure.message));
       } finally {
         active = false;
         await events.close();
@@ -70,7 +134,9 @@ class AppleTranslationProvider implements BatchTranslationProvider {
     events.onCancel = () {
       if (!active) return;
       active = false;
-      _cancelNative(requestId);
+      for (final requestId in inFlight) {
+        _cancelNative(requestId);
+      }
     };
     return events.stream;
   }

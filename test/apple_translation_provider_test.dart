@@ -53,6 +53,108 @@ void main() {
     ]);
   });
 
+  test('段落分批：首批只含第一段，其后每批累计满 400 字符成批，余下段落成最后一批', () {
+    expect(
+      AppleTranslationProvider.paragraphBatches([
+        'a' * 10,
+        'b' * 100,
+        'c' * 300,
+        'd' * 399,
+        'e' * 1,
+        'f' * 5,
+      ]),
+      [
+        [0],
+        [1, 2],
+        [3, 4],
+        [5],
+      ],
+    );
+    expect(AppleTranslationProvider.paragraphBatches(const []), isEmpty);
+  });
+
+  test('各批并发提交、至多 3 批在途，后面的批先完成时仍按原文顺序逐批输出', () async {
+    final source = [
+      'P0.',
+      'P1 ${'x' * 400}',
+      'P2 ${'y' * 400}',
+      'P3 ${'z' * 400}',
+    ].join('\n');
+    final pending = <String, Completer<List<String>>>{};
+    nativeTranslate((texts) {
+      final completer = Completer<List<String>>();
+      pending[texts.first.substring(0, 2)] = completer;
+      return completer.future;
+    });
+    final updates = <String>[];
+    final done = Completer<List<TranslationPair>>();
+    provider
+        .translate(
+          TranslationRequest(
+            sourceText: source,
+            detectedLanguage: 'en',
+            targetLanguage: 'zh-CN',
+          ),
+        )
+        .listen((event) {
+          if (event is TranslationUpdate) updates.add(event.addition);
+          if (event is TranslationCompleted) done.complete(event.pairs);
+        });
+    await pumpEventQueue();
+    expect(pending.keys, unorderedEquals(['P0', 'P1', 'P2']));
+    pending['P1']!.complete(['译1']);
+    await pumpEventQueue();
+    expect(updates, isEmpty);
+    expect(pending.keys, contains('P3'));
+    pending['P0']!.complete(['译0']);
+    await pumpEventQueue();
+    expect(updates, ['译0', '\n译1']);
+    pending['P3']!.complete(['译3']);
+    pending['P2']!.complete(['译2']);
+    final pairs = await done.future;
+    expect(updates.join(), '译0\n译1\n译2\n译3');
+    expect(pairs.map((pair) => pair.source).join(), source);
+  });
+
+  test('任一批失败即输出失败、取消其余在途批次且不再输出完成', () async {
+    final source = ['P0.', 'P1 ${'x' * 400}', 'P2 ${'y' * 400}'].join('\n');
+    final cancelled = <String>[];
+    final pending = <String, Completer<List<String>>>{};
+    messenger.setMockMethodCallHandler(methods, (call) async {
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
+      if (call.method == MethodNames.cancelSystemTranslation) {
+        cancelled.add(arguments['requestId'] as String);
+        return null;
+      }
+      final texts = List<String>.from(arguments['texts'] as List);
+      final completer = Completer<List<String>>();
+      pending[texts.first.substring(0, 2)] = completer;
+      return completer.future;
+    });
+    final events = <TranslationEvent>[];
+    final closed = Completer<void>();
+    provider
+        .translate(
+          TranslationRequest(
+            sourceText: source,
+            detectedLanguage: 'en',
+            targetLanguage: 'zh-CN',
+          ),
+        )
+        .listen(events.add, onDone: closed.complete);
+    await pumpEventQueue();
+    pending['P1']!.completeError(
+      PlatformException(code: ErrorCodes.translationUnsupported),
+    );
+    await pumpEventQueue();
+    expect(cancelled, hasLength(2));
+    pending['P0']!.complete(['译0']);
+    pending['P2']!.complete(['译2']);
+    await closed.future;
+    expect(events.whereType<TranslationCompleted>(), isEmpty);
+    expect(events.whereType<TranslationFailure>(), hasLength(1));
+  });
+
   test('原文语言无法识别时直接失败，单篇与批量文案一致且批量按单段放弃', () async {
     nativeTranslate((_) async => throw StateError('原文语言未知时不应进入原生翻译'));
     final single = await provider

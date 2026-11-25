@@ -716,58 +716,57 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
               : colors.onSurfaceVariant,
         );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 8,
-      children: [
-        for (var index = 0; index < pairs.length; index++)
-          if (translated && !failed)
-            MouseRegion(
-              key: ValueKey('${widget.session.sessionId}-reveal-$index'),
-              onEnter: (_) => setState(() {
-                _hoveredParagraph = (widget.session.sessionId, index);
-              }),
-              onExit: (_) => setState(() => _hoveredParagraph = null),
-              child: CharReveal(
-                key: ValueKey('translated-paragraph-$index'),
-                text: pairs[index].translation,
-                style: style,
-                builder: (context, span) => SelectableText.rich(span),
-              ),
-            )
-          else
-            GentleReveal(
-              key: ValueKey(
-                '${widget.session.sessionId}-${translated ? 't' : 's'}-$index-${failed ? 'err' : 'ok'}',
-              ),
-              staggerIndex: index.clamp(0, 6),
-              shakeOnError: translated && failed,
-              child: translated
-                  ? MouseRegion(
-                      key: ValueKey('translated-paragraph-$index'),
-                      onEnter: (_) => setState(() {
-                        _hoveredParagraph = (widget.session.sessionId, index);
-                      }),
-                      onExit: (_) => setState(() => _hoveredParagraph = null),
-                      child: SelectableText(
-                        pairs[index].translation,
-                        style: style,
+    return SelectionArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          for (var index = 0; index < pairs.length; index++)
+            if (translated && !failed)
+              MouseRegion(
+                key: ValueKey('${widget.session.sessionId}-reveal-$index'),
+                onEnter: (_) => setState(() {
+                  _hoveredParagraph = (widget.session.sessionId, index);
+                }),
+                onExit: (_) => setState(() => _hoveredParagraph = null),
+                child: CharReveal(
+                  key: ValueKey('translated-paragraph-$index'),
+                  text: pairs[index].translation,
+                  style: style,
+                  builder: (context, span) => Text.rich(span),
+                ),
+              )
+            else
+              GentleReveal(
+                key: ValueKey(
+                  '${widget.session.sessionId}-${translated ? 't' : 's'}-$index-${failed ? 'err' : 'ok'}',
+                ),
+                staggerIndex: index.clamp(0, 6),
+                shakeOnError: translated && failed,
+                child: translated
+                    ? MouseRegion(
+                        key: ValueKey('translated-paragraph-$index'),
+                        onEnter: (_) => setState(() {
+                          _hoveredParagraph = (widget.session.sessionId, index);
+                        }),
+                        onExit: (_) => setState(() => _hoveredParagraph = null),
+                        child: Text(pairs[index].translation, style: style),
+                      )
+                    : Container(
+                        key: ValueKey('source-paragraph-$index'),
+                        decoration: BoxDecoration(
+                          color:
+                              _hoveredParagraph ==
+                                  (widget.session.sessionId, index)
+                              ? colors.primaryContainer
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(pairs[index].source, style: style),
                       ),
-                    )
-                  : Container(
-                      key: ValueKey('source-paragraph-$index'),
-                      decoration: BoxDecoration(
-                        color:
-                            _hoveredParagraph ==
-                                (widget.session.sessionId, index)
-                            ? colors.primaryContainer
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: SelectableText(pairs[index].source, style: style),
-                    ),
-            ),
-      ],
+              ),
+        ],
+      ),
     );
   }
 }

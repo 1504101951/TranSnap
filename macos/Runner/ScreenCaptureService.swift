@@ -169,6 +169,21 @@ enum ScreenCaptureService {
         return image
     }
 
+    static func prewarmTextRecognition() {
+        Task.detached(priority: .utility) {
+            let start = ContinuousClock.now
+            guard let context = CGContext(
+                data: nil, width: 160, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
+            context.setFillColor(.white)
+            context.fill(CGRect(x: 0, y: 0, width: 160, height: 100))
+            guard let image = context.makeImage() else { return }
+            _ = try? await paragraphRequest().perform(on: image)
+            PerformanceLog.record("ocr-prewarm", since: start)
+        }
+    }
+
     static func recognizeText(image: CGImage) async throws -> String {
         try await recognizeDocument(image: image).map(\.markdown).joined(separator: "\n\n")
     }

@@ -190,7 +190,7 @@ enum AccessibilitySelection {
         var roles: [String] = []
         var current: AXUIElement? = element
         var steps = 0
-        while let node = current, steps < 16 {
+        while let node = current, steps < 64 {
             if let role = role(of: node) { roles.append(role) }
             current = axElement(attribute(node, kAXParentAttribute as CFString))
             steps += 1

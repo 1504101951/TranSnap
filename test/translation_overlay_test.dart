@@ -491,9 +491,14 @@ void main() {
     final source = tester.getTopLeft(find.text('pot'));
     expect(translated.dx, source.dx);
     expect(translated.dy, lessThan(source.dy));
-    final style = tester.widget<EditableText>(find.text('你好')).style;
+    final style = tester.widget<Text>(find.text('你好')).textSpan!.style!;
     expect(style.fontSize, 15);
     expect(style.fontWeight, FontWeight.w600);
+    expect(
+      find.ancestor(of: find.text('你好'), matching: find.byType(SelectionArea)),
+      findsOneWidget,
+    );
+    expect(find.byType(EditableText), findsNothing);
     final dictionaryX = tester.getTopLeft(find.text('词典')).dx;
     expect(dictionaryX, greaterThan(288));
     expect(translated.dx, lessThan(288));

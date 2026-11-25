@@ -63,6 +63,7 @@ class AppDelegate: FlutterAppDelegate {
         ) { [weak self] _ in self?.historyWindow.refresh() }
         bridge.onReady = { [weak self, weak bridge] in
             bridge?.screenshot.prewarm()
+            ScreenCaptureService.prewarmTextRecognition()
             let access = AccessibilitySelection.isTrusted(prompt: false)
             let screen = ScreenCaptureService.isAuthorized()
             if access && screen {
