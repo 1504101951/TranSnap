@@ -128,7 +128,7 @@ enum MCPPeer {
         return (true, requirement)
     }()
 
-    static func isTrustedHelper(_ connection: Int32) -> Bool {
+    @Sendable static func isTrustedHelper(_ connection: Int32) -> Bool {
         guard rule.readable else { return false }
         var token = audit_token_t()
         var length = socklen_t(MemoryLayout<audit_token_t>.size)

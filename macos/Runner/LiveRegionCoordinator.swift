@@ -309,7 +309,7 @@ final class LiveTextOverlay {
         appearanceObserver = NotificationCenter.default.addObserver(
             forName: AppConstants.appearanceChangedNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.syncAppearance()
+            MainActor.assumeIsolated { self?.syncAppearance() }
         }
     }
 
