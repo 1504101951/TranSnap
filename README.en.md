@@ -73,3 +73,9 @@ flutter analyze && flutter test
 - [macOS Signing & Keychain Guide (Chinese)](docs/macos.md)
 - [Domain Glossary (Chinese)](docs/glossary.md)
 - [Docs Index (Chinese)](docs/index.md)
+
+---
+
+## License
+
+TranSnap is licensed under the [Apache License 2.0](LICENSE). Third-party attributions and licenses are listed in [NOTICE](NOTICE).

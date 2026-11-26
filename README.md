@@ -90,3 +90,9 @@ xcodebuild build-for-testing -workspace macos/Runner.xcworkspace -scheme Runner 
 - [macOS 构建、权限与签名](docs/macos.md)：`package-and-install-macos.sh` 流程、权限排查与免弹窗钥匙串授权设置
 - [领域术语表](docs/glossary.md)：项目核心概念与规范命名
 - [目录索引](docs/index.md)：完整文档与子目录入口
+
+---
+
+## 开源许可
+
+TranSnap 以 [Apache License 2.0](LICENSE) 开源。第三方署名与许可见 [NOTICE](NOTICE)。
