@@ -6,7 +6,7 @@
 
 ## 领域文档
 
-本仓库采用单一领域上下文，阅读顺序与术语约定见 [领域文档规则](docs/agents/domain.md)。
+本仓库采用单一领域上下文，术语以 [领域术语表](docs/glossary.md) 为准，代码与文档中保持一致；同一术语定义冲突时，先向用户确认以哪一份为准。
 
 ## 代码约定
 
@@ -18,7 +18,12 @@
 
 ## 界面设计
 
-设计、实现、重构或审查界面前，读取并遵守 [UI 规则入口](docs/agents/liquid-glass-ui.md)。
+设计、实现、重构或审查界面前，读取并遵守：
+
+1. [样式规格 #67](https://github.com/1504101951/TranSnap/issues/67)全文及当前功能 Issue 的样式约束；组件尺寸、圆角、配色和命中区以 Issue 的明确规定为准，调色盘、线宽和图形模式按样式规格中的确定数值实现。
+2. 操作行为、编辑对象选择、保存、键盘与验收边界读取[功能与交互规格 #1](https://github.com/1504101951/TranSnap/issues/1)及当前功能 Issue。
+3. 材料接入职责、共享绘制样式、颜色／粗细控件边界读取[架构设计约束 #68](https://github.com/1504101951/TranSnap/issues/68)及当前功能 Issue；仅实际选用 liquid_glass_widgets 时应用其“liquid_glass_widgets 专项规则”小节。
+4. 液态玻璃设计资料的来源与使用边界见样式规格“来源与改编说明”，许可证原文保存在 [liquid-glass-source-license.txt](docs/agents/liquid-glass-source-license.txt)。
 
 ## 并行会话
 
@@ -26,7 +31,7 @@
 
 ## 先更新规格，再开发
 
-开发依据分为三类：[功能与交互规格 #1](https://github.com/1504101951/TranSnap/issues/1)、[样式规格 #67](https://github.com/1504101951/TranSnap/issues/67)、[架构设计约束 #68](https://github.com/1504101951/TranSnap/issues/68)。实施已批准需求前，先更新受影响的 GitHub Issue。本地规格副本与用户指定保留的澄清记录的保留或删除，统一按 [规格索引](docs/specs/README.md) 处理。界面数值必须明确，不得擅自偏离规格或将待确认参数视为已批准值。
+开发依据分为三类：[功能与交互规格 #1](https://github.com/1504101951/TranSnap/issues/1)、[样式规格 #67](https://github.com/1504101951/TranSnap/issues/67)、[架构设计约束 #68](https://github.com/1504101951/TranSnap/issues/68)。实施已批准需求前，先更新受影响的 GitHub Issue。本地规格副本与用户指定保留的澄清记录的保留或删除，统一按 [Issue 跟踪规则](docs/agents/issue-tracker.md)「三类规格与执行工单」处理。界面数值必须明确，不得擅自偏离规格或将待确认参数视为已批准值。
 
 ## 零警告
 
@@ -34,7 +39,7 @@
 
 ## 目录索引
 
-项目维护的每个目录通过 `index.md` 说明直接子文件和子目录的作用，每项一句话；新增、删除或重命名项目文件时同步所在目录索引。Git 元数据、依赖缓存、构建产物及个人工作区目录不纳入索引。
+项目维护的每个目录通过 `index.md` 说明直接子文件和子目录的作用，每项一句话；新增、删除或重命名项目文件时同步所在目录索引。Git 元数据、依赖缓存、构建产物、个人工作区目录，以及 Xcode 自动生成或维护的目录（`*.xcodeproj/`、`*.xcworkspace/`、`*.xcassets/`、`*.lproj/` 及其子目录）不建 `index.md`，由上级索引一句话说明整个目录。
 
 ## Issue 状态权限
 

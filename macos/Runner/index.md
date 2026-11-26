@@ -2,8 +2,8 @@
 
 macOS应用生命周期、系统能力与窗口控制器。
 
-1. [Assets.xcassets/](Assets.xcassets/index.md)：应用图标等Xcode资源目录。
-2. [Base.lproj/](Base.lproj/index.md)：macOS基础语言的窗口和菜单界面资源。
+1. [Assets.xcassets/](Assets.xcassets/)：应用图标等Xcode资源目录。
+2. [Base.lproj/](Base.lproj/)：macOS基础语言的窗口和菜单界面资源。
 3. [Common/](Common/index.md)：Swift平台协议常量与共享工具。
 4. [Configs/](Configs/index.md)：应用标识、编译模式与警告配置。
 5. [AccessibilitySelection.swift](AccessibilitySelection.swift)：通过辅助功能及显式复制读取来源应用选中文字。

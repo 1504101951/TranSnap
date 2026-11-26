@@ -4,7 +4,7 @@
 
 ## 规则
 
-- 涉及领域判断的工作开始前先读 `docs/agents/domain.md`。
+- 涉及领域判断的工作开始前先读 `docs/glossary.md`。
 - 会话私有产物使用 `<主题>.<会话ID>` 或 `<会话ID>/` 目录。
 - 规格、工单、报告和跟踪 Issue 写上 `<框架名>-Thread: <会话ID>`，框架名为实际运行的智能体框架，如 `Codex-Thread`、`Claude-Thread`、`Grok-Thread`、`Pi-Thread`；不借用其他框架的名称。
 - 以明确的来源规格或工单为准，不按分支或话题猜测。

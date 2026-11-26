@@ -30,6 +30,11 @@
 - Bundles a verified stdio MCP helper at `/Applications/TranSnap.app/Contents/MacOS/transnap-mcp` with one-click setup for **Claude Code**, **Claude Desktop**, **Codex**, and **Grok** inside **Settings → MCP**.
 - Exposes screen/window inspection, controlled capture, Vision document OCR, and opt-in UI automation tools.
 
+Setup:
+1. In **Settings → MCP**, turn on **允许 agent 截图** (allow agent screenshots); turn on **允许操控电脑** (allow computer control) only when the model should click or type for you.
+2. Click **复制客户端配置** (copy client config), or click **安装** (install) for your client on the **接入平台** (platforms) card. CLI clients register the `transnap` server through their official CLI; Claude Desktop backs up and updates `mcpServers.transnap` in `claude_desktop_config.json`.
+3. If the page shows **路径已变化** (path changed) after you move the app, click **重新安装** (reinstall) to refresh the config. The first time the model controls a protected app, macOS shows a one-time authorization card.
+
 ---
 
 ## Getting Started
@@ -68,7 +73,6 @@ flutter analyze && flutter test
 
 ## Documentation
 
-- [User Guide (Chinese)](docs/usage.md)
 - [Architecture Overview (Chinese)](docs/architecture.md)
 - [macOS Signing & Keychain Guide (Chinese)](docs/macos.md)
 - [Domain Glossary (Chinese)](docs/glossary.md)

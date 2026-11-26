@@ -30,6 +30,11 @@
 - 内置签名合规的 stdio helper（`TranSnap.app/Contents/MacOS/transnap-mcp`），可在「设置 → MCP」一键生成配置或安装至 Claude Code、Claude 桌面、Codex、Grok。
 - 支持显示器/窗口枚举、受控截图、OCR 文档识别与可授权的界面元素读取及辅助操作。
 
+接入步骤：
+1. 在「设置 → MCP」打开「允许 agent 截图」；需要模型代点屏幕或键入文本时，再打开「允许操控电脑」。
+2. 点击「复制客户端配置」，或在「接入平台」卡片点击对应客户端的「安装」：命令行类客户端通过其官方 CLI 注册 `transnap` 服务；Claude 桌面会备份并更新 `claude_desktop_config.json` 中的 `mcpServers.transnap`。
+3. 移动 App 位置后页面提示「路径已变化」时，点击「重新安装」刷新配置。模型首次操控受保护应用时，系统会弹出一次授权确认卡片。
+
 ---
 
 ## 快速开始
@@ -85,7 +90,6 @@ xcodebuild build-for-testing -workspace macos/Runner.xcworkspace -scheme Runner 
 
 ## 文档导航
 
-- [完整使用指南](docs/usage.md)：所有功能入口、浮层交互、截图工具栏、历史管理与设置详述
 - [系统架构说明](docs/architecture.md)：双端（Dart / Swift）职责划分、通道协议与多引擎窗口模型
 - [macOS 构建、权限与签名](docs/macos.md)：`package-and-install-macos.sh` 流程、权限排查与免弹窗钥匙串授权设置
 - [领域术语表](docs/glossary.md)：项目核心概念与规范命名
