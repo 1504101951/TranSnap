@@ -11,4 +11,4 @@ PRODUCT_NAME = TranSnap
 PRODUCT_BUNDLE_IDENTIFIER = com.coolyang.transnap
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.coolyang. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 The TranSnap Authors. Licensed under the Apache License 2.0.
