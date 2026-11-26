@@ -9,7 +9,6 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:transnap/src/common/constants/appearance_modes.dart';
 import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
-import 'package:transnap/src/common/constants/shortcut_keys.dart';
 import 'package:transnap/src/common/widgets/app_motion.dart';
 import 'package:transnap/src/common/widgets/native_glass.dart';
 import 'package:transnap/src/history/history_app.dart';
@@ -517,12 +516,16 @@ void main() {
       }
       if (call.method == MethodNames.getSettings) {
         return {
-          PreferenceKeys.shortcutModifiers:
-              ShortcutKeys.command | ShortcutKeys.shift,
-          PreferenceKeys.shortcutLabel: 'T',
-          PreferenceKeys.screenshotShortcutModifiers:
-              ShortcutKeys.command | ShortcutKeys.option,
-          PreferenceKeys.screenshotShortcutLabel: 'X',
+          PreferenceKeys.shortcut: {
+            'key': 'KeyT',
+            'modifiers': ['meta', 'shift'],
+            'label': 'T',
+          },
+          PreferenceKeys.screenshotShortcut: {
+            'key': 'KeyX',
+            'modifiers': ['meta', 'alt'],
+            'label': 'X',
+          },
         };
       }
       if (call.method == MethodNames.vocabularyList ||

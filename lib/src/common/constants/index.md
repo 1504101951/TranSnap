@@ -24,9 +24,9 @@
 19. [text_mode.dart](text_mode.dart)：定义译文卡片的翻译、润色、纠错与解释模式。
 20. [network_limits.dart](network_limits.dart)：定义翻译服务的网络连接时限。
 21. [live_region.dart](live_region.dart)：定义实时翻译会话阶段与原生命令的协议枚举。
-22. [shortcut_keys.dart](shortcut_keys.dart)：定义全局快捷键的修饰键位、键码、组合规则与提示文案。
+22. [shortcut_keys.dart](shortcut_keys.dart)：定义快捷键记录、平台无关的键名与修饰键名、默认快捷键、组合规则与提示文案。
 23. [emoji_catalog.dart](emoji_catalog.dart)：定义贴纸下拉框按类别分组的 Unicode 标准 Emoji。
-24. [toolbar_grid.dart](toolbar_grid.dart)：定义截图工具栏网格的列组合修饰键位、每列格数、最大列数、默认列与数字行物理键映射。
+24. [toolbar_grid.dart](toolbar_grid.dart)：定义截图工具栏网格的可选列组合、每列格数、最大列数、默认列、数字键名与格位换算、数字行物理键映射。
 25. [motion_metrics.dart](motion_metrics.dart)：定义界面物理弹簧、舒缓链式入场、光学棱镜高光与矢量状态机的规格数值。
 26. [line_icon_weights.dart](line_icon_weights.dart)：列出用到的 Lucide 图标在各字重下的常量，由 scripts/generate-line-icon-weights.py 生成。
 27. [app_colors.dart](app_colors.dart)：定义跨模块复用的界面颜色：系统色相，以及面板、托盘、卡片、深色文字、错误与警示色。

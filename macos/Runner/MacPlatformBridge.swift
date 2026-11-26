@@ -46,7 +46,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     private var inputAnchor: InputAnchor?
     private var inputSelection: AXUIElement?
     var closePermissionWizard: (() -> Void)?
-    var shortcutRecorder: ((UInt32, UInt32) -> Void)?
+    var shortcutRecorder: ((SelectionMonitor.HotKeyBinding) -> Void)?
     private var currentSessionId: String?
     private var sourceProcessIdentifier: pid_t?
     private var selectionReadTask: Task<Void, Never>?
@@ -545,11 +545,13 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         case AppConstants.systemShortcutsMethod:
             let entries = UserDefaults(suiteName: AppConstants.symbolicHotKeysDomain)?
                 .dictionary(forKey: AppConstants.symbolicHotKeysKey) as? [String: [String: Any]] ?? [:]
-            let enabled: [[String: Int]] = entries.values.compactMap { entry in
+            let enabled: [[String: Any]] = entries.values.compactMap { entry in
                 guard entry["enabled"] as? Bool == true,
                       let parameters = (entry["value"] as? [String: Any])?["parameters"] as? [Int],
-                      parameters.count == 3 else { return nil }
-                return ["keyCode": parameters[1], "modifiers": parameters[2]]
+                      parameters.count == 3,
+                      let key = UInt16(exactly: parameters[1]).flatMap({ AppConstants.shortcutKeyNames[$0] }) else { return nil }
+                let flags = NSEvent.ModifierFlags(rawValue: UInt(truncatingIfNeeded: parameters[2]))
+                return ["key": key, "modifiers": ShortcutNames.names(flags: flags)]
             }
             result(enabled)
         case AppConstants.chooseExcludedAppMethod:
@@ -595,8 +597,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
     private func applySettings(_ settings: [String: Any], credentials: [String: Any], result: @escaping FlutterResult) {
         var shortcuts: [GlobalHotKey: SelectionMonitor.HotKeyBinding] = [:]
         for purpose in GlobalHotKey.allCases {
-            if let keyCode = settings[purpose.keyCodeKey] as? UInt32, let modifiers = settings[purpose.modifiersKey] as? UInt32 {
-                shortcuts[purpose] = SelectionMonitor.HotKeyBinding(keyCode: keyCode, modifiers: modifiers)
+            if let binding = ShortcutNames.binding(settings[purpose.preferenceKey]) {
+                shortcuts[purpose] = binding
             }
         }
         guard let automatic = settings[AppConstants.automaticKey] as? Bool,

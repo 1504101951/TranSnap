@@ -1,9 +1,9 @@
 import '../constants/shortcut_keys.dart';
 
-List<String> shortcutTokens(int modifiers, String label) => [
-  if (modifiers & ShortcutKeys.control != 0) '⌃',
-  if (modifiers & ShortcutKeys.option != 0) '⌥',
-  if (modifiers & ShortcutKeys.shift != 0) '⇧',
-  if (modifiers & ShortcutKeys.command != 0) '⌘',
-  if (label.isNotEmpty) label,
+List<String> shortcutTokens(Shortcut shortcut) => [
+  if (shortcut.modifiers & ShortcutModifiers.control != 0) '⌃',
+  if (shortcut.modifiers & ShortcutModifiers.alt != 0) '⌥',
+  if (shortcut.modifiers & ShortcutModifiers.shift != 0) '⇧',
+  if (shortcut.modifiers & ShortcutModifiers.meta != 0) '⌘',
+  if (shortcut.label.isNotEmpty) shortcut.label,
 ];

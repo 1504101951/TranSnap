@@ -32,6 +32,7 @@
 ### 1. 平台通道（`lib/src/common/constants/channel_names.dart` ↔ `AppConstants`）
 - `transnap/platform` & `transnap/platform/events`：主引擎核心请求（能力声明、权限、选区读取、替换输入、浮层尺寸与显隐、系统翻译、语音朗读、历史读写、热键状态、性能打点）。
 - 能力声明：原生以 `capabilities` 上报支持的能力（`PlatformCapability`：Apple 系统翻译、词典、权限、截图、录制、MCP）；主引擎、设置窗口与历史窗口启动时读取，按声明隐藏不支持的入口，内置翻译服务由 `ServiceConfig.builtins` 按能力列出，首项为默认服务。macOS 上报全部能力。
+- 快捷键表示：全局翻译、输入翻译、区域截图快捷键在偏好中各存为 `{key, modifiers, label}`，`key` 为 W3C UI Events `code` 键名（如 `KeyT`、`Digit1`），`modifiers` 为 `control`、`alt`、`shift`、`meta` 名称列表；截图工具栏列的组合同样以名称列表保存。Dart 端以 `Shortcut` 记录与 `ShortcutModifiers` 位（control 1、alt 2、shift 4、meta 8）校验与比较；原生端以 `ShortcutNames` 在键名与本平台键码、修饰键之间转换。macOS 启动时把以键码保存的旧偏好规范化一次。
 - `transnap/settings`：设置页面草稿读取与序列化自动保存。
 - `transnap/screenshot`：截图快照、本地图片导入、OCR/条码、图内段落翻译、贴图、标注保存与确认操作。
 - `transnap/capture` & `transnap/capture_video_preview`：录制/长截图会话控制、实时帧预览与结果导出。

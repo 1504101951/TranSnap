@@ -39,6 +39,7 @@ import 'stickers.dart';
 import 'recognized_text_panel.dart';
 import '../settings/screenshot_toolbar_preferences.dart';
 import '../common/constants/toolbar_grid.dart';
+import '../common/constants/shortcut_keys.dart';
 import '../common/constants/screenshot_actions.dart';
 import '../common/constants/app_colors.dart';
 import 'toolbar_layout.dart';
@@ -364,7 +365,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       ToolbarLayout.extent(_toolbarLines(actions, perLine), _strips());
 
   bool _onModifierKey(KeyEvent event) {
-    final held = ToolbarModifiers.pressed() & ~ToolbarModifiers.shift;
+    final held = ToolbarModifiers.pressed() & ~ShortcutModifiers.shift;
     if (held != _heldModifiers && mounted) {
       setState(() => _heldModifiers = held);
     }

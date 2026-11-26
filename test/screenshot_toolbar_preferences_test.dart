@@ -12,9 +12,9 @@ import 'package:transnap/src/settings/screenshot_toolbar_editor.dart';
 import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 
 void main() {
-  const cmd = ToolbarModifiers.command;
-  const opt = ToolbarModifiers.option;
-  const ctrl = ToolbarModifiers.control;
+  const cmd = ShortcutModifiers.meta;
+  const opt = ShortcutModifiers.alt;
+  const ctrl = ShortcutModifiers.control;
 
   test('默认常用 6 个占无修饰 1–6，其余 9 个一级工具分为 ⌘、⌥ 两组，不含光标，每个工具只有一个键位', () {
     final value = ScreenshotToolbarPreferences();
@@ -98,7 +98,14 @@ void main() {
     final map = value.toMap();
     expect(
       (map[PreferenceKeys.screenshotToolbarColumns] as List).last,
-      containsPair('slots', contains('')),
+      allOf(
+        containsPair('slots', contains('')),
+        containsPair('modifiers', ['control']),
+      ),
+    );
+    expect(
+      ToolbarColumn(cmd | opt | ctrl, const []).toMap()['modifiers'],
+      ['control', 'alt', 'meta'],
     );
     final restored = ScreenshotToolbarPreferences.fromMap(map);
     expect(
@@ -192,8 +199,8 @@ void main() {
         );
     for (final invalid in [
       [0, opt, cmd | opt],
-      [ToolbarModifiers.shift, opt, cmd | opt],
-      [cmd | ToolbarModifiers.shift, opt, cmd | opt],
+      [ShortcutModifiers.shift, opt, cmd | opt],
+      [cmd | ShortcutModifiers.shift, opt, cmd | opt],
       [cmd, cmd, opt],
     ]) {
       expect(
@@ -272,33 +279,24 @@ void main() {
     );
   });
 
-  test('全局快捷键与系统快捷键按数字行键码换算为格位，带 ⇧ 或 7 以外的键不落在网格', () {
-    expect(ToolbarGrid.slotOfCarbon(18, ShortcutKeys.command), (
-      modifiers: cmd,
-      digit: 1,
+  test('全局快捷键与系统快捷键按数字行键名换算为格位，带 ⇧ 或 1–6 以外的键不落在网格', () {
+    expect(ToolbarGrid.slotOf('Digit1', cmd), (modifiers: cmd, digit: 1));
+    expect(ToolbarGrid.slotOf('Digit6', ctrl | opt), (
+      modifiers: ctrl | opt,
+      digit: 6,
     ));
-    expect(
-      ToolbarGrid.slotOfCarbon(22, ShortcutKeys.control | ShortcutKeys.option),
-      (modifiers: ctrl | opt, digit: 6),
-    );
-    expect(ToolbarGrid.slotOfCarbon(26, ShortcutKeys.command), isNull);
-    expect(
-      ToolbarGrid.slotOfCarbon(18, ShortcutKeys.command | ShortcutKeys.shift),
-      isNull,
-    );
-    expect(ToolbarGrid.slotOfCocoa(18, 1 << 18), (modifiers: ctrl, digit: 1));
-    expect(ToolbarGrid.slotOfCocoa(19, (1 << 20) | (1 << 17)), isNull);
+    expect(ToolbarGrid.slotOf('Digit7', cmd), isNull);
+    expect(ToolbarGrid.slotOf('KeyA', cmd), isNull);
+    expect(ToolbarGrid.slotOf('Digit1', cmd | ShortcutModifiers.shift), isNull);
   });
 
   test('全局快捷键落在有工具的格位时拒绝保存，落在空格或网格外时允许', () {
-    AppSettings withTranslate(int code, int modifiers) => AppSettings(
+    AppSettings withTranslate(String key, int modifiers) => AppSettings(
       primaryLanguage: 'zh-CN',
-      shortcutKeyCode: code,
-      shortcutLabel: 'x',
-      shortcutModifiers: modifiers,
+      shortcut: (key: key, modifiers: modifiers, label: 'x'),
     );
     expect(
-      () => withTranslate(18, ShortcutKeys.command).validate(),
+      () => withTranslate('Digit1', cmd).validate(),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -307,24 +305,11 @@ void main() {
         ),
       ),
     );
-    expect(
-      () => withTranslate(
-        23,
-        ShortcutKeys.command | ShortcutKeys.option,
-      ).validate(),
-      returnsNormally,
-    );
-    expect(
-      () => withTranslate(26, ShortcutKeys.command).validate(),
-      returnsNormally,
-    );
-    expect(
-      withTranslate(
-        23,
-        ShortcutKeys.command | ShortcutKeys.option,
-      ).globalShortcutSlots,
-      {(modifiers: cmd | opt, digit: 5): '全局翻译'},
-    );
+    expect(() => withTranslate('Digit5', cmd | opt).validate(), returnsNormally);
+    expect(() => withTranslate('Digit7', cmd).validate(), returnsNormally);
+    expect(withTranslate('Digit5', cmd | opt).globalShortcutSlots, {
+      (modifiers: cmd | opt, digit: 5): '全局翻译',
+    });
   });
 
   group('网格编辑器', () {

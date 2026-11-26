@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
 import 'package:transnap/src/common/constants/method_names.dart';
 
 import 'dart:async';
@@ -1367,17 +1368,17 @@ void main() {
     ];
     final preferences = ScreenshotToolbarPreferences(
       columns: [
-        ToolbarColumn(ToolbarModifiers.command, [
+        ToolbarColumn(ShortcutModifiers.meta, [
           ScreenshotActions.text,
           ...rest.sublist(0, 5),
         ]),
-        ToolbarColumn(ToolbarModifiers.option, [
+        ToolbarColumn(ShortcutModifiers.alt, [
           rest[5],
           ScreenshotActions.crop,
           ...rest.sublist(6, 10),
         ]),
-        ToolbarColumn(ToolbarModifiers.control, rest.sublist(10, 16)),
-        ToolbarColumn(ToolbarModifiers.command | ToolbarModifiers.option, [
+        ToolbarColumn(ShortcutModifiers.control, rest.sublist(10, 16)),
+        ToolbarColumn(ShortcutModifiers.meta | ShortcutModifiers.alt, [
           ...rest.sublist(16),
           ...List<String?>.filled(ToolbarGrid.slots - (rest.length - 16), null),
         ]),
@@ -1447,11 +1448,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await nativeSlot('stale', ToolbarModifiers.command, 1);
+    await nativeSlot('stale', ShortcutModifiers.meta, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
-    await nativeSlot('tool-test', ToolbarModifiers.command, 1);
+    await nativeSlot('tool-test', ShortcutModifiers.meta, 1);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
-    await nativeSlot('tool-test', ToolbarModifiers.option, 2);
+    await nativeSlot('tool-test', ShortcutModifiers.alt, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsNothing);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
@@ -1461,7 +1462,7 @@ void main() {
     await tester.tapAt(canvas.center);
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
-    await nativeSlot('tool-test', ToolbarModifiers.option, 2);
+    await nativeSlot('tool-test', ShortcutModifiers.alt, 2);
     expect(find.byKey(const Key(ScreenshotActions.sizeUp)), findsOneWidget);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);

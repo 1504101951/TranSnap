@@ -22,7 +22,7 @@ Dart业务逻辑和Flutter界面行为回归测试。
 18. [settings_app_test.dart](settings_app_test.dart)：验证设置页面侧边栏切换子页与保留草稿、默认翻译服务含Apple系统翻译、通用页语言包状态、服务显示、术语表增删改、提示词弹窗的四个字段、恢复默认与空值校验、思考开关随提示词保存、翻译语言分段只改输入翻译一组、贴纸添加与删除、确认截图动作、长截图滚动方式及配置更新。
 19. [settings_autosave_test.dart](settings_autosave_test.dart)：验证后台自动保存的串行、冲突和失败处理。
 20. [settings_spec_test.dart](settings_spec_test.dart)：验证设置界面是否符合数值、密度与交互规格，含侧边栏固定、权限卡片下方的离线翻译语言入口和新建服务四类且不含Apple。
-21. [settings_test.dart](settings_test.dart)：验证设置数据往返与配置校验，含模型服务 API Key 可留空、四种模式提示词的默认值和空值拒绝、思考开关缺省全关与往返，以及输入翻译语言的复制、隔离与往返，以及Apple系统翻译作为内置默认服务的校验。
+21. [settings_test.dart](settings_test.dart)：验证设置数据往返与配置校验，含模型服务 API Key 可留空、四种模式提示词的默认值和空值拒绝、思考开关缺省全关与往返，以及输入翻译语言的复制、隔离与往返，Apple系统翻译作为内置默认服务的校验，以及快捷键记录的往返、名称列表存储与组合校验。
 22. [translation_history_test.dart](translation_history_test.dart)：验证翻译历史组合查询、时间边界、游标分页、期限确认与清理事务、删除及记录开关。
 23. [translation_overlay_test.dart](translation_overlay_test.dart)：验证翻译按钮、双语结果与失败界面行为，以及服务菜单在润色模式只列模型服务。
 24. [translation_resume_test.dart](translation_resume_test.dart)：验证分片失败恢复、进度保留及取消边界。
@@ -63,3 +63,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 57. [toolbar_layout_test.dart](toolbar_layout_test.dart)：验证截图工具栏行布局：收起与展开的分组、子级托盘缩进对准锚点、忙碌状态组的追加条件。
 58. [foreign_terms_test.dart](foreign_terms_test.dart)：验证外文片段提取：两类目标语言的文字划分、相邻单词合并、排除规则，以及每处片段的起止偏移。
 59. [platform_capabilities_test.dart](platform_capabilities_test.dart)：验证按平台能力列出内置服务与卡片服务菜单，以及能力为空时设置窗口隐藏截图、MCP、权限、语言包与录制点击特效入口。
+60. [shortcut_tokens_test.dart](shortcut_tokens_test.dart)：验证快捷键记录拆分为键帽序列的顺序，以及修饰键名称与位的互转和快捷键记录的解析往返。

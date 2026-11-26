@@ -61,7 +61,7 @@ final class SelectionMonitor {
                 Task { @MainActor in
                     guard let entry = monitor.hotKeys.first(where: { $0.value.id == identifier.id }) else { return }
                     if let recorder = MacPlatformBridge.Shared.instance?.shortcutRecorder {
-                        recorder(entry.value.binding.keyCode, entry.value.binding.modifiers)
+                        recorder(entry.value.binding)
                         return
                     }
                     switch entry.key {
@@ -114,7 +114,8 @@ final class SelectionMonitor {
     }
 
     static func validateShortcut(keyCode: UInt32, modifiers: UInt32) throws {
-        guard keyCode <= 127, keyCode != UInt32(AppConstants.escapeKeyCode),
+        guard UInt16(exactly: keyCode).flatMap({ AppConstants.shortcutKeyNames[$0] }) != nil,
+              keyCode != UInt32(AppConstants.escapeKeyCode),
               modifiers & AppConstants.shortcutRequiredModifiers != 0,
               modifiers & ~AppConstants.shortcutAllowedModifiers == 0 else {
             throw NSError(domain: AppConstants.errorDomain, code: 1, userInfo: [
@@ -365,5 +366,21 @@ final class SelectionMonitor {
         selectionObserver = nil
         observedPID = nil
         selectionElement = nil
+    }
+}
+
+extension ShortcutNames {
+    static func binding(_ value: Any?) -> SelectionMonitor.HotKeyBinding? {
+        guard let shortcut = value as? [String: Any],
+              let key = shortcut["key"] as? String,
+              let keyCode = keyCodes[key],
+              let names = shortcut["modifiers"] as? [String] else { return nil }
+        let carbon = AppConstants.shortcutModifierNames.filter { names.contains($0.name) }.reduce(UInt32(0)) { $0 | $1.carbon }
+        return SelectionMonitor.HotKeyBinding(keyCode: UInt32(keyCode), modifiers: carbon)
+    }
+
+    static func shortcut(_ binding: SelectionMonitor.HotKeyBinding, label: String) -> [String: Any]? {
+        guard let key = UInt16(exactly: binding.keyCode).flatMap({ AppConstants.shortcutKeyNames[$0] }) else { return nil }
+        return ["key": key, "modifiers": names(carbon: binding.modifiers), "label": label]
     }
 }

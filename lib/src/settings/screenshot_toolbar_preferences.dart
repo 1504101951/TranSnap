@@ -1,5 +1,6 @@
 import '../common/constants/preference_keys.dart';
 import '../common/constants/screenshot_actions.dart';
+import '../common/constants/shortcut_keys.dart';
 import '../common/constants/toolbar_grid.dart';
 
 class ToolbarColumn {
@@ -10,13 +11,13 @@ class ToolbarColumn {
   final List<String?> slots;
 
   factory ToolbarColumn.fromMap(Map<Object?, Object?> map) =>
-      ToolbarColumn(map['modifiers'] as int, [
+      ToolbarColumn(ShortcutModifiers.parse(map['modifiers'] as List), [
         for (final slot in (map['slots'] as List).cast<String>())
           slot.isEmpty ? null : slot,
       ]);
 
   Map<String, Object> toMap() => {
-    'modifiers': modifiers,
+    'modifiers': ShortcutModifiers.encode(modifiers),
     'slots': [for (final slot in slots) slot ?? ''],
   };
 

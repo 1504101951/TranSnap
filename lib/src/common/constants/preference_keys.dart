@@ -70,11 +70,7 @@ abstract final class PreferenceKeys {
 
   static const gifMaximumWidth = 'gifMaximumWidth';
 
-  static const screenshotShortcutKeyCode = 'screenshotShortcutKeyCode';
-
-  static const screenshotShortcutLabel = 'screenshotShortcutLabel';
-
-  static const screenshotShortcutModifiers = 'screenshotShortcutModifiers';
+  static const screenshotShortcut = 'screenshotShortcut';
 
   static const secondaryLanguage = 'secondaryLanguage';
 
@@ -83,15 +79,7 @@ abstract final class PreferenceKeys {
 
   static const services = 'services';
 
-  static const shortcutKeyCode = 'shortcutKeyCode';
+  static const shortcut = 'shortcut';
 
-  static const shortcutLabel = 'shortcutLabel';
-
-  static const shortcutModifiers = 'shortcutModifiers';
-
-  static const inputShortcutKeyCode = 'inputShortcutKeyCode';
-
-  static const inputShortcutLabel = 'inputShortcutLabel';
-
-  static const inputShortcutModifiers = 'inputShortcutModifiers';
+  static const inputShortcut = 'inputShortcut';
 }

@@ -66,6 +66,38 @@ enum AppPreferences {
     static var current: [String: Any] {
         UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey) ?? [:]
     }
+
+    static func normalizeShortcuts() {
+        guard let normalized = normalizedShortcuts(current) else { return }
+        UserDefaults.standard.set(normalized, forKey: AppConstants.preferencesKey)
+    }
+
+    static func normalizedShortcuts(_ stored: [String: Any]) -> [String: Any]? {
+        var preferences = stored
+        var changed = false
+        for purpose in GlobalHotKey.allCases {
+            let codeKey = "\(purpose.preferenceKey)KeyCode"
+            let modifiersKey = "\(purpose.preferenceKey)Modifiers"
+            let labelKey = "\(purpose.preferenceKey)Label"
+            guard let keyCode = preferences[codeKey] as? UInt32 else { continue }
+            if let modifiers = preferences[modifiersKey] as? UInt32,
+               let label = preferences[labelKey] as? String,
+               let shortcut = ShortcutNames.shortcut(.init(keyCode: keyCode, modifiers: modifiers), label: label) {
+                preferences[purpose.preferenceKey] = shortcut
+            }
+            for key in [codeKey, modifiersKey, labelKey] { preferences.removeValue(forKey: key) }
+            changed = true
+        }
+        if let columns = preferences[AppConstants.screenshotToolbarColumnsKey] as? [[String: Any]],
+           columns.contains(where: { $0["modifiers"] is Int }) {
+            preferences[AppConstants.screenshotToolbarColumnsKey] = columns.map { column in
+                guard let bits = column["modifiers"] as? Int else { return column }
+                return column.merging(["modifiers": ShortcutNames.names(bits: bits)]) { _, new in new }
+            }
+            changed = true
+        }
+        return changed ? preferences : nil
+    }
 }
 
 enum LanguageDetection {

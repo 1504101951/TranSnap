@@ -60,13 +60,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func recordShortcut(result: @escaping FlutterResult) {
         finishRecording(nil)
         recordingResult = result
-        MacPlatformBridge.Shared.instance?.shortcutRecorder = { [weak self] keyCode, modifiers in
+        MacPlatformBridge.Shared.instance?.shortcutRecorder = { [weak self] binding in
             let preferences = AppPreferences.current
-            let purpose = GlobalHotKey.allCases.first {
-                preferences[$0.keyCodeKey] as? UInt32 == keyCode && preferences[$0.modifiersKey] as? UInt32 == modifiers
-            }
-            let label = purpose.flatMap { preferences[$0.labelKey] as? String } ?? ""
-            self?.finishRecording(["keyCode": keyCode, "modifiers": modifiers, "label": label])
+            let purpose = GlobalHotKey.allCases.first { ShortcutNames.binding(preferences[$0.preferenceKey]) == binding }
+            let label = purpose.flatMap { (preferences[$0.preferenceKey] as? [String: Any])?["label"] as? String } ?? ""
+            self?.finishRecording(ShortcutNames.shortcut(binding, label: label))
         }
         recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.isKeyWindow == true else { return event }
@@ -90,7 +88,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                     105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20",
                 ]
                 let label = special[event.keyCode] ?? event.charactersIgnoringModifiers?.uppercased() ?? ""
-                self.finishRecording(["keyCode": Int(event.keyCode), "modifiers": modifiers, "label": label])
+                self.finishRecording(ShortcutNames.shortcut(
+                    SelectionMonitor.HotKeyBinding(keyCode: UInt32(event.keyCode), modifiers: modifiers), label: label))
             } catch {
                 self.finishRecording(FlutterError(code: AppConstants.shortcutInvalidError, message: error.localizedDescription, details: nil))
             }

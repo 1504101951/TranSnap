@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
 import 'package:transnap/src/common/constants/method_names.dart';
 
 import 'dart:async';
@@ -9,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transnap/src/common/constants/emoji_catalog.dart';
 import 'package:transnap/src/common/constants/screenshot_actions.dart';
-import 'package:transnap/src/common/constants/toolbar_grid.dart';
 import 'package:transnap/src/common/widgets/app_motion.dart';
 import 'package:transnap/src/settings/screenshot_toolbar_preferences.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
@@ -29,13 +29,16 @@ import 'support/capture_pixels.dart';
 void main() {
   test('截图快捷键独立保存并拒绝与翻译使用同一组合', () {
     final settings = AppSettings(primaryLanguage: 'zh-CN');
-    settings.screenshotShortcutKeyCode = 7;
-    settings.screenshotShortcutLabel = 'X';
+    settings.screenshotShortcut = (
+      key: 'KeyX',
+      modifiers: ShortcutKeys.screenshot.modifiers,
+      label: 'X',
+    );
     settings.validate();
     final restored = AppSettings.fromMap(settings.toMap());
-    expect(restored.screenshotShortcutKeyCode, 7);
-    expect(restored.shortcutKeyCode, 17);
-    restored.screenshotShortcutKeyCode = restored.shortcutKeyCode;
+    expect(restored.screenshotShortcut.key, 'KeyX');
+    expect(restored.shortcut, ShortcutKeys.translate);
+    restored.screenshotShortcut = restored.shortcut;
     expect(restored.validate, throwsFormatException);
     expect(
       screenshotFilename(DateTime(2026, 9, 6, 1, 2, 3, 4)),
@@ -608,7 +611,7 @@ void main() {
       const StandardMethodCodec().encodeMethodCall(
         MethodCall(MethodNames.screenshotToolbarSlot, {
           'id': 'shot-busy',
-          'modifiers': ToolbarModifiers.option,
+          'modifiers': ShortcutModifiers.alt,
           'digit': 6,
         }),
       ),

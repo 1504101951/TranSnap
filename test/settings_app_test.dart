@@ -9,7 +9,6 @@ import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/channel_names.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
 import 'package:transnap/src/common/constants/screenshot_enums.dart';
-import 'package:transnap/src/common/constants/shortcut_keys.dart';
 import 'package:transnap/src/common/constants/text_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -125,7 +124,13 @@ void main() {
         return {...draft, 'revision': (draft['revision'] as int) + 1};
       }
       if (call.method == MethodNames.recordShortcut) {
-        return cancel ? null : {'keyCode': 18, 'modifiers': 4352, 'label': '1'};
+        return cancel
+            ? null
+            : {
+                'key': 'Digit1',
+                'modifiers': ['control', 'meta'],
+                'label': '1',
+              };
       }
       return null;
     });
@@ -1079,7 +1084,11 @@ void main() {
       isNotNull,
     );
 
-    pendingShortcut.complete({'keyCode': 1, 'modifiers': 256, 'label': '⌘ S'});
+    pendingShortcut.complete({
+      'key': 'KeyS',
+      'modifiers': ['meta'],
+      'label': '⌘ S',
+    });
     await tester.pumpAndSettle();
     expect(saved, isFalse);
 
@@ -1149,14 +1158,16 @@ void main() {
         case MethodNames.getSettings:
           return {
             'revision': 0,
-            PreferenceKeys.shortcutKeyCode: 19,
-            PreferenceKeys.shortcutModifiers:
-                ShortcutKeys.shift | ShortcutKeys.command,
-            PreferenceKeys.shortcutLabel: '@',
-            PreferenceKeys.inputShortcutKeyCode: 18,
-            PreferenceKeys.inputShortcutModifiers:
-                ShortcutKeys.shift | ShortcutKeys.command,
-            PreferenceKeys.inputShortcutLabel: '!',
+            PreferenceKeys.shortcut: {
+              'key': 'Digit2',
+              'modifiers': ['shift', 'meta'],
+              'label': '@',
+            },
+            PreferenceKeys.inputShortcut: {
+              'key': 'Digit1',
+              'modifiers': ['shift', 'meta'],
+              'label': '!',
+            },
           };
       }
       return null;

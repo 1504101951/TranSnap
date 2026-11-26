@@ -5,6 +5,7 @@ import 'dart:ui' show Color;
 import 'package:transnap/src/common/constants/appearance_modes.dart';
 import 'package:transnap/src/settings/service_config.dart';
 import 'package:transnap/src/common/constants/preference_keys.dart';
+import 'package:transnap/src/common/constants/shortcut_keys.dart';
 import 'package:transnap/src/common/constants/screenshot_enums.dart';
 import 'package:transnap/src/common/constants/text_mode.dart';
 
@@ -186,24 +187,18 @@ void main() {
     final settings = AppSettings(primaryLanguage: 'zh-CN');
     expect(settings.validate, returnsNormally);
     final restored = AppSettings.fromMap(settings.toMap());
-    expect(
-      (
-        restored.inputShortcutKeyCode,
-        restored.inputShortcutModifiers,
-        restored.inputShortcutLabel,
-      ),
-      (15, 6144, 'R'),
-    );
-    for (final (code, modifiers) in [
-      (settings.shortcutKeyCode, settings.shortcutModifiers),
-      (
-        settings.screenshotShortcutKeyCode,
-        settings.screenshotShortcutModifiers,
-      ),
-    ]) {
+    expect(restored.inputShortcut, (
+      key: 'KeyR',
+      modifiers: ShortcutModifiers.control | ShortcutModifiers.alt,
+      label: 'R',
+    ));
+    for (final other in [settings.shortcut, settings.screenshotShortcut]) {
       final duplicate = AppSettings.fromMap(settings.toMap())
-        ..inputShortcutKeyCode = code
-        ..inputShortcutModifiers = modifiers;
+        ..inputShortcut = (
+          key: other.key,
+          modifiers: other.modifiers,
+          label: '另一个标签',
+        );
       expect(duplicate.validate, throwsFormatException);
     }
   });
@@ -289,9 +284,19 @@ void main() {
     settings
       ..secondaryLanguage = 'zh-CN'
       ..inputSecondaryLanguage = 'zh-CN';
-    settings.shortcutModifiers = 512;
+    settings.shortcut = (
+      key: 'KeyT',
+      modifiers: ShortcutModifiers.shift,
+      label: 'T',
+    );
     expect(settings.validate, throwsFormatException);
-    settings.shortcutModifiers = 6144;
+    settings.shortcut = (
+      key: ShortcutKeys.escape,
+      modifiers: ShortcutModifiers.control,
+      label: 'Esc',
+    );
+    expect(settings.validate, throwsFormatException);
+    settings.shortcut = ShortcutKeys.translate;
     expect(settings.validate, returnsNormally);
   });
 
@@ -320,16 +325,22 @@ void main() {
       primaryLanguage: 'ja',
       secondaryLanguage: 'en',
       automatic: false,
-      shortcutKeyCode: 15,
-      shortcutLabel: 'R',
-      shortcutModifiers: 6400,
+      shortcut: (
+        key: 'KeyR',
+        modifiers: ShortcutModifiers.control | ShortcutModifiers.meta,
+        label: 'R',
+      ),
       excludedApps: {'com.apple.TextEdit': '文本编辑'},
     );
     final restored = AppSettings.fromMap(settings.toMap());
     expect(restored.automatic, isFalse);
     expect(restored.excludedApps, {'com.apple.TextEdit': '文本编辑'});
-    expect(restored.shortcutKeyCode, 15);
-    expect(restored.shortcutLabel, 'R');
+    expect(settings.toMap()[PreferenceKeys.shortcut], {
+      'key': 'KeyR',
+      'modifiers': ['control', 'meta'],
+      'label': 'R',
+    });
+    expect(restored.shortcut, settings.shortcut);
     expect(restored.direction.resolve('ja').targetLanguage, 'en');
   });
 

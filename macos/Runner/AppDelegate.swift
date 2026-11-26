@@ -38,6 +38,7 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationDidFinishLaunching(_ notification: Notification) {
         let launchStart = ContinuousClock.now
         defer { PerformanceLog.record("launch-finish", since: launchStart) }
+        AppPreferences.normalizeShortcuts()
         let flutter = FlutterViewController()
         flutterViewController = flutter
         _ = flutter.view

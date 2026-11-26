@@ -613,9 +613,10 @@ class RunnerTests: XCTestCase {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
         let preferences = UserDefaults.standard.dictionary(forKey: AppConstants.preferencesKey)
         let settings: [String: Any] = [
-            AppConstants.automaticKey: false, AppConstants.shortcutKeyCodeKey: 128, AppConstants.shortcutModifiersKey: 6144,
-            AppConstants.inputShortcutKeyCodeKey: 15, AppConstants.inputShortcutModifiersKey: 6144,
-            AppConstants.screenshotShortcutKeyCodeKey: 1, AppConstants.screenshotShortcutModifiersKey: 6144,
+            AppConstants.automaticKey: false,
+            AppConstants.shortcutKey: ["key": "Escape", "modifiers": ["control", "alt"], "label": "Esc"],
+            AppConstants.inputShortcutKey: ["key": "KeyR", "modifiers": ["control", "alt"], "label": "R"],
+            AppConstants.screenshotShortcutKey: ["key": "KeyS", "modifiers": ["control", "alt"], "label": "S"],
             AppConstants.excludedAppsKey: [String: String](),
             AppConstants.launchAtLoginKey: [.enabled, .requiresApproval].contains(SMAppService.mainApp.status),
         ]
@@ -1228,6 +1229,29 @@ class RunnerTests: XCTestCase {
         } catch {
             XCTAssertNotEqual(error.localizedDescription, editingMessage)
         }
+    }
+
+    func testLegacyShortcutPreferencesNormalizeToKeyNamesOnce() throws {
+        let legacy: [String: Any] = [
+            "shortcutKeyCode": 17, "shortcutModifiers": 6144, "shortcutLabel": "T",
+            "inputShortcutKeyCode": 52, "inputShortcutModifiers": 256, "inputShortcutLabel": "?",
+            "screenshotShortcutKeyCode": 18, "screenshotShortcutModifiers": 768, "screenshotShortcutLabel": "1",
+            AppConstants.screenshotToolbarColumnsKey: [["modifiers": 8, "slots": ["crop"]], ["modifiers": 3, "slots": [""]]],
+            AppConstants.automaticKey: false,
+        ]
+        let normalized = try XCTUnwrap(AppPreferences.normalizedShortcuts(legacy))
+        XCTAssertEqual(normalized[AppConstants.shortcutKey] as? NSDictionary,
+                       ["key": "KeyT", "modifiers": ["control", "alt"], "label": "T"] as NSDictionary)
+        XCTAssertNil(normalized[AppConstants.inputShortcutKey])
+        XCTAssertEqual(normalized[AppConstants.screenshotShortcutKey] as? NSDictionary,
+                       ["key": "Digit1", "modifiers": ["shift", "meta"], "label": "1"] as NSDictionary)
+        XCTAssertEqual((normalized[AppConstants.screenshotToolbarColumnsKey] as? [[String: Any]])?.map { $0["modifiers"] as? [String] },
+                       [["meta"], ["control", "alt"]])
+        XCTAssertEqual(normalized[AppConstants.automaticKey] as? Bool, false)
+        XCTAssertTrue(normalized.keys.allSatisfy { !$0.hasSuffix("KeyCode") && !$0.hasSuffix("Label") && !$0.hasSuffix("Modifiers") })
+        XCTAssertNil(AppPreferences.normalizedShortcuts(normalized))
+        XCTAssertEqual(ShortcutNames.binding(normalized[AppConstants.shortcutKey]),
+                       SelectionMonitor.HotKeyBinding(keyCode: 17, modifiers: 6144))
     }
 
     func testLanguageDetectionPrefersUserLanguages() {

@@ -9,6 +9,7 @@ import '../common/constants/appearance_modes.dart';
 import '../common/constants/method_names.dart';
 import '../common/constants/platform_capabilities.dart';
 import '../common/constants/toolbar_grid.dart';
+import '../common/constants/shortcut_keys.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/error_codes.dart';
 import '../common/constants/screenshot_enums.dart';
@@ -210,9 +211,9 @@ class _SettingsPageState extends State<_SettingsPage>
     setState(
       () => _systemShortcutSlots = {
         for (final entry in entries)
-          ?ToolbarGrid.slotOfCocoa(
-            entry['keyCode'] as int,
-            entry['modifiers'] as int,
+          ?ToolbarGrid.slotOf(
+            entry['key']! as String,
+            ShortcutModifiers.parse(entry['modifiers']! as List),
           ),
       },
     );
@@ -551,13 +552,7 @@ class _SettingsPageState extends State<_SettingsPage>
 
   Future<void> _recordShortcut(
     String target,
-    void Function(
-      AppSettings settings,
-      int keyCode,
-      int modifiers,
-      String label,
-    )
-    apply,
+    void Function(AppSettings settings, Shortcut shortcut) apply,
   ) async {
     if (_recordingTarget != null) return;
     setState(() => _recordingTarget = target);
@@ -566,14 +561,7 @@ class _SettingsPageState extends State<_SettingsPage>
         MethodNames.recordShortcut,
       );
       if (!mounted || key == null || _recordingTarget != target) return;
-      _edit(
-        () => apply(
-          _settings!,
-          key['keyCode'] as int,
-          key['modifiers'] as int,
-          key['label'] as String,
-        ),
-      );
+      _edit(() => apply(_settings!, ShortcutKeys.parse(key)!));
     } on PlatformException catch (error) {
       if (mounted && _recordingTarget == target) {
         setState(() {
@@ -769,13 +757,12 @@ class _SettingsPageState extends State<_SettingsPage>
 
   List<Widget> _shortcutBlock({
     required String title,
-    required int code,
-    required String label,
-    required void Function(AppSettings, int, int, String) apply,
+    required Shortcut shortcut,
+    required void Function(AppSettings, Shortcut) apply,
     Widget? leading,
   }) {
     final isThisRecording = _recordingTarget == title;
-    final tokens = shortcutTokens(code, label);
+    final tokens = shortcutTokens(shortcut);
     return [
       ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
@@ -1443,29 +1430,18 @@ class _SettingsPageState extends State<_SettingsPage>
                                       icon: LucideIcons.languages,
                                     ),
                                     title: '全局翻译快捷键',
-                                    code: settings.shortcutModifiers,
-                                    label: settings.shortcutLabel,
-                                    apply:
-                                        (target, keyCode, modifiers, label) =>
-                                            target
-                                              ..shortcutKeyCode = keyCode
-                                              ..shortcutModifiers = modifiers
-                                              ..shortcutLabel = label,
+                                    shortcut: settings.shortcut,
+                                    apply: (target, shortcut) =>
+                                        target.shortcut = shortcut,
                                   ),
                                   ..._shortcutBlock(
                                     leading: const NativeGlassRowIcon(
                                       icon: LucideIcons.notebookPen,
                                     ),
                                     title: '输入翻译快捷键',
-                                    code: settings.inputShortcutModifiers,
-                                    label: settings.inputShortcutLabel,
-                                    apply:
-                                        (target, keyCode, modifiers, label) =>
-                                            target
-                                              ..inputShortcutKeyCode = keyCode
-                                              ..inputShortcutModifiers =
-                                                  modifiers
-                                              ..inputShortcutLabel = label,
+                                    shortcut: settings.inputShortcut,
+                                    apply: (target, shortcut) =>
+                                        target.inputShortcut = shortcut,
                                   ),
                                 ],
                               ),
@@ -1674,16 +1650,9 @@ class _SettingsPageState extends State<_SettingsPage>
                                       icon: LucideIcons.crop,
                                     ),
                                     title: '区域截图快捷键',
-                                    code: settings.screenshotShortcutModifiers,
-                                    label: settings.screenshotShortcutLabel,
-                                    apply:
-                                        (target, keyCode, modifiers, label) =>
-                                            target
-                                              ..screenshotShortcutKeyCode =
-                                                  keyCode
-                                              ..screenshotShortcutModifiers =
-                                                  modifiers
-                                              ..screenshotShortcutLabel = label,
+                                    shortcut: settings.screenshotShortcut,
+                                    apply: (target, shortcut) =>
+                                        target.screenshotShortcut = shortcut,
                                   ),
                                   NativeGlassDropdown<ScreenshotConfirmAction>(
                                     label: '回车或双击确认时',

@@ -7,6 +7,7 @@ import '../common/constants/method_names.dart';
 import '../common/constants/motion_metrics.dart';
 import '../common/constants/platform_capabilities.dart';
 import '../common/constants/preference_keys.dart';
+import '../common/constants/shortcut_keys.dart';
 import '../common/utils/date_text.dart';
 import '../common/utils/shortcut_tokens.dart';
 import '../common/widgets/app_motion.dart';
@@ -69,8 +70,10 @@ class _HistoryAppState extends State<HistoryApp> {
   bool _managing = false;
   String? _managementError;
 
-  List<String> _globalShortcutTokens = shortcutTokens(6144, 'T');
-  List<String> _screenshotShortcutTokens = shortcutTokens(6144, 'S');
+  List<String> _globalShortcutTokens = shortcutTokens(ShortcutKeys.translate);
+  List<String> _screenshotShortcutTokens = shortcutTokens(
+    ShortcutKeys.screenshot,
+  );
 
   _HistorySection _section = _HistorySection.history;
 
@@ -113,17 +116,17 @@ class _HistoryAppState extends State<HistoryApp> {
         MethodNames.getSettings,
       );
       if (!mounted || settings == null) return;
-      final globalModifiers =
-          settings[PreferenceKeys.shortcutModifiers] as int? ?? 6144;
-      final globalLabel =
-          settings[PreferenceKeys.shortcutLabel] as String? ?? 'T';
-      final shotModifiers =
-          settings[PreferenceKeys.screenshotShortcutModifiers] as int? ?? 6144;
-      final shotLabel =
-          settings[PreferenceKeys.screenshotShortcutLabel] as String? ?? 'S';
+      final global =
+          ShortcutKeys.parse(settings[PreferenceKeys.shortcut] as Map?) ??
+          ShortcutKeys.translate;
+      final shot =
+          ShortcutKeys.parse(
+            settings[PreferenceKeys.screenshotShortcut] as Map?,
+          ) ??
+          ShortcutKeys.screenshot;
       setState(() {
-        _globalShortcutTokens = shortcutTokens(globalModifiers, globalLabel);
-        _screenshotShortcutTokens = shortcutTokens(shotModifiers, shotLabel);
+        _globalShortcutTokens = shortcutTokens(global);
+        _screenshotShortcutTokens = shortcutTokens(shot);
       });
     } on MissingPluginException catch (_) {
     } on PlatformException catch (_) {}

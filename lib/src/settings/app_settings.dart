@@ -19,15 +19,9 @@ class AppSettings {
     String? inputPrimaryLanguage,
     String? inputSecondaryLanguage,
     this.automatic = true,
-    this.shortcutKeyCode = 17,
-    this.shortcutLabel = 'T',
-    this.shortcutModifiers = 6144,
-    this.inputShortcutKeyCode = 15,
-    this.inputShortcutLabel = 'R',
-    this.inputShortcutModifiers = 6144,
-    this.screenshotShortcutKeyCode = 1,
-    this.screenshotShortcutLabel = 'S',
-    this.screenshotShortcutModifiers = 6144,
+    this.shortcut = ShortcutKeys.translate,
+    this.inputShortcut = ShortcutKeys.input,
+    this.screenshotShortcut = ShortcutKeys.screenshot,
     this.screenshotSaveDirectory = '',
     this.gifFramesPerSecond = 10,
     this.liveRecording = false,
@@ -79,16 +73,9 @@ class AppSettings {
   String inputPrimaryLanguage;
   String? inputSecondaryLanguage;
   bool automatic;
-  int shortcutKeyCode;
-  String shortcutLabel;
-  int shortcutModifiers;
-
-  int inputShortcutKeyCode;
-  String inputShortcutLabel;
-  int inputShortcutModifiers;
-  int screenshotShortcutKeyCode;
-  String screenshotShortcutLabel;
-  int screenshotShortcutModifiers;
+  Shortcut shortcut;
+  Shortcut inputShortcut;
+  Shortcut screenshotShortcut;
 
   String screenshotSaveDirectory;
 
@@ -175,21 +162,15 @@ class AppSettings {
             (e) => ServiceConfig.fromMap(Map<Object?, Object?>.from(e as Map)),
           )
           .toList(),
-      shortcutKeyCode: map[PreferenceKeys.shortcutKeyCode] as int? ?? 17,
-      shortcutLabel: map[PreferenceKeys.shortcutLabel] as String? ?? 'T',
-      shortcutModifiers: map[PreferenceKeys.shortcutModifiers] as int? ?? 6144,
-      inputShortcutKeyCode:
-          map[PreferenceKeys.inputShortcutKeyCode] as int? ?? 15,
-      inputShortcutLabel:
-          map[PreferenceKeys.inputShortcutLabel] as String? ?? 'R',
-      inputShortcutModifiers:
-          map[PreferenceKeys.inputShortcutModifiers] as int? ?? 6144,
-      screenshotShortcutKeyCode:
-          map[PreferenceKeys.screenshotShortcutKeyCode] as int? ?? 1,
-      screenshotShortcutLabel:
-          map[PreferenceKeys.screenshotShortcutLabel] as String? ?? 'S',
-      screenshotShortcutModifiers:
-          map[PreferenceKeys.screenshotShortcutModifiers] as int? ?? 6144,
+      shortcut:
+          ShortcutKeys.parse(map[PreferenceKeys.shortcut] as Map?) ??
+          ShortcutKeys.translate,
+      inputShortcut:
+          ShortcutKeys.parse(map[PreferenceKeys.inputShortcut] as Map?) ??
+          ShortcutKeys.input,
+      screenshotShortcut:
+          ShortcutKeys.parse(map[PreferenceKeys.screenshotShortcut] as Map?) ??
+          ShortcutKeys.screenshot,
       screenshotSaveDirectory:
           map[PreferenceKeys.screenshotSaveDirectory] as String? ?? '',
       gifFramesPerSecond: map[PreferenceKeys.gifFramesPerSecond] as int? ?? 10,
@@ -301,27 +282,18 @@ class AppSettings {
         glossary.map((entry) => entry.key).toSet().length != glossary.length) {
       throw const FormatException('术语不能为空，且同一目标语言下不能重复。');
     }
-    final shortcuts = [
-      (shortcutKeyCode, shortcutLabel, shortcutModifiers),
-      (inputShortcutKeyCode, inputShortcutLabel, inputShortcutModifiers),
-      (
-        screenshotShortcutKeyCode,
-        screenshotShortcutLabel,
-        screenshotShortcutModifiers,
-      ),
-    ];
-    for (final (code, label, modifiers) in shortcuts) {
-      if (code < 0 ||
-          code > ShortcutKeys.maxKeyCode ||
-          code == ShortcutKeys.escape ||
+    final shortcuts = [shortcut, inputShortcut, screenshotShortcut];
+    for (final (:key, :modifiers, :label) in shortcuts) {
+      if (key.isEmpty ||
+          key == ShortcutKeys.escape ||
           label.isEmpty ||
-          modifiers & ShortcutKeys.required == 0 ||
-          modifiers & ~ShortcutKeys.allowed != 0) {
+          modifiers & ShortcutModifiers.required == 0 ||
+          modifiers & ~ShortcutModifiers.allowed != 0) {
         throw const FormatException(ShortcutKeys.invalidMessage);
       }
     }
     final combinations = {
-      for (final (code, _, modifiers) in shortcuts) (code, modifiers),
+      for (final (:key, :modifiers, label: _) in shortcuts) (key, modifiers),
     };
     if (combinations.length != shortcuts.length) {
       throw const FormatException('翻译、输入翻译与截图快捷键不能相同。');
@@ -339,12 +311,12 @@ class AppSettings {
   }
 
   Map<({int modifiers, int digit}), String> get globalShortcutSlots => {
-    for (final (purpose, code, modifiers) in [
-      ('全局翻译', shortcutKeyCode, shortcutModifiers),
-      ('输入翻译', inputShortcutKeyCode, inputShortcutModifiers),
-      ('区域截图', screenshotShortcutKeyCode, screenshotShortcutModifiers),
+    for (final (purpose, (:key, :modifiers, label: _)) in [
+      ('全局翻译', shortcut),
+      ('输入翻译', inputShortcut),
+      ('区域截图', screenshotShortcut),
     ])
-      ?ToolbarGrid.slotOfCarbon(code, modifiers): purpose,
+      ?ToolbarGrid.slotOf(key, modifiers): purpose,
   };
 
   Map<String, Object> toMap() => {
@@ -357,15 +329,9 @@ class AppSettings {
     PreferenceKeys.inputPrimaryLanguage: inputPrimaryLanguage,
     PreferenceKeys.inputSecondaryLanguage: ?inputSecondaryLanguage,
     PreferenceKeys.automatic: automatic,
-    PreferenceKeys.shortcutKeyCode: shortcutKeyCode,
-    PreferenceKeys.shortcutLabel: shortcutLabel,
-    PreferenceKeys.shortcutModifiers: shortcutModifiers,
-    PreferenceKeys.inputShortcutKeyCode: inputShortcutKeyCode,
-    PreferenceKeys.inputShortcutLabel: inputShortcutLabel,
-    PreferenceKeys.inputShortcutModifiers: inputShortcutModifiers,
-    PreferenceKeys.screenshotShortcutKeyCode: screenshotShortcutKeyCode,
-    PreferenceKeys.screenshotShortcutLabel: screenshotShortcutLabel,
-    PreferenceKeys.screenshotShortcutModifiers: screenshotShortcutModifiers,
+    PreferenceKeys.shortcut: ShortcutKeys.encode(shortcut),
+    PreferenceKeys.inputShortcut: ShortcutKeys.encode(inputShortcut),
+    PreferenceKeys.screenshotShortcut: ShortcutKeys.encode(screenshotShortcut),
     PreferenceKeys.screenshotSaveDirectory: screenshotSaveDirectory,
     PreferenceKeys.gifFramesPerSecond: gifFramesPerSecond,
     PreferenceKeys.liveRecording: liveRecording,

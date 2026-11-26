@@ -157,6 +157,30 @@ enum AppConstants {
     static let shortcutRequiredModifiers = UInt32(cmdKey | optionKey | controlKey)
     static let shortcutAllowedModifiers = shortcutRequiredModifiers | UInt32(shiftKey)
     static let textEditingKeyCodes: Set<UInt32> = [0, 6, 7, 8, 9]
+    static let shortcutKeyNames: [UInt16: String] = [
+        0: "KeyA", 1: "KeyS", 2: "KeyD", 3: "KeyF", 4: "KeyH", 5: "KeyG", 6: "KeyZ", 7: "KeyX",
+        8: "KeyC", 9: "KeyV", 10: "IntlBackslash", 11: "KeyB", 12: "KeyQ", 13: "KeyW", 14: "KeyE", 15: "KeyR",
+        16: "KeyY", 17: "KeyT", 18: "Digit1", 19: "Digit2", 20: "Digit3", 21: "Digit4", 22: "Digit6", 23: "Digit5",
+        24: "Equal", 25: "Digit9", 26: "Digit7", 27: "Minus", 28: "Digit8", 29: "Digit0", 30: "BracketRight", 31: "KeyO",
+        32: "KeyU", 33: "BracketLeft", 34: "KeyI", 35: "KeyP", 36: "Enter", 37: "KeyL", 38: "KeyJ", 39: "Quote",
+        40: "KeyK", 41: "Semicolon", 42: "Backslash", 43: "Comma", 44: "Slash", 45: "KeyN", 46: "KeyM", 47: "Period",
+        48: "Tab", 49: "Space", 50: "Backquote", 51: "Backspace", 53: "Escape",
+        64: "F17", 65: "NumpadDecimal", 67: "NumpadMultiply", 69: "NumpadAdd", 71: "NumLock",
+        72: "AudioVolumeUp", 73: "AudioVolumeDown", 74: "AudioVolumeMute", 75: "NumpadDivide", 76: "NumpadEnter",
+        78: "NumpadSubtract", 79: "F18", 80: "F19", 81: "NumpadEqual", 82: "Numpad0", 83: "Numpad1", 84: "Numpad2",
+        85: "Numpad3", 86: "Numpad4", 87: "Numpad5", 88: "Numpad6", 89: "Numpad7", 90: "F20", 91: "Numpad8",
+        92: "Numpad9", 93: "IntlYen", 94: "IntlRo", 95: "NumpadComma", 96: "F5", 97: "F6", 98: "F7", 99: "F3",
+        100: "F8", 101: "F9", 102: "Lang2", 103: "F11", 104: "Lang1", 105: "F13", 106: "F16", 107: "F14",
+        109: "F10", 110: "ContextMenu", 111: "F12", 113: "F15", 114: "Insert", 115: "Home", 116: "PageUp",
+        117: "Delete", 118: "F4", 119: "End", 120: "F2", 121: "PageDown", 122: "F1", 123: "ArrowLeft",
+        124: "ArrowRight", 125: "ArrowDown", 126: "ArrowUp",
+    ]
+    static let shortcutModifierNames: [(name: String, carbon: UInt32, flag: NSEvent.ModifierFlags, bit: Int)] = [
+        ("control", UInt32(controlKey), .control, 1),
+        ("alt", UInt32(optionKey), .option, 2),
+        ("shift", UInt32(shiftKey), .shift, 4),
+        ("meta", UInt32(cmdKey), .command, 8),
+    ]
     static let returnKeyCode: UInt16 = 36
     static let keypadEnterKeyCode: UInt16 = 76
     static let confirmScreenshotMethod = "confirmScreenshot"
@@ -278,20 +302,14 @@ enum AppConstants {
     static let saveScreenshotMethod = "saveScreenshot"
     static let saveFailedError = "save_failed"
     static let screenshotChangedMethod = "screenshotChanged"
-    static let screenshotShortcutKeyCodeKey = "screenshotShortcutKeyCode"
-    static let screenshotShortcutLabelKey = "screenshotShortcutLabel"
-    static let screenshotShortcutModifiersKey = "screenshotShortcutModifiers"
+    static let screenshotShortcutKey = "screenshotShortcut"
     static let selectionCapturedEvent = "selectionCaptured"
     static let selectionInvalidatedEvent = "selectionInvalidated"
     static let setOverlaySizeMethod = "setOverlaySize"
     static let settingsEntrypoint = "settingsMain"
     static let settingsFailedError = "settings_failed"
-    static let shortcutKeyCodeKey = "shortcutKeyCode"
-    static let shortcutLabelKey = "shortcutLabel"
-    static let shortcutModifiersKey = "shortcutModifiers"
-    static let inputShortcutKeyCodeKey = "inputShortcutKeyCode"
-    static let inputShortcutLabelKey = "inputShortcutLabel"
-    static let inputShortcutModifiersKey = "inputShortcutModifiers"
+    static let shortcutKey = "shortcut"
+    static let inputShortcutKey = "inputShortcut"
     static let shortcutInvalidError = "shortcut_invalid"
     static let showOverlayMethod = "showOverlay"
     static let showOverlayTooltipMethod = "showOverlayTooltip"
@@ -492,19 +510,11 @@ enum GlobalHotKey: CaseIterable {
     case input
     case screenshot
 
-    var keyCodeKey: String {
+    var preferenceKey: String {
         switch self {
-        case .translate: AppConstants.shortcutKeyCodeKey
-        case .input: AppConstants.inputShortcutKeyCodeKey
-        case .screenshot: AppConstants.screenshotShortcutKeyCodeKey
-        }
-    }
-
-    var modifiersKey: String {
-        switch self {
-        case .translate: AppConstants.shortcutModifiersKey
-        case .input: AppConstants.inputShortcutModifiersKey
-        case .screenshot: AppConstants.screenshotShortcutModifiersKey
+        case .translate: AppConstants.shortcutKey
+        case .input: AppConstants.inputShortcutKey
+        case .screenshot: AppConstants.screenshotShortcutKey
         }
     }
 
@@ -516,43 +526,22 @@ enum GlobalHotKey: CaseIterable {
         }
     }
 
-    var labelKey: String {
-        switch self {
-        case .translate: AppConstants.shortcutLabelKey
-        case .input: AppConstants.inputShortcutLabelKey
-        case .screenshot: AppConstants.screenshotShortcutLabelKey
-        }
-    }
-
     func formattedShortcut(
         in preferences: [String: Any]
     ) -> (titleSuffix: String, keyEquivalent: String, modifiers: NSEvent.ModifierFlags)? {
-        guard let rawModifiers = (preferences[modifiersKey] as? NSNumber)?.uint32Value,
-              rawModifiers != 0,
-              let rawLabel = (preferences[labelKey] as? String)?
+        guard let shortcut = preferences[preferenceKey] as? [String: Any],
+              let names = shortcut["modifiers"] as? [String],
+              let rawLabel = (shortcut["label"] as? String)?
                   .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawLabel.isEmpty else {
             return nil
         }
-        var flags: NSEvent.ModifierFlags = []
-        var symbols = ""
-        if rawModifiers & UInt32(controlKey) != 0 {
-            flags.insert(.control)
-            symbols += "⌃"
-        }
-        if rawModifiers & UInt32(optionKey) != 0 {
-            flags.insert(.option)
-            symbols += "⌥"
-        }
-        if rawModifiers & UInt32(shiftKey) != 0 {
-            flags.insert(.shift)
-            symbols += "⇧"
-        }
-        if rawModifiers & UInt32(cmdKey) != 0 {
-            flags.insert(.command)
-            symbols += "⌘"
-        }
+        let flags = ShortcutNames.flags(names)
         guard !flags.isEmpty else { return nil }
+        let symbols = [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+            .filter { flags.contains($0.0) }
+            .map(\.1)
+            .joined()
         if rawLabel.unicodeScalars.count == 1,
            let scalar = rawLabel.unicodeScalars.first,
            scalar.isASCII,
@@ -560,6 +549,26 @@ enum GlobalHotKey: CaseIterable {
             return ("", rawLabel.lowercased(), flags)
         }
         return (" (\(symbols)\(rawLabel))", "", flags)
+    }
+}
+
+enum ShortcutNames {
+    static let keyCodes = Dictionary(uniqueKeysWithValues: AppConstants.shortcutKeyNames.map { ($0.value, $0.key) })
+
+    static func names(carbon: UInt32) -> [String] {
+        AppConstants.shortcutModifierNames.filter { carbon & $0.carbon != 0 }.map(\.name)
+    }
+
+    static func names(flags: NSEvent.ModifierFlags) -> [String] {
+        AppConstants.shortcutModifierNames.filter { flags.contains($0.flag) }.map(\.name)
+    }
+
+    static func names(bits: Int) -> [String] {
+        AppConstants.shortcutModifierNames.filter { bits & $0.bit != 0 }.map(\.name)
+    }
+
+    static func flags(_ names: [String]) -> NSEvent.ModifierFlags {
+        NSEvent.ModifierFlags(AppConstants.shortcutModifierNames.filter { names.contains($0.name) }.map(\.flag))
     }
 }
 

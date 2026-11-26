@@ -3,32 +3,29 @@ import 'package:flutter/services.dart';
 import 'shortcut_keys.dart';
 
 abstract final class ToolbarModifiers {
-  static const control = 1;
-  static const option = 2;
-  static const shift = 4;
-  static const command = 8;
-
   static const allowed = [
-    command,
-    option,
-    control,
-    command | option,
-    command | control,
-    option | control,
-    command | option | control,
+    ShortcutModifiers.meta,
+    ShortcutModifiers.alt,
+    ShortcutModifiers.control,
+    ShortcutModifiers.meta | ShortcutModifiers.alt,
+    ShortcutModifiers.meta | ShortcutModifiers.control,
+    ShortcutModifiers.alt | ShortcutModifiers.control,
+    ShortcutModifiers.meta | ShortcutModifiers.alt | ShortcutModifiers.control,
   ];
 
   static String label(int modifiers) =>
-      '${modifiers & control != 0 ? '⌃' : ''}'
-      '${modifiers & option != 0 ? '⌥' : ''}'
-      '${modifiers & shift != 0 ? '⇧' : ''}'
-      '${modifiers & command != 0 ? '⌘' : ''}';
+      '${modifiers & ShortcutModifiers.control != 0 ? '⌃' : ''}'
+      '${modifiers & ShortcutModifiers.alt != 0 ? '⌥' : ''}'
+      '${modifiers & ShortcutModifiers.shift != 0 ? '⇧' : ''}'
+      '${modifiers & ShortcutModifiers.meta != 0 ? '⌘' : ''}';
 
   static int pressed() =>
-      (HardwareKeyboard.instance.isControlPressed ? control : 0) |
-      (HardwareKeyboard.instance.isAltPressed ? option : 0) |
-      (HardwareKeyboard.instance.isShiftPressed ? shift : 0) |
-      (HardwareKeyboard.instance.isMetaPressed ? command : 0);
+      (HardwareKeyboard.instance.isControlPressed
+          ? ShortcutModifiers.control
+          : 0) |
+      (HardwareKeyboard.instance.isAltPressed ? ShortcutModifiers.alt : 0) |
+      (HardwareKeyboard.instance.isShiftPressed ? ShortcutModifiers.shift : 0) |
+      (HardwareKeyboard.instance.isMetaPressed ? ShortcutModifiers.meta : 0);
 }
 
 abstract final class ToolbarGrid {
@@ -60,44 +57,23 @@ abstract final class ToolbarGrid {
   static const lineGap = 4.0;
 
   static const defaultModifiers = [
-    ToolbarModifiers.command,
-    ToolbarModifiers.option,
+    ShortcutModifiers.meta,
+    ShortcutModifiers.alt,
   ];
 
+  static const digitKeys = [
+    'Digit1',
+    'Digit2',
+    'Digit3',
+    'Digit4',
+    'Digit5',
+    'Digit6',
+  ];
 
-  static const carbonKeyCodes = [18, 19, 20, 21, 23, 22];
-
-  static ({int modifiers, int digit})? slotOfCarbon(
-    int code,
-    int carbonModifiers,
-  ) {
-    final index = carbonKeyCodes.indexOf(code);
-    if (index < 0 || carbonModifiers & ShortcutKeys.shift != 0) return null;
-    return (
-      modifiers:
-          (carbonModifiers & ShortcutKeys.control != 0
-              ? ToolbarModifiers.control
-              : 0) |
-          (carbonModifiers & ShortcutKeys.option != 0
-              ? ToolbarModifiers.option
-              : 0) |
-          (carbonModifiers & ShortcutKeys.command != 0
-              ? ToolbarModifiers.command
-              : 0),
-      digit: index + 1,
-    );
-  }
-
-  static ({int modifiers, int digit})? slotOfCocoa(int code, int cocoaFlags) {
-    final index = carbonKeyCodes.indexOf(code);
-    if (index < 0 || cocoaFlags & (1 << 17) != 0) return null;
-    return (
-      modifiers:
-          (cocoaFlags & (1 << 18) != 0 ? ToolbarModifiers.control : 0) |
-          (cocoaFlags & (1 << 19) != 0 ? ToolbarModifiers.option : 0) |
-          (cocoaFlags & (1 << 20) != 0 ? ToolbarModifiers.command : 0),
-      digit: index + 1,
-    );
+  static ({int modifiers, int digit})? slotOf(String key, int modifiers) {
+    final index = digitKeys.indexOf(key);
+    if (index < 0 || modifiers & ShortcutModifiers.shift != 0) return null;
+    return (modifiers: modifiers, digit: index + 1);
   }
 
   static final digits = {
