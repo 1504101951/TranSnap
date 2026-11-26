@@ -1,6 +1,6 @@
 # TranSnap
 
-[中文](README.md)
+[中文](README.md) | [English](README.en.md)
 
 **TranSnap** is a macOS 26+ desktop productivity suite combining instant global text translation with screen capture, annotation, recording, scrolling screenshots, live on-screen translation, and local MCP integration. Built with Flutter/Dart for UI and orchestration alongside a native Swift layer for non-activating panels, macOS Liquid Glass surfaces, and system capture frameworks.
 

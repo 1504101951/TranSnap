@@ -1,6 +1,6 @@
 # TranSnap
 
-[English](README.en.md)
+[中文](README.md) | [English](README.en.md)
 
 **TranSnap** 是一款面向 **macOS 26+** 的桌面效率工具，集成了全局选区翻译与屏幕采集套件。应用采用 Flutter/Dart 实现界面与业务编排，由 Swift 原生层提供非激活悬浮面板、`macOS 26+` 液态玻璃材料与系统级屏幕采集能力。
 
