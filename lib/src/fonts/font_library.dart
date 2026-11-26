@@ -35,8 +35,24 @@ class FontLibrary {
 
   Future<void> _set(FontState state) async {
     _state = state;
-    await publish(state.toMap());
+    await noteSelection(selected());
   }
+
+  String _source(FontFile file) => file.isBundled
+      ? 'asset:${FontFile.bundledDirectory}/${file.fileName}'
+      : _path(file);
+
+  Future<void> noteSelection(FontSet set) => publish({
+    ..._state.toMap(),
+    'roles': {
+      for (final (role, pair) in [
+        ('ui', set.ui),
+        ('body', set.body),
+        ('title', set.title),
+      ])
+        role: {'latin': _source(pair.latin), 'cjk': _source(pair.cjk)},
+    },
+  });
 
   Future<void> start() async {
     directory.createSync(recursive: true);
@@ -120,7 +136,7 @@ class FontLibrary {
             downloaded: _state.downloaded,
             download: (set: set, received: received, total: total),
           );
-          publish(_state.toMap());
+          noteSelection(selected());
         });
         if (!fetched) return false;
         _state = FontState(

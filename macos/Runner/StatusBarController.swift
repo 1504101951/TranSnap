@@ -225,6 +225,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        AppFonts.apply(to: menu)
         guard !liveAbort else { return }
         stopCaptureItem?.isEnabled = MacPlatformBridge.Shared.instance?.capture.canStop == true
         applyScreenshotShortcut()
@@ -310,7 +311,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
                 alert.alertStyle = .warning
                 alert.messageText = "设置未保存"
                 alert.informativeText = error.message ?? error.code
-                alert.runModal()
+                AppFonts.prepare(alert).runModal()
                 return
             }
             self?.refreshSettings?()

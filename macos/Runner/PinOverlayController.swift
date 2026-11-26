@@ -116,7 +116,7 @@ final class PinPanel: NSPanel {
         imageView.layer?.masksToBounds = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.onDoubleClick = { [weak self] in self?.closeFromUserAction() }
-        imageView.menu = buildContextMenu()
+        imageView.menu = AppFonts.apply(to: buildContextMenu())
 
         closeButton.target = self
         closeButton.action = #selector(closeFromUserAction)

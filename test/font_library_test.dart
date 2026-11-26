@@ -15,7 +15,10 @@ class _Harness {
   _Harness(this.directory, Uri base, {this._selected = FontSet.neutral}) {
     library = FontLibrary(
       directory: directory,
-      publish: (state) async => published.add(FontState.fromMap(state)),
+      publish: (state) async {
+        raw.add(state);
+        published.add(FontState.fromMap(state));
+      },
       select: (set) async {
         selections.add(set);
         _selected = set;
@@ -28,6 +31,7 @@ class _Harness {
   final Directory directory;
   late final FontLibrary library;
   final published = <FontState>[];
+  final raw = <Map<String, Object>>[];
   final selections = <FontSet>[];
   FontSet _selected;
 
@@ -86,9 +90,7 @@ void main() {
       directory.listSync().where((e) => e.path.endsWith('.part')),
       isEmpty,
     );
-    final progress = [
-      for (final state in harness.published) ?state.download,
-    ];
+    final progress = [for (final state in harness.published) ?state.download];
     expect(progress.first.received, 0);
     expect(progress.first.total, FontFile.atkinsonHyperlegibleNext.bytes);
     expect(progress.last.received, lessThanOrEqualTo(progress.first.total));
@@ -204,6 +206,25 @@ void main() {
     expect(harness.selections, isEmpty);
     expect(harness.library.state.downloaded, {
       FontFile.atkinsonHyperlegibleNext,
+    });
+  });
+
+  test('发布的状态附带所选组合三个角色的文件：内置文件给资源键，下载文件给字体目录路径', () async {
+    final harness = _Harness(directory, base, selected: FontSet.claude);
+    await harness.library.noteSelection(FontSet.character);
+    expect(harness.raw.last['roles'], {
+      'ui': {
+        'latin': '${directory.path}/SpaceGrotesk.ttf',
+        'cjk': 'asset:assets/fonts/NotoSansSC.ttf',
+      },
+      'body': {
+        'latin': '${directory.path}/SpaceGrotesk.ttf',
+        'cjk': 'asset:assets/fonts/NotoSansSC.ttf',
+      },
+      'title': {
+        'latin': '${directory.path}/SpaceGrotesk.ttf',
+        'cjk': '${directory.path}/SmileySans-Oblique.ttf',
+      },
     });
   });
 }

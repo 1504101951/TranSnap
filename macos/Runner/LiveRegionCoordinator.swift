@@ -267,7 +267,7 @@ final class LiveFitTextView: NSView {
         var best = floorSize
         while high - low > 0.5 {
             let size = (low + high) / 2
-            let font = NSFont.systemFont(ofSize: size, weight: .semibold)
+            let font = AppFonts.font(.body, size: size, weight: .semibold)
             let style = NSMutableParagraphStyle()
             style.lineBreakMode = .byWordWrapping
             let rect = (text as NSString).boundingRect(
@@ -282,7 +282,7 @@ final class LiveFitTextView: NSView {
                 high = size
             }
         }
-        let font = NSFont.systemFont(ofSize: best, weight: .semibold)
+        let font = AppFonts.font(.body, size: best, weight: .semibold)
         fitted = (text, availableSize, font)
         return font
     }

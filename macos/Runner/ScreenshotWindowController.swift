@@ -123,7 +123,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
             alert.messageText = "剪贴板中没有可读取的图片"
             alert.informativeText = "请先复制图片，再从剪贴板打开。"
             NSApp.activate()
-            alert.runModal()
+            AppFonts.prepare(alert).runModal()
             return
         }
         loadImage { data }

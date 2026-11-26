@@ -93,7 +93,7 @@ class AppDelegate: FlutterAppDelegate {
             alert.informativeText = "未保存的录制或长图将被删除。已经保存的文件会保留。"
             alert.addButton(withTitle: "返回采集")
             alert.addButton(withTitle: "退出并丢弃")
-            guard alert.runModal() == .alertSecondButtonReturn else {
+            guard AppFonts.prepare(alert).runModal() == .alertSecondButtonReturn else {
                 capture.present(force: true)
                 return .terminateCancel
             }

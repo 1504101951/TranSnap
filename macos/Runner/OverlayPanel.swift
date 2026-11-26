@@ -164,7 +164,6 @@ final class OverlayPanelController {
 final class OverlayTooltipBubble {
     private lazy var label: NSTextField = {
         let label = NSTextField(labelWithString: "")
-        label.font = .systemFont(ofSize: 12)
         label.lineBreakMode = .byClipping
         return label
     }()
@@ -201,6 +200,7 @@ final class OverlayTooltipBubble {
         let dark = panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         bubble.layer?.backgroundColor = (dark ? NSColor(srgbRed: 0.898, green: 0.898, blue: 0.918, alpha: 1) : NSColor(srgbRed: 0.173, green: 0.173, blue: 0.180, alpha: 1)).cgColor
         label.textColor = dark ? NSColor(srgbRed: 0.110, green: 0.110, blue: 0.118, alpha: 1) : .white
+        label.font = AppFonts.font(.ui, size: 12)
         label.stringValue = message
         label.sizeToFit()
         let size = NSSize(
@@ -293,7 +293,7 @@ final class InputStatusBubble {
             try? await Task.sleep(for: .milliseconds(AppConstants.inputProgressDelayMs))
             guard let self, self.generation == current else { return }
             let label = NSTextField(labelWithString: AppConstants.inputProgressText)
-            label.font = .systemFont(ofSize: AppConstants.inputProgressFontSize)
+            label.font = AppFonts.font(.ui, size: AppConstants.inputProgressFontSize)
             label.textColor = .labelColor
             label.lineBreakMode = .byClipping
             label.sizeToFit()

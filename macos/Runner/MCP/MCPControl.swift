@@ -584,15 +584,15 @@ enum MCPControlApproval {
         NativeGlassFactory.applyAppearance(to: panel)
 
         let title = NSTextField(labelWithString: "允许模型操作 \(appName)？")
-        title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        title.font = AppFonts.font(.title, size: NSFont.systemFontSize, weight: .bold)
         title.textColor = .labelColor
 
         let body = NSTextField(wrappingLabelWithString: "动作：\(detail)")
-        body.font = .systemFont(ofSize: NSFont.systemFontSize)
+        body.font = AppFonts.font(.ui, size: NSFont.systemFontSize)
         body.textColor = .labelColor
 
         let countdownLabel = NSTextField(labelWithString: countdownText(initialSeconds))
-        countdownLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        countdownLabel.font = AppFonts.font(.ui, size: 11, monospacedDigits: true)
         countdownLabel.textColor = .secondaryLabelColor
 
         let deny = NSButton(title: "拒绝", target: Handler.shared, action: #selector(Handler.deny))

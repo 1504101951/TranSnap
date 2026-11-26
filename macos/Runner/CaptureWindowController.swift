@@ -539,7 +539,7 @@ final class CaptureWindowController: NSObject, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.messageText = "无法完成采集操作"
         alert.informativeText = error.localizedDescription
-        alert.runModal()
+        AppFonts.prepare(alert).runModal()
     }
 
     private func releasePlayer() {
@@ -1188,7 +1188,7 @@ final class CaptureShadeView: NSView {
         paragraph.maximumLineHeight = 18
         paragraph.alignment = .center
         return NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: 13),
+            .font: AppFonts.font(.ui, size: 13),
             .foregroundColor: isError ? NSColor.systemRed : NSColor.labelColor,
             .paragraphStyle: paragraph,
         ])

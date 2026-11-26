@@ -92,6 +92,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       unawaited(bridge.publishLiveRegion(view.toMap()));
     },
   );
+  late final FontLibrary fonts;
   final settings = SettingsController(
     initial: initial,
     platform: bridge,
@@ -110,9 +111,10 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       session.inputProvider = providerForInput(candidate, bridge);
       session.serviceChoices = () => serviceChoices(candidate, capabilities);
       live.noteSettings(candidate);
+      unawaited(fonts.noteSelection(candidate.fontSet));
     },
   );
-  final fonts = FontLibrary(
+  fonts = FontLibrary(
     directory: Directory('$support/Fonts'),
     publish: bridge.publishFontState,
     select: (set) =>

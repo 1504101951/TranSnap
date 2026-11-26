@@ -571,6 +571,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             result(AppConstants.platformCapabilities)
         case AppConstants.publishFontStateMethod:
             NativeGlassFactory.fontState = call.arguments as? [String: Any] ?? [:]
+            AppFonts.update(NativeGlassFactory.fontState)
             NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
             result(nil)
         case AppConstants.appReadyMethod:
@@ -591,7 +592,7 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             alert.messageText = "TranSnap 无法启动"
             alert.informativeText = "主程序初始化失败：\(args["message"] as! String)"
             alert.addButton(withTitle: "退出")
-            alert.runModal()
+            AppFonts.prepare(alert).runModal()
             NSApp.terminate(nil)
         default:
             result(FlutterMethodNotImplemented)

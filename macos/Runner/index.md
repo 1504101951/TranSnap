@@ -13,7 +13,7 @@ macOS应用生命周期、系统能力与窗口控制器。
 9. [Info.plist](Info.plist)：声明应用元数据、入口和系统权限用途说明。
 10. [MacPlatformBridge.swift](MacPlatformBridge.swift)：处理Flutter平台请求并发送选区与系统事件。
 11. [MainFlutterWindow.swift](MainFlutterWindow.swift)：隐藏XIB主窗口并安装菜单栏入口。
-12. [NativeGlass.swift](NativeGlass.swift)：注册原生玻璃平台视图并同步窗口材料与外观。
+12. [NativeGlass.swift](NativeGlass.swift)：注册原生玻璃平台视图并同步窗口材料与外观；`AppFonts` 按主引擎发布的字体角色文件经 Core Text 注册字体，为原生自绘文字、菜单与提示框提供所选组合的字体。
 13. [OverlayPanel.swift](OverlayPanel.swift)：管理不抢来源焦点的翻译浮层及其定位和拖动。
 14. [PinOverlayController.swift](PinOverlayController.swift)：管理独立置顶贴图的选择、拖动和关闭。
 15. [Release.entitlements](Release.entitlements)：声明发布构建所需的系统授权能力。

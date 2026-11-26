@@ -65,5 +65,5 @@ Dart业务逻辑和Flutter界面行为回归测试。
 59. [platform_capabilities_test.dart](platform_capabilities_test.dart)：验证按平台能力列出内置服务与卡片服务菜单，以及能力为空时设置窗口隐藏截图、MCP、权限、语言包与录制点击特效入口。
 60. [shortcut_tokens_test.dart](shortcut_tokens_test.dart)：验证快捷键记录拆分为键帽序列的顺序，以及修饰键名称与位的互转和快捷键记录的解析往返。
 61. [font_sets_test.dart](font_sets_test.dart)：验证主题按界面、正文、标题角色使用所选字体组合，显式样式继承主题字体，日文、韩文、繁体中文正文回退系统字体，组合文件与缺失体积计算，偏好往返，以及外观快照中所选组合文件缺失时退回中性。
-62. [font_library_test.dart](font_library_test.dart)：经本机 HTTP 服务验证字体下载的进度、校验通过后移入并切换、校验不符与下载失败的清理、取消与并发限制、卸载时保留其他组合需要的文件，以及启动时校验不符切回中性与残留临时文件清理。
+62. [font_library_test.dart](font_library_test.dart)：经本机 HTTP 服务验证字体下载的进度、校验通过后移入并切换、校验不符与下载失败的清理、取消与并发限制、卸载时保留其他组合需要的文件，启动时校验不符切回中性与残留临时文件清理，以及发布状态附带所选组合三个角色的字体文件位置。
 63. [font_set_picker_test.dart](font_set_picker_test.dart)：验证字体下拉框列出 8 套组合并按自身字体显示名称、按下载状态显示内置/已下载/缺失体积与卸载按钮，选择、下载与卸载请求，下载进度行与取消，以及下载失败时显示原因。

@@ -151,7 +151,7 @@ enum WindowEngine {
         """
         alert.addButton(withTitle: "好")
         alert.addButton(withTitle: "打开数据目录")
-        if alert.runModal() == .alertSecondButtonReturn {
+        if AppFonts.prepare(alert).runModal() == .alertSecondButtonReturn {
             let target = FileManager.default.fileExists(atPath: supportURL.path)
                 ? supportURL
                 : supportURL.deletingLastPathComponent()

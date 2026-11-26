@@ -323,3 +323,95 @@ final class NativeGlassContainerView: NSView {
         }
     }
 }
+
+enum AppFonts {
+    enum Role: String {
+        case ui
+        case body
+        case title
+    }
+
+    private static var registered: Set<URL> = []
+    private static var families: [Role: (latin: String, cjk: String)] = [:]
+    private static let weightAxis = NSNumber(value: 0x7767_6874)
+    private static let cssWeights: [(weight: NSFont.Weight, value: Double)] = [
+        (.ultraLight, 100), (.thin, 200), (.light, 300), (.regular, 400),
+        (.medium, 500), (.semibold, 600), (.bold, 700), (.heavy, 800), (.black, 900),
+    ]
+
+    static func update(_ state: [String: Any]) {
+        let roles = state["roles"] as? [String: [String: String]] ?? [:]
+        families = Dictionary(uniqueKeysWithValues: roles.compactMap { name, pair in
+            guard let role = Role(rawValue: name),
+                  let latin = pair["latin"].flatMap(family),
+                  let cjk = pair["cjk"].flatMap(family) else { return nil }
+            return (role, (latin, cjk))
+        })
+    }
+
+    private static func family(_ source: String) -> String? {
+        let url: URL
+        if source.hasPrefix("asset:") {
+            let bundle = Bundle(identifier: "io.flutter.flutter.app") ?? .main
+            guard let resources = bundle.resourceURL else { return nil }
+            url = resources.appendingPathComponent(FlutterDartProject.lookupKey(forAsset: String(source.dropFirst(6)), from: bundle))
+        } else {
+            url = URL(fileURLWithPath: source)
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        if !registered.contains(url) {
+            guard CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil) else { return nil }
+            registered.insert(url)
+        }
+        let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor]
+        return descriptors?.first.flatMap { CTFontDescriptorCopyAttribute($0, kCTFontFamilyNameAttribute) as? String }
+    }
+
+    static func font(_ role: Role, size: CGFloat, weight: NSFont.Weight = .regular, monospacedDigits: Bool = false) -> NSFont {
+        guard let pair = families[role] else {
+            return monospacedDigits
+                ? .monospacedDigitSystemFont(ofSize: size, weight: weight)
+                : .systemFont(ofSize: size, weight: weight)
+        }
+        let css = cssWeights.min { abs($0.weight.rawValue - weight.rawValue) < abs($1.weight.rawValue - weight.rawValue) }!.value
+        let styled: [NSFontDescriptor.AttributeName: Any] = [
+            .variation: [weightAxis: NSNumber(value: css)],
+            .traits: [NSFontDescriptor.TraitKey.weight: weight.rawValue],
+        ]
+        let cjk = NSFontDescriptor(fontAttributes: [.family: pair.cjk]).addingAttributes(styled)
+        let digits: [NSFontDescriptor.AttributeName: Any] = monospacedDigits
+            ? [.featureSettings: [[
+                NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
+                NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector,
+            ]]]
+            : [:]
+        let descriptor = NSFontDescriptor(fontAttributes: [.family: pair.latin])
+            .addingAttributes(styled)
+            .addingAttributes(digits)
+            .addingAttributes([.cascadeList: [cjk]])
+        return NSFont(descriptor: descriptor, size: size) ?? .systemFont(ofSize: size, weight: weight)
+    }
+
+    @discardableResult
+    static func prepare(_ alert: NSAlert) -> NSAlert {
+        alert.layout()
+        for case let field as NSTextField in alert.window.contentView?.subviews ?? [] {
+            field.font = field.stringValue == alert.messageText
+                ? font(.title, size: NSFont.systemFontSize, weight: .bold)
+                : font(.ui, size: NSFont.smallSystemFontSize)
+        }
+        for button in alert.buttons {
+            button.font = font(.ui, size: NSFont.systemFontSize)
+        }
+        return alert
+    }
+
+    @discardableResult
+    static func apply(to menu: NSMenu) -> NSMenu {
+        menu.font = font(.ui, size: NSFont.menuFont(ofSize: 0).pointSize)
+        for item in menu.items {
+            if let submenu = item.submenu { apply(to: submenu) }
+        }
+        return menu
+    }
+}
