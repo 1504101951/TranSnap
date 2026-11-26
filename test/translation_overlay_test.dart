@@ -1,6 +1,7 @@
 import 'package:transnap/src/common/constants/selection_gesture_types.dart';
 import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/text_mode.dart';
+import 'package:transnap/src/common/constants/glass_metrics.dart';
 import 'package:transnap/src/common/constants/bridge_event_types.dart';
 
 import 'dart:async';
@@ -293,6 +294,23 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(drags, 2);
+      final grip = find.byKey(const ValueKey('card-drag-handle'));
+      final gripRect = tester.getRect(grip);
+      expect(gripRect.left, GlassMetrics.space8);
+      expect(gripRect.size, const Size.square(GlassMetrics.hitSize));
+      expect(
+        gripRect.right,
+        lessThan(
+          tester.getRect(find.byKey(const ValueKey('card-mode-menu'))).left,
+        ),
+      );
+      await tester.drag(grip, const Offset(40, 0));
+      await tester.pumpAndSettle();
+      expect(drags, 3);
+      await tester.tap(grip);
+      await tester.pumpAndSettle();
+      expect(drags, 3);
+      expect(find.text('润色'), findsNothing);
       expect(session.sessionId, 's1');
       expect(session.snapshot.phase, TranslationPhase.completed);
       expect(find.text('你好'), findsOneWidget);

@@ -458,6 +458,8 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                       ),
                       Row(
                         children: [
+                          _CardDragHandle(onDrag: widget.onDrag),
+                          const SizedBox(width: GlassMetrics.space4),
                           NativeGlassMenuButton<TextMode>(
                             key: const ValueKey('card-mode-menu'),
                             quiet: true,
@@ -823,6 +825,65 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
                       ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+class _CardDragHandle extends StatefulWidget {
+  const _CardDragHandle({required this.onDrag});
+
+  final VoidCallback onDrag;
+
+  @override
+  State<_CardDragHandle> createState() => _CardDragHandleState();
+}
+
+class _CardDragHandleState extends State<_CardDragHandle> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AppTooltip(
+      message: '拖动移动卡片',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          key: const ValueKey('card-drag-handle'),
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => widget.onDrag(),
+          child: SizedBox.square(
+            dimension: GlassMetrics.hitSize,
+            child: Center(
+              child: AnimatedContainer(
+                duration: AppMotion.reduced(context)
+                    ? Duration.zero
+                    : GlassMetrics.transition,
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: _hovered
+                      ? colors.onSurface.withValues(alpha: 0.06)
+                      : Colors.transparent,
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(
+                      GlassMetrics.controlRadius,
+                    ),
+                  ),
+                ),
+                child: LineIcon(
+                  LucideIcons.gripVertical,
+                  size: 14,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
