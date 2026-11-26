@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -95,7 +96,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      SettingsApp(createMcpService: (path) => service ?? _FakeMcpService(path)),
+      SettingsApp(capabilities: PlatformCapability.values.toSet(), createMcpService: (path) => service ?? _FakeMcpService(path)),
     );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, section);

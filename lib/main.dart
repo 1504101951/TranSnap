@@ -9,6 +9,8 @@ import 'src/capture/capture_app.dart';
 import 'src/common/constants/channel_names.dart';
 import 'src/common/constants/live_region.dart';
 import 'src/common/constants/method_names.dart';
+import 'src/common/constants/platform_capabilities.dart';
+import 'src/common/constants/preference_keys.dart';
 import 'src/common/widgets/focus_visibility.dart';
 import 'src/history/history_app.dart';
 import 'src/history/history_requests.dart';
@@ -22,6 +24,7 @@ import 'src/selection/selection_translation_app.dart';
 import 'src/settings/app_settings.dart';
 import 'src/settings/permission_wizard_app.dart';
 import 'src/settings/settings_app.dart';
+import 'src/settings/service_config.dart';
 import 'src/settings/settings_controller.dart';
 import 'src/translation/live_region_session.dart';
 import 'src/translation/provider_selection.dart';
@@ -43,7 +46,13 @@ Future<void> main() async {
 Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   final total = Stopwatch()..start();
   final stage = Stopwatch()..start();
-  final initial = AppSettings.fromMap(await bridge.loadSettings());
+  final capabilities = await bridge.capabilities();
+  final initial = AppSettings.fromMap({
+    PreferenceKeys.defaultServiceId: ServiceConfig.builtins(capabilities)
+        .keys
+        .first,
+    ...await bridge.loadSettings(),
+  });
   unawaited(bridge.perfMark('launch-dart-settings', stage));
   stage.reset();
   final support = await bridge.applicationSupportPath();
@@ -70,7 +79,9 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
     detectLanguage: bridge.detectLanguage,
     language: initial.direction,
     inputLanguage: initial.inputDirection,
-    lookupDefinition: bridge.lookupDefinition,
+    lookupDefinition: capabilities.contains(PlatformCapability.dictionary)
+        ? bridge.lookupDefinition
+        : null,
   );
   final live = LiveRegionSession(
     providerFor: (settings) => providerForSettings(settings, bridge),
@@ -96,7 +107,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       session.inputLanguage = candidate.inputDirection;
       session.provider = providerForSettings(candidate, bridge);
       session.inputProvider = providerForInput(candidate, bridge);
-      session.serviceChoices = () => serviceChoices(candidate);
+      session.serviceChoices = () => serviceChoices(candidate, capabilities);
       live.noteSettings(candidate);
     },
   );
@@ -105,7 +116,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   session.serviceProviderFor = (serviceId, mode) => mode == TextMode.translate
       ? providerForService(settings.current, bridge, serviceId)
       : assistProviderForService(settings.current, bridge, mode, serviceId);
-  session.serviceChoices = () => serviceChoices(initial);
+  session.serviceChoices = () => serviceChoices(initial, capabilities);
 
   void prewarm() {
     final origin = translationOrigin(settings.current);
@@ -251,7 +262,8 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
 
 @pragma('vm:entry-point')
 Future<void> settingsMain() async {
-  await _runWindow(const SettingsApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  await _runWindow(SettingsApp(capabilities: await _windowCapabilities()));
 }
 
 @pragma('vm:entry-point')
@@ -271,8 +283,15 @@ Future<void> permissionWizardMain() async {
 
 @pragma('vm:entry-point')
 Future<void> historyMain() async {
-  await _runWindow(const HistoryApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  await _runWindow(HistoryApp(capabilities: await _windowCapabilities()));
 }
+
+Future<Set<PlatformCapability>> _windowCapabilities() async =>
+    PlatformCapability.parse(
+      (await const MethodChannel(ChannelNames.settings)
+          .invokeListMethod<Object?>(MethodNames.capabilities))!,
+    );
 
 Future<void> _runWindow(Widget app) async {
   WidgetsFlutterBinding.ensureInitialized();

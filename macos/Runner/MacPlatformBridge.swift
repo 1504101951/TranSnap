@@ -565,6 +565,8 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 }
                 result(["id": id, "name": (FileManager.default.displayName(atPath: url.path) as NSString).deletingPathExtension])
             }
+        case AppConstants.capabilitiesMethod:
+            result(AppConstants.platformCapabilities)
         case AppConstants.appReadyMethod:
             if let onReady {
                 onReady()

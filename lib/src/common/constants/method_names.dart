@@ -50,6 +50,8 @@ abstract final class MethodNames {
 
   static const appReady = 'appReady';
 
+  static const capabilities = 'capabilities';
+
   static const appStartFailed = 'appStartFailed';
 
   static const perfMark = 'perfMark';

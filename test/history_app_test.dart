@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -78,6 +79,32 @@ void main() {
     database.close();
   });
 
+  testWidgets('平台不提供词典与截图时历史窗口只保留翻译历史，不显示分段控件', (tester) async {
+    store.insert(
+      sourceText: 'source',
+      translatedText: 'translation',
+      detectedLanguage: 'en',
+      targetLanguage: 'zh',
+      providerId: 'test',
+      completedAt: DateTime(2026, 9, 19, 9, 30).millisecondsSinceEpoch,
+      sourceLabel: 'Safari',
+    );
+    await tester.pumpWidget(
+      const HistoryApp(
+        capabilities: {PlatformCapability.permissions},
+        channel: channel,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate((widget) => widget is NativeGlassSegments),
+      findsNothing,
+    );
+    expect(find.text('生词本'), findsNothing);
+    expect(find.text('截图历史'), findsNothing);
+    expect(find.text('translation'), findsOneWidget);
+  });
+
   testWidgets('历史随外观切换保持来源和正文可读，标题栏居中分段且收到新增事件自动刷新', (tester) async {
     final completedAt = DateTime(2026, 9, 19, 9, 30).millisecondsSinceEpoch;
     store.insert(
@@ -89,7 +116,7 @@ void main() {
       completedAt: completedAt,
       sourceLabel: 'Safari',
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(
       find.byWidgetPredicate((widget) => widget is NativeGlassSegments),
@@ -152,7 +179,7 @@ void main() {
       completedAt: 1,
       sourceLabel: 'Notes',
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     final segments = find.byWidgetPredicate(
       (widget) => widget is NativeGlassSegments,
@@ -200,7 +227,7 @@ void main() {
         sourceLabel: i == 22 ? '截图' : 'Safari',
       );
     }
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(find.text('2026-09-19'), findsOneWidget);
     expect(find.byType(HistoryGroupCard), findsOneWidget);
@@ -245,7 +272,7 @@ void main() {
       providerId: 'google',
       completedAt: 1000,
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(find.textContaining('未记录来源 · '), findsOneWidget);
     expect(find.text('完整译文\n保留换行'), findsOneWidget);
@@ -262,7 +289,7 @@ void main() {
       providerId: 'test',
       completedAt: 1,
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     database.execute(
       'ALTER TABLE translation_history RENAME TO unavailable_history',
@@ -306,7 +333,7 @@ void main() {
       completedAt: 100,
       sourceLabel: 'Notes',
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('history-filter-button')));
@@ -374,7 +401,7 @@ void main() {
         completedAt: index + 1,
       );
     }
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     database.execute(
       'ALTER TABLE translation_history RENAME TO unavailable_history',
@@ -407,7 +434,7 @@ void main() {
     );
     database.execute("DELETE FROM history_meta WHERE key LIKE 'retention_%'");
     store = TranslationHistoryStore(database, now: () => DateTime(2026, 11, 3));
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(find.textContaining('将清理 1 条记录'), findsOneWidget);
     await tester.tap(find.text('取消'));
@@ -447,7 +474,7 @@ void main() {
       completedAt: 1000,
       sourceLabel: 'Notes',
     );
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('history-search-clear')), findsNothing);
 
@@ -524,7 +551,7 @@ void main() {
       sourceLabel: 'Safari',
     );
     final itemId = store.page(limit: 1).single.id;
-    await tester.pumpWidget(const HistoryApp(channel: channel));
+    await tester.pumpWidget(HistoryApp(capabilities: PlatformCapability.values.toSet(), channel: channel));
     await tester.pumpAndSettle();
     expect(find.byType(VocabularyPage), findsNothing);
 

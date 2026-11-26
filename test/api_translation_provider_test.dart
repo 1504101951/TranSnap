@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -889,7 +890,7 @@ void main() {
       defaultServiceId: ServiceConfig.systemId,
     );
     final platform = _SecretPlatform();
-    expect(serviceChoices(settings), [
+    expect(serviceChoices(settings, PlatformCapability.values.toSet()), [
       (
         id: ServiceConfig.systemId,
         name: 'Apple 系统翻译',

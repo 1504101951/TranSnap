@@ -1,3 +1,4 @@
+import '../common/constants/platform_capabilities.dart';
 import '../common/constants/text_mode.dart';
 import '../platform/settings_platform.dart';
 import '../settings/app_settings.dart';
@@ -90,11 +91,13 @@ TranslationProvider? assistProviderForService(
   );
 }
 
-List<ServiceChoice> serviceChoices(AppSettings settings) => [
-  for (final (id, name) in [
-    (ServiceConfig.systemId, ServiceConfig.systemName),
-    (ServiceConfig.builtinId, ServiceConfig.builtinName),
-  ])
+List<ServiceChoice> serviceChoices(
+  AppSettings settings,
+  Set<PlatformCapability> capabilities,
+) => [
+  for (final MapEntry(key: id, value: name) in ServiceConfig.builtins(
+    capabilities,
+  ).entries)
     (
       id: id,
       name: name,

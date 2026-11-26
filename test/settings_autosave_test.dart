@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -41,7 +42,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(
@@ -95,7 +96,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '语言与服务');
     final primary = find.descendant(
@@ -164,7 +165,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     delayStatus = true;
     final loading = messenger.handlePlatformMessage(

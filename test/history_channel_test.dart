@@ -1,5 +1,6 @@
 import 'package:transnap/src/common/constants/method_names.dart';
 import 'package:transnap/src/common/constants/channel_names.dart';
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -24,6 +25,8 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(methods, (call) async {
       switch (call.method) {
+        case MethodNames.capabilities:
+          return [for (final c in PlatformCapability.values) c.name];
         case MethodNames.loadSettings:
           return <String, Object>{};
         case MethodNames.applicationSupportPath:

@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -183,7 +184,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(
@@ -255,7 +256,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(

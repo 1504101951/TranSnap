@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../common/constants/platform_capabilities.dart';
+
 import 'platform_event.dart';
 
 abstract interface class SelectionPort {
@@ -76,6 +78,8 @@ abstract interface class AppHost {
   Future<Map<Object?, Object?>> loadSettings();
 
   Future<String> applicationSupportPath();
+
+  Future<Set<PlatformCapability>> capabilities();
 
   Future<void> appReady();
 

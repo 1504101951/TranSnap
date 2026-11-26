@@ -7,6 +7,7 @@ import '../common/constants/preference_keys.dart';
 import '../common/constants/drawing_metrics.dart';
 import '../common/constants/appearance_modes.dart';
 import '../common/constants/method_names.dart';
+import '../common/constants/platform_capabilities.dart';
 import '../common/constants/toolbar_grid.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/error_codes.dart';
@@ -58,23 +59,32 @@ enum SettingsPage {
 class SettingsApp extends StatelessWidget {
   const SettingsApp({
     super.key,
+    required this.capabilities,
     this.createMcpService = McpSettingsPage.defaultService,
   });
 
+  final Set<PlatformCapability> capabilities;
   final McpPlatformService Function(String helperPath) createMcpService;
 
   @override
   Widget build(BuildContext context) => NativeGlassApp(
     title: '权限与启动',
     home: NativeGlassWindowPage(
-      child: _SettingsPage(createMcpService: createMcpService),
+      child: _SettingsPage(
+        capabilities: capabilities,
+        createMcpService: createMcpService,
+      ),
     ),
   );
 }
 
 class _SettingsPage extends StatefulWidget {
-  const _SettingsPage({required this.createMcpService});
+  const _SettingsPage({
+    required this.capabilities,
+    required this.createMcpService,
+  });
 
+  final Set<PlatformCapability> capabilities;
   final McpPlatformService Function(String helperPath) createMcpService;
   @override
   State<_SettingsPage> createState() => _SettingsPageState();
@@ -107,49 +117,53 @@ class _SettingsPageState extends State<_SettingsPage>
   bool? _screenshotHistoryRecording;
   bool _savingScreenshotHistoryRecording = false;
 
-  static const List<NativeGlassSidebarSection<SettingsPage>> _sidebarSections =
-      [
-        (
-          title: '通用',
-          icon: LucideIcons.sliders,
-          value: null,
-          children: {
-            SettingsPage.general: '权限与启动',
-            SettingsPage.personalization: '个性化',
-          },
-        ),
-        (
-          title: '翻译',
-          icon: LucideIcons.languages,
-          value: null,
-          children: {
-            SettingsPage.languages: '语言与服务',
-            SettingsPage.services: '服务列表',
-            SettingsPage.shortcuts: '快捷键',
-            SettingsPage.exclusions: '排除应用',
-          },
-        ),
-        (
-          title: '截图',
-          icon: LucideIcons.scan,
-          value: null,
-          children: {
-            SettingsPage.screenshotSave: '保存与导出',
-            SettingsPage.recording: '录制',
-            SettingsPage.screenshotActions: '操作',
-            SettingsPage.stickers: '贴纸',
-            SettingsPage.toolbar: '工具栏',
-          },
-        ),
-        (
-          title: 'MCP',
-          icon: LucideIcons.network,
-          value: SettingsPage.mcp,
-          children: {},
-        ),
-      ];
+  bool _has(PlatformCapability capability) =>
+      widget.capabilities.contains(capability);
 
-  static String _pageTitle(SettingsPage page) {
+  late final List<NativeGlassSidebarSection<SettingsPage>> _sidebarSections = [
+    (
+      title: '通用',
+      icon: LucideIcons.sliders,
+      value: null,
+      children: {
+        SettingsPage.general: '权限与启动',
+        SettingsPage.personalization: '个性化',
+      },
+    ),
+    (
+      title: '翻译',
+      icon: LucideIcons.languages,
+      value: null,
+      children: {
+        SettingsPage.languages: '语言与服务',
+        SettingsPage.services: '服务列表',
+        SettingsPage.shortcuts: '快捷键',
+        SettingsPage.exclusions: '排除应用',
+      },
+    ),
+    if (_has(PlatformCapability.screenshot))
+      (
+        title: '截图',
+        icon: LucideIcons.scan,
+        value: null,
+        children: {
+          SettingsPage.screenshotSave: '保存与导出',
+          SettingsPage.recording: '录制',
+          SettingsPage.screenshotActions: '操作',
+          SettingsPage.stickers: '贴纸',
+          SettingsPage.toolbar: '工具栏',
+        },
+      ),
+    if (_has(PlatformCapability.mcp))
+      (
+        title: 'MCP',
+        icon: LucideIcons.network,
+        value: SettingsPage.mcp,
+        children: {},
+      ),
+  ];
+
+  String _pageTitle(SettingsPage page) {
     for (final section in _sidebarSections) {
       if (section.value == page) return section.title;
       final title = section.children[page];
@@ -168,7 +182,10 @@ class _SettingsPageState extends State<_SettingsPage>
       }
     });
     unawaited(_syncWindowTitle(_pageTitle(page)));
-    if (page == SettingsPage.general) _checkLanguagePacks();
+    if (page == SettingsPage.general &&
+        _has(PlatformCapability.appleTranslation)) {
+      _checkLanguagePacks();
+    }
     if (page == SettingsPage.toolbar) _loadSystemShortcuts();
   }
 
@@ -226,7 +243,7 @@ class _SettingsPageState extends State<_SettingsPage>
       if (call.method == MethodNames.refreshSettings) await _load();
     });
     _load();
-    _checkLanguagePacks();
+    if (_has(PlatformCapability.appleTranslation)) _checkLanguagePacks();
     _channel.invokeMethod<String>(MethodNames.stickerDirectory).then((path) {
       if (mounted) setState(() => _stickerDirectory = path);
     });
@@ -632,7 +649,9 @@ class _SettingsPageState extends State<_SettingsPage>
       _settings!.services.remove(service);
       _credentials[service.id] = null;
       if (_settings!.defaultServiceId == service.id) {
-        _settings!.defaultServiceId = ServiceConfig.systemId;
+        _settings!.defaultServiceId = ServiceConfig.builtins(
+          widget.capabilities,
+        ).keys.first;
       }
     });
   }
@@ -886,56 +905,68 @@ class _SettingsPageState extends State<_SettingsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (_page == SettingsPage.general) ...[
-                              NativeGlassGroup(
-                                title: '权限',
-                                children: [
-                                  NativeGlassSettingRow(
-                                    title: '辅助功能',
-                                    caption: '用于读取选中文字',
-                                    leading: const NativeGlassRowIcon(
-                                      icon: LucideIcons.shieldCheck,
-                                    ),
-                                    child: _permissionState(
-                                      granted: _status['accessibility'] == true,
-                                      onGrant: () =>
-                                          _channel.invokeMethod<void>(
-                                            MethodNames.openAccessibility,
-                                          ),
-                                    ),
-                                  ),
-                                  NativeGlassSettingRow(
-                                    key: const ValueKey('屏幕录制权限'),
-                                    title: '屏幕录制',
-                                    caption: '截图、录屏与实时翻译需要',
-                                    leading: const NativeGlassRowIcon(
-                                      icon: LucideIcons.monitor,
-                                    ),
-                                    child: _permissionState(
-                                      granted: _status['screenAccess'] == true,
-                                      onGrant: _requestScreenAccess,
-                                    ),
-                                  ),
-                                  NativeGlassSettingRow(
-                                    key: const ValueKey('离线翻译语言'),
-                                    title: 'Apple 离线翻译语言包',
-                                    caption: _languagePackStatus ?? '正在检查语言包…',
-                                    leading: const NativeGlassRowIcon(
-                                      icon: LucideIcons.languages,
-                                    ),
-                                    child: NativeGlassSurface(
-                                      material: true,
-                                      child: TextButton(
-                                        onPressed: () =>
-                                            _channel.invokeMethod<void>(
-                                              MethodNames
-                                                  .openTranslationLanguages,
-                                            ),
-                                        child: const Text('管理'),
+                              if (_has(PlatformCapability.permissions) ||
+                                  _has(PlatformCapability.appleTranslation))
+                                NativeGlassGroup(
+                                  title: '权限',
+                                  children: [
+                                    if (_has(
+                                      PlatformCapability.permissions,
+                                    )) ...[
+                                      NativeGlassSettingRow(
+                                        title: '辅助功能',
+                                        caption: '用于读取选中文字',
+                                        leading: const NativeGlassRowIcon(
+                                          icon: LucideIcons.shieldCheck,
+                                        ),
+                                        child: _permissionState(
+                                          granted:
+                                              _status['accessibility'] == true,
+                                          onGrant: () =>
+                                              _channel.invokeMethod<void>(
+                                                MethodNames.openAccessibility,
+                                              ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                      NativeGlassSettingRow(
+                                        key: const ValueKey('屏幕录制权限'),
+                                        title: '屏幕录制',
+                                        caption: '截图、录屏与实时翻译需要',
+                                        leading: const NativeGlassRowIcon(
+                                          icon: LucideIcons.monitor,
+                                        ),
+                                        child: _permissionState(
+                                          granted:
+                                              _status['screenAccess'] == true,
+                                          onGrant: _requestScreenAccess,
+                                        ),
+                                      ),
+                                    ],
+                                    if (_has(
+                                      PlatformCapability.appleTranslation,
+                                    ))
+                                      NativeGlassSettingRow(
+                                        key: const ValueKey('离线翻译语言'),
+                                        title: 'Apple 离线翻译语言包',
+                                        caption:
+                                            _languagePackStatus ?? '正在检查语言包…',
+                                        leading: const NativeGlassRowIcon(
+                                          icon: LucideIcons.languages,
+                                        ),
+                                        child: NativeGlassSurface(
+                                          material: true,
+                                          child: TextButton(
+                                            onPressed: () =>
+                                                _channel.invokeMethod<void>(
+                                                  MethodNames
+                                                      .openTranslationLanguages,
+                                                ),
+                                            child: const Text('管理'),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               NativeGlassGroup(
                                 children: [
                                   NativeGlassSwitchTile(
@@ -1141,25 +1172,27 @@ class _SettingsPageState extends State<_SettingsPage>
                                   ),
                                 ],
                               ),
-                              NativeGlassGroup(
-                                title: '录制点击特效',
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: GlassMetrics.space4,
-                                    ),
-                                    child: Center(
-                                      child: ClickEffectPlayer(
-                                        effect: settings.recordingClickEffect,
-                                        onChanged: (v) => _edit(
-                                          () =>
-                                              settings.recordingClickEffect = v,
+                              if (_has(PlatformCapability.recording))
+                                NativeGlassGroup(
+                                  title: '录制点击特效',
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: GlassMetrics.space4,
+                                      ),
+                                      child: Center(
+                                        child: ClickEffectPlayer(
+                                          effect: settings.recordingClickEffect,
+                                          onChanged: (v) => _edit(
+                                            () =>
+                                                settings.recordingClickEffect =
+                                                    v,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
                             ] else if (_page == SettingsPage.languages) ...[
                               NativeGlassGroup(
                                 dividerIndent: 0,
@@ -1234,10 +1267,9 @@ class _SettingsPageState extends State<_SettingsPage>
                                     ),
                                     value: settings.defaultServiceId,
                                     items: {
-                                      ServiceConfig.systemId:
-                                          ServiceConfig.systemName,
-                                      ServiceConfig.builtinId:
-                                          ServiceConfig.builtinName,
+                                      ...ServiceConfig.builtins(
+                                        widget.capabilities,
+                                      ),
                                       for (final service in settings.services)
                                         service.id: service.displayName,
                                     },
@@ -1334,7 +1366,12 @@ class _SettingsPageState extends State<_SettingsPage>
                                         top: GlassMetrics.space8,
                                       ),
                                       child: Text(
-                                        '暂无自定义翻译服务；默认使用谷歌翻译或 Apple 系统翻译。',
+                                        _has(
+                                              PlatformCapability
+                                                  .appleTranslation,
+                                            )
+                                            ? '暂无自定义翻译服务；默认使用${ServiceConfig.builtinName}或 ${ServiceConfig.systemName}。'
+                                            : '暂无自定义翻译服务；默认使用${ServiceConfig.builtinName}。',
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall,

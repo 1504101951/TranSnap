@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -56,7 +57,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '快捷键');
     await tester.tap(
@@ -129,7 +130,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '快捷键');
     await tester.scrollUntilVisible(
@@ -195,7 +196,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '服务列表');
     await tester.tap(find.text('添加服务'));
@@ -282,7 +283,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
 
     expect(find.text('权限与启动'), findsNWidgets(2));
@@ -401,7 +402,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '保存与导出');
     expect(find.text('截图目录'), findsOneWidget);
@@ -439,7 +440,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(settings.containsKey(PreferenceKeys.gifMaximumWidth), isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '保存与导出');
     expect(find.text('15 fps'), findsOneWidget);
@@ -490,7 +491,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '贴纸');
     expect(find.text('还没有贴纸'), findsOneWidget);
@@ -561,7 +562,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '语言与服务');
     await tester.tap(find.text('输入翻译').first);
@@ -604,7 +605,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '语言与服务');
     await tester.ensureVisible(find.text('编辑提示词'));
@@ -685,7 +686,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '操作');
     final scrollable = settingsContentScrollable();
@@ -730,7 +731,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '语言与服务');
     await tester.tap(find.text('管理术语（0）'));
@@ -821,7 +822,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '操作');
     await tester.scrollUntilVisible(
@@ -863,7 +864,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '录制');
 
@@ -950,7 +951,7 @@ void main() {
         return null;
       });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-      await tester.pumpWidget(const SettingsApp());
+      await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
       await tester.pumpAndSettle();
 
       await openSettingsPage(tester, '语言与服务');
@@ -1005,7 +1006,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pump();
     await tester.pump();
     expect(find.text('正在检查语言包…'), findsOneWidget);
@@ -1056,7 +1057,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '快捷键');
 
@@ -1110,7 +1111,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
 
     await openSettingsPage(tester, '服务列表');
@@ -1162,7 +1163,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '快捷键');
 
@@ -1210,7 +1211,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
 
     await openSettingsPage(tester, '语言与服务');

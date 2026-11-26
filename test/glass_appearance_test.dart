@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +34,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     expect(find.text('保存设置'), findsNothing);
@@ -80,7 +81,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     final slider = find.byType(Slider);
@@ -173,7 +174,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
 
@@ -210,7 +211,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     expect(saved[PreferenceKeys.accentForeground], isNull);
@@ -250,7 +251,7 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
 

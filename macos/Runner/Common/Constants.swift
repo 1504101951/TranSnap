@@ -163,6 +163,8 @@ enum AppConstants {
     static let arrowKeyDirections: [UInt16: (dx: Int, dy: Int)] = [123: (-1, 0), 124: (1, 0), 125: (0, 1), 126: (0, -1)]
     static let nudgeScreenshotCropMethod = "nudgeScreenshotCrop"
     static let appReadyMethod = "appReady"
+    static let capabilitiesMethod = "capabilities"
+    static let platformCapabilities = ["appleTranslation", "dictionary", "permissions", "screenshot", "recording", "mcp"]
     static let appStartFailedMethod = "appStartFailed"
     static let perfMarkMethod = "perfMark"
     static let appearanceChangedMethod = "appearanceChanged"

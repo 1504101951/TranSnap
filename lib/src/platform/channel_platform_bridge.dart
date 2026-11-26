@@ -1,5 +1,6 @@
 import '../common/constants/method_names.dart';
 import '../common/constants/channel_names.dart';
+import '../common/constants/platform_capabilities.dart';
 
 import 'package:flutter/services.dart';
 
@@ -165,6 +166,12 @@ class ChannelPlatformBridge
   @override
   Future<String> applicationSupportPath() async => (await _methods
       .invokeMethod<String>(MethodNames.applicationSupportPath))!;
+
+  @override
+  Future<Set<PlatformCapability>> capabilities() async =>
+      PlatformCapability.parse(
+        (await _methods.invokeListMethod<Object?>(MethodNames.capabilities))!,
+      );
 
   @override
   Future<void> applySettings(

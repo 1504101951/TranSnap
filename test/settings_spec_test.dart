@@ -1,3 +1,4 @@
+import 'package:transnap/src/common/constants/platform_capabilities.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -36,7 +37,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     final sidebar = find.byKey(const ValueKey('settings-sidebar'));
     final before = tester.getRect(sidebar);
@@ -241,7 +242,7 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const SettingsApp());
+    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '服务列表');
     final edit = tester.getRect(

@@ -62,3 +62,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 56. [click_effect_player_test.dart](click_effect_player_test.dart)：验证录制点击特效播放器的时间轴映射、自动循环高亮、单一动作循环、暂停与减少动态效果时只播放一次。
 57. [toolbar_layout_test.dart](toolbar_layout_test.dart)：验证截图工具栏行布局：收起与展开的分组、子级托盘缩进对准锚点、忙碌状态组的追加条件。
 58. [foreign_terms_test.dart](foreign_terms_test.dart)：验证外文片段提取：两类目标语言的文字划分、相邻单词合并、排除规则，以及每处片段的起止偏移。
+59. [platform_capabilities_test.dart](platform_capabilities_test.dart)：验证按平台能力列出内置服务与卡片服务菜单，以及能力为空时设置窗口隐藏截图、MCP、权限、语言包与录制点击特效入口。

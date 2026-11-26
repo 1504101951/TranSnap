@@ -5,6 +5,7 @@ import '../common/constants/channel_names.dart';
 import '../common/constants/glass_metrics.dart';
 import '../common/constants/method_names.dart';
 import '../common/constants/motion_metrics.dart';
+import '../common/constants/platform_capabilities.dart';
 import '../common/constants/preference_keys.dart';
 import '../common/utils/date_text.dart';
 import '../common/utils/shortcut_tokens.dart';
@@ -29,9 +30,11 @@ enum _HistorySection { history, vocabulary, screenshots }
 class HistoryApp extends StatefulWidget {
   const HistoryApp({
     super.key,
+    required this.capabilities,
     this.channel = const MethodChannel(ChannelNames.settings),
   });
 
+  final Set<PlatformCapability> capabilities;
   final MethodChannel channel;
 
   @override
@@ -123,8 +126,7 @@ class _HistoryAppState extends State<HistoryApp> {
         _screenshotShortcutTokens = shortcutTokens(shotModifiers, shotLabel);
       });
     } on MissingPluginException catch (_) {
-    } on PlatformException catch (_) {
-    }
+    } on PlatformException catch (_) {}
   }
 
   Future<void> _syncWindowTitle(String title) async {
@@ -133,8 +135,7 @@ class _HistoryAppState extends State<HistoryApp> {
         'title': title,
       });
     } on MissingPluginException catch (_) {
-    } on PlatformException catch (_) {
-    }
+    } on PlatformException catch (_) {}
   }
 
   void _selectSection(_HistorySection section) {
@@ -362,21 +363,28 @@ class _HistoryAppState extends State<HistoryApp> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final segments = NativeGlassSegments<_HistorySection>(
-      value: _section,
-      options: const {
-        _HistorySection.history: '翻译历史',
+    final capabilities = widget.capabilities;
+    final options = {
+      _HistorySection.history: '翻译历史',
+      if (capabilities.contains(PlatformCapability.dictionary))
         _HistorySection.vocabulary: '生词本',
+      if (capabilities.contains(PlatformCapability.screenshot))
         _HistorySection.screenshots: '截图历史',
-      },
-      navigation: true,
-      onChanged: _selectSection,
-    );
+    };
     return WindowDragArea(
       channel: widget.channel,
       child: SizedBox(
         height: GlassMetrics.compactTitlebarHeight,
-        child: Center(child: segments),
+        child: options.length > 1
+            ? Center(
+                child: NativeGlassSegments<_HistorySection>(
+                  value: _section,
+                  options: options,
+                  navigation: true,
+                  onChanged: _selectSection,
+                ),
+              )
+            : null,
       ),
     );
   }

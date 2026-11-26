@@ -1,3 +1,5 @@
+import '../common/constants/platform_capabilities.dart';
+
 class ServiceConfig {
   const ServiceConfig({
     required this.id,
@@ -18,6 +20,12 @@ class ServiceConfig {
   static const systemId = 'apple-system';
 
   static const systemName = 'Apple 系统翻译';
+
+  static Map<String, String> builtins(Set<PlatformCapability> capabilities) => {
+    if (capabilities.contains(PlatformCapability.appleTranslation))
+      systemId: systemName,
+    builtinId: builtinName,
+  };
   static const kinds = {
     'baidu': '百度翻译',
     'google': '谷歌翻译',
