@@ -22,6 +22,7 @@ import 'package:motor/motor.dart';
 
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/window_drag_area.dart';
+import '../common/widgets/focus_visibility.dart';
 import '../common/widgets/native_glass.dart';
 
 import 'app_settings.dart';
@@ -2025,7 +2026,8 @@ class _AccentColorSwatchState extends State<_AccentColorSwatch> {
         message: widget.label,
         child: FocusableActionDetector(
           mouseCursor: SystemMouseCursors.click,
-          onShowFocusHighlight: (v) => setState(() => _focused = v),
+          onFocusChange: (v) =>
+              setState(() => _focused = v && FocusVisibility.fromKeyboard),
           actions: {
             ActivateIntent: CallbackAction<ActivateIntent>(
               onInvoke: (_) {
@@ -2136,7 +2138,8 @@ class _StickerThumbnailState extends State<_StickerThumbnail> {
 
   @override
   Widget build(BuildContext context) => Focus(
-    onFocusChange: (value) => setState(() => _focused = value),
+    onFocusChange: (value) =>
+        setState(() => _focused = value && FocusVisibility.fromKeyboard),
     onKeyEvent: (_, event) {
       if (event is KeyDownEvent &&
           widget.onDelete != null &&

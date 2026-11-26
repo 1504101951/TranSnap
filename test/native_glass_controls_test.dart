@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 import 'package:transnap/src/common/constants/appearance_modes.dart';
 import 'package:transnap/src/common/constants/glass_metrics.dart';
+import 'package:transnap/src/common/widgets/focus_visibility.dart';
 import 'package:transnap/src/common/widgets/native_glass.dart';
 
 void main() {
@@ -453,6 +454,7 @@ void main() {
   testWidgets(
     'NativeGlassSurface 穿透包装层识别按钮并提供悬停、0.96 按压微缩与 2pt 焦点环（U-01、#144）',
     (tester) async {
+      FocusVisibility.install();
       const accent = Color(0xFFAF52DE);
       final appearance = const GlassAppearance(
         mode: 'light',
@@ -532,6 +534,83 @@ void main() {
       await press.up();
     },
   );
+
+  testWidgets('鼠标选完下拉菜单后焦点回到按钮但不显示焦点框，按 Tab 切到下一个按钮时显示 2pt 焦点框', (
+    tester,
+  ) async {
+    FocusVisibility.install();
+    const accent = Color(0xFFAF52DE);
+    const appearance = GlassAppearance(
+      mode: 'light',
+      accentLight: accent,
+      accentDark: accent,
+    );
+    BorderSide ring(String key) {
+      final overlay = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byKey(ValueKey(key)),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      return ((overlay.decoration as ShapeDecoration).shape
+              as RoundedSuperellipseBorder)
+          .side;
+    }
+
+    bool focusedIn(String key) {
+      var found = false;
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements((
+        element,
+      ) {
+        found = element.widget.key == ValueKey(key);
+        return !found;
+      });
+      return found;
+    }
+
+    var mode = 'translate';
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: NativeGlassTheme.data(Brightness.light, appearance),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => Row(
+              children: [
+                NativeGlassMenuButton<String>(
+                  key: const ValueKey('first'),
+                  quiet: true,
+                  value: mode,
+                  items: const {'translate': '翻译', 'polish': '润色'},
+                  onChanged: (value) => setState(() => mode = value),
+                ),
+                NativeGlassMenuButton<String>(
+                  key: const ValueKey('second'),
+                  quiet: true,
+                  value: 'zh',
+                  items: const {'zh': '简体中文', 'en': 'English'},
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('润色').last);
+    await tester.pumpAndSettle();
+    expect(mode, 'polish');
+    expect(focusedIn('first'), isTrue);
+    expect(ring('first'), BorderSide.none);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(focusedIn('second'), isTrue);
+    expect(ring('second').width, GlassMetrics.focusRingWidth);
+    expect(ring('second').color, accent);
+  });
 
   testWidgets('菜单空项容错、flat 反馈、长菜单滚动、行内报错与危险确认对话框与横幅（U-04、U-13、U-21、U-26）', (
     tester,

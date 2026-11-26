@@ -19,6 +19,7 @@ import 'package:motor/motor.dart';
 
 import 'app_motion.dart';
 import '../constants/app_colors.dart';
+import 'focus_visibility.dart';
 
 class NativeGlassWindowPage extends StatelessWidget {
   const NativeGlassWindowPage({super.key, required this.child});
@@ -306,7 +307,8 @@ class _NativeGlassButtonFeedbackState extends State<NativeGlassButtonFeedback> {
     final duration = reduced ? Duration.zero : GlassMetrics.transition;
     return Focus(
       canRequestFocus: false,
-      onFocusChange: (value) => setState(() => _focused = value),
+      onFocusChange: (value) =>
+          setState(() => _focused = value && FocusVisibility.fromKeyboard),
       onKeyEvent: (_, event) {
         if (event.logicalKey == LogicalKeyboardKey.space ||
             event.logicalKey == LogicalKeyboardKey.enter) {
@@ -1718,7 +1720,8 @@ class _NativeGlassSwitchState extends State<NativeGlassSwitch> {
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
         enabled: enabled,
-        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        onFocusChange: (focused) =>
+            setState(() => _focused = focused && FocusVisibility.fromKeyboard),
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {

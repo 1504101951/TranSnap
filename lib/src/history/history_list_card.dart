@@ -5,6 +5,7 @@ import '../common/constants/motion_metrics.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
+import '../common/widgets/focus_visibility.dart';
 import '../common/constants/app_colors.dart';
 
 class HistoryGroupCard extends StatelessWidget {
@@ -100,7 +101,9 @@ class _HistoryHoverIconButtonState extends State<HistoryHoverIconButton> {
               onTap: enabled ? widget.onPressed : null,
               onHover: (value) => setState(() => _hovered = value),
               onHighlightChanged: (value) => setState(() => _pressed = value),
-              onFocusChange: (value) => setState(() => _focused = value),
+              onFocusChange: (value) => setState(
+                () => _focused = value && FocusVisibility.fromKeyboard,
+              ),
               borderRadius: BorderRadius.circular(GlassMetrics.menuItemRadius),
               hoverColor: Colors.transparent,
               highlightColor: Colors.transparent,

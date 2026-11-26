@@ -13,3 +13,4 @@
 9. [line_icon.dart](line_icon.dart)：按显示尺寸选用 Lucide 字重，使各尺寸图标的屏幕线宽接近 1.6pt。
 10. [app_tooltip.dart](app_tooltip.dart)：提供统一的悬浮气泡提示组件，支持在浮层窗口中经原生气泡突破窗口边界显示。
 11. [glass_icon_button.dart](glass_icon_button.dart)：提供统一的玻璃图标按钮组件，集成 32pt 命中区、加载进度环与统一悬浮气泡提示。
+12. [focus_visibility.dart](focus_visibility.dart)：记录最近一次操作来自键盘还是鼠标，按钮类控件只在键盘带来焦点时显示焦点框。

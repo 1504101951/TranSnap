@@ -9,6 +9,7 @@ import 'src/capture/capture_app.dart';
 import 'src/common/constants/channel_names.dart';
 import 'src/common/constants/live_region.dart';
 import 'src/common/constants/method_names.dart';
+import 'src/common/widgets/focus_visibility.dart';
 import 'src/history/history_app.dart';
 import 'src/history/history_requests.dart';
 import 'src/history/screenshot_history.dart';
@@ -29,6 +30,7 @@ import 'src/common/constants/text_mode.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FocusVisibility.install();
   final bridge = ChannelPlatformBridge();
   try {
     await _startApplication(bridge);
@@ -274,6 +276,7 @@ Future<void> historyMain() async {
 
 Future<void> _runWindow(Widget app) async {
   WidgetsFlutterBinding.ensureInitialized();
+  FocusVisibility.install();
   runApp(app);
   const startup = MethodChannel(ChannelNames.windowStartup);
   await startup.invokeMethod<void>(MethodNames.windowReady);
