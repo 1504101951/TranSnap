@@ -21,4 +21,4 @@
 15. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 16. [pubspec.lock](pubspec.lock)：锁定Dart与Flutter依赖的具体解析版本。
 17. [pubspec.yaml](pubspec.yaml)：声明Flutter应用版本、运行约束和依赖。
-
+18. [assets/](assets/index.md)：随应用分发的字体与许可证资源。

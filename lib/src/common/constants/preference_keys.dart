@@ -36,6 +36,8 @@ abstract final class PreferenceKeys {
 
   static const glassOpacity = 'glassOpacity';
 
+  static const fontSet = 'fontSet';
+
   static const accentColor = 'accentColor';
 
   static const accentForeground = 'accentForeground';

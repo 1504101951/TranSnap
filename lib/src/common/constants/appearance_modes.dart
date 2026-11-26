@@ -13,6 +13,8 @@ abstract final class AppearanceModes {
 abstract final class AppearanceKeys {
   static const accentLight = 'accentLight';
   static const accentDark = 'accentDark';
+  static const fontsDirectory = 'fontsDirectory';
+  static const fontState = 'fontState';
 }
 
 abstract final class AccentColors {

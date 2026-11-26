@@ -51,6 +51,11 @@ abstract final class MethodNames {
   static const appReady = 'appReady';
 
   static const capabilities = 'capabilities';
+  static const publishFontState = 'publishFontState';
+  static const downloadFontSet = 'downloadFontSet';
+  static const cancelFontDownload = 'cancelFontDownload';
+  static const uninstallFontSet = 'uninstallFontSet';
+  static const selectFontSet = 'selectFontSet';
 
   static const appStartFailed = 'appStartFailed';
 

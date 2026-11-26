@@ -1119,7 +1119,9 @@ class _FitText extends StatelessWidget {
     builder: (context, constraints) {
       final box = constraints.biggest;
       if (box.width <= 1 || box.height <= 1) return const SizedBox.shrink();
-      final style = DefaultTextStyle.of(context).style.merge(_overlayTextStyle);
+      final style = DefaultTextStyle.of(
+        context,
+      ).style.merge(GlassFonts.resolve(context).body).merge(_overlayTextStyle);
       return Center(
         child: CharReveal(
           text: text,

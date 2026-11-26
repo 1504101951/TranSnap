@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../common/widgets/native_glass.dart';
+
 enum DefinitionLineKind { headword, partOfSpeech, sense, example, plain }
 
 class DefinitionLine {
@@ -102,7 +104,7 @@ class DictionaryDefinitionView extends StatelessWidget {
       double line,
       Color color, [
       FontWeight? weight,
-    ]) => TextStyle(
+    ]) => GlassFonts.resolve(context).body.copyWith(
       fontSize: size,
       height: line / size,
       color: color,

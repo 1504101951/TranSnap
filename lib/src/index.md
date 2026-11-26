@@ -12,3 +12,4 @@
 8. [translation/](translation/index.md)：语言方向、翻译数据契约、段落对照及分片流程。
 9. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 10. [capture/](capture/index.md)：统一采集悬浮条、视频结果与全视频GIF导出。
+11. [fonts/](fonts/index.md)：界面字体组合的状态模型、各引擎的字体注册，以及主引擎的字体下载、校验与卸载。

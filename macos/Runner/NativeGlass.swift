@@ -27,6 +27,8 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
 
     static var preview: [String: Any] = [:]
 
+    static var fontState: [String: Any] = [:]
+
     private static var visualPreferences: [String: Any] {
         AppPreferences.current.merging(preview) { _, previewed in previewed }
     }
@@ -46,7 +48,10 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
                 AppConstants.glassOpacityKey: preferences[AppConstants.glassOpacityKey] as? Double ?? 0.8,
                 AppConstants.accentForegroundKey: preferences[AppConstants.accentForegroundKey] as? String ?? "auto",
                 AppConstants.accentLightKey: pair?.light ?? accentARGB(.aqua),
-                AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua)]
+                AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua),
+                AppConstants.fontSetKey: preferences[AppConstants.fontSetKey] as? String ?? AppConstants.fontSetFallback,
+                AppConstants.fontsDirectoryKey: AppConstants.fontsURL.path,
+                AppConstants.fontStateKey: fontState]
     }
 
     static func resolvedAccentNSColor(for appearance: NSAppearance) -> NSColor {

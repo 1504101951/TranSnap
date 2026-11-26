@@ -569,6 +569,10 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
             }
         case AppConstants.capabilitiesMethod:
             result(AppConstants.platformCapabilities)
+        case AppConstants.publishFontStateMethod:
+            NativeGlassFactory.fontState = call.arguments as? [String: Any] ?? [:]
+            NotificationCenter.default.post(name: AppConstants.appearanceChangedNotification, object: nil)
+            result(nil)
         case AppConstants.appReadyMethod:
             if let onReady {
                 onReady()

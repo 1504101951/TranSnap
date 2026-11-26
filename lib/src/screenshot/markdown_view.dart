@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../common/constants/glass_metrics.dart';
+import '../common/widgets/native_glass.dart';
 
 sealed class MarkdownBlock {
   const MarkdownBlock();
@@ -123,7 +124,7 @@ class MarkdownView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final body = TextStyle(
+    final body = GlassFonts.resolve(context).body.copyWith(
       fontSize: GlassMetrics.bodyFont,
       height: GlassMetrics.bodyLine / GlassMetrics.bodyFont,
       color: colors.onSurface,

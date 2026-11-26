@@ -1,4 +1,10 @@
 abstract final class ErrorCodes {
+  static const fontBusy = 'font_busy';
+
+  static const fontChecksum = 'font_checksum';
+
+  static const fontDownload = 'font_download';
+
   static const invalidSettings = 'invalid_settings';
 
   static const ocrEmpty = 'ocr_empty';

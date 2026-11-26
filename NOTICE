@@ -8,3 +8,12 @@ skill by Sebastian Degenaar
 (https://github.com/sdegenaar/liquid_glass_widgets), licensed under the
 MIT License. The original copyright and license text are preserved in
 docs/agents/liquid-glass-source-license.txt.
+
+This product bundles and downloads fonts licensed under the SIL Open Font
+License, Version 1.1: Inter, Noto Sans SC, Noto Serif SC, Geist, Instrument
+Sans, Source Serif 4, IBM Plex Sans, Nunito, Literata, LXGW WenKai, Space
+Grotesk, Smiley Sans and Atkinson Hyperlegible Next. Each font's copyright
+notice and license text are in assets/fonts/licenses/. The files in
+assets/fonts/names/ are subsets of these fonts that contain only the
+characters of the font menu; their font names are removed so that no Reserved
+Font Name is used.

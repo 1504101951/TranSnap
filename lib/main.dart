@@ -28,6 +28,7 @@ import 'src/settings/service_config.dart';
 import 'src/settings/settings_controller.dart';
 import 'src/translation/live_region_session.dart';
 import 'src/translation/provider_selection.dart';
+import 'src/fonts/font_library.dart';
 import 'src/translation/translation_http.dart';
 import 'src/common/constants/text_mode.dart';
 
@@ -111,6 +112,14 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       live.noteSettings(candidate);
     },
   );
+  final fonts = FontLibrary(
+    directory: Directory('$support/Fonts'),
+    publish: bridge.publishFontState,
+    select: (set) =>
+        settings.handle(MethodCall(MethodNames.selectFontSet, set.name)),
+    selected: () => settings.current.fontSet,
+  );
+  unawaited(fonts.start());
   session.assistProviderFor = (mode) =>
       assistProviderForSettings(settings.current, bridge, mode);
   session.serviceProviderFor = (serviceId, mode) => mode == TextMode.translate
@@ -148,6 +157,10 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.testService:
       case MethodNames.checkSystemTranslation:
         return settings.handle(call);
+      case MethodNames.downloadFontSet:
+      case MethodNames.cancelFontDownload:
+      case MethodNames.uninstallFontSet:
+        return fonts.handle(call);
       case MethodNames.historyPage:
       case MethodNames.historyRecording:
       case MethodNames.setHistoryRecording:

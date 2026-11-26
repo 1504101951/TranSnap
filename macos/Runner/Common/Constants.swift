@@ -243,6 +243,11 @@ enum AppConstants {
     static let accentCustomDarkLift = 0.35
     static let accentLightKey = "accentLight"
     static let accentDarkKey = "accentDark"
+    static let fontSetKey = "fontSet"
+    static let fontSetFallback = "neutral"
+    static let fontsDirectoryKey = "fontsDirectory"
+    static let fontStateKey = "fontState"
+    static let publishFontStateMethod = "publishFontState"
     static let hideOverlayMethod = "hideOverlay"
     static let hideOverlayTooltipMethod = "hideOverlayTooltip"
     static let historyEntrypoint = "historyMain"
@@ -374,6 +379,9 @@ enum AppConstants {
     static var applicationSupportURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(applicationSupportFolderName, isDirectory: true)
+    }
+    static var fontsURL: URL {
+        applicationSupportURL.appendingPathComponent("Fonts", isDirectory: true)
     }
     static var stickersURL: URL {
         applicationSupportURL.appendingPathComponent("Stickers", isDirectory: true)

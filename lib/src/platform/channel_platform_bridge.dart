@@ -36,6 +36,10 @@ class ChannelPlatformBridge
       _methods.invokeMethod<void>(MethodNames.historyChanged);
 
   @override
+  Future<void> publishFontState(Map<String, Object> state) =>
+      _methods.invokeMethod<void>(MethodNames.publishFontState, state);
+
+  @override
   Future<void> publishLiveRegion(Map<String, Object?> state) =>
       _methods.invokeMethod<void>(MethodNames.publishLiveRegion, state);
 

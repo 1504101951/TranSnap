@@ -751,11 +751,20 @@ class _TranslationOverlayState extends State<TranslationOverlay> {
     bool lead = false,
   }) {
     final colors = Theme.of(context).colorScheme;
-    final style = TranslationOverlay.textStyleFor(dictionary: dictionary)
-        .copyWith(
-          color: translated || lead
-              ? colors.onSurface
-              : colors.onSurfaceVariant,
+    final session = widget.session;
+    final detected = session.snapshot.detectedLanguage;
+    final language = translated
+        ? session.outputLanguage ??
+              session.activeLanguage.resolve(detected).targetLanguage
+        : detected;
+    final style = GlassFonts.resolve(context)
+        .bodyFor(language)
+        .merge(
+          TranslationOverlay.textStyleFor(dictionary: dictionary).copyWith(
+            color: translated || lead
+                ? colors.onSurface
+                : colors.onSurfaceVariant,
+          ),
         );
 
     return SelectionArea(

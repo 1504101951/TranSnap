@@ -28,3 +28,84 @@ flutter:
   uses-material-design: true
   shaders:
     - shaders/optical_prism.frag
+  assets:
+    - assets/fonts/licenses/
+  fonts:
+    - family: TranSnap Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: TranSnap NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC.ttf
+    - family: TranSnap Name neutral
+      fonts:
+        - asset: assets/fonts/names/neutral.ttf
+    - family: TranSnap Name neutral Title
+      fonts:
+        - asset: assets/fonts/names/neutral-title.ttf
+    - family: TranSnap Name neutral Text
+      fonts:
+        - asset: assets/fonts/names/neutral-text.ttf
+    - family: TranSnap Name geometric
+      fonts:
+        - asset: assets/fonts/names/geometric.ttf
+    - family: TranSnap Name geometric Title
+      fonts:
+        - asset: assets/fonts/names/geometric-title.ttf
+    - family: TranSnap Name geometric Text
+      fonts:
+        - asset: assets/fonts/names/geometric-text.ttf
+    - family: TranSnap Name claude
+      fonts:
+        - asset: assets/fonts/names/claude.ttf
+    - family: TranSnap Name claude Title
+      fonts:
+        - asset: assets/fonts/names/claude-title.ttf
+    - family: TranSnap Name claude Text
+      fonts:
+        - asset: assets/fonts/names/claude-text.ttf
+    - family: TranSnap Name humanist
+      fonts:
+        - asset: assets/fonts/names/humanist.ttf
+    - family: TranSnap Name humanist Title
+      fonts:
+        - asset: assets/fonts/names/humanist-title.ttf
+    - family: TranSnap Name humanist Text
+      fonts:
+        - asset: assets/fonts/names/humanist-text.ttf
+    - family: TranSnap Name rounded
+      fonts:
+        - asset: assets/fonts/names/rounded.ttf
+    - family: TranSnap Name rounded Title
+      fonts:
+        - asset: assets/fonts/names/rounded-title.ttf
+    - family: TranSnap Name rounded Text
+      fonts:
+        - asset: assets/fonts/names/rounded-text.ttf
+    - family: TranSnap Name bookish
+      fonts:
+        - asset: assets/fonts/names/bookish.ttf
+    - family: TranSnap Name bookish Title
+      fonts:
+        - asset: assets/fonts/names/bookish-title.ttf
+    - family: TranSnap Name bookish Text
+      fonts:
+        - asset: assets/fonts/names/bookish-text.ttf
+    - family: TranSnap Name character
+      fonts:
+        - asset: assets/fonts/names/character.ttf
+    - family: TranSnap Name character Title
+      fonts:
+        - asset: assets/fonts/names/character-title.ttf
+    - family: TranSnap Name character Text
+      fonts:
+        - asset: assets/fonts/names/character-text.ttf
+    - family: TranSnap Name legible
+      fonts:
+        - asset: assets/fonts/names/legible.ttf
+    - family: TranSnap Name legible Title
+      fonts:
+        - asset: assets/fonts/names/legible-title.ttf
+    - family: TranSnap Name legible Text
+      fonts:
+        - asset: assets/fonts/names/legible-text.ttf

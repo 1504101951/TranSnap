@@ -104,6 +104,14 @@ class SettingsController {
             }),
             {},
           );
+        case MethodNames.selectFontSet:
+          return _save(
+            AppSettings.fromMap({
+              ..._current.toMap(),
+              PreferenceKeys.fontSet: call.arguments,
+            }),
+            {},
+          );
         case MethodNames.toggleAutomatic:
           return _save(
             AppSettings.fromMap({

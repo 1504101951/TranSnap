@@ -31,3 +31,4 @@
 26. [line_icon_weights.dart](line_icon_weights.dart)：列出用到的 Lucide 图标在各字重下的常量，由 scripts/generate-line-icon-weights.py 生成。
 27. [app_colors.dart](app_colors.dart)：定义跨模块复用的界面颜色：系统色相，以及面板、托盘、卡片、深色文字、错误与警示色。
 28. [platform_capabilities.dart](platform_capabilities.dart)：定义原生启动时上报的平台能力及其解析。
+29. [font_sets.dart](font_sets.dart)：定义界面字体文件（下载地址、字节数、SHA-256）与 8 套字体组合的名称、组成及界面、正文、标题三个角色的字体。

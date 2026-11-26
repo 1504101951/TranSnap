@@ -1,5 +1,6 @@
 import '../screenshot/drawing_preferences.dart';
 import '../common/constants/appearance_modes.dart';
+import '../common/constants/font_sets.dart';
 import '../common/constants/preference_keys.dart';
 import '../common/constants/screenshot_actions.dart';
 import '../common/constants/toolbar_grid.dart';
@@ -36,6 +37,7 @@ class AppSettings {
     this.gifMaximumWidth,
     this.glassAppearance = AppearanceModes.system,
     this.glassOpacity = 0.8,
+    this.fontSet = FontSet.fallback,
     this.accentColor = AccentColors.system,
     this.accentForeground = AccentForegrounds.auto,
     this.launchAtLogin = false,
@@ -101,6 +103,8 @@ class AppSettings {
 
   String glassAppearance;
   double glassOpacity;
+
+  FontSet fontSet;
   String accentColor;
   String accentForeground;
   bool launchAtLogin;
@@ -198,6 +202,7 @@ class AppSettings {
           AppearanceModes.system,
       glassOpacity:
           (map[PreferenceKeys.glassOpacity] as num?)?.toDouble() ?? 0.8,
+      fontSet: FontSet.parse(map[PreferenceKeys.fontSet]),
       accentColor:
           map[PreferenceKeys.accentColor] as String? ?? AccentColors.system,
       accentForeground:
@@ -346,6 +351,7 @@ class AppSettings {
     PreferenceKeys.gifMaximumWidth: ?gifMaximumWidth,
     PreferenceKeys.glassAppearance: glassAppearance,
     PreferenceKeys.glassOpacity: glassOpacity,
+    PreferenceKeys.fontSet: fontSet.name,
     PreferenceKeys.accentColor: accentColor,
     PreferenceKeys.accentForeground: accentForeground,
     PreferenceKeys.launchAtLogin: launchAtLogin,

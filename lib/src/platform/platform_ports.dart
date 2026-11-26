@@ -88,4 +88,6 @@ abstract interface class AppHost {
   void handleApplicationRequests(Future<Object?> Function(MethodCall) handler);
 
   Future<void> notifyHistoryChanged();
+
+  Future<void> publishFontState(Map<String, Object> state);
 }

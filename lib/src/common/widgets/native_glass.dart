@@ -6,6 +6,9 @@ import '../constants/platform_view_types.dart';
 import '../constants/glass_metrics.dart';
 import '../constants/motion_metrics.dart';
 import '../constants/appearance_modes.dart';
+import '../constants/font_sets.dart';
+import '../../fonts/font_registry.dart';
+import '../../fonts/font_state.dart';
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -2187,13 +2190,21 @@ abstract final class NativeGlassTheme {
     final controlShape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
     );
-    final text = TextStyle(
+    final fonts = GlassFonts.of(appearance.fontSet);
+    final text = fonts.ui.copyWith(
       fontSize: GlassMetrics.bodyFont,
       height: GlassMetrics.bodyLine / GlassMetrics.bodyFont,
       color: colors.onSurface,
     );
+    final title = text.copyWith(
+      fontFamily: fonts.title.fontFamily,
+      fontFamilyFallback: fonts.title.fontFamilyFallback,
+    );
     final typography = Typography.material2021(platform: TargetPlatform.macOS);
-    final baseText = dark ? typography.white : typography.black;
+    final baseText = (dark ? typography.white : typography.black).apply(
+      fontFamily: fonts.ui.fontFamily,
+      fontFamilyFallback: fonts.ui.fontFamilyFallback,
+    );
     final content = dark ? const Color(0xF2232323) : const Color(0xF2FFFFFF);
     final focusSide = BorderSide(
       color: accent,
@@ -2211,7 +2222,7 @@ abstract final class NativeGlassTheme {
           height: GlassMetrics.captionLine / GlassMetrics.captionFont,
           fontWeight: FontWeight.w500,
         ),
-        titleMedium: text.copyWith(
+        titleMedium: title.copyWith(
           fontSize: 15,
           height: 22 / 15,
           fontWeight: FontWeight.w600,
@@ -2226,12 +2237,12 @@ abstract final class NativeGlassTheme {
           height: 16 / GlassMetrics.statusFont,
           fontWeight: FontWeight.w600,
         ),
-        titleSmall: text.copyWith(
+        titleSmall: title.copyWith(
           fontSize: 15,
           height: 22 / 15,
           fontWeight: FontWeight.w600,
         ),
-        headlineSmall: text.copyWith(
+        headlineSmall: title.copyWith(
           fontSize: GlassMetrics.pageTitleFont,
           height: 26 / GlassMetrics.pageTitleFont,
           fontWeight: FontWeight.w600,
@@ -2251,6 +2262,7 @@ abstract final class NativeGlassTheme {
       colorScheme: colors,
       extensions: [
         GlassAccent(accent, foreground: appearance.accentForeground),
+        fonts,
       ],
       brightness: brightness,
       scaffoldBackgroundColor: Colors.transparent,
@@ -2488,6 +2500,8 @@ class GlassAppearance {
     this.accentLight = SystemHues.blue,
     this.accentDark = SystemHues.blueDark,
     this.accentForeground = AccentForegrounds.auto,
+    this.fontSet = FontSet.fallback,
+    this.fontsDirectory = '',
   });
   final String mode;
   final double opacity;
@@ -2495,6 +2509,8 @@ class GlassAppearance {
   final Color accentDark;
 
   final String accentForeground;
+  final FontSet fontSet;
+  final String fontsDirectory;
   static final current = ValueNotifier(const GlassAppearance());
   static const channel = MethodChannel(ChannelNames.appearance);
 
@@ -2527,8 +2543,42 @@ class GlassAppearance {
       accentLight: Color(accentLight),
       accentDark: Color(accentDark),
       accentForeground: foreground,
+      fontSet: FontSet.parse(map[PreferenceKeys.fontSet]),
+      fontsDirectory: map[AppearanceKeys.fontsDirectory] as String? ?? '',
     );
   }
+
+  GlassAppearance withFontSet(FontSet value) => GlassAppearance(
+    mode: mode,
+    opacity: opacity,
+    accentLight: accentLight,
+    accentDark: accentDark,
+    accentForeground: accentForeground,
+    fontSet: value,
+    fontsDirectory: fontsDirectory,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is GlassAppearance &&
+      other.mode == mode &&
+      other.opacity == opacity &&
+      other.accentLight == accentLight &&
+      other.accentDark == accentDark &&
+      other.accentForeground == accentForeground &&
+      other.fontSet == fontSet &&
+      other.fontsDirectory == fontsDirectory;
+
+  @override
+  int get hashCode => Object.hash(
+    mode,
+    opacity,
+    accentLight,
+    accentDark,
+    accentForeground,
+    fontSet,
+    fontsDirectory,
+  );
 
   ThemeMode get themeMode => switch (mode) {
     AppearanceModes.light => ThemeMode.light,
@@ -2552,9 +2602,7 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
     super.initState();
     GlassAppearance.channel.setMethodCallHandler((call) async {
       if (call.method == MethodNames.appearanceChanged) {
-        GlassAppearance.current.value = GlassAppearance.fromMap(
-          Map<Object?, Object?>.from(call.arguments as Map),
-        );
+        await _apply(Map<Object?, Object?>.from(call.arguments as Map));
       }
     });
     unawaited(_load());
@@ -2563,9 +2611,22 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
   Future<void> _load() async {
     final value = await GlassAppearance.channel
         .invokeMapMethod<Object?, Object?>(MethodNames.getAppearance);
-    if (mounted && value != null) {
-      GlassAppearance.current.value = GlassAppearance.fromMap(value);
-    }
+    if (mounted && value != null) await _apply(value);
+  }
+
+  Future<void> _apply(Map<Object?, Object?> snapshot) async {
+    final appearance = GlassAppearance.fromMap(snapshot);
+    FontState.current.value = FontState.fromMap(
+      snapshot[AppearanceKeys.fontState] as Map? ?? const {},
+    );
+    final loaded = await FontRegistry.ensure(
+      appearance.fontSet,
+      appearance.fontsDirectory,
+    );
+    if (!mounted) return;
+    GlassAppearance.current.value = loaded
+        ? appearance
+        : appearance.withFontSet(FontSet.fallback);
   }
 
   @override
@@ -2631,4 +2692,56 @@ class GlassAccent extends ThemeExtension<GlassAccent> {
           Color.lerp(color, other.color, t)!,
           foreground: t < 0.5 ? foreground : other.foreground,
         );
+}
+
+class GlassFonts extends ThemeExtension<GlassFonts> {
+  const GlassFonts({required this.ui, required this.body, required this.title});
+
+  final TextStyle ui;
+  final TextStyle body;
+  final TextStyle title;
+
+  static TextStyle _style(FontPair pair) => TextStyle(
+    fontFamily: pair.latin.family,
+    fontFamilyFallback: [pair.cjk.family],
+  );
+
+  factory GlassFonts.of(FontSet set) => GlassFonts(
+    ui: _style(set.ui),
+    body: _style(set.body),
+    title: _style(set.title),
+  );
+
+  static const _systemCjkLanguages = {'ja', 'ko', 'zh-TW', 'zh-HK', 'zh-Hant'};
+
+  TextStyle bodyFor(String? language) {
+    if (language == null ||
+        !_systemCjkLanguages.contains(language) &&
+            !_systemCjkLanguages.contains(language.split('-').first)) {
+      return body;
+    }
+    final code = language.split('-').first;
+    return TextStyle(
+      fontFamily: body.fontFamily,
+      locale: code == 'zh'
+          ? const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
+          : Locale(code),
+    );
+  }
+
+  static GlassFonts resolve(BuildContext context) =>
+      Theme.of(context).extension<GlassFonts>() ??
+      GlassFonts.of(FontSet.fallback);
+
+  @override
+  GlassFonts copyWith({TextStyle? ui, TextStyle? body, TextStyle? title}) =>
+      GlassFonts(
+        ui: ui ?? this.ui,
+        body: body ?? this.body,
+        title: title ?? this.title,
+      );
+
+  @override
+  GlassFonts lerp(GlassFonts? other, double t) =>
+      t < 0.5 || other == null ? this : other;
 }

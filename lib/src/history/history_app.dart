@@ -801,7 +801,9 @@ class _HistoryAppState extends State<HistoryApp> {
               Expanded(
                 child: SelectableText(
                   item.translatedText,
-                  style: TextStyle(
+                  style: GlassFonts.resolve(
+                    context,
+                  ).bodyFor(item.targetLanguage).copyWith(
                     fontSize: 14,
                     height: 20 / 14,
                     color: colors.onSurface,
@@ -826,7 +828,7 @@ class _HistoryAppState extends State<HistoryApp> {
               Expanded(
                 child: SelectableText(
                   item.sourceText,
-                  style: TextStyle(
+                  style: GlassFonts.resolve(context).body.copyWith(
                     fontSize: GlassMetrics.captionFont,
                     height: GlassMetrics.captionLine / GlassMetrics.captionFont,
                     color: colors.onSurfaceVariant,
