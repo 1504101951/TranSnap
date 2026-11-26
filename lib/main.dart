@@ -184,16 +184,14 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
         return null;
       case MethodNames.liveRegionOcr:
         final sample = Map<Object?, Object?>.from(call.arguments as Map);
-        final blocks = <LiveTextBlock>[
-          for (final item in sample['blocks'] as List? ?? const [])
-            if (item is Map) LiveTextBlock.fromMap(item),
-        ];
         await live.onOcr(
           LiveOcrSample(
             generation: sample['generation'] as int,
-            text: sample['text'] as String?,
             failure: sample['failure'] as String?,
-            blocks: blocks,
+            blocks: [
+              for (final item in sample['blocks'] as List? ?? const [])
+                LiveTextBlock.fromMap(item as Map),
+            ],
           ),
         );
         return null;

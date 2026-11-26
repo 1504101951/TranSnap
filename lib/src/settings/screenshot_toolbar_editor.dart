@@ -8,6 +8,7 @@ import '../common/constants/screenshot_actions.dart';
 import '../common/constants/toolbar_grid.dart';
 import '../common/widgets/native_glass.dart';
 import 'screenshot_toolbar_preferences.dart';
+import '../common/constants/app_colors.dart';
 
 class ScreenshotToolbarEditor extends StatefulWidget {
   const ScreenshotToolbarEditor({
@@ -45,9 +46,7 @@ class ScreenshotToolbarEditor extends StatefulWidget {
   static const childRowHeight = 40.0;
 
   static Color conflictColor(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFFFF6961)
-      : const Color(0xFFB3261E);
+      AppColors.error(Theme.of(context).brightness == Brightness.dark);
 
   static const cellFillLight = Color(0xFFFFFFFF);
   static const cellFillDark = Color(0xFF2C2C2E);

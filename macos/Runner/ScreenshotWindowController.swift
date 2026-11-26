@@ -533,7 +533,7 @@ final class ScreenshotWindowController: NSObject, NSWindowDelegate {
                         result(Self.staleCaptureFailure)
                         return
                     }
-                    result(blocks)
+                    result(blocks.map(\.channelValue))
                 } catch {
                     LiveRegionLog.note("screenshot ocr ms=\(Self.milliseconds(since: started)) failed")
                     result(FlutterError(code: AppConstants.ocrFailedError, message: error.localizedDescription, details: nil))

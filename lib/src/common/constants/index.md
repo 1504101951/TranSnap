@@ -29,3 +29,4 @@
 24. [toolbar_grid.dart](toolbar_grid.dart)：定义截图工具栏网格的列组合修饰键位、每列格数、最大列数、默认列与数字行物理键映射。
 25. [motion_metrics.dart](motion_metrics.dart)：定义界面物理弹簧、舒缓链式入场、光学棱镜高光与矢量状态机的规格数值。
 26. [line_icon_weights.dart](line_icon_weights.dart)：列出用到的 Lucide 图标在各字重下的常量，由 scripts/generate-line-icon-weights.py 生成。
+27. [app_colors.dart](app_colors.dart)：定义跨模块复用的界面颜色：系统色相，以及面板、托盘、卡片、深色文字、错误与警示色。

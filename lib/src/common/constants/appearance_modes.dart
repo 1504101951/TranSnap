@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'app_colors.dart';
+
 abstract final class AppearanceModes {
   static const system = 'system';
   static const light = 'light';
@@ -70,7 +72,7 @@ abstract final class AccentForegrounds {
 
   static const colors = <String, Color>{
     white: Color(0xFFFFFFFF),
-    black: Color(0xFF1C1C1E),
+    black: AppColors.ink,
   };
 
   static bool isValid(String value) =>

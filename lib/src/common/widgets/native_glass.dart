@@ -18,6 +18,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:motor/motor.dart';
 
 import 'app_motion.dart';
+import '../constants/app_colors.dart';
 
 class NativeGlassWindowPage extends StatelessWidget {
   const NativeGlassWindowPage({super.key, required this.child});
@@ -949,9 +950,9 @@ class NativeGlassSettingRow extends StatelessWidget {
               caption!,
               style: Theme.of(context).textTheme.bodySmall!.copyWith(
                 color: captionWarning
-                    ? (Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFFFF9F0A)
-                          : const Color(0xFF8A4A00))
+                    ? AppColors.warning(
+                        Theme.of(context).brightness == Brightness.dark,
+                      )
                     : null,
               ),
             ),
@@ -1015,7 +1016,7 @@ class NativeGlassStatus extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final color = granted
         ? Theme.of(context).colorScheme.onSurfaceVariant
-        : (dark ? const Color(0xFFFF9F0A) : const Color(0xFF8A4A00));
+        : AppColors.warning(dark);
     return Semantics(
       container: true,
       label: text,
@@ -1059,7 +1060,7 @@ class NativeGlassGroup extends StatelessWidget {
     final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
     final card = DecoratedBox(
       decoration: ShapeDecoration(
-        color: dark ? const Color(0xFF232326) : Colors.white,
+        color: AppColors.card(dark),
         shape: RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(GlassMetrics.groupRadius),
           side: BorderSide(color: line, width: GlassMetrics.groupBorderWidth),
@@ -1953,8 +1954,8 @@ class NativeGlassBanner extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final accent = NativeGlassTheme.accentOf(context);
     final foreground = isError
-        ? (dark ? const Color(0xFFFF6961) : const Color(0xFFB3261E))
-        : (dark ? const Color(0xFFCCCCCC) : const Color(0xFF1C1C1E));
+        ? AppColors.error(dark)
+        : (dark ? const Color(0xFFCCCCCC) : AppColors.ink);
     final tint = isError ? foreground : accent;
     return Semantics(
       liveRegion: isError,
@@ -2093,10 +2094,9 @@ abstract final class NativeGlassTheme {
     if (contrastRatio(Colors.white, accent) >= 4.5) {
       return (fill: accent, foreground: Colors.white);
     }
-    const darkInk = Color(0xFF1C1C1E);
     if (accent.computeLuminance() >= 0.27 &&
-        contrastRatio(darkInk, accent) >= 4.5) {
-      return (fill: accent, foreground: darkInk);
+        contrastRatio(AppColors.ink, accent) >= 4.5) {
+      return (fill: accent, foreground: AppColors.ink);
     }
     var low = 0.0;
     var high = 1.0;
@@ -2466,7 +2466,7 @@ abstract final class NativeGlassTheme {
         ),
         textStyle: TextStyle(
           fontSize: GlassMetrics.captionFont,
-          color: dark ? const Color(0xFF1C1C1E) : Colors.white,
+          color: dark ? AppColors.ink : Colors.white,
         ),
         padding: const EdgeInsets.symmetric(
           horizontal: GlassMetrics.space8,
@@ -2482,8 +2482,8 @@ class GlassAppearance {
   const GlassAppearance({
     this.mode = AppearanceModes.system,
     this.opacity = 0.8,
-    this.accentLight = const Color(0xFF007AFF),
-    this.accentDark = const Color(0xFF0A84FF),
+    this.accentLight = SystemHues.blue,
+    this.accentDark = SystemHues.blueDark,
     this.accentForeground = AccentForegrounds.auto,
   });
   final String mode;

@@ -11,21 +11,29 @@ import XCTest
 @testable import TranSnap
 
 final class CaptureMediaTests: XCTestCase {
-    func testLiveOcrSlotKeepsOnePendingFrameForTheCurrentGeneration() {
-        var slot = LiveOcrSlot()
-        slot.adopt(1)
-        XCTAssertTrue(slot.offer(generation: 1))
-        XCTAssertFalse(slot.offer(generation: 1))
-        XCTAssertTrue(slot.finish())
-        XCTAssertFalse(slot.finish())
-        XCTAssertTrue(slot.offer(generation: 1))
-        slot.adopt(2)
-        XCTAssertFalse(slot.offer(generation: 1))
-        XCTAssertFalse(slot.offer(generation: 2))
-        XCTAssertTrue(slot.finish())
-        slot.adopt(3)
-        XCTAssertFalse(slot.finish())
-        XCTAssertTrue(slot.offer(generation: 3))
+    func testLiveScreenBlocksMapSlicePixelsToScreenPointsInReadingOrder() {
+        let bounds = NSRect(x: 100, y: 200, width: 400, height: 300)
+        let pixelSize = CGSize(width: 800, height: 600)
+        let found = [
+            ScreenCaptureService.OCRBlock(
+                text: "lower",
+                rect: CGRect(x: 0, y: 400, width: 200, height: 100),
+                segments: [ScreenCaptureService.OCRSegment(start: 1, end: 3, rect: CGRect(x: 40, y: 400, width: 80, height: 100))]
+            ),
+            ScreenCaptureService.OCRBlock(text: "right", rect: CGRect(x: 400, y: 0, width: 200, height: 100)),
+            ScreenCaptureService.OCRBlock(text: "left", rect: CGRect(x: 0, y: 1, width: 200, height: 100)),
+        ]
+        let mapped = LiveRegionCapture.screenBlocks(found, pixelSize: pixelSize, bounds: bounds)
+        XCTAssertEqual(mapped[0].rect, NSRect(x: 100, y: 250, width: 100, height: 50))
+        XCTAssertEqual(mapped[0].segments, [ScreenCaptureService.OCRSegment(start: 1, end: 3, rect: NSRect(x: 120, y: 250, width: 40, height: 50))])
+        XCTAssertEqual(mapped[1].rect, NSRect(x: 300, y: 450, width: 100, height: 50))
+        let ordered = LiveRegionCapture.readingOrder(mapped)
+        XCTAssertEqual(ordered.map(\.text), ["left", "right", "lower"])
+        let wide = LiveRegionCapture.readingOrder([
+            ScreenCaptureService.OCRBlock(text: "second", rect: CGRect(x: 0, y: 100, width: 10, height: 10)),
+            ScreenCaptureService.OCRBlock(text: "first", rect: CGRect(x: 50, y: 300, width: 10, height: 10)),
+        ])
+        XCTAssertEqual(wide.map(\.text), ["first", "second"])
     }
 
     func testScreenshotStorageClassifiesByDateAndKeepsExistingFiles() async throws {

@@ -48,7 +48,7 @@
   - `ScreenshotComposer`：截图历史多图原始像素拼接、拆分与逐像素差异比较。
   - `ScreenshotStorage`：统一管理 `~/Library/Application Support/TranSnap/` 下分类日期目录与防重名写入。
   - `RecordingClickOverlay`：采集期间透明点击穿透层，绘制光学点击波纹与拖动轨迹。
-  - `LiveRegionCapture` & `LiveRegionCoordinator`：实时区域未编码画面追踪与原位译文叠加渲染。
+  - `LiveRegionCapture` & `LiveRegionCoordinator`：实时区域画面采集（画面不变时跳过识别）、段落按阅读顺序回传与原位译文叠加渲染；OCR 结果以 `ScreenCaptureService.OCRBlock` 流转（段落位置及按空白与字符类别切出的分段位置），只在 Flutter 通道出口转为字典。
 - **系统服务**：`SystemTranslationService`（Apple 离线翻译会话与语言包检查）、`SpeechService`（离线 TTS）。
 
 ---

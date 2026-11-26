@@ -12,6 +12,7 @@ import 'line_icon.dart';
 import '../constants/glass_metrics.dart';
 import '../constants/motion_metrics.dart';
 import '../constants/translation_phase.dart';
+import '../constants/app_colors.dart';
 
 abstract final class AppMotion {
   static bool reduced(BuildContext context) =>
@@ -631,7 +632,7 @@ class _TranslationStatusIconState extends State<TranslationStatusIcon>
             spin: reduced ? 0.2 : _spinController.value,
             progress: reduced ? 1.0 : _stateController.value,
             primary: colors.primary,
-            success: const Color(0xFF34C759),
+            success: SystemHues.green,
             error: colors.error,
             muted: colors.onSurfaceVariant,
           ),

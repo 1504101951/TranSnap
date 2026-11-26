@@ -1,40 +1,6 @@
 import AppKit
 import ScreenCaptureKit
 
-struct LiveOcrSlot {
-    private(set) var busy = false
-    private var pending = false
-    private(set) var acceptedGeneration = 0
-    private var pendingGeneration = 0
-
-    mutating func adopt(_ generation: Int) {
-        acceptedGeneration = generation
-        pending = false
-    }
-
-    mutating func offer(generation: Int) -> Bool {
-        guard generation == acceptedGeneration else { return false }
-        if busy {
-            pending = true
-            pendingGeneration = generation
-            return false
-        }
-        busy = true
-        return true
-    }
-
-    mutating func finish() -> Bool {
-        busy = false
-        guard pending, pendingGeneration == acceptedGeneration else {
-            pending = false
-            return false
-        }
-        pending = false
-        busy = true
-        return true
-    }
-}
-
 private struct LiveCaptureSlice: @unchecked Sendable {
     let filter: SCContentFilter
     let config: SCStreamConfiguration
@@ -43,12 +9,12 @@ private struct LiveCaptureSlice: @unchecked Sendable {
 
 @MainActor
 final class LiveRegionCapture {
-    var onRecognized: ((Int, [[String: Any]]?, String?) -> Void)?
+    var onRecognized: ((Int, [ScreenCaptureService.OCRBlock]?, String?) -> Void)?
     var onUnavailable: ((String) -> Void)?
     var onFrame: ((NSRect) -> Void)?
 
     private let background = CGColor(gray: 0, alpha: 1)
-    private var slot = LiveOcrSlot()
+    private var acceptedGeneration = 0
     private var captureTask: Task<Void, Never>?
     private var running = false
     private var targetDisplayID: CGDirectDisplayID?
@@ -64,7 +30,7 @@ final class LiveRegionCapture {
         try DisplayCapture.requireAuthorization()
         captureTask?.cancel()
         captureTask = nil
-        slot.adopt(generation)
+        acceptedGeneration = generation
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         guard let kind = source["kind"] as? String else {
             throw GIFExporter.ExportError(message: "缺少采集方式。")
@@ -77,70 +43,58 @@ final class LiveRegionCapture {
         let slices = built.slices
         captureTask = Task.detached { [weak self] in
             let clock = ContinuousClock()
+            var recognizedFrames: [Data]?
             while !Task.isCancelled {
                 let started = clock.now
                 let nextCapture = started.advanced(by: .milliseconds(AppConstants.liveCaptureMinIntervalMs))
-                var pixels = 0.0
                 do {
-                    var blocks: [[String: Any]] = []
+                    var captured: [(slice: LiveCaptureSlice, image: CGImage)] = []
                     for slice in slices {
                         try Task.checkCancellation()
                         let image = try await SCScreenshotManager.captureImage(
                             contentFilter: slice.filter,
                             configuration: slice.config
                         )
-                        try Task.checkCancellation()
-                        let found = try await ScreenCaptureService.recognizeParagraphs(image: image)
-                        let pixelWidth = Double(image.width)
-                        let pixelHeight = Double(image.height)
-                        guard pixelWidth > 0, pixelHeight > 0 else { continue }
-                        pixels += pixelWidth * pixelHeight
-                        for item in found {
-                            guard let text = item["text"] as? String,
-                                  let x = item["x"] as? Double,
-                                  let y = item["y"] as? Double,
-                                  let width = item["width"] as? Double,
-                                  let height = item["height"] as? Double else { continue }
-                            let rect = NSRect(
-                                x: slice.bounds.minX + x / pixelWidth * slice.bounds.width,
-                                y: slice.bounds.maxY - (y + height) / pixelHeight * slice.bounds.height,
-                                width: width / pixelWidth * slice.bounds.width,
-                                height: height / pixelHeight * slice.bounds.height
+                        guard image.width > 0, image.height > 0 else { continue }
+                        captured.append((slice, image))
+                    }
+                    try Task.checkCancellation()
+                    let frames = captured.compactMap { $0.image.dataProvider?.data as Data? }
+                    let unchanged = frames.count == captured.count && frames == recognizedFrames
+                    if !unchanged {
+                        var blocks: [ScreenCaptureService.OCRBlock] = []
+                        var pixels = 0
+                        for (slice, image) in captured {
+                            try Task.checkCancellation()
+                            let found = try await ScreenCaptureService.recognizeParagraphs(image: image)
+                            pixels += image.width * image.height
+                            blocks += Self.screenBlocks(
+                                found,
+                                pixelSize: CGSize(width: image.width, height: image.height),
+                                bounds: slice.bounds
                             )
-                            blocks.append([
-                                "text": text,
-                                "x": rect.minX,
-                                "y": rect.minY,
-                                "width": rect.width,
-                                "height": rect.height,
-                            ])
                         }
+                        let ordered = Self.readingOrder(blocks)
+                        let elapsed = started.duration(to: clock.now).components
+                        let milliseconds = Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15
+                        LiveRegionLog.note("ocr ms=\(Int(milliseconds)) pixels=\(pixels) paragraphs=\(ordered.count)")
+                        let active = await MainActor.run { [weak self] () -> Bool in
+                            guard let self,
+                                  generation == self.acceptedGeneration,
+                                  self.running else { return false }
+                            self.onRecognized?(generation, ordered, nil)
+                            return true
+                        }
+                        guard active else { break }
+                        recognizedFrames = frames
                     }
-                    blocks.sort { lhs, rhs in
-                        let ly = lhs["y"] as? Double ?? 0
-                        let ry = rhs["y"] as? Double ?? 0
-                        let lh = lhs["height"] as? Double ?? 0
-                        let rh = rhs["height"] as? Double ?? 0
-                        if abs((ly + lh) - (ry + rh)) > 1 { return ly + lh > ry + rh }
-                        return (lhs["x"] as? Double ?? 0) < (rhs["x"] as? Double ?? 0)
-                    }
-                    let elapsed = started.duration(to: clock.now).components
-                    let milliseconds = Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15
-                    LiveRegionLog.note("ocr ms=\(Int(milliseconds)) pixels=\(Int(pixels)) paragraphs=\(blocks.count)")
-                    let active = await MainActor.run { [weak self] () -> Bool in
-                        guard let self,
-                              generation == self.slot.acceptedGeneration,
-                              self.running else { return false }
-                        self.onRecognized?(generation, blocks, nil)
-                        return true
-                    }
-                    guard active else { break }
                 } catch is CancellationError {
                     break
                 } catch {
+                    recognizedFrames = nil
                     let active = await MainActor.run { [weak self] () -> Bool in
                         guard let self,
-                              generation == self.slot.acceptedGeneration,
+                              generation == self.acceptedGeneration,
                               self.running else { return false }
                         self.onRecognized?(generation, nil, error.localizedDescription)
                         return true
@@ -159,8 +113,41 @@ final class LiveRegionCapture {
         }
     }
 
+    nonisolated static func screenBlocks(
+        _ found: [ScreenCaptureService.OCRBlock],
+        pixelSize: CGSize,
+        bounds: NSRect
+    ) -> [ScreenCaptureService.OCRBlock] {
+        let scaleX = bounds.width / pixelSize.width
+        let scaleY = bounds.height / pixelSize.height
+        let screen = { (rect: CGRect) in
+            NSRect(
+                x: bounds.minX + rect.minX * scaleX,
+                y: bounds.maxY - rect.maxY * scaleY,
+                width: rect.width * scaleX,
+                height: rect.height * scaleY
+            )
+        }
+        return found.map { block in
+            ScreenCaptureService.OCRBlock(
+                text: block.text,
+                rect: screen(block.rect),
+                segments: block.segments.map {
+                    ScreenCaptureService.OCRSegment(start: $0.start, end: $0.end, rect: screen($0.rect))
+                }
+            )
+        }
+    }
+
+    nonisolated static func readingOrder(_ blocks: [ScreenCaptureService.OCRBlock]) -> [ScreenCaptureService.OCRBlock] {
+        blocks.sorted { lhs, rhs in
+            if abs(lhs.rect.maxY - rhs.rect.maxY) > 1 { return lhs.rect.maxY > rhs.rect.maxY }
+            return lhs.rect.minX < rhs.rect.minX
+        }
+    }
+
     func pause(generation: Int) async {
-        slot.adopt(generation)
+        acceptedGeneration = generation
         running = false
         captureTask?.cancel()
         captureTask = nil
@@ -172,7 +159,7 @@ final class LiveRegionCapture {
 
     func stop() async {
         running = false
-        slot.adopt(slot.acceptedGeneration + 1)
+        acceptedGeneration += 1
         captureTask?.cancel()
         captureTask = nil
         removeObservers()

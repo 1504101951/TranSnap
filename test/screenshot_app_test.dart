@@ -19,6 +19,7 @@ import 'package:transnap/src/common/utils/geometry.dart';
 import 'package:transnap/src/common/utils/screenshot_filename.dart';
 import 'package:transnap/src/screenshot/edit_document.dart';
 import 'package:transnap/src/screenshot/recognized_text_panel.dart';
+import 'package:transnap/src/screenshot/editor_surface.dart';
 import 'package:transnap/src/screenshot/screenshot_app.dart';
 import 'package:transnap/src/screenshot/sticker_panel.dart';
 import 'package:transnap/src/settings/app_settings.dart';

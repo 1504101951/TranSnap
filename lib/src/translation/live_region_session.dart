@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Rect;
 
 import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../common/constants/live_region.dart';
 import '../common/constants/text_limits.dart';
 import '../settings/app_settings.dart';
+import 'foreign_terms.dart';
 import 'language_direction.dart';
 import 'live_block_cache.dart';
 import 'translation_http.dart';
@@ -55,48 +57,69 @@ final class SystemLiveRegionClock implements LiveRegionClock {
   }
 }
 
+class LiveTextSegment {
+  const LiveTextSegment({
+    required this.start,
+    required this.end,
+    required this.rect,
+  });
+
+  factory LiveTextSegment.fromMap(Map<Object?, Object?> map) => LiveTextSegment(
+    start: map['start'] as int,
+    end: map['end'] as int,
+    rect: Rect.fromLTWH(
+      map['x'] as double,
+      map['y'] as double,
+      map['width'] as double,
+      map['height'] as double,
+    ),
+  );
+
+  final int start;
+  final int end;
+  final Rect rect;
+}
+
 class LiveTextBlock {
   const LiveTextBlock({
     required this.text,
-    this.x,
-    this.y,
-    this.width,
-    this.height,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    this.segments = const [],
   });
 
   factory LiveTextBlock.fromMap(Map<Object?, Object?> map) => LiveTextBlock(
-    text: '${map['text'] ?? ''}',
-    x: (map['x'] as num?)?.toDouble(),
-    y: (map['y'] as num?)?.toDouble(),
-    width: (map['width'] as num?)?.toDouble(),
-    height: (map['height'] as num?)?.toDouble(),
+    text: map['text'] as String,
+    x: map['x'] as double,
+    y: map['y'] as double,
+    width: map['width'] as double,
+    height: map['height'] as double,
+    segments: [
+      for (final item in map['segments'] as List)
+        LiveTextSegment.fromMap(item as Map),
+    ],
   );
 
   final String text;
-  final double? x;
-  final double? y;
-  final double? width;
-  final double? height;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final List<LiveTextSegment> segments;
 
-  bool get placeable =>
-      x != null &&
-      y != null &&
-      width != null &&
-      height != null &&
-      width! > 0 &&
-      height! > 0;
+  bool get placeable => width > 0 && height > 0;
 }
 
 class LiveOcrSample {
   const LiveOcrSample({
     required this.generation,
-    this.text,
     this.failure,
     this.blocks = const [],
   });
 
   final int generation;
-  final String? text;
   final String? failure;
   final List<LiveTextBlock> blocks;
 }
@@ -143,6 +166,8 @@ class _Paragraph {
   var done = false;
 
   var alone = false;
+
+  List<String>? terms;
 }
 
 class _Batch {
@@ -307,10 +332,7 @@ class LiveRegionSession {
       return;
     }
     final blocks = [
-      for (final block
-          in sample.blocks.isEmpty
-              ? [LiveTextBlock(text: sample.text ?? '')]
-              : sample.blocks)
+      for (final block in sample.blocks)
         if (block.text.trim().isNotEmpty) block,
     ];
     if (blocks.isEmpty) {
@@ -333,6 +355,7 @@ class LiveRegionSession {
       }
       paragraph.places.add(block);
     }
+    _attachTerms(next, settings, now);
     _paragraphs = next;
     for (final batch in List<_Batch>.of(_inflight)) {
       if (!batch.texts.any(next.containsKey)) _cancel(batch);
@@ -355,6 +378,57 @@ class LiveRegionSession {
         ..done = true;
     }
     return paragraph;
+  }
+
+  void _attachTerms(
+    Map<String, _Paragraph> paragraphs,
+    AppSettings settings,
+    DateTime now,
+  ) {
+    final target = settings.direction.primaryCode;
+    for (final paragraph in List<_Paragraph>.of(paragraphs.values)) {
+      if (paragraph.places.isEmpty ||
+          !paragraph.done ||
+          paragraph.shown.trim() != paragraph.text.trim()) {
+        continue;
+      }
+      for (final term
+          in paragraph.terms ??= ForeignTerms.of(paragraph.text, target)) {
+        if (paragraphs.containsKey(term)) continue;
+        paragraphs[term] =
+            (_paragraphs[term] ?? _appear(term, now, settings, immediate: true))
+              ..places = [];
+      }
+    }
+  }
+
+  Iterable<Map<String, Object>> _termPlates(
+    _Paragraph paragraph,
+    String target,
+  ) sync* {
+    final spans = ForeignTerms.spans(paragraph.text, target);
+    for (final place in paragraph.places) {
+      for (final span in spans) {
+        final entry = _paragraphs[span.text];
+        final text = entry != null && entry.done ? entry.shown.trim() : '';
+        if (text.isEmpty || text == span.text) continue;
+        final covered = [
+          for (final segment in place.segments)
+            if (segment.start < span.end && segment.end > span.start)
+              segment.rect,
+        ];
+        if (covered.isEmpty) continue;
+        final rect = covered.reduce((a, b) => a.expandToInclude(b));
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        yield {
+          'text': text,
+          'x': rect.left,
+          'y': rect.top,
+          'width': rect.width,
+          'height': rect.height,
+        };
+      }
+    }
   }
 
   void _clearScreen(String notice) {
@@ -601,6 +675,7 @@ class LiveRegionSession {
         ..shown = translation
         ..done = true;
     }
+    _attachTerms(_paragraphs, _latestSettings!, clock.now());
     _measure(batch, 'completed');
     _finish(batch);
   }
@@ -774,17 +849,22 @@ class LiveRegionSession {
   List<Map<String, Object>> _overlayMaps() {
     if (_phase != LiveRegionPhase.running) return const [];
     final maps = <Map<String, Object>>[];
+    final target = _latestSettings!.direction.primaryCode;
     for (final paragraph in _paragraphs.values) {
+      if (paragraph.terms?.isNotEmpty ?? false) {
+        maps.addAll(_termPlates(paragraph, target));
+        continue;
+      }
       final text = paragraph.shown;
       if (text.isEmpty || text.trim() == paragraph.text.trim()) continue;
       for (final place in paragraph.places) {
         if (!place.placeable) continue;
         maps.add({
           'text': text,
-          'x': place.x!,
-          'y': place.y!,
-          'width': place.width!,
-          'height': place.height!,
+          'x': place.x,
+          'y': place.y,
+          'width': place.width,
+          'height': place.height,
         });
       }
     }

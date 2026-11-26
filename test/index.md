@@ -31,7 +31,7 @@ Dart业务逻辑和Flutter界面行为回归测试。
 26. [drawing_style_test.dart](drawing_style_test.dart)：验证马赛克像素、样式隔离、撤销及调色盘与粗细的提交边界，以及调色盘渐变页签、渐变像素与渐变偏好往返。
 27. [capture_app_test.dart](capture_app_test.dart)：验证录制目标与应用图标动态行、录制选项的保存与延时提交、倒计时状态气泡、安全区域布局和选择状态、长截图直启选区、四气泡暂停恢复与立即放弃、长图等比预览和原尺寸导出、视频内容区六个操作的布局、裁剪等待、GIF/APNG导出与按类型取消转换及工具栏外的一秒响应。
 28. [settings_controller_test.dart](settings_controller_test.dart)：验证配置快照隔离、设置提交顺序、真实文件存储失败恢复、过期修订拒绝、录制选项保存与延时校验和Apple系统翻译语言包检查。
-29. [live_region_session_test.dart](live_region_session_test.dart)：验证实时翻译的段落块缓存、批次调度、四类失败（含频率受限退避）、暂停恢复和迟到事件。
+29. [live_region_session_test.dart](live_region_session_test.dart)：验证实时翻译的段落块缓存、批次调度、四类失败（含频率受限退避）、暂停恢复、迟到事件，以及目标语言段落中外文片段的译文盖板定位。
 30. [live_block_cache_test.dart](live_block_cache_test.dart)：验证段落块缓存的预算淘汰、最近使用顺序和失败记录。
 31. [numbered_batch_test.dart](numbered_batch_test.dart)：验证批次编号文本与流式输出按编号归属的边界。
 32. [mcp_settings_page_test.dart](mcp_settings_page_test.dart)：验证设置 MCP 页的侧边栏行、开关自动保存、「允许操控电脑」依赖 MCP 开关的禁用与保存、helper 路径与配置复制、平台状态与按钮可用性、安装失败原文及删除二次确认。
@@ -60,3 +60,5 @@ Dart业务逻辑和Flutter界面行为回归测试。
 54. [line_icon_test.dart](line_icon_test.dart)：验证线性图标按显示尺寸选字重与换用常量图标的结果。
 55. [result_window_test.dart](result_window_test.dart)：验证结果窗口上弹托盘三角按托盘实际宽度对准锚点。
 56. [click_effect_player_test.dart](click_effect_player_test.dart)：验证录制点击特效播放器的时间轴映射、自动循环高亮、单一动作循环、暂停与减少动态效果时只播放一次。
+57. [toolbar_layout_test.dart](toolbar_layout_test.dart)：验证截图工具栏行布局：收起与展开的分组、子级托盘缩进对准锚点、忙碌状态组的追加条件。
+58. [foreign_terms_test.dart](foreign_terms_test.dart)：验证外文片段提取：两类目标语言的文字划分、相邻单词合并、排除规则，以及每处片段的起止偏移。

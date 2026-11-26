@@ -37,6 +37,7 @@ import 'mcp_settings_page.dart';
 import 'service_config.dart';
 import 'screenshot_toolbar_editor.dart';
 import 'service_editor.dart';
+import '../common/constants/app_colors.dart';
 
 enum SettingsPage {
   general,
@@ -1957,12 +1958,12 @@ class _AccentColorSwatch extends StatefulWidget {
   });
 
   static const systemSweep = [
-    Color(0xFF007AFF),
-    Color(0xFFAF52DE),
+    SystemHues.blue,
+    SystemHues.purple,
     Color(0xFFF74F9E),
     Color(0xFFF7821B),
     Color(0xFF28A745),
-    Color(0xFF007AFF),
+    SystemHues.blue,
   ];
 
   final String id;

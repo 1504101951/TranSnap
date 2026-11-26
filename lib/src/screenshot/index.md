@@ -4,7 +4,7 @@
 
 1. [edit_document.dart](edit_document.dart)：维护截图裁剪、标注、编辑历史及统一图片渲染。
 2. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
-3. [screenshot_app.dart](screenshot_app.dart)：实现截图画布、采集工具组、文字编辑和导出操作。
+3. [screenshot_app.dart](screenshot_app.dart)：截图编辑器状态与交互：工具动作、采集工具组、文字编辑、导出操作及工具栏内容。
 4. [screenshot_editor_layout.dart](screenshot_editor_layout.dart)：计算工具栏避让布局并保持截图画布位置与比例。
 
 5. [drawing_style.dart](drawing_style.dart)：定义不可变共享绘制样式与工具能力。
@@ -18,3 +18,6 @@
 12. [box_transform.dart](box_transform.dart)：可拖动矩形的控制点命中与移动、拉伸、比例、旋转变换，裁剪框、文字框与贴纸共用。
 13. [stickers.dart](stickers.dart)：我的贴纸条目（id 与默认大小）及按原图比例计算初始默认大小。
 14. [sticker_panel.dart](sticker_panel.dart)：截图贴纸下拉框（Emoji 与我的贴纸两段）及其按「贴纸」按钮定位的布局，返回选中的表情、贴纸或管理入口。
+15. [editor_surface.dart](editor_surface.dart)：截图画布：选区遮罩、标注与贴纸绘制、手势光标、缩放与工具栏避让定位，以及截图翻译覆盖层。
+16. [toolbar_layout.dart](toolbar_layout.dart)：截图工具栏行布局纯函数：由常用与分组配置、展开状态、子级与属性托盘、附加行计算各行与托盘缩进。
+17. [toolbar_motion.dart](toolbar_motion.dart)：截图工具栏动效与手柄：常用/完整切换的整体滑移、分组分裂与残影合并，拖动手柄悬停，托盘三角。

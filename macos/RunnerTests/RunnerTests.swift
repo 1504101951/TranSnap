@@ -1130,9 +1130,11 @@ class RunnerTests: XCTestCase {
         XCTAssertTrue(recognized.contains("HelloOCR"), recognized)
         let blocks = try await ScreenCaptureService.recognizeBlocks(png: png)
         XCTAssertFalse(blocks.isEmpty)
-        XCTAssertTrue((blocks[0]["text"] as? String)?.contains("HelloOCR") == true, String(describing: blocks))
-        XCTAssertGreaterThan((blocks[0]["width"] as? Double) ?? 0, 0)
-        XCTAssertGreaterThan((blocks[0]["height"] as? Double) ?? 0, 0)
+        XCTAssertTrue(blocks[0].text.contains("HelloOCR"), String(describing: blocks))
+        let channel = blocks[0].channelValue
+        XCTAssertEqual(channel["text"] as? String, blocks[0].text)
+        XCTAssertGreaterThan(try XCTUnwrap(channel["width"] as? Double), 0)
+        XCTAssertGreaterThan(try XCTUnwrap(channel["height"] as? Double), 0)
         let blank = NSImage(size: NSSize(width: 8, height: 8))
         blank.lockFocus()
         NSColor.white.setFill()
@@ -1143,6 +1145,37 @@ class RunnerTests: XCTestCase {
         let blankPng = try XCTUnwrap(blankBitmap.representation(using: .png, properties: [:]))
         let empty = try await ScreenCaptureService.recognizeText(image: ScreenCaptureService.decodeImage(png: blankPng))
         XCTAssertTrue(empty.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    func testOcrSegmentsSplitAtSpacesAndCharacterClasses() {
+        let text = "我去bank，don't 用"
+        let pieces = ScreenCaptureService.segmentRanges(text).map { String(text[$0]) }
+        XCTAssertEqual(pieces, ["我去", "bank", "，", "don", "'", "t", "用"])
+    }
+
+    func testScreenCaptureOcrLocatesEmbeddedWordSegment() async throws {
+        let image = NSImage(size: NSSize(width: 600, height: 80))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath.fill(NSRect(x: 0, y: 0, width: 600, height: 80))
+        ("我们用 cache 机制" as NSString).draw(at: NSPoint(x: 12, y: 22), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 32),
+            .foregroundColor: NSColor.black,
+        ])
+        image.unlockFocus()
+        let tiff = try XCTUnwrap(image.tiffRepresentation)
+        let png = try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+        let blocks = try await ScreenCaptureService.recognizeBlocks(png: png)
+        let block = try XCTUnwrap(blocks.first)
+        let start = try XCTUnwrap(block.text.range(of: "cache"))
+        let offset = block.text.utf16.distance(from: block.text.startIndex, to: start.lowerBound)
+        let word = try XCTUnwrap(block.segments.first { $0.start == offset }, String(describing: block.segments))
+        XCTAssertEqual(word.end, offset + 5)
+        XCTAssertTrue(block.rect.insetBy(dx: -1, dy: -1).contains(word.rect), "\(word.rect) \(block.rect)")
+        XCTAssertLessThan(word.rect.width, block.rect.width / 2)
+        let channel = try XCTUnwrap(block.channelValue["segments"] as? [[String: Any]])
+        XCTAssertEqual(channel.count, block.segments.count)
+        XCTAssertNotNil(channel.first?["width"] as? Double)
     }
 
     private func generatedCode(_ name: String, message: String, scale: CGFloat) throws -> CGImage {

@@ -16,3 +16,4 @@
 12. [glossary.dart](glossary.dart)：定义术语条目，按目标语言与整词规则筛选本次请求命中的术语。
 13. [translation_http.dart](translation_http.dart)：提供翻译请求共用的 HTTP 客户端与连接预热，复用与服务之间的连接。
 14. [glossary_file.dart](glossary_file.dart)：校验并解析 CSV/JSON 术语文件，提供导入预览、顺序合并与导出。
+15. [foreign_terms.dart](foreign_terms.dart)：按目标语言的文字提取段落中夹杂的外文片段（排除网址、版本号、代码式写法与单字），并给出每处片段的 UTF-16 起止偏移，供译文盖板定位。

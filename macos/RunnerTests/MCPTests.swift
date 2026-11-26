@@ -578,7 +578,7 @@ final class MCPTests: XCTestCase {
         ], CGRect(x: 10, y: 200, width: 300, height: 90))]
 
         let blocks = ScreenCaptureService.markdownBlocks(layout)
-        XCTAssertEqual(blocks.map(\.markdown), [
+        XCTAssertEqual(blocks.map(\.text), [
             "# Report",
             "Intro text\nsecond line",
             "- first item\n- second item",
@@ -588,8 +588,8 @@ final class MCPTests: XCTestCase {
 
     func testMarkdownTextWithPositionsAndEmptyResult() {
         let blocks = [
-            ScreenCaptureService.OCRBlock(markdown: "# T", rect: CGRect(x: 100, y: 40, width: 200, height: 20)),
-            ScreenCaptureService.OCRBlock(markdown: "Body", rect: CGRect(x: 100, y: 80, width: 400, height: 60)),
+            ScreenCaptureService.OCRBlock(text: "# T", rect: CGRect(x: 100, y: 40, width: 200, height: 20)),
+            ScreenCaptureService.OCRBlock(text: "Body", rect: CGRect(x: 100, y: 80, width: 400, height: 60)),
         ]
         let size = (width: 1000, height: 500)
         XCTAssertEqual(MCPImageOutput.text(blocks, scaleX: 0.5, scaleY: 0.5, size: size, includePositions: false), "# T\n\nBody")

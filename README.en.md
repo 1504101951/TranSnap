@@ -21,10 +21,10 @@
 
 ### 2. Screen Capture, Editing & Live Translation
 - **Region Capture & Annotation**: Interactive cropping, shapes (rect, oval, arrow, line), pens/highlighter/mosaic, step badges, rich text, color picker, ruler, custom stickers, and gradient beautification. Pin captures to your desktop or run local **Vision OCR** and barcode/QR decoding.
-- **Customizable Shortcut Grid**: Arrange tools into modifier-key rows mapped to keys `1–6` with nested secondary tool trays in **Settings**.
+- **Favorites & Full Toolbar**: Every capture opens a favorites toolbar of up to 6 tools on plain keys `1–6`. Double-click the drag handle or press `Tab` twice to show the full toolbar, where the remaining tools sit in modifier-key groups (`⌘` and `⌥` by default); each tool has exactly one shortcut. Arrange tools, nested trays, and modifier groups in **Settings**.
 - **Screen Recording & Export**: Record regions, windows, or entire apps with countdown timers, trim clips in a unified 52pt result window, and export to **MP4**, **GIF**, **APNG**, or **WebM**.
 - **Scrolling Capture & Image Tools**: Stitch long pages manually or with accessibility auto-scrolling, and stitch, split, or pixel-diff images in Screenshot History.
-- **Live Region Translation**: Continuously OCR and render real-time translated overlays above an active region or window.
+- **Live Region Translation**: Continuously OCR and render real-time translated overlays above an active region or window, skipping recognition while the picture stays the same.
 
 ### 3. Local MCP Server
 - Bundles a verified stdio MCP helper at `/Applications/TranSnap.app/Contents/MacOS/transnap-mcp` with one-click setup for **Claude Code**, **Claude Desktop**, **Codex**, and **Grok** inside **Settings → MCP**.

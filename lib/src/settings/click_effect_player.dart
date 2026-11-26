@@ -9,6 +9,7 @@ import '../common/constants/screenshot_enums.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/line_icon.dart';
 import '../common/widgets/native_glass.dart';
+import '../common/constants/app_colors.dart';
 
 enum ClickDemoAction {
   left('左键单击'),
@@ -27,8 +28,8 @@ abstract final class ClickEffectDemo {
   static const dragStart = 0.3;
   static const dragSeconds = 0.9;
   static const staticFrame = 0.68;
-  static const leftColor = Color(0xFF007AFF);
-  static const rightColor = Color(0xFFFF9500);
+  static const leftColor = SystemHues.blue;
+  static const rightColor = SystemHues.orange;
 
   static ({ClickDemoAction action, double time}) frameAt(
     double timeline,
@@ -482,10 +483,7 @@ class _ClickEffectPainter extends CustomPainter {
         Rect.fromLTWH(w * .26, h * .18, w * .48, h * .64),
         const Radius.circular(8),
       ),
-      Paint()
-        ..color = (dark ? const Color(0xFF232326) : Colors.white).withValues(
-          alpha: 0.9,
-        ),
+      Paint()..color = AppColors.card(dark).withValues(alpha: 0.9),
     );
     final linePaint = Paint()..color = line;
     for (var i = 0; i < 4; i++) {

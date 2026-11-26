@@ -32,7 +32,7 @@ macOS应用生命周期、系统能力与窗口控制器。
 28. [ScrollStitcher.swift](ScrollStitcher.swift)：先用缩略探针跳过静止帧，再识别垂直位移和上下固定带并生成保持原始像素的长图。
 29. [ScreenshotComposer.swift](ScreenshotComposer.swift)：按原始像素拼接、拆分截图历史图片，并逐像素比较两张图生成差异蒙版。
 30. [ApplicationRecorder.swift](ApplicationRecorder.swift)：将所选应用在全部显示器上的可见窗口合成为固定黑底画布并编码视频。
-31. [LiveRegionCapture.swift](LiveRegionCapture.swift)：以未编码画面帧持续识别区域、窗口或全屏文字。
+31. [LiveRegionCapture.swift](LiveRegionCapture.swift)：持续采集区域、窗口或全屏画面并识别文字，画面不变时跳过识别，结果换算为屏幕坐标并按阅读顺序回传。
 32. [LiveRegionCoordinator.swift](LiveRegionCoordinator.swift)：在选区上绘制实时翻译盖层，并连接捕获与主引擎会话。
 33. [MCP/](MCP/index.md)：MCP 截图接口的 JSON-RPC 协议、本地 socket 传输及 App 侧请求处理。
 34. [SystemTranslationService.swift](SystemTranslationService.swift)：按语言对创建无界面系统翻译会话，翻译一组段落、按请求取消并查询语言包状态。

@@ -650,12 +650,9 @@ final class LiveRegionCoordinator {
         }
     }
 
-    private func sendOcr(generation: Int, blocks: [[String: Any]]?, failure: String?) {
+    private func sendOcr(generation: Int, blocks: [ScreenCaptureService.OCRBlock]?, failure: String?) {
         var arguments: [String: Any] = ["generation": generation]
-        if let blocks {
-            arguments["blocks"] = blocks
-            arguments["text"] = blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
-        }
+        if let blocks { arguments["blocks"] = blocks.map(\.channelValue) }
         if let failure { arguments["failure"] = failure }
         bridge.requestApplication(AppConstants.liveRegionOcrMethod, arguments: arguments) { _ in }
     }

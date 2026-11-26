@@ -216,7 +216,7 @@ enum ScreenCaptureService {
     }
 
     static func recognizeText(image: CGImage) async throws -> String {
-        try await recognizeDocument(image: image).map(\.markdown).joined(separator: "\n\n")
+        try await recognizeDocument(image: image).map(\.text).joined(separator: "\n\n")
     }
 
     static func detectCodes(image: CGImage) async throws -> [[String: String]] {
@@ -234,9 +234,71 @@ enum ScreenCaptureService {
         }
     }
 
-    struct OCRBlock: Equatable {
-        let markdown: String
+    struct OCRSegment: Equatable, Sendable {
+        let start: Int
+        let end: Int
         let rect: CGRect
+    }
+
+    struct OCRBlock: Equatable, Sendable {
+        let text: String
+        let rect: CGRect
+        var segments: [OCRSegment] = []
+
+        var channelValue: [String: Any] {
+            [
+                "text": text,
+                "x": Double(rect.minX),
+                "y": Double(rect.minY),
+                "width": Double(rect.width),
+                "height": Double(rect.height),
+                "segments": segments.map { segment in
+                    [
+                        "start": segment.start,
+                        "end": segment.end,
+                        "x": Double(segment.rect.minX),
+                        "y": Double(segment.rect.minY),
+                        "width": Double(segment.rect.width),
+                        "height": Double(segment.rect.height),
+                    ] as [String: Any]
+                },
+            ]
+        }
+    }
+
+    private enum CharacterClass {
+        case cjk
+        case word
+        case mark
+    }
+
+    private static let cjkScalars: [ClosedRange<UInt32>] = [
+        0x3040...0x30FF, 0x3400...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF, 0x20000...0x3134F,
+    ]
+
+    private static func characterClass(_ character: Character) -> CharacterClass? {
+        guard !character.isWhitespace, let scalar = character.unicodeScalars.first?.value else { return nil }
+        if cjkScalars.contains(where: { $0.contains(scalar) }) { return .cjk }
+        return character.isLetter || character.isNumber ? .word : .mark
+    }
+
+    static func segmentRanges(_ text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var start: String.Index?
+        var current: CharacterClass?
+        var index = text.startIndex
+        while index < text.endIndex {
+            let kind = characterClass(text[index])
+            if kind != current, let begin = start {
+                ranges.append(begin..<index)
+                start = nil
+            }
+            if kind != nil, start == nil { start = index }
+            current = kind
+            index = text.index(after: index)
+        }
+        if let begin = start { ranges.append(begin..<text.endIndex) }
+        return ranges
     }
 
     struct OCRLayout {
@@ -279,23 +341,23 @@ enum ScreenCaptureService {
         var blocks: [OCRBlock] = []
         let title = layout.title.map { (text: normalized($0.text), rect: $0.rect) }
         if let title, !title.text.isEmpty {
-            blocks.append(OCRBlock(markdown: "# \(title.text.replacingOccurrences(of: "\n", with: " "))", rect: title.rect))
+            blocks.append(OCRBlock(text: "# \(title.text.replacingOccurrences(of: "\n", with: " "))", rect: title.rect))
         }
         let covered = layout.lists.map(\.rect) + layout.tables.map(\.rect)
         for paragraph in layout.paragraphs {
             let text = normalized(paragraph.text)
             let center = CGPoint(x: paragraph.rect.midX, y: paragraph.rect.midY)
             guard !text.isEmpty, text != title?.text, !covered.contains(where: { $0.contains(center) }) else { continue }
-            blocks.append(OCRBlock(markdown: text, rect: paragraph.rect))
+            blocks.append(OCRBlock(text: text, rect: paragraph.rect))
         }
         for list in layout.lists {
             let items = list.items.map { cellText($0, escapePipes: false) }.filter { !$0.isEmpty }
             guard !items.isEmpty else { continue }
-            blocks.append(OCRBlock(markdown: items.map { "- \($0)" }.joined(separator: "\n"), rect: list.rect))
+            blocks.append(OCRBlock(text: items.map { "- \($0)" }.joined(separator: "\n"), rect: list.rect))
         }
         for table in layout.tables {
             guard let markdown = tableMarkdown(table.cells) else { continue }
-            blocks.append(OCRBlock(markdown: markdown, rect: table.rect))
+            blocks.append(OCRBlock(text: markdown, rect: table.rect))
         }
         return blocks.sorted { ($0.rect.minY, $0.rect.minX) < ($1.rect.minY, $1.rect.minX) }
     }
@@ -324,7 +386,7 @@ enum ScreenCaptureService {
         return escapePipes ? single.replacingOccurrences(of: "|", with: "\\|") : single
     }
 
-    static func recognizeParagraphs(image: CGImage) async throws -> [[String: Any]] {
+    static func recognizeParagraphs(image: CGImage) async throws -> [OCRBlock] {
         let observations = try await paragraphRequest().perform(on: image)
         return paragraphBlocks(
             observations.flatMap { $0.document.paragraphs },
@@ -346,11 +408,22 @@ enum ScreenCaptureService {
         _ paragraphs: [DocumentObservation.Container.Text],
         width: Double,
         height: Double
-    ) -> [[String: Any]] {
+    ) -> [OCRBlock] {
         paragraphs.compactMap { paragraph in
             let text = paragraph.transcript
             guard !text.isEmpty else { return nil }
-            return textBlock(text, box: paragraph.boundingRegion.boundingBox.cgRect, width: width, height: height)
+            return OCRBlock(
+                text: text,
+                rect: pixelRect(paragraph.boundingRegion.boundingBox.cgRect, width: width, height: height),
+                segments: segmentRanges(text).compactMap { range in
+                    guard let region = paragraph.boundingRegion(for: range) else { return nil }
+                    return OCRSegment(
+                        start: text.utf16.distance(from: text.startIndex, to: range.lowerBound),
+                        end: text.utf16.distance(from: text.startIndex, to: range.upperBound),
+                        rect: pixelRect(region.boundingBox.cgRect, width: width, height: height)
+                    )
+                }
+            )
         }
     }
 
@@ -358,18 +431,7 @@ enum ScreenCaptureService {
         CGRect(x: box.minX * width, y: (1 - box.maxY) * height, width: box.width * width, height: box.height * height)
     }
 
-    private static func textBlock(_ text: String, box: CGRect, width: Double, height: Double) -> [String: Any] {
-        let rect = pixelRect(box, width: width, height: height)
-        return [
-            "text": text,
-            "x": Double(rect.minX),
-            "y": Double(rect.minY),
-            "width": Double(rect.width),
-            "height": Double(rect.height),
-        ]
-    }
-
-    static func recognizeBlocks(png: Data) async throws -> [[String: Any]] {
+    static func recognizeBlocks(png: Data) async throws -> [OCRBlock] {
         try await recognizeParagraphs(image: try decodeImage(png: png))
     }
 }

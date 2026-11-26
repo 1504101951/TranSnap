@@ -81,7 +81,14 @@ void main() {
     final translating = request(MethodNames.translateScreenshotBlocks, {
       'id': 'closed-shot',
       'blocks': [
-        {'text': 'Hello', 'x': 0, 'y': 0, 'width': 4, 'height': 2},
+        {
+          'text': 'Hello',
+          'x': 0.0,
+          'y': 0.0,
+          'width': 4.0,
+          'height': 2.0,
+          'segments': [],
+        },
       ],
     });
     await started.future;

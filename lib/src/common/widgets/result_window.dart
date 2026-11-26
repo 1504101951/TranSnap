@@ -8,18 +8,13 @@ import '../constants/motion_metrics.dart';
 import 'app_motion.dart';
 import 'app_tooltip.dart';
 import 'native_glass.dart';
+import '../constants/app_colors.dart';
 
 abstract final class ResultWindowColors {
   static const mediaBorderWidth = 0.5;
 
   static Color canvas(bool dark) =>
       dark ? const Color(0xFF1C1C1E) : const Color(0xFFE9E9EB);
-
-  static Color bar(bool dark) =>
-      dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC);
-
-  static Color tray(bool dark) =>
-      dark ? const Color(0xFF1D1D1F) : const Color(0xFFECECED);
 
   static Color hairline(bool dark) =>
       (dark ? Colors.white : Colors.black).withValues(alpha: 0.12);
@@ -115,7 +110,7 @@ class ResultWindowBar extends StatelessWidget {
       key: const Key('result-window-bar'),
       height: GlassMetrics.resultBarHeight,
       decoration: BoxDecoration(
-        color: ResultWindowColors.bar(dark),
+        color: AppColors.panel(dark),
         border: Border(
           top: BorderSide(color: ResultWindowColors.hairline(dark), width: 0.5),
         ),
@@ -408,7 +403,7 @@ class ResultUpwardTray extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final trayColor = ResultWindowColors.tray(dark);
+    final trayColor = AppColors.tray(dark);
     final hairline = ResultWindowColors.hairline(dark);
     return Stack(
       clipBehavior: Clip.none,

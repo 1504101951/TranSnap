@@ -58,13 +58,13 @@ enum MCPImageOutput {
         size: (width: Int, height: Int), includePositions: Bool
     ) -> String {
         guard !blocks.isEmpty else { return AppConstants.mcpNoTextMessage }
-        guard includePositions else { return blocks.map(\.markdown).joined(separator: "\n\n") }
+        guard includePositions else { return blocks.map(\.text).joined(separator: "\n\n") }
         let positioned = blocks.map { block in
             let x = Int((block.rect.minX * scaleX).rounded())
             let y = Int((block.rect.minY * scaleY).rounded())
             let width = Int((block.rect.width * scaleX).rounded())
             let height = Int((block.rect.height * scaleY).rounded())
-            return "[\(x),\(y),\(width),\(height)]\n\(block.markdown)"
+            return "[\(x),\(y),\(width),\(height)]\n\(block.text)"
         }
         return (["[image \(size.width)×\(size.height)]"] + positioned).joined(separator: "\n\n")
     }

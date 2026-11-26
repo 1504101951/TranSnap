@@ -648,6 +648,69 @@ void main() {
     );
   });
 
+  test('已是目标语言的段落不整段覆盖，只在夹杂的外文片段位置盖译文盖板；多个分段合并为一块，同一片段跨段落只请求一次，可排除与译文同原词的片段不盖（#24）', () async {
+    Future<String?> language(String text) async =>
+        RegExp(r'[㐀-鿿]').hasMatch(text) ? 'zh-Hans' : 'en';
+    LiveTextSegment segment(int start, int end, double y) => LiveTextSegment(
+      start: start,
+      end: end,
+      rect: Rect.fromLTWH(start * 10.0, y, (end - start) * 10.0, 20),
+    );
+    LiveTextBlock block(String text, double y, List<(int, int)> words) =>
+        LiveTextBlock(
+          text: text,
+          x: 0,
+          y: y,
+          width: text.length * 10.0,
+          height: 20,
+          segments: [for (final (start, end) in words) segment(start, end, y)],
+        );
+    final clock = ManualClock();
+    final provider = ScriptedProvider();
+    final session = LiveRegionSession(
+      providerFor: (_) => provider,
+      detectLanguage: language,
+      clock: clock,
+    );
+    session.start(_settings(secondary: null), 1);
+    final frame = LiveOcrSample(
+      generation: 1,
+      blocks: [
+        block('我们用 cache hit 机制', 0, [(0, 3), (4, 9), (10, 13), (14, 16)]),
+        block('缓存叫 cache，经理叫 PM', 20, [
+          (0, 3),
+          (4, 9),
+          (9, 10),
+          (10, 13),
+          (14, 16),
+        ]),
+        block('见 v1.2 和 A 方案', 40, [(0, 1), (2, 6), (7, 8), (9, 10), (11, 13)]),
+      ],
+    );
+    await session.onOcr(frame);
+    expect(provider.requests, isEmpty);
+    clock.elapse(_halfSecond);
+    await _delivered(session);
+    expect(provider.sent, [
+      ['cache hit', 'cache', 'PM'],
+    ]);
+    expect(provider.requests.single.detectedLanguage, 'en');
+    expect(provider.requests.single.targetLanguage, 'zh-CN');
+    expect(session.view.overlays, isEmpty);
+    provider.complete(0, ['缓存命中', '缓存', 'PM']);
+    await _delivered(session);
+    expect(session.view.overlays, [
+      {'text': '缓存命中', 'x': 40.0, 'y': 0.0, 'width': 90.0, 'height': 20.0},
+      {'text': '缓存', 'x': 40.0, 'y': 20.0, 'width': 50.0, 'height': 20.0},
+    ]);
+    expect(session.view.status, '已完成');
+
+    await session.onOcr(frame);
+    clock.elapse(_halfSecond);
+    await _delivered(session);
+    expect(provider.requests, hasLength(1));
+    expect(session.view.overlays, hasLength(2));
+  });
   test('同一段落原文出现在两处时只翻译一次，两处都盖上译文', () async {
     final clock = ManualClock();
     final provider = ScriptedProvider();

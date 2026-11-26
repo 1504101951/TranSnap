@@ -9,10 +9,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -30,7 +28,6 @@ import '../common/widgets/native_glass.dart';
 import '../common/widgets/result_window.dart';
 import '../common/widgets/toolbar_feedback.dart';
 import '../common/widgets/native_brush_cursor.dart';
-import '../common/widgets/native_resize_cursor.dart';
 import 'beautify.dart';
 import 'edit_document.dart';
 import 'drawing_style.dart';
@@ -40,44 +37,13 @@ import 'box_transform.dart';
 import 'sticker_panel.dart';
 import 'stickers.dart';
 import 'recognized_text_panel.dart';
-import 'screenshot_editor_layout.dart';
 import '../settings/screenshot_toolbar_preferences.dart';
 import '../common/constants/toolbar_grid.dart';
 import '../common/constants/screenshot_actions.dart';
-
-MouseCursor cursorForEditHandle(
-  BoxHandle? handle, {
-  required bool plusWhenIdle,
-  required MethodChannel channel,
-}) {
-  switch (handle) {
-    case BoxHandle.n:
-    case BoxHandle.s:
-      return SystemMouseCursors.resizeUpDown;
-    case BoxHandle.e:
-    case BoxHandle.w:
-      return SystemMouseCursors.resizeLeftRight;
-    case BoxHandle.nw:
-    case BoxHandle.se:
-      return NativeResizeCursor(
-        ResizeCursorAxes.northWestSouthEast,
-        channel: channel,
-      );
-    case BoxHandle.ne:
-    case BoxHandle.sw:
-      return NativeResizeCursor(
-        ResizeCursorAxes.northEastSouthWest,
-        channel: channel,
-      );
-    case BoxHandle.move:
-    case BoxHandle.rotate:
-      return SystemMouseCursors.grab;
-    case null:
-      return plusWhenIdle
-          ? SystemMouseCursors.precise
-          : SystemMouseCursors.basic;
-  }
-}
+import '../common/constants/app_colors.dart';
+import 'toolbar_layout.dart';
+import 'toolbar_motion.dart';
+import 'editor_surface.dart';
 
 enum _ExpandedRow { recording, beautify, ratio }
 
@@ -124,28 +90,10 @@ class _ScreenshotAppState extends State<ScreenshotApp>
   bool _recordingClickEffectEnabled = false;
   bool _childrenRevealed = false;
   bool _toolbarExpanded = false;
-  bool _toolbarGridShown = false;
-  bool _toolbarSplitting = false;
-  final _favoritesKey = GlobalKey();
-  late final _toolbarGlide = AnimationController.unbounded(
-    vsync: this,
-    value: 1,
-  );
-  Offset _toolbarShift = Offset.zero;
-  final _gridBlockKeys = <String, GlobalKey>{};
-  List<({_ToolbarCells group, Offset offset, Size size})> _ghosts = const [];
-  Size _ghostTarget = Size.zero;
-  late final _ghostMerge = AnimationController.unbounded(
-    vsync: this,
-    value: 1,
-  );
-
-  Offset get _glideOffset => _toolbarShift * (1 - _toolbarGlide.value);
+  final _toolbarMotion = GlobalKey<ToolbarMotionState>();
   DateTime? _lastToolbarTab;
-  bool _toolbarHandleHovered = false;
   bool _toolbarLifted = false;
 
-  static const _favoritesGroupKey = 'screenshot-favorites-group';
   static const _toolbarTabInterval = Duration(milliseconds: 300);
   Map<Object?, Object?>? _recordingApplication;
   List<Map<Object?, Object?>> _recordingApplications = [];
@@ -177,9 +125,9 @@ class _ScreenshotAppState extends State<ScreenshotApp>
 
   final _buttonKeys = <String, GlobalKey>{};
 
-  ({String parent, String kind, List<String> cells})? _closing;
+  ToolbarTray? _closing;
 
-  ({String parent, String kind, List<String> cells})? _open;
+  ToolbarTray? _open;
 
   String? _lastActiveId;
 
@@ -256,7 +204,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
   }
 
   String? _savedPath;
-  List<_OcrOverlay> _ocrOverlays = [];
+  List<OcrOverlay> _ocrOverlays = [];
 
   Offset _translationOrigin = Offset.zero;
 
@@ -360,214 +308,24 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       if (!_toolbar.hidden.contains(id)) id,
   ];
 
-  static const _busyCell = 'screenshot-busy';
-
-  List<_ToolbarLine> _toolbarLines(
+  List<ToolbarLine> _toolbarLines(
     Map<String, VoidCallback?> actions,
     int perLine,
-  ) {
-    List<_ToolbarLine> pair(List<_ToolbarCells> groups, {String? anchor}) => [
-      for (var start = 0; start < groups.length; start += perLine)
-        (
-          groups: groups.sublist(
-            start,
-            math.min(start + perLine, groups.length),
-          ),
-          strip: null,
-          anchor: anchor,
-          indent: 0.0,
-          caret: null,
-        ),
-    ];
-    List<List<String>> chunk(List<String> ids) => [
-      for (var start = 0; start < ids.length; start += ToolbarGrid.slots)
-        ids.sublist(start, math.min(start + ToolbarGrid.slots, ids.length)),
-    ];
-    final attributes = _attributeIds(actions);
-    final inserted = <_ToolbarCells>[
-      for (final (index, cells) in chunk(_visibleChildren).indexed)
-        (
-          key: 'screenshot-children-group-$index',
-          cells: <String?>[...cells],
-          modifiers: null,
-        ),
-      for (final (index, cells) in chunk(attributes).indexed)
-        (
-          key: 'screenshot-attributes-group-$index',
-          cells: <String?>[...cells],
-          modifiers: null,
-        ),
-    ];
-    final anchor = _group ?? _activeId;
-    final closing = _closing;
-    final groups = <_ToolbarCells>[];
-    int? anchorGroup;
-    int? closingGroup;
-    final sources = [
-      (
-        key: _favoritesGroupKey,
-        cells: <String?>[..._toolbar.favorites],
-        modifiers: 0,
-      ),
-      if (_toolbarGridShown)
-        for (final (index, column) in _toolbar.columns.indexed)
-          (
-            key: 'screenshot-grid-group-$index',
-            cells: [
-              for (final id in column.slots)
-                id == null || _toolbar.hidden.contains(id) ? null : id,
-            ],
-            modifiers: column.modifiers,
-          ),
-    ];
-    for (final source in sources) {
-      if (source.key != _favoritesGroupKey &&
-          source.cells.every((id) => id == null)) {
-        continue;
-      }
-      if (anchorGroup == null && source.cells.contains(anchor)) {
-        anchorGroup = groups.length;
-      }
-      if (closing != null &&
-          closingGroup == null &&
-          source.cells.contains(closing.parent)) {
-        closingGroup = groups.length;
-      }
-      groups.add(source);
-    }
-    final shown = {
-      for (final group in [...groups, ...inserted]) ...group.cells,
-    };
-    final status = [
-      if (actions.containsKey(ScreenshotActions.reveal))
-        ScreenshotActions.reveal,
-      if (_busy && !shown.contains(_busyId)) _busyCell,
-    ];
-    if (status.isNotEmpty) {
-      groups.add((
-        key: 'screenshot-status-group',
-        cells: status,
-        modifiers: null,
-      ));
-    }
-    final lines = pair(groups);
-    final extra = <int, List<_ToolbarLine>>{};
-    final leaving = [
-      for (final id in closing?.cells ?? const <String>[])
-        if (!shown.contains(id)) id,
-    ];
-    if (closing != null && leaving.isNotEmpty) {
-      final at = closingGroup == null
-          ? lines.length
-          : closingGroup ~/ perLine + 1;
-      (extra[at] ??= []).addAll(
-        pair([
-          for (final (index, cells) in chunk(leaving).indexed)
-            (
-              key: 'screenshot-closing-group-$index',
-              cells: <String?>[...cells],
-              modifiers: null,
-            ),
-        ], anchor: closing.parent),
-      );
-    }
-    final after = anchorGroup == null
-        ? lines.length
-        : anchorGroup ~/ perLine + 1;
-    final strips = _strips();
-    (extra[after] ??= []).addAll([
-      ...pair(inserted, anchor: anchor),
-      for (final MapEntry(:key, :value) in strips.entries)
-        (
-          groups: const <_ToolbarCells>[],
-          strip: key,
-          anchor: value.anchor,
-          indent: 0.0,
-          caret: null,
-        ),
-    ]);
-    return _placeTrays([
-      for (var index = 0; index <= lines.length; index++) ...[
-        ...?extra[index],
-        if (index < lines.length) lines[index],
-      ],
-    ], strips);
-  }
+  ) => ToolbarLayout.lines(
+    toolbar: _toolbar,
+    expanded: _toolbarExpanded,
+    children: _visibleChildren,
+    attributes: _attributeIds(actions),
+    anchor: _group ?? _activeId,
+    closing: _closing,
+    reveal: actions.containsKey(ScreenshotActions.reveal),
+    busy: _busy,
+    busyId: _busyId,
+    strips: _strips(),
+    perLine: perLine,
+  );
 
-  static List<_ToolbarLine> _placeTrays(
-    List<_ToolbarLine> lines,
-    Map<String, _Strip> strips,
-  ) {
-    final centers = <String, double>{};
-    void record(_ToolbarLine line) {
-      if (line.strip != null) {
-        const step = ToolbarGrid.trayButton + 4;
-        for (final MapEntry(:key, :value)
-            in strips[line.strip]!.hosts.entries) {
-          centers[key] =
-              line.indent +
-              ToolbarGrid.trayPadding +
-              value * step +
-              ToolbarGrid.trayButton / 2;
-        }
-        return;
-      }
-      final tray = _isTray(line);
-      var start = tray ? line.indent + ToolbarGrid.trayPadding : 0.0;
-      for (final group in line.groups) {
-        final step = tray ? ToolbarGrid.trayButton + 4 : 36.0;
-        final head = tray ? 0.0 : ToolbarGrid.blockPadding + _hintRun(group);
-        for (final (slot, id) in group.cells.indexed) {
-          if (id == null) continue;
-          centers[id] = start + head + slot * step + step / 2 - 2;
-        }
-        start += tray
-            ? _trayRun(group.cells.length) +
-                  ToolbarGrid.traySeparatorGap * 2 +
-                  1
-            : _blockLength(group) + ToolbarGrid.blockGap;
-      }
-    }
-
-    _ToolbarLine hang(_ToolbarLine line, double limit) {
-      const first = ToolbarGrid.trayPadding + ToolbarGrid.trayButton / 2;
-      final center = centers[line.anchor];
-      final bare = _lineLength(line, strips);
-      final indent = center == null
-          ? 0.0
-          : math.min(
-              math.max(0.0, center - first),
-              math.max(0.0, limit - bare),
-            );
-      return (
-        groups: line.groups,
-        strip: line.strip,
-        anchor: line.anchor,
-        indent: indent,
-        caret: center == null ? first : center - indent,
-      );
-    }
-
-    final placed = <_ToolbarLine>[];
-    for (final line in lines) {
-      final next = _isTray(line) ? hang(line, double.infinity) : line;
-      if (next.strip == null) record(next);
-      placed.add(next);
-    }
-    final widest = [
-      0.0,
-      for (final line in placed)
-        if (line.strip == null) _lineLength(line, strips),
-    ].reduce(math.max);
-    for (final (index, line) in placed.indexed) {
-      if (line.strip == null) continue;
-      placed[index] = hang(line, widest);
-      record(placed[index]);
-    }
-    return placed;
-  }
-
-  Map<String, _Strip> _strips() {
+  Map<String, ToolbarStrip> _strips() {
     const step = ToolbarGrid.trayButton + 4;
     return {
       if (_beautifyExpanded)
@@ -602,70 +360,8 @@ class _ScreenshotAppState extends State<ScreenshotApp>
     };
   }
 
-  static double _cellsLength(int count) =>
-      count * 32.0 + math.max(0, count - 1) * 4;
-
-  static double _trayRun(int count) =>
-      count * ToolbarGrid.trayButton + math.max(0, count - 1) * 4;
-
-  static double _hintRun(_ToolbarCells group) =>
-      group.modifiers == null ? 0 : ToolbarGrid.hintExtent + 4;
-
-  static double _blockLength(_ToolbarCells group) =>
-      ToolbarGrid.blockPadding * 2 +
-      _hintRun(group) +
-      _cellsLength(group.cells.length);
-
-  static bool _isTray(_ToolbarLine line) =>
-      line.groups.isNotEmpty &&
-      line.groups.first.modifiers == null &&
-      line.groups.first.key != 'screenshot-status-group';
-
-  static double _lineLength(_ToolbarLine line, Map<String, _Strip> strips) {
-    if (line.strip != null) {
-      return line.indent +
-          ToolbarGrid.trayPadding * 2 +
-          _trayRun(strips[line.strip]!.count);
-    }
-    if (_isTray(line)) {
-      return line.indent +
-          ToolbarGrid.trayPadding * 2 +
-          line.groups.fold(
-            0.0,
-            (sum, group) => sum + _trayRun(group.cells.length),
-          ) +
-          (line.groups.length - 1) * (ToolbarGrid.traySeparatorGap * 2 + 1);
-    }
-    return line.groups.fold(0.0, (sum, group) => sum + _blockLength(group)) +
-        (line.groups.length - 1) * ToolbarGrid.blockGap;
-  }
-
-  static double _lineThickness(_ToolbarLine line) =>
-      line.strip != null || _isTray(line)
-      ? ToolbarGrid.trayThickness
-      : ToolbarGrid.blockThickness;
-
-  ({List<double> lengths, double grouped, double blocks, double thickness})
-  _lineLengths(Map<String, VoidCallback?> actions, int perLine) {
-    final strips = _strips();
-    final lines = _toolbarLines(actions, perLine);
-    return (
-      lengths: [for (final line in lines) _lineLength(line, strips)],
-      grouped: [
-        0.0,
-        for (final line in lines)
-          if (line.strip == null) _lineLength(line, strips),
-      ].reduce(math.max),
-      blocks: [
-        0.0,
-        for (final line in lines)
-          if (line.strip == null && !_isTray(line)) _lineLength(line, strips),
-      ].reduce(math.max),
-      thickness:
-          lines.fold(0.0, (sum, line) => sum + _lineThickness(line)) +
-          math.max(0, lines.length - 1) * ToolbarGrid.lineGap,
-    );
-  }
+  ToolbarExtent _lineLengths(Map<String, VoidCallback?> actions, int perLine) =>
+      ToolbarLayout.extent(_toolbarLines(actions, perLine), _strips());
 
   bool _onModifierKey(KeyEvent event) {
     final held = ToolbarModifiers.pressed() & ~ToolbarModifiers.shift;
@@ -706,7 +402,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
         setState(() {
           _ocrOverlays = [
             for (final item in map['overlays'] as List)
-              _OcrOverlay.fromMap(item as Map, _translationOrigin),
+              OcrOverlay.fromMap(item as Map, _translationOrigin),
           ];
           _setFeedback(
             status.isEmpty ? null : status,
@@ -810,14 +506,9 @@ class _ScreenshotAppState extends State<ScreenshotApp>
     _expandedRow = null;
     _childrenRevealed = false;
     _toolbarExpanded = false;
-    _toolbarGridShown = false;
-    _toolbarShift = Offset.zero;
-    _toolbarGlide.value = 1;
-    _ghosts = const [];
-    _ghostMerge.value = 1;
+    _toolbarMotion.currentState?.reset();
     _lastToolbarTab = null;
     _liveTranslation = false;
-    _toolbarHandleHovered = false;
     _toolbarLifted = false;
     _beautify = null;
     _cropRatio = null;
@@ -2617,8 +2308,6 @@ class _ScreenshotAppState extends State<ScreenshotApp>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onModifierKey);
-    _toolbarGlide.dispose();
-    _ghostMerge.dispose();
     _feedbackTimer?.cancel();
     _picker.dispose();
     _toolbarRect.dispose();
@@ -2727,7 +2416,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
                   children: [
                     Expanded(
                       child: ResultWindowCanvas(
-                        child: _EditorSurface(
+                        child: EditorSurface(
                           key: ValueKey(_capture['id']),
                           openedImage: true,
                           imageScale:
@@ -2813,7 +2502,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
                   ],
                 )
               else if (hasImage)
-                _EditorSurface(
+                EditorSurface(
                   key: ValueKey(_capture['id']),
                   imageScale: (_capture['imageScale'] as num?)?.toDouble(),
                   channel: widget.channel,
@@ -3137,78 +2826,13 @@ class _ScreenshotAppState extends State<ScreenshotApp>
   void _toggleToolbarExpanded() =>
       _setToolbarExpanded(!_toolbarExpanded);
 
-  Offset? _favoritesPosition() {
-    final box = _favoritesKey.currentContext?.findRenderObject();
-    return box is RenderBox && box.hasSize
-        ? box.localToGlobal(Offset.zero)
-        : null;
-  }
-
   void _setToolbarExpanded(bool expand) {
     if (expand == _toolbarExpanded) return;
-    final reduced = MediaQuery.disableAnimationsOf(context);
-    final before = _favoritesPosition();
-    final ghosts = expand || reduced || before == null
-        ? const <({_ToolbarCells group, Offset offset, Size size})>[]
-        : _departingGhosts(before);
-    final favorites = _favoritesKey.currentContext?.size ?? Size.zero;
-    _ghostMerge.stop();
-    setState(() {
-      _toolbarExpanded = expand;
-      _toolbarGridShown = expand;
-      _toolbarSplitting = expand;
-      _ghosts = ghosts;
-      _ghostTarget = favorites;
-    });
-    if (expand) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _toolbarSplitting = false,
-      );
-    } else if (ghosts.isNotEmpty) {
-      _ghostMerge.value = 0;
-      _ghostMerge
-          .animateWith(SpringSimulation(AppMotion.settleSpring, 0, 1, 0))
-          .then((_) {
-            if (mounted) setState(() => _ghosts = const []);
-          });
-    }
-    _glideFavoritesFrom(before);
-  }
-
-  List<({_ToolbarCells group, Offset offset, Size size})> _departingGhosts(
-    Offset favorites,
-  ) => [
-    for (final (index, column) in _toolbar.columns.indexed)
-      if (_gridBlockKeys['screenshot-grid-group-$index']?.currentContext
-          ?.findRenderObject()
-          case final RenderBox box when box.attached && box.hasSize)
-        (
-          group: (
-            key: 'screenshot-grid-group-$index',
-            cells: [
-              for (final id in column.slots)
-                id == null || _toolbar.hidden.contains(id) ? null : id,
-            ],
-            modifiers: column.modifiers,
-          ),
-          offset: box.localToGlobal(Offset.zero) - favorites,
-          size: box.size,
-        ),
-  ];
-
-  void _glideFavoritesFrom(Offset? before) {
-    if (before == null || MediaQuery.disableAnimationsOf(context)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final after = _favoritesPosition();
-      if (!mounted || after == null) return;
-      final shift = before - (after - _glideOffset);
-      if (shift.distance < 0.5) return;
-      _toolbarShift = shift;
-      _toolbarGlide.value = 0;
-      _toolbarGlide
-          .animateWith(SpringSimulation(AppMotion.bouncySpring, 0, 1, 0))
-          .then((_) => _toolbarGlide.value = 1);
-    });
+    _toolbarMotion.currentState?.prepare(
+      expand: expand,
+      grid: ToolbarLayout.grid(_toolbar),
+    );
+    setState(() => _toolbarExpanded = expand);
   }
 
   bool _runToolbarSlot(int modifiers, int digit) {
@@ -3744,8 +3368,8 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       );
     }
 
-    final blockColor = dark ? const Color(0xFF2A2A2D) : const Color(0xFFFBFBFC);
-    final trayColor = dark ? const Color(0xFF1D1D1F) : const Color(0xFFECECED);
+    final blockColor = AppColors.panel(dark);
+    final trayColor = AppColors.tray(dark);
 
     ShapeDecoration panel(Color color, double radius, double lift) =>
         ShapeDecoration(
@@ -3800,9 +3424,9 @@ class _ScreenshotAppState extends State<ScreenshotApp>
     );
 
     Widget groupOf(
-      _ToolbarCells group, {
+      ToolbarCells group, {
       bool compact = false,
-      bool ghost = false,
+      ToolbarMotionState? motion,
     }) {
       final size = compact ? ToolbarGrid.trayButton : 32.0;
       final raised =
@@ -3811,9 +3435,9 @@ class _ScreenshotAppState extends State<ScreenshotApp>
         for (final (slot, id) in group.cells.indexed)
           if (id == null)
             SizedBox(width: size, height: size)
-          else if (id == _busyCell)
+          else if (id == ToolbarLayout.busyCell)
             BusyRing(
-              key: const Key(_busyCell),
+              key: const Key(ToolbarLayout.busyCell),
               active: true,
               color: NativeGlassTheme.accentOf(context),
               child: SizedBox(width: size, height: size),
@@ -3826,9 +3450,11 @@ class _ScreenshotAppState extends State<ScreenshotApp>
               digit: group.modifiers == null ? null : slot + 1,
             ),
       ];
-      final isClosing = group.key.startsWith('screenshot-closing-group-');
-      final isChildren = group.key.startsWith('screenshot-children-group-');
-      final isAttributes = group.key.startsWith('screenshot-attributes-group-');
+      final isClosing = group.key.startsWith(ToolbarLayout.closingPrefix);
+      final isChildren = group.key.startsWith(ToolbarLayout.childrenPrefix);
+      final isAttributes = group.key.startsWith(
+        ToolbarLayout.attributesPrefix,
+      );
       final parent = isClosing
           ? _closing?.parent
           : isChildren
@@ -3920,64 +3546,26 @@ class _ScreenshotAppState extends State<ScreenshotApp>
                 ),
               ),
       );
-      final handleActive = _toolbarHandleHovered || _toolbarLifted;
       final hintControl = !dragHandlePlaced
-          ? AppTooltip(
-              message: _toolbarExpanded
+          ? ToolbarDragHandle(
+              key: ValueKey('toolbar-drag-handle-${_capture['id']}'),
+              tooltip: _toolbarExpanded
                   ? '拖动移动工具栏，双击图标或连按两次 Tab 收起为常用工具栏'
                   : '拖动移动工具栏，双击图标或连按两次 Tab 展开完整工具栏',
-              child: MouseRegion(
-                cursor: _toolbarLifted
-                    ? SystemMouseCursors.grabbing
-                    : SystemMouseCursors.grab,
-                onEnter: (_) => setState(() => _toolbarHandleHovered = true),
-                onExit: (_) => setState(() => _toolbarHandleHovered = false),
-                child: GestureDetector(
-                  key: const Key('toolbar-drag-handle'),
-                  behavior: HitTestBehavior.opaque,
-                  dragStartBehavior: DragStartBehavior.down,
-                  onPanStart: (_) => setState(() => _toolbarLifted = true),
-                  onPanUpdate: (details) => onToolbarDrag(details.delta),
-                  onPanEnd: (_) => setState(() => _toolbarLifted = false),
-                  onPanCancel: () => setState(() => _toolbarLifted = false),
-                  onDoubleTap: _toggleToolbarExpanded,
-                  child: AnimatedContainer(
-                    duration: liftDuration,
-                    decoration: ShapeDecoration(
-                      color: handleActive
-                          ? colors.onSurface.withValues(alpha: 0.06)
-                          : Colors.transparent,
-                      shape: RoundedSuperellipseBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: AppMotion.iconSwitcher(
-                      context,
-                      handleActive
-                          ? SizedBox(
-                              key: const Key('toolbar-drag-grip'),
-                              width: axis == Axis.horizontal
-                                  ? ToolbarGrid.hintExtent
-                                  : 32,
-                              height: axis == Axis.horizontal
-                                  ? 32
-                                  : ToolbarGrid.hintExtent,
-                              child: Center(
-                                child: LineIcon(
-                                  LucideIcons.gripVertical,
-                                  size: 14,
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : KeyedSubtree(
-                              key: const ValueKey('toolbar-drag-hint'),
-                              child: hint,
-                            ),
-                    ),
-                  ),
-                ),
+              lifted: _toolbarLifted,
+              extent: axis == Axis.horizontal
+                  ? const Size(ToolbarGrid.hintExtent, 32)
+                  : const Size(32, ToolbarGrid.hintExtent),
+              duration: liftDuration,
+              hint: hint,
+              grip: LineIcon(
+                LucideIcons.gripVertical,
+                size: 14,
+                color: colors.onSurfaceVariant,
               ),
+              onLift: (lifted) => setState(() => _toolbarLifted = lifted),
+              onDrag: onToolbarDrag,
+              onDoubleTap: _toggleToolbarExpanded,
             )
           : hint;
       dragHandlePlaced = true;
@@ -3993,20 +3581,11 @@ class _ScreenshotAppState extends State<ScreenshotApp>
           ),
         ),
       );
-      if (ghost) return framed;
-      if (group.key == _favoritesGroupKey) {
-        return KeyedSubtree(key: _favoritesKey, child: framed);
+      if (motion == null) return framed;
+      if (group.key == ToolbarLayout.favoritesKey) {
+        return motion.favorites(framed);
       }
-      return LiquidBlockSplit(
-        key: ValueKey('split-${group.key}'),
-        origin: _favoritesKey,
-        order: int.tryParse(group.key.split('-').last) ?? 0,
-        entering: _toolbarSplitting,
-        child: KeyedSubtree(
-          key: _gridBlockKeys.putIfAbsent(group.key, GlobalKey.new),
-          child: framed,
-        ),
-      );
+      return motion.gridBlock(group.key, framed);
     }
 
     Widget captureButton(
@@ -4306,7 +3885,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       ),
     );
 
-    Widget tray(_ToolbarLine row) {
+    Widget tray(ToolbarLine row) {
       final strip = row.strip != null;
       final children = <Widget>[];
       for (final (index, group) in row.groups.indexed) {
@@ -4341,7 +3920,7 @@ class _ScreenshotAppState extends State<ScreenshotApp>
                   ToolbarGrid.trayCaretHeight,
                   ToolbarGrid.trayCaretWidth,
                 ),
-          painter: _TrayCaretPainter(color: trayColor, axis: axis),
+          painter: ToolbarTrayCaret(color: trayColor, axis: axis),
         ),
       );
       return Flex(
@@ -4359,1204 +3938,40 @@ class _ScreenshotAppState extends State<ScreenshotApp>
       );
     }
 
-    final toolbar = Flex(
-      key: const Key('screenshot-toolbar'),
-      direction: cross,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: ToolbarGrid.lineGap,
-      children: [
-        for (final row in _toolbarLines(actions, perLine))
-          SizedBox(
-            width: axis == Axis.vertical ? _lineThickness(row) : null,
-            height: axis == Axis.horizontal ? _lineThickness(row) : null,
-            child: row.strip != null || _isTray(row)
-                ? tray(row)
-                : Flex(
-                    direction: axis,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: ToolbarGrid.blockGap,
-                    children: [for (final group in row.groups) groupOf(group)],
-                  ),
-          ),
-      ],
-    );
-    final ghosts = [
-      for (final ghost in _ghosts)
-        (ghost: ghost, child: groupOf(ghost.group, ghost: true)),
-    ];
-    return AnimatedBuilder(
-      animation: _toolbarGlide,
-      builder: (context, child) =>
-          Transform.translate(offset: _glideOffset, child: child),
-      child: ghosts.isEmpty
-          ? toolbar
-          : Stack(
-              clipBehavior: Clip.none,
-              children: [
-                toolbar,
-                for (final (:ghost, :child) in ghosts)
-                  AnimatedBuilder(
-                    animation: _ghostMerge,
-                    child: IgnorePointer(child: ExcludeSemantics(child: child)),
-                    builder: (context, child) {
-                      final t = _ghostMerge.value;
-                      final target = Offset(
-                        (_ghostTarget.width - ghost.size.width) / 2,
-                        0,
-                      );
-                      final at = Offset.lerp(ghost.offset, target, t)!;
-                      final blur =
-                          MotionMetrics.blockSplitBlur * t.clamp(0.0, 1.0);
-                      return Positioned(
-                        key: ValueKey('ghost-${ghost.group.key}'),
-                        left: at.dx,
-                        top: at.dy,
-                        child: Opacity(
-                          opacity: (1 - t).clamp(0.0, 1.0),
-                          child: Transform(
-                            alignment: Alignment.topCenter,
-                            transform: Matrix4.diagonal3Values(
-                              1 +
-                                  (_ghostTarget.width / ghost.size.width - 1) *
-                                      t.clamp(0.0, 1.0),
-                              1,
-                              1,
-                            ),
-                            child: ImageFiltered(
-                              enabled: blur > 0.01,
-                              imageFilter: ui.ImageFilter.blur(
-                                sigmaX: blur,
-                                sigmaY: blur,
-                              ),
-                              child: child,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-    );
-  }
-}
-
-class _EditorSurface extends StatefulWidget {
-  const _EditorSurface({
-    super.key,
-    this.openedImage = false,
-    this.imageScale,
-    required this.channel,
-    required this.document,
-    required this.tool,
-    required this.dragStart,
-    required this.dragCurrent,
-    required this.previewAnnotation,
-    this.previewCrop,
-    this.recordingWindows,
-    this.recordingPreview = false,
-    required this.pixelRatio,
-    required this.brushCursor,
-    required this.busy,
-    required this.textInputOpen,
-    required this.textController,
-    required this.textFocus,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
-    required this.onTextTap,
-    required this.onCropTap,
-    required this.onStepTap,
-    required this.ruler,
-    required this.picker,
-    required this.pickerColor,
-    required this.onPickerHover,
-    required this.onPickerTap,
-    required this.cropSelected,
-    required this.activeHandle,
-    required this.onDoubleTap,
-    required this.onDoubleTapDown,
-    required this.toolbarBuilder,
-    this.toolbarSafeArea,
-    this.displaySize,
-    required this.lines,
-    this.beautify,
-    required this.toolbarRect,
-    required this.ocrOverlays,
-    this.selectedText,
-    this.sourceImage,
-    this.selectedShape,
-  });
-
-  final bool openedImage;
-  final double? imageScale;
-  final Rect? toolbarSafeArea;
-  final Size? displaySize;
-
-  final ({
-    List<double> lengths,
-    double grouped,
-    double blocks,
-    double thickness,
-  })
-  Function(int perLine)
-  lines;
-
-  final BeautifyStyle? beautify;
-  final ValueNotifier<Rect> toolbarRect;
-  final MethodChannel channel;
-  final EditDocument document;
-  final ScreenshotTool tool;
-  final Offset? dragStart;
-  final Offset? dragCurrent;
-  final EditAnnotation? previewAnnotation;
-  final Rect? previewCrop;
-
-  final List<Rect>? recordingWindows;
-  final bool recordingPreview;
-  final double pixelRatio;
-
-  final MouseCursor brushCursor;
-  final bool busy;
-  final bool textInputOpen;
-  final TextEditingController textController;
-  final FocusNode textFocus;
-  final EditAnnotation? selectedText;
-  final ui.Image? sourceImage;
-  final EditAnnotation? selectedShape;
-  final ValueChanged<Offset> onDragStart;
-  final ValueChanged<Offset> onDragUpdate;
-  final VoidCallback onDragEnd;
-  final ValueChanged<Offset> onTextTap;
-  final ValueChanged<Offset> onCropTap;
-
-  final ValueChanged<Offset> onStepTap;
-
-  final ({Offset start, Offset end})? ruler;
-  final ValueListenable<Offset?> picker;
-  final Color? Function(Offset point) pickerColor;
-
-  final ValueChanged<Offset?> onPickerHover;
-  final ValueChanged<Offset> onPickerTap;
-  final bool cropSelected;
-  final BoxHandle? activeHandle;
-  final VoidCallback onDoubleTap;
-  final ValueChanged<Offset> onDoubleTapDown;
-
-  final Widget Function(
-    BuildContext context,
-    Axis axis,
-    int perLine,
-    ValueChanged<Offset> onToolbarDrag,
-  )
-  toolbarBuilder;
-  final List<_OcrOverlay> ocrOverlays;
-
-  @override
-  State<_EditorSurface> createState() => _EditorSurfaceState();
-}
-
-class _EditorSurfaceState extends State<_EditorSurface> {
-  final _vertical = ScrollController();
-  final _horizontal = ScrollController();
-  Offset _toolbarDragOffset = Offset.zero;
-  Rect? _lastCropRect;
-
-  void _onToolbarDrag(Offset delta, Rect baseRect, Rect safeBounds) {
-    final next = baseRect.shift(_toolbarDragOffset + delta);
-    final maxLeft = math.max(safeBounds.left, safeBounds.right - next.width);
-    final maxTop = math.max(safeBounds.top, safeBounds.bottom - next.height);
-    final clampedLeft = next.left.clamp(safeBounds.left, maxLeft).toDouble();
-    final clampedTop = next.top.clamp(safeBounds.top, maxTop).toDouble();
-    setState(() {
-      _toolbarDragOffset = Offset(
-        clampedLeft - baseRect.left,
-        clampedTop - baseRect.top,
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _vertical.dispose();
-    _horizontal.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_vertical, _horizontal]),
-      builder: (context, _) => LayoutBuilder(
-        builder: (context, constraints) {
-          final cropRect = widget.document.cropRect;
-          if (_lastCropRect != cropRect) {
-            _lastCropRect = cropRect;
-            _toolbarDragOffset = Offset.zero;
-          }
-          final safeBounds =
-              widget.toolbarSafeArea == null || widget.displaySize == null
-              ? (Offset.zero & constraints.biggest)
-              : Rect.fromLTRB(
-                  widget.toolbarSafeArea!.left *
-                      constraints.maxWidth /
-                      widget.displaySize!.width,
-                  widget.toolbarSafeArea!.top *
-                      constraints.maxHeight /
-                      widget.displaySize!.height,
-                  widget.toolbarSafeArea!.right *
-                      constraints.maxWidth /
-                      widget.displaySize!.width,
-                  widget.toolbarSafeArea!.bottom *
-                      constraints.maxHeight /
-                      widget.displaySize!.height,
-                );
-          final imageSize = widget.document.imageSize;
-          final imageScale = widget.imageScale;
-          final resultSize = imageScale == null ? null : imageSize / imageScale;
-          final canvasPad = widget.openedImage
-              ? GlassMetrics.resultCanvasPadding
-              : 0.0;
-          final paddedWidth = resultSize == null
-              ? 0.0
-              : resultSize.width + canvasPad * 2;
-          final paddedHeight = resultSize == null
-              ? 0.0
-              : resultSize.height + canvasPad * 2;
-          final hOffset = _horizontal.hasClients ? _horizontal.offset : 0.0;
-          final vOffset = _vertical.hasClients ? _vertical.offset : 0.0;
-          final resultRect = resultSize == null
-              ? null
-              : Rect.fromLTWH(
-                  paddedWidth <= constraints.maxWidth
-                      ? (constraints.maxWidth - resultSize.width) / 2
-                      : canvasPad - hOffset,
-                  widget.openedImage
-                      ? (paddedHeight <= constraints.maxHeight
-                            ? (constraints.maxHeight - resultSize.height) / 2
-                            : canvasPad - vOffset)
-                      : -vOffset,
-                  resultSize.width,
-                  resultSize.height,
-                );
-          ScreenshotEditorLayout placeFor(
-            ({
-              List<double> lengths,
-              double grouped,
-              double blocks,
-              double thickness,
-            })
-            lines,
-          ) => ScreenshotEditorLayout.place(
-            viewport: constraints.biggest,
-            imageRect: resultRect,
-            available:
-                widget.toolbarSafeArea == null || widget.displaySize == null
-                ? null
-                : Rect.fromLTRB(
-                    widget.toolbarSafeArea!.left *
-                        constraints.maxWidth /
-                        widget.displaySize!.width,
-                    widget.toolbarSafeArea!.top *
-                        constraints.maxHeight /
-                        widget.displaySize!.height,
-                    widget.toolbarSafeArea!.right *
-                        constraints.maxWidth /
-                        widget.displaySize!.width,
-                    widget.toolbarSafeArea!.bottom *
-                        constraints.maxHeight /
-                        widget.displaySize!.height,
-                  ),
-            image: imageSize,
-            crop: widget.document.cropRect,
-            toolbarLength: [...lines.lengths, 32.0].reduce(math.max),
-            centerLength: lines.blocks,
-            thickness: math.max(lines.thickness, ToolbarGrid.blockThickness),
-          );
-          var perLine = ToolbarGrid.groupsPerLine;
-          var lines = widget.lines(perLine);
-          var layout = placeFor(lines);
-          final length = layout.axis == Axis.horizontal
-              ? layout.toolbar.width
-              : layout.toolbar.height;
-          if (length < lines.grouped) {
-            perLine = 1;
-            lines = widget.lines(perLine);
-            layout = placeFor(lines);
-          }
-          final shiftedToolbar = layout.toolbar.shift(_toolbarDragOffset);
-          final maxToolbarLeft = math.max(
-            safeBounds.left,
-            safeBounds.right - shiftedToolbar.width,
-          );
-          final maxToolbarTop = math.max(
-            safeBounds.top,
-            safeBounds.bottom - shiftedToolbar.height,
-          );
-          final toolbarRect = Rect.fromLTWH(
-            shiftedToolbar.left.clamp(safeBounds.left, maxToolbarLeft).toDouble(),
-            shiftedToolbar.top.clamp(safeBounds.top, maxToolbarTop).toDouble(),
-            shiftedToolbar.width,
-            shiftedToolbar.height,
-          );
-          if (widget.toolbarRect.value != toolbarRect) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && widget.toolbarRect.value != toolbarRect) {
-                widget.toolbarRect.value = toolbarRect;
-              }
-            });
-          }
-          final fitted = layout.canvas;
-          Rect cropDisplay = mapRectToFitted(
-            widget.previewCrop ?? widget.document.cropRect,
-            imageSize,
-            fitted,
-          );
-          if (widget.previewCrop == null &&
-              widget.tool == ScreenshotTool.crop &&
-              widget.dragStart != null &&
-              widget.dragCurrent != null) {
-            cropDisplay = mapRectToFitted(
-              Rect.fromPoints(widget.dragStart!, widget.dragCurrent!),
-              imageSize,
-              fitted,
-            );
-          }
-          Offset toImage(Offset local) {
-            final x = (local.dx / fitted.width) * imageSize.width;
-            final y = (local.dy / fitted.height) * imageSize.height;
-            return Offset(
-              x.clamp(0, imageSize.width),
-              y.clamp(0, imageSize.height),
-            );
-          }
-
-          final singleTapTool = const {
-            ScreenshotTool.text,
-            ScreenshotTool.step,
-            ScreenshotTool.eyedropper,
-            ScreenshotTool.ruler,
-          }.contains(widget.tool);
-          final canvasContent = MouseRegion(
-            opaque: false,
-            onHover: widget.tool == ScreenshotTool.eyedropper
-                ? (event) => widget.onPickerHover(toImage(event.localPosition))
-                : null,
-            onExit: (_) => widget.onPickerHover(null),
-            child: GestureDetector(
-              key: const Key('screenshot-canvas'),
-              dragStartBehavior: DragStartBehavior.down,
-              behavior: HitTestBehavior.opaque,
-              onDoubleTapDown:
-                  widget.textInputOpen || widget.busy || singleTapTool
-                  ? null
-                  : (details) =>
-                        widget.onDoubleTapDown(toImage(details.localPosition)),
-              onDoubleTap: widget.textInputOpen || widget.busy || singleTapTool
-                  ? null
-                  : widget.onDoubleTap,
-              onPanStart: widget.busy
-                  ? null
-                  : (details) =>
-                        widget.onDragStart(toImage(details.localPosition)),
-              onPanUpdate: widget.busy || widget.textInputOpen
-                  ? null
-                  : (details) =>
-                        widget.onDragUpdate(toImage(details.localPosition)),
-              onPanEnd: widget.busy || widget.textInputOpen
-                  ? null
-                  : (_) => widget.onDragEnd(),
-              onTapUp: !widget.busy
-                  ? (details) {
-                      final point = toImage(details.localPosition);
-                      if (widget.textInputOpen) {
-                        widget.onTextTap(point);
-                      } else if (widget.tool == ScreenshotTool.crop) {
-                        widget.onCropTap(point);
-                      } else if (widget.tool == ScreenshotTool.text ||
-                          widget.tool == ScreenshotTool.cursor) {
-                        widget.onTextTap(point);
-                      } else if (widget.tool == ScreenshotTool.step) {
-                        widget.onStepTap(point);
-                      } else if (widget.tool == ScreenshotTool.eyedropper) {
-                        widget.onPickerTap(point);
-                      }
-                    }
-                  : null,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  RawImage(
-                    image: widget.document.source,
-                    fit: BoxFit.fill,
-                    filterQuality: FilterQuality.none,
-                    isAntiAlias: false,
-                  ),
-                  RepaintBoundary(
-                    child: CustomPaint(
-                      painter: _OverlayPainter(
-                        sourceImage: widget.sourceImage,
-                        stickers: widget.document.stickerImages,
-                        pixelRatio: widget.pixelRatio,
-                        selectedShape: widget.selectedShape,
-                        annotations: widget.document.annotations,
-                        previewAnnotation: widget.previewAnnotation,
-                        imageSize: imageSize,
-                        accent: NativeGlassTheme.accentOf(context),
+    return ToolbarMotion(
+      key: _toolbarMotion,
+      ghostBuilder: groupOf,
+      builder: (context, motion) {
+        dragHandlePlaced = false;
+        return Flex(
+          key: const Key('screenshot-toolbar'),
+          direction: cross,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: ToolbarGrid.lineGap,
+          children: [
+            for (final row in _toolbarLines(actions, perLine))
+              SizedBox(
+                width: axis == Axis.vertical
+                    ? ToolbarLayout.lineThickness(row)
+                    : null,
+                height: axis == Axis.horizontal
+                    ? ToolbarLayout.lineThickness(row)
+                    : null,
+                child: row.strip != null || ToolbarLayout.isTray(row)
+                    ? tray(row)
+                    : Flex(
+                        direction: axis,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: ToolbarGrid.blockGap,
+                        children: [
+                          for (final group in row.groups)
+                            groupOf(group, motion: motion),
+                        ],
                       ),
-                    ),
-                  ),
-                  ValueListenableBuilder<Offset?>(
-                    valueListenable: widget.picker,
-                    builder: (context, picker, _) =>
-                        widget.ruler == null && picker == null
-                        ? const SizedBox.shrink()
-                        : MeasureLayer(
-                            imageSize: imageSize,
-                            ruler: widget.ruler,
-                            picker: picker,
-                            pickerColor: picker == null
-                                ? null
-                                : widget.pickerColor(picker),
-                          ),
-                  ),
-                  ...[
-                    for (final overlay in widget.ocrOverlays)
-                      Positioned.fromRect(
-                        key: ValueKey(overlay.rect),
-                        rect: mapRectToFitted(
-                          overlay.rect,
-                          imageSize,
-                          Offset.zero & fitted.size,
-                        ).intersect(Offset.zero & fitted.size),
-                        child: IgnorePointer(
-                          child: ColoredBox(
-                            color: const Color(0xCCFFFFFF),
-                            child: _FitText(overlay.text),
-                          ),
-                        ),
-                      ),
-                  ],
-                ],
               ),
-            ),
-          );
-
-          return _CornerCursor(
-            cursorFor: (local) {
-              if (widget.textInputOpen) return SystemMouseCursors.text;
-              if (widget.activeHandle != null) {
-                return cursorForEditHandle(
-                  widget.activeHandle,
-                  plusWhenIdle: false,
-                  channel: widget.channel,
-                );
-              }
-              final point = toImage(local - fitted.topLeft);
-              final pad = GlassMetrics.cropHandleHitRadius * widget.pixelRatio;
-              if (widget.tool == ScreenshotTool.cursor ||
-                  widget.tool == ScreenshotTool.text) {
-                final box =
-                    (widget.previewAnnotation ?? widget.selectedText)?.bounds;
-                final handle = box == null
-                    ? null
-                    : hitBoxHandle(
-                        BoxFrame(box),
-                        point,
-                        pad: pad,
-                        edgePad:
-                            GlassMetrics.cropEdgeHitRadius * widget.pixelRatio,
-                      )?.widthOnly;
-                if (handle != null && handle != BoxHandle.move) {
-                  return cursorForEditHandle(
-                    handle,
-                    plusWhenIdle: false,
-                    channel: widget.channel,
-                  );
-                }
-                for (final annotation in widget.document.annotations.reversed) {
-                  if (annotation.kind == AnnotationKind.text &&
-                      annotation.bounds.inflate(4).contains(point)) {
-                    return cursorForEditHandle(
-                      hitBoxHandle(
-                            BoxFrame(annotation.bounds),
-                            point,
-                            pad: pad,
-                            edgePad:
-                                GlassMetrics.cropEdgeHitRadius *
-                                widget.pixelRatio,
-                          )?.widthOnly ??
-                          BoxHandle.move,
-                      plusWhenIdle: false,
-                      channel: widget.channel,
-                    );
-                  }
-                }
-                if (widget.tool == ScreenshotTool.text) {
-                  return SystemMouseCursors.basic;
-                }
-              }
-              if (widget.tool == ScreenshotTool.crop ||
-                  widget.tool == ScreenshotTool.cursor) {
-                if (widget.tool == ScreenshotTool.crop &&
-                    !widget.cropSelected) {
-                  return SystemMouseCursors.precise;
-                }
-                final handle = hitBoxHandle(
-                  BoxFrame(widget.previewCrop ?? widget.document.cropRect),
-                  point,
-                  pad: pad,
-                  edgePad: GlassMetrics.cropEdgeHitRadius * widget.pixelRatio,
-                );
-                if (handle != null) {
-                  return cursorForEditHandle(
-                    handle,
-                    plusWhenIdle: false,
-                    channel: widget.channel,
-                  );
-                }
-                return widget.tool == ScreenshotTool.crop
-                    ? SystemMouseCursors.precise
-                    : SystemMouseCursors.basic;
-              }
-              if (widget.tool == ScreenshotTool.brush) {
-                return widget.brushCursor;
-              }
-              if (widget.tool == ScreenshotTool.eyedropper ||
-                  widget.tool == ScreenshotTool.ruler) {
-                return SystemMouseCursors.precise;
-              }
-              return SystemMouseCursors.basic;
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (resultSize == null)
-                  Positioned.fromRect(rect: fitted, child: canvasContent)
-                else
-                  Positioned.fill(
-                    child: Scrollbar(
-                      controller: _vertical,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _vertical,
-                        child: SingleChildScrollView(
-                          controller: _horizontal,
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: math.max(
-                              constraints.maxWidth,
-                              paddedWidth,
-                            ),
-                            height: math.max(
-                              constraints.maxHeight,
-                              paddedHeight,
-                            ),
-                            child: Align(
-                              alignment: widget.openedImage
-                                  ? Alignment.center
-                                  : Alignment.topCenter,
-                              child: Padding(
-                                padding: EdgeInsets.all(canvasPad),
-                                child: widget.openedImage
-                                    ? ResultMediaFrame(
-                                        child: SizedBox(
-                                          width: resultSize.width,
-                                          height: resultSize.height,
-                                          child: canvasContent,
-                                        ),
-                                      )
-                                    : SizedBox(
-                                        width: resultSize.width,
-                                        height: resultSize.height,
-                                        child: canvasContent,
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (!widget.openedImage)
-                  IgnorePointer(
-                    child: CustomPaint(
-                      size: constraints.biggest,
-                      painter: _DimPainter(
-                        accent: NativeGlassTheme.accentOf(context),
-                        recordingPreview: widget.recordingPreview,
-                        cropDisplay: cropDisplay,
-                        beautify: widget.beautify,
-                        beautifyUnit:
-                            fitted.width / (imageSize.width / widget.pixelRatio),
-                        showHandles: widget.cropSelected,
-                        windows: widget.recordingWindows
-                            ?.map(
-                              (rect) => mapRectToFitted(rect, imageSize, fitted),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  ),
-                if (!widget.openedImage &&
-                    (widget.tool == ScreenshotTool.crop ||
-                        widget.tool == ScreenshotTool.cursor) &&
-                    widget.recordingWindows == null &&
-                    !widget.textInputOpen)
-                  Positioned(
-                    left:
-                        cropDisplay.left +
-                        (cropDisplay.top -
-                                    CropMetrics.labelGap -
-                                    CropMetrics.labelHeight <
-                                fitted.top
-                            ? CropMetrics.labelGap
-                            : 0),
-                    top:
-                        cropDisplay.top -
-                                CropMetrics.labelGap -
-                                CropMetrics.labelHeight <
-                            fitted.top
-                        ? cropDisplay.top + CropMetrics.labelGap
-                        : cropDisplay.top -
-                              CropMetrics.labelGap -
-                              CropMetrics.labelHeight,
-                    child: IgnorePointer(
-                      child: Container(
-                        key: const Key('crop-size-label'),
-                        height: CropMetrics.labelHeight,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: CropMetrics.labelPadding,
-                        ),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: CropMetrics.labelBackground,
-                          borderRadius: BorderRadius.circular(
-                            CropMetrics.labelRadius,
-                          ),
-                        ),
-                        child: Text(
-                          '${(widget.previewCrop ?? widget.document.cropRect).width.round()} × '
-                          '${(widget.previewCrop ?? widget.document.cropRect).height.round()}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: CropMetrics.labelFontSize,
-                            fontFeatures: [ui.FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (widget.textInputOpen)
-                  Positioned.fromRect(
-                    rect: mapRectToFitted(
-                      (widget.previewAnnotation ?? widget.selectedText)
-                              ?.bounds ??
-                          Rect.fromLTWH(
-                            widget.dragStart?.dx ?? 0,
-                            widget.dragStart?.dy ?? 0,
-                            ScreenshotDefaults.textBoxWidth * widget.pixelRatio,
-                            0,
-                          ),
-                      imageSize,
-                      fitted,
-                    ),
-                    child: GestureDetector(
-                      onDoubleTap: () {},
-                      child: Material(
-                        color: Colors.transparent,
-                        child: NativeGlassSurface(
-                          material: true,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface
-                                  .withValues(alpha: 0.72),
-                              borderRadius: BorderRadius.circular(
-                                GlassMetrics.space4,
-                              ),
-                            ),
-                            child: TextField(
-                              key: const Key('screenshot-text-field'),
-                              controller: widget.textController,
-                              focusNode: widget.textFocus,
-                              autofocus: true,
-                              maxLines: null,
-                              textInputAction: TextInputAction.newline,
-                              style: TextStyle(
-                                color:
-                                    (widget.previewAnnotation ??
-                                            widget.selectedText)
-                                        ?.color ??
-                                    ScreenshotDefaults.strokeColor,
-                                fontSize:
-                                    ((widget.previewAnnotation ??
-                                                widget.selectedText)
-                                            ?.fontSize ??
-                                        ScreenshotDefaults.fontSize) *
-                                    fitted.width /
-                                    imageSize.width,
-                              ),
-                              cursorColor: NativeGlassTheme.accentOf(context),
-                              decoration: InputDecoration.collapsed(
-                                hintText: '输入文字',
-                                hintStyle: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (!widget.openedImage && lines.lengths.isNotEmpty)
-                  Positioned.fromRect(
-                    rect: toolbarRect,
-                    child: Visibility(
-                      visible: widget.dragStart == null || widget.textInputOpen,
-                      maintainState: true,
-                      maintainAnimation: true,
-                      child: widget.toolbarBuilder(
-                        context,
-                        layout.axis,
-                        perLine,
-                        (delta) =>
-                            _onToolbarDrag(delta, layout.toolbar, safeBounds),
-                      ),
-                    ),
-                  ),
-                if (widget.selectedText != null ||
-                    (widget.previewAnnotation?.kind == AnnotationKind.text))
-                  IgnorePointer(
-                    child: CustomPaint(
-                      size: constraints.biggest,
-                      painter: _TextBoxPainter(
-                        accent: NativeGlassTheme.accentOf(context),
-                        box: mapRectToFitted(
-                          (widget.previewAnnotation ?? widget.selectedText)!
-                              .bounds,
-                          imageSize,
-                          fitted,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CornerCursor extends StatefulWidget {
-  const _CornerCursor({required this.cursorFor, required this.child});
-
-  final MouseCursor Function(Offset local) cursorFor;
-  final Widget child;
-
-  @override
-  State<_CornerCursor> createState() => _CornerCursorState();
-}
-
-class _CornerCursorState extends State<_CornerCursor> {
-  MouseCursor _cursor = SystemMouseCursors.basic;
-  Offset? _position;
-
-  @override
-  void didUpdateWidget(covariant _CornerCursor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_position != null) _cursor = widget.cursorFor(_position!);
-  }
-
-  void _update(Offset position) {
-    _position = position;
-    final next = widget.cursorFor(position);
-    if (next != _cursor) setState(() => _cursor = next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      opaque: false,
-      cursor: _cursor,
-      onEnter: (event) => _update(event.localPosition),
-      onHover: (event) => _update(event.localPosition),
-      onExit: (_) {
-        _position = null;
-        if (_cursor != SystemMouseCursors.basic) {
-          setState(() => _cursor = SystemMouseCursors.basic);
-        }
-      },
-      child: Listener(
-        onPointerMove: (event) => _update(event.localPosition),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class _TextBoxPainter extends CustomPainter {
-  _TextBoxPainter({required this.box, required this.accent});
-
-  final Rect box;
-  final Color accent;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    _DimPainter(
-      cropDisplay: box,
-      showHandles: true,
-      accent: accent,
-    ).paintHandles(canvas);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TextBoxPainter oldDelegate) =>
-      oldDelegate.box != box || oldDelegate.accent != accent;
-}
-
-class _DimPainter extends CustomPainter {
-  _DimPainter({
-    required this.cropDisplay,
-    required this.showHandles,
-    required this.accent,
-    this.windows,
-    this.recordingPreview = false,
-    this.beautify,
-    this.beautifyUnit = 1,
-  });
-
-  final BeautifyStyle? beautify;
-  final double beautifyUnit;
-
-  final List<Rect>? windows;
-  final bool recordingPreview;
-
-  final Rect cropDisplay;
-  final bool showHandles;
-
-  final Color accent;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final outer = Path()..addRect(Offset.zero & size);
-    var visible = Path()..addRect(cropDisplay);
-    if (windows != null) {
-      visible = Path();
-      for (final rect in windows!) {
-        visible = Path.combine(
-          PathOperation.union,
-          visible,
-          Path()..addRect(rect),
+          ],
         );
-      }
-    }
-    final shade = Path.combine(PathOperation.difference, outer, visible);
-    canvas.drawPath(shade, Paint()..color = const Color(0x99000000));
-    if (beautify != null && windows == null) {
-      paintBeautifyBackdrop(canvas, cropDisplay, beautify!, unit: beautifyUnit);
-    }
-    if (windows != null) {
-      final border = Paint()
-        ..color = accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1;
-      for (final rect in windows!) {
-        canvas.drawRect(rect, border);
-      }
-    }
-    paintHandles(canvas);
-  }
-
-  void paintHandles(Canvas canvas) {
-    final border = Paint()
-      ..color = recordingPreview ? accent : Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawRect(cropDisplay, border);
-    if (!showHandles) return;
-    const handle = GlassMetrics.cropHandle;
-    final fill = Paint()..color = recordingPreview ? accent : Colors.white;
-    for (final point in <Offset>[
-      cropDisplay.topLeft,
-      cropDisplay.topCenter,
-      cropDisplay.topRight,
-      cropDisplay.centerLeft,
-      cropDisplay.centerRight,
-      cropDisplay.bottomLeft,
-      cropDisplay.bottomCenter,
-      cropDisplay.bottomRight,
-    ]) {
-      canvas.drawCircle(point, handle / 2, fill);
-      canvas.drawCircle(
-        point,
-        handle / 2,
-        Paint()
-          ..color = accent
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DimPainter oldDelegate) =>
-      oldDelegate.recordingPreview != recordingPreview ||
-      oldDelegate.beautify != beautify ||
-      oldDelegate.beautifyUnit != beautifyUnit ||
-      oldDelegate.windows != windows ||
-      oldDelegate.cropDisplay != cropDisplay ||
-      oldDelegate.showHandles != showHandles ||
-      oldDelegate.accent != accent;
-}
-
-class _OverlayPainter extends CustomPainter {
-  _OverlayPainter({
-    required this.annotations,
-    required this.previewAnnotation,
-    required this.imageSize,
-    required this.accent,
-    this.sourceImage,
-    this.selectedShape,
-    this.stickers = const {},
-    this.pixelRatio = 1,
-  });
-
-  final List<EditAnnotation> annotations;
-  final EditAnnotation? previewAnnotation;
-  final Size imageSize;
-  final Color accent;
-  final ui.Image? sourceImage;
-  final EditAnnotation? selectedShape;
-
-  final Map<String, ui.Image> stickers;
-  final double pixelRatio;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final scaleX = size.width / imageSize.width;
-    final scaleY = size.height / imageSize.height;
-    canvas.save();
-    canvas.scale(scaleX, scaleY);
-    final draggingId = previewAnnotation?.id;
-    final numbers = stepNumbers(annotations);
-    for (final annotation in annotations) {
-      if (draggingId != null &&
-          draggingId != 'preview' &&
-          annotation.id == draggingId) {
-        continue;
-      }
-      EditDocument.paintAnnotation(
-        canvas,
-        annotation,
-        sourceImage: sourceImage,
-        stepNumber: numbers[annotation.id],
-        stickers: stickers,
-      );
-    }
-    if (previewAnnotation != null) {
-      EditDocument.paintAnnotation(
-        canvas,
-        previewAnnotation!,
-        sourceImage: sourceImage,
-        stepNumber: numbers.length + 1,
-        stickers: stickers,
-      );
-    }
-    final selected = previewAnnotation?.id == selectedShape?.id
-        ? previewAnnotation
-        : selectedShape;
-    if (selected != null) {
-      final stroke = Paint()
-        ..color = accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1 / scaleX;
-      if (selected.kind == AnnotationKind.sticker) {
-        _paintStickerSelection(canvas, selected, stroke, scaleX);
-      } else {
-        canvas.drawRect(selected.bounds.inflate(2), stroke);
-      }
-    }
-    canvas.restore();
-  }
-
-  void _paintStickerSelection(
-    Canvas canvas,
-    EditAnnotation sticker,
-    Paint stroke,
-    double scale,
-  ) {
-    final rect = sticker.bounds;
-    final center = rect.center;
-    final handle = GlassMetrics.cropHandle / scale;
-    final knob = StickerMetrics.rotateHandle / scale;
-    final knobCenter = Offset(
-      center.dx,
-      rect.top - StickerMetrics.rotateDistance * pixelRatio,
+      },
     );
-    final fill = Paint()..color = const Color(0xFFFFFFFF);
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(sticker.rotation);
-    canvas.translate(-center.dx, -center.dy);
-    canvas.drawRect(rect, stroke);
-    for (final point in [
-      rect.topLeft,
-      rect.topCenter,
-      rect.topRight,
-      rect.centerRight,
-      rect.bottomRight,
-      rect.bottomCenter,
-      rect.bottomLeft,
-      rect.centerLeft,
-    ]) {
-      final square = Rect.fromCenter(
-        center: point,
-        width: handle,
-        height: handle,
-      );
-      canvas.drawRect(square, fill);
-      canvas.drawRect(square, stroke);
-    }
-    canvas.drawLine(rect.topCenter, knobCenter, stroke);
-    canvas.drawCircle(knobCenter, knob / 2, fill);
-    canvas.drawCircle(knobCenter, knob / 2, stroke);
-    canvas.restore();
   }
-
-  @override
-  bool shouldRepaint(covariant _OverlayPainter oldDelegate) {
-    return oldDelegate.annotations != annotations ||
-        oldDelegate.previewAnnotation != previewAnnotation ||
-        oldDelegate.selectedShape != selectedShape ||
-        oldDelegate.sourceImage != sourceImage ||
-        oldDelegate.pixelRatio != pixelRatio ||
-        oldDelegate.imageSize != imageSize ||
-        oldDelegate.accent != accent;
-  }
-}
-
-typedef _ToolbarCells = ({String key, List<String?> cells, int? modifiers});
-
-typedef _ToolbarLine = ({
-  List<_ToolbarCells> groups,
-  String? strip,
-  String? anchor,
-  double indent,
-  double? caret,
-});
-
-typedef _Strip = ({int count, String anchor, Map<String, int> hosts});
-
-class _OcrOverlay {
-  const _OcrOverlay({required this.text, required this.rect});
-
-  factory _OcrOverlay.fromMap(Map<Object?, Object?> map, Offset origin) =>
-      _OcrOverlay(
-        text: map['text'] as String,
-        rect: Rect.fromLTWH(
-          origin.dx + (map['x'] as num).toDouble(),
-          origin.dy + (map['y'] as num).toDouble(),
-          (map['width'] as num).toDouble(),
-          (map['height'] as num).toDouble(),
-        ),
-      );
-
-  final String text;
-  final Rect rect;
-}
-
-const _overlayTextStyle = TextStyle(
-  color: Colors.black,
-  fontWeight: FontWeight.w600,
-);
-
-double fitOverlayFontSize({
-  required String text,
-  required Size box,
-  required TextStyle style,
-}) {
-  var low = 1.0;
-  var high = math.max(1.0, box.height);
-  var best = low;
-  final painter = TextPainter(
-    textAlign: TextAlign.center,
-    textDirection: TextDirection.ltr,
-  );
-  while (high - low > 0.5) {
-    final size = (low + high) / 2;
-    painter
-      ..text = TextSpan(
-        text: text,
-        style: style.copyWith(fontSize: size),
-      )
-      ..layout(maxWidth: box.width);
-    if (painter.height <= box.height + 0.5) {
-      best = size;
-      low = size;
-    } else {
-      high = size;
-    }
-  }
-  painter.dispose();
-  return best;
-}
-
-class _FitText extends StatelessWidget {
-  const _FitText(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final box = constraints.biggest;
-      if (box.width <= 1 || box.height <= 1) return const SizedBox.shrink();
-      final style = DefaultTextStyle.of(context).style.merge(_overlayTextStyle);
-      return Center(
-        child: CharReveal(
-          text: text,
-          style: style.copyWith(
-            fontSize: fitOverlayFontSize(text: text, box: box, style: style),
-          ),
-          builder: (context, span) => Text.rich(
-            span,
-            textAlign: TextAlign.center,
-            textScaler: TextScaler.noScaling,
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class _TrayCaretPainter extends CustomPainter {
-  const _TrayCaretPainter({required this.color, required this.axis});
-
-  final Color color;
-  final Axis axis;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = axis == Axis.horizontal
-        ? (Path()
-            ..moveTo(0, size.height)
-            ..lineTo(size.width / 2, 0)
-            ..lineTo(size.width, size.height)
-            ..close())
-        : (Path()
-            ..moveTo(size.width, 0)
-            ..lineTo(0, size.height / 2)
-            ..lineTo(size.width, size.height)
-            ..close());
-    canvas.drawPath(path, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_TrayCaretPainter old) =>
-      old.color != color || old.axis != axis;
 }

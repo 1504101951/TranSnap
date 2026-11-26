@@ -5,6 +5,7 @@ import '../common/constants/motion_metrics.dart';
 import '../common/widgets/app_motion.dart';
 import '../common/widgets/app_tooltip.dart';
 import '../common/widgets/native_glass.dart';
+import '../common/constants/app_colors.dart';
 
 class HistoryGroupCard extends StatelessWidget {
   const HistoryGroupCard({super.key, required this.children});
@@ -17,7 +18,7 @@ class HistoryGroupCard extends StatelessWidget {
     final line = (dark ? Colors.white : Colors.black).withValues(alpha: 0.10);
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: dark ? const Color(0xFF232326) : Colors.white,
+        color: AppColors.card(dark),
         shape: RoundedSuperellipseBorder(
           borderRadius: BorderRadius.circular(GlassMetrics.groupRadius),
           side: BorderSide(color: line, width: GlassMetrics.groupBorderWidth),
@@ -218,7 +219,7 @@ class HistoryFieldBox extends StatelessWidget {
       radius: GlassMetrics.controlRadius + MotionMetrics.busyRingOutset,
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          color: dark ? const Color(0xFF232326) : Colors.white,
+          color: AppColors.card(dark),
           shape: RoundedSuperellipseBorder(
             borderRadius: BorderRadius.circular(GlassMetrics.controlRadius),
             side: BorderSide(
