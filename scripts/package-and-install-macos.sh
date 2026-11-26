@@ -293,14 +293,22 @@ if [[ "$identity" == "Developer ID Application:"* ]]; then
 else
   sign_flags+=(--timestamp=none)
 fi
+resign() {
+  local target="$1"
+  shift
+  if codesign -d "$target" >/dev/null 2>&1; then
+    codesign --remove-signature "$target"
+  fi
+  codesign "${sign_flags[@]}" "$@" "$target"
+}
 while IFS= read -r -d '' library; do
-  codesign "${sign_flags[@]}" "$library"
+  resign "$library"
 done < <(find "$package_stage/TranSnap.app/Contents" -type f -name '*.dylib' -print0)
 for framework in "$package_stage/TranSnap.app/Contents/Frameworks/"*.framework; do
-  codesign "${sign_flags[@]}" "$framework"
+  resign "$framework"
 done
-codesign "${sign_flags[@]}" --identifier "$bundle_id.mcp" "$package_stage/TranSnap.app/Contents/MacOS/transnap-mcp"
-codesign "${sign_flags[@]}" --entitlements macos/Runner/Release.entitlements "$package_stage/TranSnap.app"
+resign "$package_stage/TranSnap.app/Contents/MacOS/transnap-mcp" --identifier "$bundle_id.mcp"
+resign "$package_stage/TranSnap.app" --entitlements macos/Runner/Release.entitlements
 codesign --verify --deep --strict "$package_stage/TranSnap.app"
 requirement="$(codesign -d -r- "$package_stage/TranSnap.app" 2>&1)"
 printf '%s\n' "$requirement"

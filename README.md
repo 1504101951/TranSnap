@@ -4,7 +4,7 @@
 
 **TranSnap** 是一款面向 **macOS 26+** 的桌面效率工具，集成了全局选区翻译与屏幕采集套件。应用采用 Flutter/Dart 实现界面与业务编排，由 Swift 原生层提供非激活悬浮面板、`macOS 26+` 液态玻璃材料与系统级屏幕采集能力。
 
-> 当前版本专注于 **macOS 26+（Darwin 25+）**。
+> 当前版本专注于 **macOS 26+（Darwin 25+）**，仅支持 Apple 芯片（arm64）Mac。
 
 ![TranSnap 功能演示](docs/media/transnap-intro.gif)
 
@@ -58,7 +58,7 @@ open /Applications/TranSnap.app
 ## 从源码构建与打包
 
 ### 环境要求
-- macOS 26.0 或更高版本（SDK 26+）
+- macOS 26.0 或更高版本（SDK 26+），Apple 芯片 Mac
 - Xcode 27+ 与对应 Command Line Tools
 - Flutter SDK（Dart `^3.11.1`）
 - 本机登录钥匙串中的 `TranSnap Local Signing` 代码签名证书（配置指南见 [macOS 构建与签名说明](docs/macos.md)）

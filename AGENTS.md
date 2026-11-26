@@ -28,6 +28,10 @@
 
 开发依据分为三类：[功能与交互规格 #1](https://github.com/1504101951/TranSnap/issues/1)、[样式规格 #67](https://github.com/1504101951/TranSnap/issues/67)、[架构设计约束 #68](https://github.com/1504101951/TranSnap/issues/68)。实施已批准需求前，先更新受影响的 GitHub Issue。本地规格副本与用户指定保留的澄清记录的保留或删除，统一按 [规格索引](docs/specs/README.md) 处理。界面数值必须明确，不得擅自偏离规格或将待确认参数视为已批准值。
 
+## 零警告
+
+交付前，本次改动不得在以下输出中留下警告：`flutter analyze` 无 issue；`xcodebuild build-for-testing` 输出中没有 `warning:`（含 Swift 并发警告）；`./scripts/package-and-install-macos.sh` 的标准错误只允许出现 [macOS 构建说明](docs/macos.md)「允许保留的工具提示」中登记的条目。发现警告时从源头修改代码或配置，不用 `// ignore`、`@preconcurrency`、`nonisolated(unsafe)` 等方式压制，也不整段重定向丢弃输出；确实无法在项目内消除的工具提示，登记到该表并写明来源与保留原因。
+
 ## 目录索引
 
 项目维护的每个目录通过 `index.md` 说明直接子文件和子目录的作用，每项一句话；新增、删除或重命名项目文件时同步所在目录索引。Git 元数据、依赖缓存、构建产物及个人工作区目录不纳入索引。

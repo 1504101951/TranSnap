@@ -4,7 +4,7 @@
 
 **TranSnap** is a macOS 26+ desktop productivity suite combining instant global text translation with screen capture, annotation, recording, scrolling screenshots, live on-screen translation, and local MCP integration. Built with Flutter/Dart for UI and orchestration alongside a native Swift layer for non-activating panels, macOS Liquid Glass surfaces, and system capture frameworks.
 
-> Currently targets **macOS 26+ (Darwin 25+)** only.
+> Currently targets **macOS 26+ (Darwin 25+)** on Apple silicon (arm64) Macs only.
 
 ![TranSnap Demo](docs/media/transnap-intro.gif)
 
@@ -53,7 +53,7 @@ open /Applications/TranSnap.app
 ## Development & Packaging
 
 ### Requirements
-- macOS 26.0+ (SDK 26+)
+- macOS 26.0+ (SDK 26+) on an Apple silicon Mac
 - Xcode 27+ & Command Line Tools
 - Flutter SDK (Dart `^3.11.1`)
 - A `TranSnap Local Signing` certificate in your login keychain (see [macOS Guide](docs/macos.md))

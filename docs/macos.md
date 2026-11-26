@@ -19,6 +19,17 @@ TRANSNAP_SIGN_IDENTITY='Developer ID Application: YOUR NAME (TEAMID)' ./scripts/
 
 未设置该变量时，脚本默认使用登录钥匙串中的 **`TranSnap Local Signing`**。脚本严禁回退到临时（ad-hoc）签名，证书缺失或私钥无权访问时会直接报错退出。
 
+4. **只构建 Apple 芯片**：项目级 `macos/Runner/Configs/Debug.xcconfig` 与 `Release.xcconfig` 设置 `EXCLUDED_ARCHS = x86_64`，App、MCP helper 与测试目标都只包含 arm64，不支持 Intel Mac。
+5. **签名前移除原签名**：Flutter 构建产物自带签名，脚本对每个库、Framework、helper 与 App 先移除原签名再用固定身份签名。
+
+### 允许保留的工具提示
+
+打包脚本的标准错误只允许出现下表中的提示；其他任何输出都按警告处理，须从源头消除。
+
+| 提示 | 来源 | 保留原因 |
+| --- | --- | --- |
+| `xcodebuild[…] [MT] IDESchemeActionsInvocationRecord: Device <IDEOSXSupportCore.IDEMacPlaceholder …> is missing operatingSystemVersion, operatingSystemVersionWithBuildNumber.` | Xcode 27 内部日志，`flutter build macos --release` 以通用 macOS 目标调用 xcodebuild 时打印 | 构建目标由 Flutter 工具决定，项目配置无法改变，不影响产物 |
+
 ---
 
 ## 二、为什么必须使用固定代码签名？
