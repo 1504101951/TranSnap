@@ -10,6 +10,8 @@ import '../common/constants/method_names.dart';
 import '../common/constants/platform_capabilities.dart';
 import '../common/constants/toolbar_grid.dart';
 import '../common/constants/shortcut_keys.dart';
+import '../fonts/font_state.dart';
+import 'font_set_picker.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/error_codes.dart';
 import '../common/constants/screenshot_enums.dart';
@@ -392,6 +394,20 @@ class _SettingsPageState extends State<_SettingsPage>
       });
     } finally {
       if (mounted) setState(() => _savingScreenshotHistoryRecording = false);
+    }
+  }
+
+  Future<void> _fontRequest(String method, String set) async {
+    try {
+      await _channel.invokeMethod<Object?>(method, set);
+      await _load();
+    } on PlatformException catch (error) {
+      if (mounted) {
+        setState(() {
+          _message = error.message;
+          _failed = true;
+        });
+      }
     }
   }
 
@@ -1157,29 +1173,31 @@ class _SettingsPageState extends State<_SettingsPage>
                                       ],
                                     ),
                                   ),
-                                ],
-                              ),
-                              if (_has(PlatformCapability.recording))
-                                NativeGlassGroup(
-                                  title: '录制点击特效',
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: GlassMetrics.space4,
-                                      ),
-                                      child: Center(
-                                        child: ClickEffectPlayer(
-                                          effect: settings.recordingClickEffect,
-                                          onChanged: (v) => _edit(
-                                            () =>
-                                                settings.recordingClickEffect =
-                                                    v,
+                                  ValueListenableBuilder<FontState>(
+                                    valueListenable: FontState.current,
+                                    builder: (context, fonts, _) =>
+                                        FontSetPicker(
+                                          value: settings.fontSet,
+                                          state: fonts,
+                                          onSelect: (set) => _edit(
+                                            () => settings.fontSet = set,
+                                          ),
+                                          onDownload: (set) => _fontRequest(
+                                            MethodNames.downloadFontSet,
+                                            set.name,
+                                          ),
+                                          onCancel: () => _channel
+                                              .invokeMethod<void>(
+                                                MethodNames.cancelFontDownload,
+                                              ),
+                                          onUninstall: (set) => _fontRequest(
+                                            MethodNames.uninstallFontSet,
+                                            set.name,
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
+                              ),
                             ] else if (_page == SettingsPage.languages) ...[
                               NativeGlassGroup(
                                 dividerIndent: 0,
@@ -1641,6 +1659,27 @@ class _SettingsPageState extends State<_SettingsPage>
                                   ),
                                 ],
                               ),
+                              if (_has(PlatformCapability.recording))
+                                NativeGlassGroup(
+                                  title: '录制点击特效',
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: GlassMetrics.space4,
+                                      ),
+                                      child: Center(
+                                        child: ClickEffectPlayer(
+                                          effect: settings.recordingClickEffect,
+                                          onChanged: (v) => _edit(
+                                            () =>
+                                                settings.recordingClickEffect =
+                                                    v,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                             ] else if (_page ==
                                 SettingsPage.screenshotActions) ...[
                               NativeGlassGroup(

@@ -16,4 +16,5 @@
 12. [glossary_editor.dart](glossary_editor.dart)：术语表管理弹窗与单条术语编辑弹窗，编辑确定前检查同一目标语言下是否重复。
 13. [prompt_editor.dart](prompt_editor.dart)：提示词弹窗，编辑翻译、润色、纠错、解释的系统提示词与思考开关，可分别恢复默认。
 14. [sticker_upload_dialog.dart](sticker_upload_dialog.dart)：添加贴纸的上传框，棋盘格预览并拖动四角等比设定默认大小。
-15. [click_effect_player.dart](click_effect_player.dart)：个性化页的录制点击特效演示播放器，按所选样式循环演示左键、右键与拖动。
+15. [click_effect_player.dart](click_effect_player.dart)：「截图 → 录制」页的录制点击特效演示播放器，按所选样式循环演示左键、右键与拖动。
+16. [font_set_picker.dart](font_set_picker.dart)：「个性化 → 字体」下拉框：菜单按各组合自身字体列出名称与组成和下载状态，选择已下载组合即保存、未下载组合即下载，已下载组合可卸载，下载中显示进度与取消。

@@ -843,7 +843,7 @@ void main() {
     expect(state[PreferenceKeys.scrollCaptureMode], 'automatic');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('截图录制页：指针开关默认关闭，「录制包含点击特效」默认关闭可自动保存；个性化页 6 种样式可选并保存（#105、#143）', (
+  testWidgets('截图录制页：指针开关默认关闭，「录制包含点击特效」默认关闭可自动保存，同页下方 6 种样式可选并保存，个性化页不再出现（#105、#143）', (
     tester,
   ) async {
     const channel = MethodChannel(ChannelNames.settings);
@@ -904,7 +904,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(state[PreferenceKeys.recordingClickEffectEnabled], isTrue);
 
-    await openSettingsPage(tester, '个性化');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('click-effect-liquid')),
+      200,
+      scrollable: settingsContentScrollable(),
+    );
     expect(find.text('录制点击特效'), findsOneWidget);
     expect(find.text('关闭'), findsNothing);
     for (final effect in RecordingClickEffect.values) {
@@ -913,6 +917,9 @@ void main() {
     await tester.tap(find.byKey(const Key('click-effect-liquid')));
     await tester.pumpAndSettle();
     expect(state[PreferenceKeys.recordingClickEffect], 'liquid');
+
+    await openSettingsPage(tester, '个性化');
+    expect(find.text('录制点击特效'), findsNothing);
   });
 
   testWidgets(

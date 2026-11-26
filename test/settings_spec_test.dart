@@ -273,9 +273,13 @@ void main() {
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('强调色'), findsOneWidget);
     expect(find.text('窗口透明度'), findsOneWidget);
-    expect(find.byKey(const Key('click-effect-stage')), findsOneWidget);
+    expect(find.text('字体'), findsOneWidget);
+    expect(find.byKey(const Key('click-effect-stage')), findsNothing);
     expect(maxScroll(), 0, reason: '个性化');
-    for (final page in ['保存与导出', '录制', '操作', '工具栏']) {
+    await openSettingsPage(tester, '录制');
+    expect(find.byKey(const Key('click-effect-stage')), findsOneWidget);
+    expect(maxScroll(), 0, reason: '录制');
+    for (final page in ['保存与导出', '操作', '工具栏']) {
       await openSettingsPage(tester, page);
       expect(maxScroll(), 0, reason: page);
     }

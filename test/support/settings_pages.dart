@@ -13,7 +13,7 @@ Finder settingsContentScrollable() => find
     .first;
 
 Future<void> openSettingsPage(WidgetTester tester, String label) async {
-  if (label == '个性化') {
+  if (label == '录制') {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);

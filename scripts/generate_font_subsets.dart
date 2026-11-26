@@ -33,9 +33,9 @@ Future<void> main(List<String> arguments) async {
     ..createSync(recursive: true);
   for (final set in FontSet.values) {
     for (final (file, text, target) in [
-      (set.ui.latin, '${set.label}${set.composition}', set.name),
-      (set.title.cjk, set.label, '${set.name}-title'),
-      (set.ui.cjk, set.composition, '${set.name}-text'),
+      (set.ui.latin, '${set.label}${set.composition}…', set.name),
+      (set.title.cjk, '${set.label}…', '${set.name}-title'),
+      (set.ui.cjk, '${set.composition}…', '${set.name}-text'),
     ]) {
       final path = '${output.path}/$target.ttf';
       await _run(python, [
