@@ -19,6 +19,7 @@ inline constexpr char kPerfMark[] = "perfMark";
 inline constexpr char kAppStartFailed[] = "appStartFailed";
 inline constexpr char kGetAppearance[] = "getAppearance";
 inline constexpr char kAppearanceChanged[] = "appearanceChanged";
+inline constexpr char kToggleAutomatic[] = "toggleAutomatic";
 
 inline constexpr char kBadArgsError[] = "bad_args";
 inline constexpr char kBadSettingsError[] = "bad_settings";
@@ -27,6 +28,7 @@ inline constexpr char kRollbackFailedError[] = "rollback_failed";
 inline constexpr char kCredentialsFailedError[] = "keychain_failed";
 
 inline constexpr char kSystemLanguageKey[] = "systemLanguage";
+inline constexpr char kAutomaticKey[] = "automatic";
 inline constexpr char kLaunchAtLoginKey[] = "launchAtLogin";
 inline constexpr char kGlassAppearanceKey[] = "glassAppearance";
 inline constexpr char kGlassOpacityKey[] = "glassOpacity";

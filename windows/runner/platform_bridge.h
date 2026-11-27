@@ -17,6 +17,10 @@ class PlatformBridge {
 
   void Emit(const flutter::EncodableMap& event);
 
+  bool Automatic() const;
+
+  void ToggleAutomatic();
+
  private:
   using Call = flutter::MethodCall<flutter::EncodableValue>;
   using Result = std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>;

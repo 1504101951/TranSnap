@@ -8,6 +8,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "platform_bridge.cpp"
   "preferences_store.cpp"
+  "tray_icon.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "windows_system.cpp"

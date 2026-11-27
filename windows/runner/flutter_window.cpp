@@ -23,17 +23,19 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   bridge_ = std::make_unique<PlatformBridge>(
       flutter_controller_->engine()->messenger());
+  tray_ = std::make_unique<TrayIcon>(
+      GetHandle(),
+      TrayIcon::Actions{[this]() { return bridge_->Automatic(); },
+                        [this]() { bridge_->ToggleAutomatic(); },
+                        [this]() { ::PostMessageW(GetHandle(), WM_CLOSE, 0, 0); }});
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
-
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
   flutter_controller_->ForceRedraw();
 
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  tray_ = nullptr;
   bridge_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -53,6 +55,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     if (result) {
       return *result;
     }
+  }
+
+  if (tray_ && tray_->HandleMessage(message, wparam, lparam)) {
+    return 0;
   }
 
   switch (message) {

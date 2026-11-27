@@ -17,6 +17,8 @@ bool SetLaunchAtLogin(bool enabled, std::string& error);
 
 int64_t SystemAccent();
 
+void ShowWarning(const std::string& title, const std::string& message);
+
 void ShowStartFailure(const std::string& message);
 
 }

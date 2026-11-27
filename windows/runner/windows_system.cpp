@@ -74,10 +74,15 @@ int64_t SystemAccent() {
   return 0xFF000000 | (red << 16) | (green << 8) | blue;
 }
 
-void ShowStartFailure(const std::string& message) {
-  std::wstring text = Utf16FromUtf8("主程序初始化失败：" + message);
-  ::MessageBoxW(nullptr, text.c_str(), L"TranSnap 无法启动",
+void ShowWarning(const std::string& title, const std::string& message) {
+  std::wstring caption = Utf16FromUtf8(title);
+  std::wstring text = Utf16FromUtf8(message);
+  ::MessageBoxW(nullptr, text.c_str(), caption.c_str(),
                 MB_OK | MB_ICONWARNING | MB_TOPMOST);
+}
+
+void ShowStartFailure(const std::string& message) {
+  ShowWarning("TranSnap 无法启动", "主程序初始化失败：" + message);
   ::ExitProcess(EXIT_FAILURE);
 }
 

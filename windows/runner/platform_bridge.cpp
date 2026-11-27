@@ -1,6 +1,7 @@
 #include "platform_bridge.h"
 
 #include <flutter/event_stream_handler_functions.h>
+#include <flutter/method_result_functions.h>
 #include <flutter/standard_method_codec.h>
 
 #include <cmath>
@@ -123,6 +124,22 @@ void PlatformBridge::Emit(const EncodableMap& event) {
   if (sink_) {
     sink_->Success(EncodableValue(event));
   }
+}
+
+bool PlatformBridge::Automatic() const {
+  return Get<bool>(preferences_, protocol::kAutomaticKey).value_or(true);
+}
+
+void PlatformBridge::ToggleAutomatic() {
+  platform_->InvokeMethod(
+      protocol::kToggleAutomatic, nullptr,
+      std::make_unique<flutter::MethodResultFunctions<EncodableValue>>(
+          nullptr,
+          [](const std::string& code, const std::string& message,
+             const EncodableValue*) {
+            windows_system::ShowWarning("设置未保存", message.empty() ? code : message);
+          },
+          nullptr));
 }
 
 void PlatformBridge::HandlePlatform(const Call& call, Result result) {
