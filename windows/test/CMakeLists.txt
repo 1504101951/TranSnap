@@ -22,12 +22,14 @@ add_executable(native_tests
   "preferences_store_test.cpp"
   "selection_context_test.cpp"
   "text_file_test.cpp"
+  "tooltip_layout_test.cpp"
   "${RUNNER_DIR}/json_codec.cpp"
   "${RUNNER_DIR}/key_names.cpp"
   "${RUNNER_DIR}/language_detection.cpp"
   "${RUNNER_DIR}/preferences_store.cpp"
   "${RUNNER_DIR}/selection_context.cpp"
   "${RUNNER_DIR}/text_file.cpp"
+  "${RUNNER_DIR}/tooltip_layout.cpp"
   "${RUNNER_DIR}/utils.cpp"
 )
 target_include_directories(native_tests PRIVATE "${RUNNER_DIR}" "${WRAPPER_DIR}")

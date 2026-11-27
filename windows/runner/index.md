@@ -24,9 +24,9 @@ Windows 应用入口、主窗口与可执行文件资源。
 20. [main.cpp](main.cpp)：Windows 应用入口：初始化 COM、创建主窗口并运行消息循环。
 21. [main_thread.cpp](main_thread.cpp)：以消息专用窗口在主线程执行其他线程投递的任务与毫秒定时任务，并在后台线程（多线程套间）执行阻塞任务。
 22. [main_thread.h](main_thread.h)：声明主线程调度、后台执行与消息窗口接口。
-23. [overlay_window.cpp](overlay_window.cpp)：把主窗口设为不激活、置顶、不进任务栏的弹出窗口作为触发按钮与翻译卡片，在鼠标右下 8pt 处按会话显示并夹取到工作区内缩 8pt，调整尺寸保持左上角，按住左键时进入系统拖动。
-24. [overlay_window.h](overlay_window.h)：声明浮层显示、隐藏、调整尺寸、拖动与命中判断接口。
-25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、快捷键翻译的选区读取（密码框报 secureField）、浮层显示隐藏与尺寸拖动、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
+23. [overlay_window.cpp](overlay_window.cpp)：把主窗口设为不激活、置顶、不进任务栏的弹出窗口作为触发按钮与翻译卡片，在鼠标右下 8pt 处按会话显示并夹取到工作区内缩 8pt，调整尺寸保持左上角，按住左键时进入系统拖动；悬停提示气泡为点击穿透的圆角置顶窗口，12pt 文字、左右共 16pt 与上下共 8pt 内边距，深浅色与外观设置一致，浮层显示、隐藏、调整尺寸或拖动时收起。
+24. [overlay_window.h](overlay_window.h)：声明浮层显示、隐藏、调整尺寸、拖动、命中判断与悬停提示接口。
+25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、快捷键翻译的选区读取（密码框报 secureField）、浮层显示隐藏与尺寸拖动、浮层悬停提示、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
 26. [platform_bridge.h](platform_bridge.h)：声明主引擎平台通道。
 27. [preferences_store.cpp](preferences_store.cpp)：读取与原子写入偏好 JSON 文件，文件缺失时为空偏好，格式错误时报错。
 28. [preferences_store.h](preferences_store.h)：声明偏好文件读写接口。
@@ -46,13 +46,15 @@ Windows 应用入口、主窗口与可执行文件资源。
 42. [synthetic_input.h](synthetic_input.h)：声明合成按键接口。
 43. [text_file.cpp](text_file.cpp)：读取 UTF-8 文本文件（非 UTF-8 时报错）并以临时文件加改名原子写入。
 44. [text_file.h](text_file.h)：声明文本文件读取与原子写入接口。
-45. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
-46. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
-47. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发。
-48. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
-49. [utils.cpp](utils.cpp)：控制台附加、命令行参数读取与 UTF-8、UTF-16 互转。
-50. [utils.h](utils.h)：声明控制台、命令行参数与编码转换工具函数。
-51. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
-52. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
-53. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言与强调色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明，并显示警告与启动失败提示。
-54. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。
+45. [tooltip_layout.cpp](tooltip_layout.cpp)：计算悬停提示气泡位置：优先放在锚点上方或下方 6pt，放不下时换到另一侧，水平居中于锚点并夹取到屏幕工作区内缩 6pt。
+46. [tooltip_layout.h](tooltip_layout.h)：声明提示气泡布局接口。
+47. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
+48. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
+49. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发。
+50. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
+51. [utils.cpp](utils.cpp)：控制台附加、命令行参数读取与 UTF-8、UTF-16 互转。
+52. [utils.h](utils.h)：声明控制台、命令行参数与编码转换工具函数。
+53. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
+54. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
+55. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明，并显示警告与启动失败提示。
+56. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。

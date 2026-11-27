@@ -35,6 +35,8 @@ inline constexpr char kShowOverlay[] = "showOverlay";
 inline constexpr char kHideOverlay[] = "hideOverlay";
 inline constexpr char kSetOverlaySize[] = "setOverlaySize";
 inline constexpr char kDragOverlay[] = "dragOverlay";
+inline constexpr char kShowOverlayTooltip[] = "showOverlayTooltip";
+inline constexpr char kHideOverlayTooltip[] = "hideOverlayTooltip";
 inline constexpr char kChooseExcludedApp[] = "chooseExcludedApp";
 inline constexpr char kOpenGlossaryFile[] = "openGlossaryFile";
 inline constexpr char kSaveTextFile[] = "saveTextFile";
@@ -85,6 +87,8 @@ inline constexpr char kFontsDirectoryKey[] = "fontsDirectory";
 inline constexpr char kFontStateKey[] = "fontState";
 inline constexpr char kGlassMaterialKey[] = "glassMaterial";
 
+inline constexpr char kAppearanceDark[] = "dark";
+inline constexpr char kAppearanceLight[] = "light";
 inline constexpr char kGlassMaterialAcrylic[] = "acrylic";
 inline constexpr char kGlassMaterialOpaque[] = "opaque";
 inline constexpr unsigned long kAcrylicMinimumBuild = 22621;

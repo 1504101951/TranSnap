@@ -52,6 +52,7 @@ class PlatformBridge {
   void RequestApplication(const char* method, flutter::EncodableValue arguments,
                           SelectionMonitor::Reply reply);
   bool Excluded(const std::wstring& executable) const;
+  bool PrefersDark() const;
   void BroadcastAppearance();
 
   OverlayWindow& overlay_;

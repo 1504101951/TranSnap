@@ -151,6 +151,17 @@ void PlatformBridge::RequestApplication(const char* method, EncodableValue argum
           [shared]() { (*shared)(nullptr); }));
 }
 
+bool PlatformBridge::PrefersDark() const {
+  auto mode = Get<std::string>(AppearanceSnapshot(), protocol::kGlassAppearanceKey);
+  if (mode == protocol::kAppearanceDark) {
+    return true;
+  }
+  if (mode == protocol::kAppearanceLight) {
+    return false;
+  }
+  return windows_system::SystemPrefersDark();
+}
+
 bool PlatformBridge::Excluded(const std::wstring& executable) const {
   const auto* excluded = Find(preferences_, protocol::kExcludedAppsKey);
   const auto* apps = excluded ? std::get_if<EncodableMap>(excluded) : nullptr;
@@ -379,6 +390,24 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       return true;
     }
     capture_->Retain(*session);
+    result->Success();
+  } else if (method == protocol::kShowOverlayTooltip) {
+    auto session = Get<std::string>(args, "sessionId");
+    auto message = Get<std::string>(args, "message");
+    auto x = Get<double>(args, "x");
+    auto y = Get<double>(args, "y");
+    auto width = Get<double>(args, "width");
+    auto height = Get<double>(args, "height");
+    if (!session || !message || !x || !y || !width || !height) {
+      result->Error(protocol::kBadArgsError,
+                    "showOverlayTooltip 需要 sessionId/message/x/y/width/height");
+      return true;
+    }
+    overlay_.ShowTooltip(*session, *message, *x, *y, *width, *height,
+                         Get<bool>(args, "preferAbove").value_or(true), PrefersDark());
+    result->Success();
+  } else if (method == protocol::kHideOverlayTooltip) {
+    overlay_.HideTooltip();
     result->Success();
   } else if (method == protocol::kReadSelectionForTranslation) {
     auto session = Get<std::string>(args, "sessionId");

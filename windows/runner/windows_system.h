@@ -20,6 +20,8 @@ bool SetLaunchAtLogin(bool enabled, std::string& error);
 
 int64_t SystemAccent();
 
+bool SystemPrefersDark();
+
 bool SupportsAcrylic();
 
 void ApplyAcrylic(HWND__* window);

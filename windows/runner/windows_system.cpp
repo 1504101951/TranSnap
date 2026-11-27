@@ -83,6 +83,15 @@ int64_t SystemAccent() {
   return 0xFF000000 | (red << 16) | (green << 8) | blue;
 }
 
+bool SystemPrefersDark() {
+  DWORD light = 1;
+  DWORD size = sizeof(light);
+  ::RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+  return light == 0;
+}
+
 bool SupportsAcrylic() {
   using RtlGetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
   auto get_version = reinterpret_cast<RtlGetVersion>(
