@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "credentials.h"
+#include "language_detection.h"
 #include "preferences_store.h"
 #include "protocol.h"
 #include "windows_system.h"
@@ -243,6 +244,19 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
     preview_ = args;
     BroadcastAppearance();
     result->Success();
+  } else if (method == protocol::kLanguageCandidates) {
+    auto text = Get<std::string>(args, "text");
+    if (!text || !Get<EncodableMap>(args, "hints")) {
+      result->Error(protocol::kBadArgsError, "缺少待识别文本或语言权重");
+      return true;
+    }
+    std::string error;
+    auto candidates = language_detection::Candidates(*text, error);
+    if (!candidates) {
+      result->Error(protocol::kDetectFailedError, error);
+      return true;
+    }
+    result->Success(EncodableValue(*candidates));
   } else if (method == protocol::kHistoryChanged) {
     if (history_changed_) {
       history_changed_();

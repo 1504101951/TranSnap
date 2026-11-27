@@ -1,11 +1,11 @@
 #ifndef RUNNER_WINDOWS_SYSTEM_H_
 #define RUNNER_WINDOWS_SYSTEM_H_
 
-#include <windows.h>
-
 #include <cstdint>
 #include <filesystem>
 #include <string>
+
+struct HWND__;
 
 namespace windows_system {
 
@@ -21,7 +21,7 @@ int64_t SystemAccent();
 
 bool SupportsAcrylic();
 
-void ApplyAcrylic(HWND window);
+void ApplyAcrylic(HWND__* window);
 
 void ShowWarning(const std::string& title, const std::string& message);
 

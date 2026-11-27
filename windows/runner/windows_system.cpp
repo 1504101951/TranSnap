@@ -86,7 +86,7 @@ bool SupportsAcrylic() {
          version.dwBuildNumber >= protocol::kAcrylicMinimumBuild;
 }
 
-void ApplyAcrylic(HWND window) {
+void ApplyAcrylic(HWND__* window) {
   MARGINS margins = {-1, -1, -1, -1};
   ::DwmExtendFrameIntoClientArea(window, &margins);
   DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;

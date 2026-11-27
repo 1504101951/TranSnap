@@ -6,6 +6,7 @@ add_executable(${BINARY_NAME} WIN32
   "credentials.cpp"
   "flutter_window.cpp"
   "json_codec.cpp"
+  "language_detection.cpp"
   "main.cpp"
   "platform_bridge.cpp"
   "preferences_store.cpp"
@@ -31,7 +32,7 @@ target_compile_options(${BINARY_NAME} PRIVATE /utf-8)
 
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib" "elscore.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 add_dependencies(${BINARY_NAME} flutter_assemble)

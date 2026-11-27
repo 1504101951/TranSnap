@@ -17,13 +17,16 @@ set(WRAPPER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../flutter/ephemeral/cpp_client_wra
 
 add_executable(native_tests
   "json_codec_test.cpp"
+  "language_detection_test.cpp"
   "preferences_store_test.cpp"
   "${RUNNER_DIR}/json_codec.cpp"
+  "${RUNNER_DIR}/language_detection.cpp"
   "${RUNNER_DIR}/preferences_store.cpp"
+  "${RUNNER_DIR}/utils.cpp"
 )
 target_include_directories(native_tests PRIVATE "${RUNNER_DIR}" "${WRAPPER_DIR}")
 target_compile_options(native_tests PRIVATE /W4 /WX /utf-8)
-target_link_libraries(native_tests PRIVATE GTest::gtest_main)
+target_link_libraries(native_tests PRIVATE GTest::gtest_main elscore.lib)
 
 enable_testing()
 include(GoogleTest)
