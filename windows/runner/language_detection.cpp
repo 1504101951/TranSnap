@@ -6,7 +6,8 @@
 
 #include <vector>
 
-#include "utils.h"
+#include "text_encoding.h"
+
 
 namespace language_detection {
 namespace {

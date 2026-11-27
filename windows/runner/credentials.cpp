@@ -5,7 +5,7 @@
 
 #include "json_codec.h"
 #include "protocol.h"
-#include "utils.h"
+#include "text_encoding.h"
 
 namespace credentials {
 namespace {

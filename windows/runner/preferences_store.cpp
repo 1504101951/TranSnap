@@ -5,8 +5,8 @@
 #include <system_error>
 
 #include "json_codec.h"
+#include "text_encoding.h"
 #include "text_file.h"
-#include "utils.h"
 
 namespace preferences_store {
 

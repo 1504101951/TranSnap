@@ -4,7 +4,8 @@
 #include <sstream>
 #include <system_error>
 
-#include "utils.h"
+#include "text_encoding.h"
+
 
 namespace text_file {
 

@@ -7,7 +7,7 @@
 #include <cmath>
 
 #include "bubble_layout.h"
-#include "utils.h"
+#include "text_encoding.h"
 #include "windows_system.h"
 
 namespace {

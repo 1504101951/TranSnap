@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "main_thread.h"
-#include "utils.h"
+#include "text_encoding.h"
 
 namespace clipboard {
 namespace {

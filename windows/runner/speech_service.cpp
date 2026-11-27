@@ -11,7 +11,8 @@
 #include <atomic>
 #include <cwctype>
 
-#include "utils.h"
+#include "text_encoding.h"
+
 
 namespace {
 

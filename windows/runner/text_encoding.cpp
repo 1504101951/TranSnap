@@ -1,0 +1,43 @@
+#include "text_encoding.h"
+
+#include <windows.h>
+
+#include <cwchar>
+
+std::string Utf8FromUtf16(const wchar_t* utf16_string) {
+  if (utf16_string == nullptr) {
+    return std::string();
+  }
+  int input_length = static_cast<int>(wcsnlen(utf16_string, UNICODE_STRING_MAX_CHARS));
+  int target_length = ::WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string,
+      input_length, nullptr, 0, nullptr, nullptr);
+  std::string utf8_string;
+  if (target_length == 0 || static_cast<size_t>(target_length) > utf8_string.max_size()) {
+    return utf8_string;
+  }
+  utf8_string.resize(target_length);
+  int converted_length = ::WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, utf16_string,
+      input_length, utf8_string.data(), target_length, nullptr, nullptr);
+  if (converted_length == 0) {
+    return std::string();
+  }
+  return utf8_string;
+}
+
+std::wstring Utf16FromUtf8(const std::string& utf8_string) {
+  if (utf8_string.empty()) {
+    return std::wstring();
+  }
+  int input_length = static_cast<int>(utf8_string.size());
+  int target_length = ::MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(), input_length, nullptr, 0);
+  std::wstring utf16_string(static_cast<size_t>(target_length), L'\0');
+  if (target_length == 0 ||
+      ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(),
+                            input_length, utf16_string.data(), target_length) == 0) {
+    return std::wstring();
+  }
+  return utf16_string;
+}

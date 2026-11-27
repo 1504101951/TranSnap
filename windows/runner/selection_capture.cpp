@@ -9,8 +9,8 @@
 #include "main_thread.h"
 #include "protocol.h"
 #include "synthetic_input.h"
+#include "text_encoding.h"
 #include "uia_selection.h"
-#include "utils.h"
 #include "windows_system.h"
 
 using flutter::EncodableList;

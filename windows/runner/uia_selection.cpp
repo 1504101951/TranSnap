@@ -5,7 +5,7 @@
 #include <wrl/client.h>
 
 #include "selection_context.h"
-#include "utils.h"
+#include "text_encoding.h"
 
 namespace uia_selection {
 namespace {

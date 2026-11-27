@@ -31,8 +31,8 @@ add_executable(native_tests
   "${RUNNER_DIR}/preferences_store.cpp"
   "${RUNNER_DIR}/selection_context.cpp"
   "${RUNNER_DIR}/shortcut_rules.cpp"
+  "${RUNNER_DIR}/text_encoding.cpp"
   "${RUNNER_DIR}/text_file.cpp"
-  "${RUNNER_DIR}/utils.cpp"
 )
 target_include_directories(native_tests PRIVATE "${RUNNER_DIR}" "${WRAPPER_DIR}")
 target_compile_options(native_tests PRIVATE /W4 /WX /utf-8)

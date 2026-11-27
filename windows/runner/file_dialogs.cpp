@@ -5,7 +5,8 @@
 #include <windows.h>
 #include <wrl/client.h>
 
-#include "utils.h"
+#include "text_encoding.h"
+
 
 namespace file_dialogs {
 namespace {

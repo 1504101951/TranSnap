@@ -23,6 +23,7 @@ add_executable(${BINARY_NAME} WIN32
   "shortcut_rules.cpp"
   "speech_service.cpp"
   "synthetic_input.cpp"
+  "text_encoding.cpp"
   "text_file.cpp"
   "tray_icon.cpp"
   "uia_selection.cpp"

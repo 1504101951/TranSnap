@@ -7,7 +7,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "protocol.h"
-#include "utils.h"
+#include "text_encoding.h"
 #include "windows_system.h"
 
 AuxiliaryWindow::AuxiliaryWindow(PlatformBridge& bridge, Options options)

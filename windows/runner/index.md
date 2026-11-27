@@ -50,15 +50,17 @@ Windows 应用入口、主窗口与可执行文件资源。
 46. [speech_service.h](speech_service.h)：声明朗读开关与停止接口。
 47. [synthetic_input.cpp](synthetic_input.cpp)：发送带本应用标记的 Ctrl 组合键，先抬起仍按住的 Alt、Shift、Win，避免组合变形。
 48. [synthetic_input.h](synthetic_input.h)：声明合成按键接口。
-49. [text_file.cpp](text_file.cpp)：读取 UTF-8 文本文件（非 UTF-8 时报错）并以临时文件加改名原子写入。
-50. [text_file.h](text_file.h)：声明文本文件读取与原子写入接口。
-51. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
-52. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
-53. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发。
-54. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
-55. [utils.cpp](utils.cpp)：控制台附加、命令行参数读取与 UTF-8、UTF-16 互转。
-56. [utils.h](utils.h)：声明控制台、命令行参数与编码转换工具函数。
-57. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
-58. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
-59. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明，并显示警告与启动失败提示。
-60. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。
+49. [text_encoding.cpp](text_encoding.cpp)：UTF-8 与 UTF-16 互转（无效编码返回空串），不依赖 Flutter，原生单测直接编译。
+50. [text_encoding.h](text_encoding.h)：声明编码转换函数。
+51. [text_file.cpp](text_file.cpp)：读取 UTF-8 文本文件（非 UTF-8 时报错）并以临时文件加改名原子写入。
+52. [text_file.h](text_file.h)：声明文本文件读取与原子写入接口。
+53. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
+54. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
+55. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发。
+56. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
+57. [utils.cpp](utils.cpp)：控制台附加与命令行参数读取。
+58. [utils.h](utils.h)：声明控制台与命令行参数工具函数。
+59. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
+60. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
+61. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明，并显示警告与启动失败提示。
+62. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。

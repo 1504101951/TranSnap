@@ -20,9 +20,9 @@
 #include "language_detection.h"
 #include "preferences_store.h"
 #include "protocol.h"
+#include "text_encoding.h"
 #include "text_file.h"
 #include "uia_selection.h"
-#include "utils.h"
 #include "windows_system.h"
 
 namespace {

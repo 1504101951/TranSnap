@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "protocol.h"
-#include "utils.h"
+#include "text_encoding.h"
 
 namespace windows_system {
 
