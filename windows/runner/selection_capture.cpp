@@ -435,13 +435,14 @@ void SelectionCapture::PasteIntoCandidate(unsigned long process, const Encodable
   std::weak_ptr<char> alive = alive_;
   main_thread::Background([this, alive, process, facts, text, done]() {
     uia_selection::CandidateSearch search = uia_selection::FindWritableInputs(process);
-    main_thread::Post([this, alive, facts, text, done, search]() mutable {
+    main_thread::Post([this, alive, facts, text, done, search]() {
       if (alive.expired()) {
         return;
       }
-      facts[EncodableValue("candidates")] = EncodableValue(search.count);
+      EncodableMap request = facts;
+      request[EncodableValue("candidates")] = EncodableValue(search.count);
       delegate_.request(
-          protocol::kPasteTarget, EncodableValue(facts),
+          protocol::kPasteTarget, EncodableValue(request),
           [this, alive, text, done, search](const EncodableValue* reply) {
             const auto* action = reply ? std::get_if<std::string>(reply) : nullptr;
             if (alive.expired()) {
