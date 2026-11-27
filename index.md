@@ -22,3 +22,5 @@
 16. [pubspec.lock](pubspec.lock)：锁定Dart与Flutter依赖的具体解析版本。
 17. [pubspec.yaml](pubspec.yaml)：声明Flutter应用版本、运行约束和依赖。
 18. [assets/](assets/index.md)：随应用分发的字体与许可证资源。
+19. [windows/](windows/index.md)：Windows 宿主工程、构建配置与原生代码。
+20. [.github/](.github/index.md)：GitHub Actions 等 GitHub 托管的自动化配置。
