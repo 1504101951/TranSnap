@@ -8,7 +8,8 @@
 2. `flutter analyze` 静态分析。
 3. `flutter test` 运行全部 Dart 测试。
 4. `flutter build windows --release` 构建 Windows 应用。
-5. 上传 `build/windows/x64/runner/Release` 目录为构建产物 `TranSnap-windows-x64-<提交>`，解压后运行 `TranSnap.exe` 实测。
+5. 以 CMake 编译 `windows/test` 的 GoogleTest 原生单测并由 CTest 运行。
+6. 上传 `build/windows/x64/runner/Release` 目录为构建产物 `TranSnap-windows-x64-<提交>`，解压后运行 `TranSnap.exe` 实测。
 
 工作流也可在 GitHub Actions 页面手动运行。
 

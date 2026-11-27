@@ -20,6 +20,9 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build windows --release
+      - run: cmake -S windows/test -B build/native-tests
+      - run: cmake --build build/native-tests --config Release
+      - run: ctest --test-dir build/native-tests -C Release --output-on-failure
       - uses: actions/upload-artifact@v4
         with:
           name: TranSnap-windows-x64-${{ github.sha }}
