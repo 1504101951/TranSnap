@@ -34,7 +34,9 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
+    await tester.pumpWidget(
+      SettingsApp(capabilities: PlatformCapability.values.toSet()),
+    );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     expect(find.text('保存设置'), findsNothing);
@@ -81,7 +83,9 @@ void main() {
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
+    await tester.pumpWidget(
+      SettingsApp(capabilities: PlatformCapability.values.toSet()),
+    );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     final slider = find.byType(Slider);
@@ -134,6 +138,65 @@ void main() {
     );
   });
 
+  test('外观快照的玻璃材质缺省为原生，接受亚克力与不透明，未知值报错', () {
+    Map<String, Object> snapshot([String? material]) => {
+      PreferenceKeys.glassAppearance: AppearanceModes.system,
+      PreferenceKeys.glassOpacity: 0.8,
+      AppearanceKeys.accentLight: 0xFF007AFF,
+      AppearanceKeys.accentDark: 0xFF0A84FF,
+      AppearanceKeys.glassMaterial: ?material,
+    };
+    expect(GlassAppearance.fromMap(snapshot()).material, GlassMaterials.native);
+    for (final material in [GlassMaterials.acrylic, GlassMaterials.opaque]) {
+      expect(GlassAppearance.fromMap(snapshot(material)).material, material);
+    }
+    expect(
+      () => GlassAppearance.fromMap(snapshot('mica')),
+      throwsFormatException,
+    );
+  });
+
+  testWidgets('非原生材质由 Flutter 绘制底色：亚克力叠加 16% 色调乘以透明度，不透明用阅读底色，均不创建原生玻璃视图', (
+    tester,
+  ) async {
+    addTearDown(() => GlassAppearance.current.value = const GlassAppearance());
+    Future<void> pump(String material, Brightness brightness) async {
+      GlassAppearance.current.value = GlassAppearance(
+        opacity: 0.5,
+        material: material,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: NativeGlassTheme.data(brightness),
+          home: const Center(
+            child: NativeGlassSurface(material: true, child: Text('玻璃')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Iterable<Color> fills() => tester
+        .widgetList<ColoredBox>(
+          find.descendant(
+            of: find.byType(NativeGlassSurface),
+            matching: find.byType(ColoredBox),
+          ),
+        )
+        .map((box) => box.color);
+
+    await pump(GlassMaterials.acrylic, Brightness.light);
+    expect(find.byType(AppKitView), findsNothing);
+    expect(fills(), contains(Colors.white.withValues(alpha: 0.08)));
+    await pump(GlassMaterials.acrylic, Brightness.dark);
+    expect(fills(), contains(Colors.black.withValues(alpha: 0.08)));
+    await pump(GlassMaterials.opaque, Brightness.dark);
+    expect(find.byType(AppKitView), findsNothing);
+    expect(fills(), contains(const Color(0xFF171717)));
+    await pump(GlassMaterials.native, Brightness.light);
+    expect(find.byType(AppKitView), findsOneWidget);
+  });
+
   test('外观快照缺少系统强调色时拒绝，系统蓝时 primary 与原定值一致', () {
     expect(
       () => GlassAppearance.fromMap({
@@ -174,7 +237,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
+    await tester.pumpWidget(
+      SettingsApp(capabilities: PlatformCapability.values.toSet()),
+    );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
 
@@ -211,7 +276,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
+    await tester.pumpWidget(
+      SettingsApp(capabilities: PlatformCapability.values.toSet()),
+    );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
     expect(saved[PreferenceKeys.accentForeground], isNull);
@@ -251,7 +318,9 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(SettingsApp(capabilities: PlatformCapability.values.toSet()));
+    await tester.pumpWidget(
+      SettingsApp(capabilities: PlatformCapability.values.toSet()),
+    );
     await tester.pumpAndSettle();
     await openSettingsPage(tester, '个性化');
 

@@ -2,11 +2,11 @@
 
 跨模块平台协议、状态、偏好键与界面数值常量。
 
-1. [appearance_modes.dart](appearance_modes.dart)：定义跟随系统、浅色和深色的外观模式标识，以及外观快照中系统强调色的键。
+1. [appearance_modes.dart](appearance_modes.dart)：定义跟随系统、浅色和深色的外观模式标识，外观快照中系统强调色、字体与玻璃材质的键，以及原生、亚克力、不透明三种玻璃材质标识。
 2. [bridge_event_types.dart](bridge_event_types.dart)：定义原生桥向Dart发送的事件类型名称。
 3. [channel_names.dart](channel_names.dart)：集中定义Flutter平台方法与事件通道名。
 4. [error_codes.dart](error_codes.dart)：集中定义跨平台调用和业务失败的错误码。
-5. [glass_metrics.dart](glass_metrics.dart)：集中定义共享玻璃控件的尺寸与间距。
+5. [glass_metrics.dart](glass_metrics.dart)：集中定义共享玻璃控件的尺寸、间距与非原生材质的色调比例。
 6. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 7. [method_names.dart](method_names.dart)：集中定义Dart与Swift交互的方法名称。
 8. [platform_view_types.dart](platform_view_types.dart)：定义原生平台视图的注册类型名。

@@ -51,7 +51,8 @@ final class NativeGlassFactory: NSObject, FlutterPlatformViewFactory {
                 AppConstants.accentDarkKey: pair?.dark ?? accentARGB(.darkAqua),
                 AppConstants.fontSetKey: preferences[AppConstants.fontSetKey] as? String ?? AppConstants.fontSetFallback,
                 AppConstants.fontsDirectoryKey: AppConstants.fontsURL.path,
-                AppConstants.fontStateKey: fontState]
+                AppConstants.fontStateKey: fontState,
+                AppConstants.glassMaterialKey: AppConstants.glassMaterialNative]
     }
 
     static func resolvedAccentNSColor(for appearance: NSAppearance) -> NSColor {

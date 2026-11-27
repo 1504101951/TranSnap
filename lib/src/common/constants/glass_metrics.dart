@@ -2,6 +2,7 @@ abstract final class GlassMetrics {
   static const controlRadius = 8.0;
   static const primaryRadius = 10.0;
   static const panelRadius = 16.0;
+  static const glassTint = 0.16;
   static const menuRadius = 10.0;
   static const menuItemRadius = 6.0;
   static const buttonHeight = 28.0;

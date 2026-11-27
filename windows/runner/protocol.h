@@ -39,6 +39,11 @@ inline constexpr char kAccentDarkKey[] = "accentDark";
 inline constexpr char kFontSetKey[] = "fontSet";
 inline constexpr char kFontsDirectoryKey[] = "fontsDirectory";
 inline constexpr char kFontStateKey[] = "fontState";
+inline constexpr char kGlassMaterialKey[] = "glassMaterial";
+
+inline constexpr char kGlassMaterialAcrylic[] = "acrylic";
+inline constexpr char kGlassMaterialOpaque[] = "opaque";
+inline constexpr unsigned long kAcrylicMinimumBuild = 22621;
 
 inline constexpr char kAppearanceSystem[] = "system";
 inline constexpr char kAccentForegroundAuto[] = "auto";

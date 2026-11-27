@@ -74,6 +74,16 @@ int64_t SystemAccent() {
   return 0xFF000000 | (red << 16) | (green << 8) | blue;
 }
 
+bool SupportsAcrylic() {
+  using RtlGetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+  auto get_version = reinterpret_cast<RtlGetVersion>(
+      ::GetProcAddress(::GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
+  RTL_OSVERSIONINFOW version = {};
+  version.dwOSVersionInfoSize = sizeof(version);
+  return get_version && get_version(&version) == 0 &&
+         version.dwBuildNumber >= protocol::kAcrylicMinimumBuild;
+}
+
 void ShowWarning(const std::string& title, const std::string& message) {
   std::wstring caption = Utf16FromUtf8(title);
   std::wstring text = Utf16FromUtf8(message);

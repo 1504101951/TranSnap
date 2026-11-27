@@ -15,6 +15,14 @@ abstract final class AppearanceKeys {
   static const accentDark = 'accentDark';
   static const fontsDirectory = 'fontsDirectory';
   static const fontState = 'fontState';
+  static const glassMaterial = 'glassMaterial';
+}
+
+abstract final class GlassMaterials {
+  static const native = 'native';
+  static const acrylic = 'acrylic';
+  static const opaque = 'opaque';
+  static const values = [native, acrylic, opaque];
 }
 
 abstract final class AccentColors {

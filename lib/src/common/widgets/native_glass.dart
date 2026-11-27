@@ -133,13 +133,28 @@ class NativeGlassSurface extends StatelessWidget {
         ),
       );
     }
+    final appearance = GlassAppearance.current.value;
     final glass = ClipRSuperellipse(
       borderRadius: BorderRadius.circular(radius),
       child: Stack(
         children: [
-          if (!activeLayer)
+          if (!activeLayer || appearance.material == GlassMaterials.opaque)
             Positioned.fill(
               child: ColoredBox(color: Theme.of(context).colorScheme.surface),
+            )
+          else if (appearance.material == GlassMaterials.acrylic)
+            Positioned.fill(
+              child: ColoredBox(
+                color:
+                    (brightness == Brightness.dark
+                            ? Colors.black
+                            : Colors.white)
+                        .withValues(
+                          alpha:
+                              GlassMetrics.glassTint *
+                              (highContrast ? 1 : appearance.opacity),
+                        ),
+              ),
             )
           else
             Positioned.fill(
@@ -2502,6 +2517,7 @@ class GlassAppearance {
     this.accentForeground = AccentForegrounds.auto,
     this.fontSet = FontSet.fallback,
     this.fontsDirectory = '',
+    this.material = GlassMaterials.native,
   });
   final String mode;
   final double opacity;
@@ -2511,6 +2527,7 @@ class GlassAppearance {
   final String accentForeground;
   final FontSet fontSet;
   final String fontsDirectory;
+  final String material;
   static final current = ValueNotifier(const GlassAppearance());
   static const channel = MethodChannel(ChannelNames.appearance);
 
@@ -2537,6 +2554,11 @@ class GlassAppearance {
     if (!AccentForegrounds.isValid(foreground)) {
       throw const FormatException('外观快照的前景色无效。');
     }
+    final material =
+        map[AppearanceKeys.glassMaterial] as String? ?? GlassMaterials.native;
+    if (!GlassMaterials.values.contains(material)) {
+      throw const FormatException('外观快照的玻璃材质无效。');
+    }
     return GlassAppearance(
       mode: mode,
       opacity: opacity,
@@ -2545,6 +2567,7 @@ class GlassAppearance {
       accentForeground: foreground,
       fontSet: FontSet.parse(map[PreferenceKeys.fontSet]),
       fontsDirectory: map[AppearanceKeys.fontsDirectory] as String? ?? '',
+      material: material,
     );
   }
 
@@ -2556,6 +2579,7 @@ class GlassAppearance {
     accentForeground: accentForeground,
     fontSet: value,
     fontsDirectory: fontsDirectory,
+    material: material,
   );
 
   @override
@@ -2567,7 +2591,8 @@ class GlassAppearance {
       other.accentDark == accentDark &&
       other.accentForeground == accentForeground &&
       other.fontSet == fontSet &&
-      other.fontsDirectory == fontsDirectory;
+      other.fontsDirectory == fontsDirectory &&
+      other.material == material;
 
   @override
   int get hashCode => Object.hash(
@@ -2578,6 +2603,7 @@ class GlassAppearance {
     accentForeground,
     fontSet,
     fontsDirectory,
+    material,
   );
 
   ThemeMode get themeMode => switch (mode) {

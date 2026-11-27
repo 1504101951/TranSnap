@@ -89,6 +89,7 @@
 ## 五、视觉体系、动效与图标系统
 
 - **视觉规范集中**：`GlassMetrics`（`lib/src/common/constants/glass_metrics.dart`）与 `MotionMetrics`（`motion_metrics.dart`）集中管理圆角、间距、字体尺寸与弹簧阻尼。
+- **玻璃材质来源**：外观快照的 `glassMaterial` 声明材质：macOS 为 `native`（`AppKitView` 原生玻璃）；Windows 11 22H2 及以上为 `acrylic`（窗口系统亚克力背景，`NativeGlassSurface` 叠加白或黑 16% 色调并乘以窗口透明度），更早的 Windows 为 `opaque`（以阅读底色绘制）。
 - **跨层材料原则**：外层容器由 `NativeGlassSurface` 提供单层原生玻璃或 `NativeReadingCanvas` 绘制连续 sRGB 阅读底色（`contentLayoutGuide` 仅避让红绿灯等安全区），禁止嵌套多层玻璃导致双重折射。
 - **统一图标体系**：全局功能图标统一使用 **`lucide_icons_flutter`（`LucideIcons`）**；翻译状态、声波、生词收藏、复制打勾、录制脉冲与 `BusyRing` 加载环由纯 Dart `CustomPainter` 驱动；所有动效遵循系统「减少动态效果」设置（无应用内开关）。
 - **逐字显影与棱镜高光**：译文与实时翻译分别由 Dart `CharReveal` 与 Swift `LiveFitTextView` 按相同节奏逐字显影；`OpticalPrismOverlay` 在前景叠加 Impeller 着色器 `shaders/optical_prism.frag` 实现随指针变动的 `1.25pt` 银白倒角与完成扫光。

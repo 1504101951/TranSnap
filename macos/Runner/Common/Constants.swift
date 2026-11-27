@@ -238,6 +238,8 @@ enum AppConstants {
     static let fontSetFallback = "neutral"
     static let fontsDirectoryKey = "fontsDirectory"
     static let fontStateKey = "fontState"
+    static let glassMaterialKey = "glassMaterial"
+    static let glassMaterialNative = "native"
     static let publishFontStateMethod = "publishFontState"
     static let hideOverlayMethod = "hideOverlay"
     static let hideOverlayTooltipMethod = "hideOverlayTooltip"

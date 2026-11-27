@@ -339,6 +339,10 @@ EncodableMap PlatformBridge::AppearanceSnapshot() const {
       {EncodableValue(protocol::kFontsDirectoryKey),
        EncodableValue((data_directory_ / protocol::kFontsDirectoryName).u8string())},
       {EncodableValue(protocol::kFontStateKey), EncodableValue(font_state_)},
+      {EncodableValue(protocol::kGlassMaterialKey),
+       EncodableValue(windows_system::SupportsAcrylic()
+                          ? protocol::kGlassMaterialAcrylic
+                          : protocol::kGlassMaterialOpaque)},
   };
 }
 
