@@ -3,7 +3,7 @@
 Windows 应用入口、主窗口与可执行文件资源。
 
 1. [resources/](resources/index.md)：可执行文件图标资源。
-2. [auxiliary_window.cpp](auxiliary_window.cpp)：设置、翻译历史等附属窗口：每个窗口一个 Flutter 引擎，收到 windowReady 后显示，5 秒未就绪关闭并提示，Windows 11 22H2 及以上使用系统亚克力背景，重复打开合并为激活已有窗口，窗口请求本地处理或转给主引擎。
+2. [auxiliary_window.cpp](auxiliary_window.cpp)：设置、翻译历史等附属窗口：每个窗口一个 Flutter 引擎，收到 windowReady 后显示，5 秒未就绪关闭并提示，Windows 11 22H2 及以上使用系统亚克力背景，重复打开合并为激活已有窗口，窗口请求本地处理或转给主引擎；快捷键录制归属发起窗口，窗口关闭时取消录制。
 3. [auxiliary_window.h](auxiliary_window.h)：声明附属窗口及其入口点、标题、尺寸与刷新方法。
 4. [bubble_layout.cpp](bubble_layout.cpp)：计算气泡位置：悬停提示优先放在锚点上方或下方 6pt，放不下时换到另一侧，水平居中于锚点并夹取到屏幕工作区内缩 6pt；输入翻译浮标在来源窗口与工作区重叠区域内优先放在锚点下方 8pt，其次上方，都放不下时贴底，左边与锚点对齐。
 5. [bubble_layout.h](bubble_layout.h)：声明悬停提示与输入浮标的布局接口及输入锚点结构。

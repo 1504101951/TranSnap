@@ -84,6 +84,7 @@ bool AuxiliaryWindow::OnCreate() {
 }
 
 void AuxiliaryWindow::OnDestroy() {
+  bridge_.CancelRecording(this);
   if (appearance_token_ != 0) {
     bridge_.RemoveAppearanceEngine(appearance_token_);
     appearance_token_ = 0;
@@ -138,6 +139,10 @@ void AuxiliaryWindow::HandleWindowRequest(const PlatformBridge::Call& call,
     ::ReleaseCapture();
     ::SendMessageW(GetHandle(), WM_NCLBUTTONDOWN, HTCAPTION, 0);
     result->Success();
+    return;
+  }
+  if (call.method_name() == protocol::kRecordShortcut) {
+    bridge_.RecordShortcut(this, std::move(result));
     return;
   }
   bridge_.RouteWindowRequest(call, std::move(result));

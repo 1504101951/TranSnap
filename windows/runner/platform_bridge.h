@@ -41,6 +41,10 @@ class PlatformBridge {
 
   void RemoveAppearanceEngine(int token);
 
+  void RecordShortcut(const void* owner, Result result);
+
+  void CancelRecording(const void* owner);
+
  private:
   void HandlePlatform(const Call& call, Result result);
   bool HandleLocal(const Call& call, Result& result);
@@ -79,6 +83,7 @@ class PlatformBridge {
   std::unique_ptr<SelectionCapture> capture_;
   std::unique_ptr<GlobalHotkeys> hotkeys_;
   std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>> recording_;
+  const void* recording_owner_ = nullptr;
 };
 
 #endif

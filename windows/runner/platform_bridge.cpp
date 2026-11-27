@@ -181,12 +181,33 @@ void PlatformBridge::RequestApplication(const char* method, EncodableValue argum
           [shared]() { (*shared)(nullptr); }));
 }
 
+void PlatformBridge::RecordShortcut(const void* owner, Result result) {
+  if (recording_) {
+    recording_->Success();
+  }
+  recording_ = std::shared_ptr<flutter::MethodResult<EncodableValue>>(std::move(result));
+  recording_owner_ = owner;
+  capture_->Record([this](unsigned scan_code, const key_names::Modifiers& modifiers) {
+    return RecordKey(scan_code, modifiers);
+  });
+}
+
+void PlatformBridge::CancelRecording(const void* owner) {
+  if (!recording_ || recording_owner_ != owner) {
+    return;
+  }
+  recording_.reset();
+  recording_owner_ = nullptr;
+  capture_->Record(nullptr);
+}
+
 bool PlatformBridge::RecordKey(unsigned scan_code, const key_names::Modifiers& modifiers) {
   auto name = key_names::Name(scan_code);
   if (!name || !recording_) {
     return false;
   }
   auto recording = std::move(recording_);
+  recording_owner_ = nullptr;
   if (*name == protocol::kEscapeKeyName) {
     recording->Success();
     return true;
@@ -480,14 +501,6 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
         return;
       }
       shared->Success(outcome.text ? EncodableValue(*outcome.text) : EncodableValue());
-    });
-  } else if (method == protocol::kRecordShortcut) {
-    if (recording_) {
-      recording_->Success();
-    }
-    recording_ = std::shared_ptr<flutter::MethodResult<EncodableValue>>(std::move(result));
-    capture_->Record([this](unsigned scan_code, const key_names::Modifiers& modifiers) {
-      return RecordKey(scan_code, modifiers);
     });
   } else if (method == protocol::kReplaceSelection) {
     auto session = Get<std::string>(args, "sessionId");
