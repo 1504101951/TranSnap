@@ -25,6 +25,8 @@ inline constexpr char kSystemStatus[] = "systemStatus";
 inline constexpr char kLanguageCandidates[] = "languageCandidates";
 inline constexpr char kToggleSpeech[] = "toggleSpeech";
 inline constexpr char kStopSpeech[] = "stopSpeech";
+inline constexpr char kSelectionPointer[] = "selectionPointer";
+inline constexpr char kSelectionKey[] = "selectionKey";
 inline constexpr char kOpenGlossaryFile[] = "openGlossaryFile";
 inline constexpr char kSaveTextFile[] = "saveTextFile";
 inline constexpr char kHistoryChanged[] = "historyChanged";
@@ -44,6 +46,13 @@ inline constexpr char kRollbackFailedError[] = "rollback_failed";
 inline constexpr char kCredentialsFailedError[] = "keychain_failed";
 inline constexpr char kDetectFailedError[] = "detect_failed";
 inline constexpr char kSaveFailedError[] = "save_failed";
+
+inline constexpr char kSelectionInvalidatedEvent[] = "selectionInvalidated";
+inline constexpr char kEscapePressedEvent[] = "escapePressed";
+inline constexpr char kPointerDownKind[] = "down";
+inline constexpr char kPointerUpKind[] = "up";
+inline constexpr char kEscapeKeyName[] = "Escape";
+inline constexpr unsigned long long kSyntheticEventTag = 0x5452534E;
 
 inline constexpr char kSystemLanguageKey[] = "systemLanguage";
 inline constexpr char kAutomaticKey[] = "automatic";

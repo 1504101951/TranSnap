@@ -1,5 +1,6 @@
 #include "windows_system.h"
 
+#include <flutter_windows.h>
 #include <windows.h>
 #include <dwmapi.h>
 #include <shlobj.h>
@@ -92,6 +93,15 @@ void ApplyAcrylic(HWND__* window) {
   DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
   ::DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
                           sizeof(backdrop));
+}
+
+std::pair<double, double> LogicalPoint(long x, long y) {
+  HMONITOR monitor = ::MonitorFromPoint(POINT{x, y}, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO info{sizeof(info)};
+  ::GetMonitorInfoW(monitor, &info);
+  double scale = FlutterDesktopGetDpiForMonitor(reinterpret_cast<intptr_t>(monitor)) / 96.0;
+  return {info.rcMonitor.left + (x - info.rcMonitor.left) / scale,
+          info.rcMonitor.top + (y - info.rcMonitor.top) / scale};
 }
 
 void ShowWarning(const std::string& title, const std::string& message) {

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
 
 struct HWND__;
 
@@ -22,6 +23,8 @@ int64_t SystemAccent();
 bool SupportsAcrylic();
 
 void ApplyAcrylic(HWND__* window);
+
+std::pair<double, double> LogicalPoint(long x, long y);
 
 void ShowWarning(const std::string& title, const std::string& message);
 
