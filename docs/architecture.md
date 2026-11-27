@@ -41,7 +41,7 @@
 - `transnap/window_startup`：附属窗口首帧就绪握手。
 
 ### 2. Swift 原生核心模块（`macos/Runner/`）
-- **选区与输入替换**：`SelectionMonitor` + `SelectionGestureDetector` + `TextSelectionContext` + `AccessibilitySelection`；输入替换时保持来源焦点并记录阶段耗时（`os_log` `subsystem=TranSnap`、`category=Performance`）。
+- **选区与输入替换**：`SelectionMonitor` 上报指针按下、抬起与按键逻辑键名，主引擎 `SelectionGestureDetector`（Dart）返回划词手势；`TextSelectionContext` 把辅助功能角色归为四类上下文，`AccessibilitySelection` 读取选区并由主引擎 `SelectionContext`（Dart）判定是否复制兜底与是否采用复制结果；语言识别由原生返回候选语言、主引擎 `LanguageDetection`（Dart）判定；输入替换时保持来源焦点并记录阶段耗时（`os_log` `subsystem=TranSnap`、`category=Performance`）。
 - **浮层与贴图**：`OverlayPanel` 管理非激活面板防抢焦定位与淡入/缩放；`PinOverlayController` 管理多个独立置顶贴图的命中、拖动与 Esc 单窗关闭。
 - **采集与导出流水线**：
   - `ScreenCaptureService`：ScreenCaptureKit 截图、图像解码、Vision 文档 OCR（保留表格/列表 Markdown 结构）与并行二维码/条码解码。

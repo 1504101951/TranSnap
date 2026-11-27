@@ -9,7 +9,9 @@ final class SelectionMonitor {
     private var nextHotKeyId: UInt32 = 1
     var isCapturingScreenshot = false
     private var hotKeyHandler: EventHandlerRef?
-    private var detector = SelectionGestureDetector()
+    private var pointerGeneration = 0
+    private var keyGeneration = 0
+    private var keyEvents: Task<Void, Never>?
     private var localMouseMonitor: Any?
     private var globalMouseMonitor: Any?
     private var keyboardMonitor: Any?
@@ -106,8 +108,8 @@ final class SelectionMonitor {
         hotKeys = replacements
         self.automatic = automatic
         self.excludedApps = excludedApps
-        detector = SelectionGestureDetector()
-        pendingKeySelection = nil
+        pointerGeneration += 1
+        clearPendingKey()
         captureTask?.cancel()
         stopObservingSelection()
         MacPlatformBridge.Shared.instance?.invalidateSelection()
@@ -144,7 +146,7 @@ final class SelectionMonitor {
 
     func start() {
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), AppConstants.axMessagingTimeout)
-        let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp]
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseMask) { [weak self] event in
             guard !SyntheticEvent.isMarked(event) else { return event }
             let type = event.type
@@ -182,7 +184,7 @@ final class SelectionMonitor {
             let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             Task { @MainActor in
                 self?.captureTask?.cancel()
-                self?.pendingKeySelection = nil
+                self?.clearPendingKey()
                 self?.stopObservingSelection()
                 MacPlatformBridge.Shared.instance?.sourceApplicationChanged(to: app?.processIdentifier)
             }
@@ -194,6 +196,7 @@ final class SelectionMonitor {
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
         captureTask?.cancel()
         validationTask?.cancel()
+        keyEvents?.cancel()
         for monitor in [localMouseMonitor, globalMouseMonitor, keyboardMonitor].compactMap({ $0 }) {
             NSEvent.removeMonitor(monitor)
         }
@@ -210,26 +213,36 @@ final class SelectionMonitor {
         guard !isCapturingScreenshot else { return }
         let bridge = MacPlatformBridge.Shared.instance
         if type == .leftMouseDown {
-            pendingKeySelection = nil
+            clearPendingKey()
             ignoreMouseGesture = bridge?.overlayContains(location) == true
                 || NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
         }
         guard !ignoreMouseGesture else { return }
-        let kind: MousePointerEvent.Kind
+        let kind: String
         switch type {
         case .leftMouseDown:
             captureTask?.cancel()
             stopObservingSelection()
             bridge?.invalidateSelection()
-            kind = .down
-        case .leftMouseDragged: kind = .dragged
-        case .leftMouseUp: kind = .up
+            pointerGeneration += 1
+            kind = AppConstants.pointerDownKind
+        case .leftMouseUp: kind = AppConstants.pointerUpKind
         default: return
         }
         guard automatic else { return }
-        let pointer = MousePointerEvent(kind: kind, clickCount: clickCount, x: location.x, y: location.y)
-        guard let gesture = detector.handle(pointer) else { return }
-        capture(gesture: gesture)
+        let generation = pointerGeneration
+        let request: [String: Any] = ["kind": kind, "clickCount": clickCount, "x": location.x, "y": location.y]
+        Task { @MainActor [weak self] in
+            let gesture = await bridge?.requestApplication(AppConstants.selectionPointerMethod, arguments: request) as? String
+            guard let self, self.pointerGeneration == generation,
+                  let gesture = gesture.flatMap(SelectionGesture.init(rawValue:)) else { return }
+            self.capture(gesture: gesture)
+        }
+    }
+
+    private func clearPendingKey() {
+        pendingKeySelection = nil
+        keyGeneration += 1
     }
 
     @MainActor
@@ -237,26 +250,38 @@ final class SelectionMonitor {
         guard !isCapturingScreenshot else { return }
         let bridge = MacPlatformBridge.Shared.instance
         if keyCode == AppConstants.escapeKeyCode, type == .keyDown {
-            pendingKeySelection = nil
+            clearPendingKey()
             captureTask?.cancel()
             stopObservingSelection()
             bridge?.invalidateSelection(eventType: AppConstants.escapePressedMethod)
             return
         }
+        let previous = keyEvents
         if automatic, type == .keyDown {
-            if let gesture = SelectionGesture.keyboardGesture(keyCode: keyCode, modifiers: modifiers) {
-                pendingKeySelection = (keyCode, gesture)
+            guard let key = SelectionGesture.keyName(keyCode: keyCode, modifiers: modifiers) else { return }
+            let generation = keyGeneration
+            let request: [String: Any] = ["key": key, "modifiers": ShortcutNames.names(flags: modifiers)]
+            keyEvents = Task { @MainActor [weak self] in
+                await previous?.value
+                let gesture = await bridge?.requestApplication(AppConstants.selectionKeyMethod, arguments: request) as? String
+                guard let self, self.keyGeneration == generation,
+                      let gesture = gesture.flatMap(SelectionGesture.init(rawValue:)) else { return }
+                self.pendingKeySelection = (keyCode, gesture)
             }
             return
         }
         guard type == .keyUp else { return }
-        if let pending = pendingKeySelection, pending.keyCode == keyCode {
-            pendingKeySelection = nil
-            capture(gesture: pending.gesture)
-            return
-        }
-        if bridge?.hasSelection == true, observedPID != nil {
-            validateSelection()
+        keyEvents = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self, !self.isCapturingScreenshot else { return }
+            if let pending = self.pendingKeySelection, pending.keyCode == keyCode {
+                self.pendingKeySelection = nil
+                self.capture(gesture: pending.gesture)
+                return
+            }
+            if bridge?.hasSelection == true, self.observedPID != nil {
+                self.validateSelection()
+            }
         }
     }
 

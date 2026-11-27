@@ -119,6 +119,10 @@ enum AppConstants {
     static let liveRecordingKey = "liveRecording"
     static let screenshotIncludesCursorKey = "screenshotIncludesCursor"
     static let languageDetectionCandidates = 3
+    static let selectAllKeyCode: UInt16 = 0
+    static let selectAllKeyName = "SelectAll"
+    static let pointerDownKind = "down"
+    static let pointerUpKind = "up"
     static let chineseScriptTransforms = [(script: "Hans", transform: "Hant-Hans"), (script: "Hant", transform: "Hans-Hant")]
     static let recordingClickEffectKey = "recordingClickEffect"
     static let recordingClickEffectEnabledKey = "recordingClickEffectEnabled"
@@ -317,6 +321,8 @@ enum AppConstants {
     static let copyImageFileMethod = "copyImageFile"
     static let languageCandidatesMethod = "languageCandidates"
     static let shouldCopySelectionMethod = "shouldCopySelection"
+    static let selectionPointerMethod = "selectionPointer"
+    static let selectionKeyMethod = "selectionKey"
     static let acceptsCopiedSelectionMethod = "acceptsCopiedSelection"
     static let lookupDefinitionMethod = "lookupDefinition"
     static let vocabularyListMethod = "vocabularyList"
@@ -494,12 +500,10 @@ enum SelectionGesture: String {
 
     var isExplicit: Bool { self == .hotkey || self == .inputHotkey }
 
-    static func keyboardGesture(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> SelectionGesture? {
+    static func keyName(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String? {
         let flags = modifiers.intersection([.command, .shift, .option, .control])
-        if keyCode == 0, flags == .command { return .selectAll }
-        let navigationKeys: Set<UInt16> = [115, 116, 119, 121, 123, 124, 125, 126]
-        if flags.contains(.shift), navigationKeys.contains(keyCode) { return .keyboard }
-        return nil
+        if keyCode == AppConstants.selectAllKeyCode, flags == .command { return AppConstants.selectAllKeyName }
+        return AppConstants.shortcutKeyNames[keyCode]
     }
 }
 

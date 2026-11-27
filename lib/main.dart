@@ -20,6 +20,7 @@ import 'src/history/vocabulary.dart';
 import 'src/platform/channel_platform_bridge.dart';
 import 'src/screenshot/screenshot_app.dart';
 import 'src/selection/selection_context.dart';
+import 'src/selection/selection_gestures.dart';
 import 'src/selection/selection_session.dart';
 import 'src/selection/selection_translation_app.dart';
 import 'src/settings/app_settings.dart';
@@ -156,6 +157,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
     },
   );
 
+  final gestures = SelectionGestureDetector();
   bridge.handleApplicationRequests((call) async {
     switch (call.method) {
       case MethodNames.getSettings:
@@ -170,6 +172,9 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.cancelFontDownload:
       case MethodNames.uninstallFontSet:
         return fonts.handle(call);
+      case MethodNames.selectionPointer:
+      case MethodNames.selectionKey:
+        return gestures.handle(call);
       case MethodNames.shouldCopySelection:
       case MethodNames.acceptsCopiedSelection:
         return handleSelectionContextRequest(call);

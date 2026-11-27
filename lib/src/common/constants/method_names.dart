@@ -219,6 +219,10 @@ abstract final class MethodNames {
 
   static const shouldCopySelection = 'shouldCopySelection';
 
+  static const selectionPointer = 'selectionPointer';
+
+  static const selectionKey = 'selectionKey';
+
   static const acceptsCopiedSelection = 'acceptsCopiedSelection';
 
   static const lookupDefinition = 'lookupDefinition';

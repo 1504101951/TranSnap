@@ -1,6 +1,10 @@
 abstract final class SelectionGestureTypes {
   static const drag = 'drag';
 
+  static const doubleClick = 'doubleClick';
+
+  static const tripleClick = 'tripleClick';
+
   static const selectAll = 'selectAll';
 
   static const keyboard = 'keyboard';
@@ -22,4 +26,25 @@ abstract final class SelectionContextKinds {
   static const web = 'web';
 
   static const other = 'other';
+}
+
+abstract final class SelectionPointerKinds {
+  static const down = 'down';
+
+  static const up = 'up';
+}
+
+abstract final class SelectionKeys {
+  static const selectAll = 'SelectAll';
+
+  static const navigation = {
+    'Home',
+    'End',
+    'PageUp',
+    'PageDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+  };
 }

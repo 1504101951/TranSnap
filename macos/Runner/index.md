@@ -20,24 +20,23 @@ macOS应用生命周期、系统能力与窗口控制器。
 16. [ScreenCaptureService.swift](ScreenCaptureService.swift)：通过系统屏幕捕获能力获取图像并执行设备OCR。
 17. [ScreenshotStorage.swift](ScreenshotStorage.swift)：统一采集根目录、分类日期路径与PNG/MP4/GIF/APNG/WebM防覆盖写入。
 18. [ScreenshotWindowController.swift](ScreenshotWindowController.swift)：管理截图与导入图片窗口、可取消捕获会话、首帧 BGRA 解码、键盘路由及原生导出操作。
-19. [SelectionGestureDetector.swift](SelectionGestureDetector.swift)：识别鼠标和键盘产生的文本选区手势。
-20. [SelectionMonitor.swift](SelectionMonitor.swift)：监听全局选区变化并协调采集、热键和会话失效。
-21. [SettingsWindowController.swift](SettingsWindowController.swift)：管理设置Flutter窗口、配置转发和快捷键录制。
-22. [StatusBarController.swift](StatusBarController.swift)：管理菜单栏入口、菜单状态和用户操作回调。
-23. [TextSelectionContext.swift](TextSelectionContext.swift)：把辅助功能角色归为文本、非文本、网页内容、其他四类，判断选区是否属于允许读取的文本上下文，并向 Dart 请求复制兜底判定。
-24. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
-25. [CaptureWindowController.swift](CaptureWindowController.swift)：协调采集选区、实时阴影、统一采集悬浮条、媒体结果和系统保存面板。
-26. [MediaCaptureService.swift](MediaCaptureService.swift)：管理屏幕流、录制会话、裁剪区间、手动与自动滚动采集、导出转换及临时资源生命周期。
-27. [GIFExporter.swift](GIFExporter.swift)：按设置在裁剪区间内逐帧解码MP4并生成有界、等比缩小的GIF或APNG。
-28. [ScrollStitcher.swift](ScrollStitcher.swift)：先用缩略探针跳过静止帧，再识别垂直位移和上下固定带并生成保持原始像素的长图。
-29. [ScreenshotComposer.swift](ScreenshotComposer.swift)：按原始像素拼接、拆分截图历史图片，并逐像素比较两张图生成差异蒙版。
-30. [ApplicationRecorder.swift](ApplicationRecorder.swift)：将所选应用在全部显示器上的可见窗口合成为固定黑底画布并编码视频。
-31. [LiveRegionCapture.swift](LiveRegionCapture.swift)：持续采集区域、窗口或全屏画面并识别文字，画面不变时跳过识别，结果换算为屏幕坐标并按阅读顺序回传。
-32. [LiveRegionCoordinator.swift](LiveRegionCoordinator.swift)：在选区上绘制实时翻译盖层，并连接捕获与主引擎会话。
-33. [MCP/](MCP/index.md)：MCP 截图接口的 JSON-RPC 协议、本地 socket 传输及 App 侧请求处理。
-34. [SystemTranslationService.swift](SystemTranslationService.swift)：按语言对创建无界面系统翻译会话，翻译一组段落、按请求取消并查询语言包状态。
-35. [SpeechService.swift](SpeechService.swift)：用系统离线语音朗读译文卡片的一栏文字，同一段再次请求即停止。
-36. [WebMExporter.swift](WebMExporter.swift)：按裁剪区间读取录制的NV12帧并转为BT.601矩阵，经不挂窗口的WebKit编码VP8并写成保持原分辨率与原帧时间的WebM，编码器丢帧时报错。
-37. [AutoScroll.swift](AutoScroll.swift)：长截图自动滚动的步进状态机，以及经辅助功能接口读写选区中心来源窗口纵向滚动条的目标。
-38. [WindowEngine.swift](WindowEngine.swift)：附属窗口共用的 Flutter 引擎与窗口装配：建引擎与通道、运行入口、注册插件与原生玻璃，建窗口、前置与启动失败提示。
-39. [RecordingClickOverlay.swift](RecordingClickOverlay.swift)：管理区域与全屏录制期间的透明穿透浮层，用原生 CALayer 绘制 5 种光学点击特效、右键区分与拖动轨迹，并过滤合成事件。
+19. [SelectionMonitor.swift](SelectionMonitor.swift)：监听全局鼠标与键盘事件，把指针按下、抬起与按键的逻辑键名交给 Dart 识别划词手势，并按返回的手势协调采集、热键和会话失效。
+20. [SettingsWindowController.swift](SettingsWindowController.swift)：管理设置Flutter窗口、配置转发和快捷键录制。
+21. [StatusBarController.swift](StatusBarController.swift)：管理菜单栏入口、菜单状态和用户操作回调。
+22. [TextSelectionContext.swift](TextSelectionContext.swift)：把辅助功能角色归为文本、非文本、网页内容、其他四类，判断选区是否属于允许读取的文本上下文，并向 Dart 请求复制兜底判定。
+23. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
+24. [CaptureWindowController.swift](CaptureWindowController.swift)：协调采集选区、实时阴影、统一采集悬浮条、媒体结果和系统保存面板。
+25. [MediaCaptureService.swift](MediaCaptureService.swift)：管理屏幕流、录制会话、裁剪区间、手动与自动滚动采集、导出转换及临时资源生命周期。
+26. [GIFExporter.swift](GIFExporter.swift)：按设置在裁剪区间内逐帧解码MP4并生成有界、等比缩小的GIF或APNG。
+27. [ScrollStitcher.swift](ScrollStitcher.swift)：先用缩略探针跳过静止帧，再识别垂直位移和上下固定带并生成保持原始像素的长图。
+28. [ScreenshotComposer.swift](ScreenshotComposer.swift)：按原始像素拼接、拆分截图历史图片，并逐像素比较两张图生成差异蒙版。
+29. [ApplicationRecorder.swift](ApplicationRecorder.swift)：将所选应用在全部显示器上的可见窗口合成为固定黑底画布并编码视频。
+30. [LiveRegionCapture.swift](LiveRegionCapture.swift)：持续采集区域、窗口或全屏画面并识别文字，画面不变时跳过识别，结果换算为屏幕坐标并按阅读顺序回传。
+31. [LiveRegionCoordinator.swift](LiveRegionCoordinator.swift)：在选区上绘制实时翻译盖层，并连接捕获与主引擎会话。
+32. [MCP/](MCP/index.md)：MCP 截图接口的 JSON-RPC 协议、本地 socket 传输及 App 侧请求处理。
+33. [SystemTranslationService.swift](SystemTranslationService.swift)：按语言对创建无界面系统翻译会话，翻译一组段落、按请求取消并查询语言包状态。
+34. [SpeechService.swift](SpeechService.swift)：用系统离线语音朗读译文卡片的一栏文字，同一段再次请求即停止。
+35. [WebMExporter.swift](WebMExporter.swift)：按裁剪区间读取录制的NV12帧并转为BT.601矩阵，经不挂窗口的WebKit编码VP8并写成保持原分辨率与原帧时间的WebM，编码器丢帧时报错。
+36. [AutoScroll.swift](AutoScroll.swift)：长截图自动滚动的步进状态机，以及经辅助功能接口读写选区中心来源窗口纵向滚动条的目标。
+37. [WindowEngine.swift](WindowEngine.swift)：附属窗口共用的 Flutter 引擎与窗口装配：建引擎与通道、运行入口、注册插件与原生玻璃，建窗口、前置与启动失败提示。
+38. [RecordingClickOverlay.swift](RecordingClickOverlay.swift)：管理区域与全屏录制期间的透明穿透浮层，用原生 CALayer 绘制 5 种光学点击特效、右键区分与拖动轨迹，并过滤合成事件。

@@ -1006,13 +1006,12 @@ class RunnerTests: XCTestCase {
     }
 
     func testKeyboardSelectionGestures() {
-        XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 0, modifiers: .command), .selectAll)
-        XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: .shift), .keyboard)
-        XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: [.shift, .option]), .keyboard)
-        XCTAssertEqual(SelectionGesture.keyboardGesture(keyCode: 115, modifiers: [.shift, .command]), .keyboard)
-        XCTAssertNil(SelectionGesture.keyboardGesture(keyCode: 0, modifiers: .shift))
-        XCTAssertNil(SelectionGesture.keyboardGesture(keyCode: 8, modifiers: .command))
-        XCTAssertNil(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: []))
+        XCTAssertEqual(SelectionGesture.keyName(keyCode: 0, modifiers: .command), AppConstants.selectAllKeyName)
+        XCTAssertEqual(SelectionGesture.keyName(keyCode: 0, modifiers: [.command, .shift]), "KeyA")
+        XCTAssertEqual(SelectionGesture.keyName(keyCode: 0, modifiers: [.command, .capsLock]), AppConstants.selectAllKeyName)
+        XCTAssertEqual(SelectionGesture.keyName(keyCode: 123, modifiers: .shift), "ArrowLeft")
+        XCTAssertEqual(SelectionGesture.keyName(keyCode: 115, modifiers: [.shift, .command]), "Home")
+        XCTAssertNil(SelectionGesture.keyName(keyCode: 255, modifiers: .shift))
     }
 
     func testTextSelectionContextKinds() {

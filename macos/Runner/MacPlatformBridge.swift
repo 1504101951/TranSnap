@@ -733,6 +733,13 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
         methods!.invokeMethod(method, arguments: arguments, result: result)
     }
 
+    @MainActor
+    func requestApplication(_ method: String, arguments: Any?) async -> Any? {
+        await withCheckedContinuation { continuation in
+            requestApplication(method, arguments: arguments) { continuation.resume(returning: $0) }
+        }
+    }
+
     func overlayContains(_ point: NSPoint) -> Bool {
         overlay.contains(point)
     }

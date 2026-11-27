@@ -34,11 +34,6 @@ enum TextSelectionContext {
 
     @MainActor
     static func decide(_ method: String, _ arguments: [String: Any]) async -> Bool {
-        guard let bridge = MacPlatformBridge.Shared.instance else { return false }
-        return await withCheckedContinuation { continuation in
-            bridge.requestApplication(method, arguments: arguments) { value in
-                continuation.resume(returning: value as? Bool == true)
-            }
-        }
+        await MacPlatformBridge.Shared.instance?.requestApplication(method, arguments: arguments) as? Bool == true
     }
 }
