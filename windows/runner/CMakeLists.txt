@@ -21,6 +21,7 @@ add_executable(${BINARY_NAME} WIN32
   "selection_capture.cpp"
   "selection_context.cpp"
   "selection_monitor.cpp"
+  "selection_watcher.cpp"
   "shortcut_rules.cpp"
   "speech_service.cpp"
   "synthetic_input.cpp"

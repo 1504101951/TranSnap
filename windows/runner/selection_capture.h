@@ -11,6 +11,7 @@
 #include "bubble_layout.h"
 #include "input_bubble.h"
 #include "selection_monitor.h"
+#include "selection_watcher.h"
 
 struct HWINEVENTHOOK__;
 
@@ -58,6 +59,8 @@ class SelectionCapture {
 
  private:
   void Validate();
+  void Observe(unsigned long process);
+  void StopObserving();
   void Decide(const char* method, flutter::EncodableMap request,
               std::function<void(bool)> done);
   struct Pending {
@@ -85,6 +88,7 @@ class SelectionCapture {
   Delegate delegate_;
   std::unique_ptr<SelectionMonitor> monitor_;
   InputBubble bubble_;
+  SelectionWatcher watcher_;
   std::optional<bubble_layout::InputAnchor> input_anchor_;
   std::vector<int> input_selection_;
   HWINEVENTHOOK__* foreground_hook_ = nullptr;

@@ -40,29 +40,31 @@ Windows 应用入口、主窗口与可执行文件资源。
 36. [resource.h](resource.h)：定义资源脚本使用的资源编号。
 37. [runner.exe.manifest](runner.exe.manifest)：声明每显示器 DPI 感知与支持的 Windows 版本。
 38. [Runner.rc](Runner.rc)：声明可执行文件的图标、版本与产品信息。
-39. [selection_capture.cpp](selection_capture.cpp)：划词采集：按手势读取来源应用选区（自动手势先等 80ms），经 Dart 决定复制兜底与是否采用复制结果，发出选区捕获与失效事件；跳过本应用与排除应用（按可执行文件路径），来源名取可执行文件的文件说明；前台应用切换、Esc 与按下鼠标使选区失效，展开卡片后保留结果；为快捷键翻译按会话读取来源选区（允许复制兜底）；输入翻译快捷键读不到选区且焦点为非密码框文本输入控件时发送 Ctrl+A 后重读，捕获后显示进度浮标，替换时由 Dart 按焦点事实决定直接粘贴或在来源窗口查找唯一可写输入框并聚焦 80ms 后粘贴，经剪贴板粘贴 500ms 后剪贴板未被改写则还原。
+39. [selection_capture.cpp](selection_capture.cpp)：划词采集：按手势读取来源应用选区（自动手势先等 80ms），经 Dart 决定复制兜底与是否采用复制结果，发出选区捕获与失效事件；跳过本应用与排除应用（按可执行文件路径），来源名取可执行文件的文件说明；前台应用切换、Esc 与按下鼠标使选区失效，捕获后观察来源的焦点与选区变化并在按键抬起或变化后 80ms 复核（读到空选区即失效），展开卡片后保留结果；为快捷键翻译按会话读取来源选区（允许复制兜底）；输入翻译快捷键读不到选区且焦点为非密码框文本输入控件时发送 Ctrl+A 后重读，捕获后显示进度浮标，替换时由 Dart 按焦点事实决定直接粘贴或在来源窗口查找唯一可写输入框并聚焦 80ms 后粘贴，经剪贴板粘贴 500ms 后剪贴板未被改写则还原。
 40. [selection_capture.h](selection_capture.h)：声明划词采集与其委托（请求 Dart、发送事件、自动模式、排除判断）。
 41. [selection_context.cpp](selection_context.cpp)：把 UI Automation 控件类型归一为文本、非文本、网页内容（Chromium、Gecko 文档）、其他四类，并按最近的文本或非文本祖先决定是否读取选中文字。
 42. [selection_context.h](selection_context.h)：声明选区上下文类别、祖先层数上限与判定接口。
 43. [selection_monitor.cpp](selection_monitor.cpp)：低级鼠标与键盘钩子：左键按下与抬起附连击次数、逻辑坐标交给 Dart 判定划词手势，键盘选区键串行请求 Dart 并在同键抬起时采集；Esc 与按下鼠标使当前选区失效，忽略落在浮层内或本应用在前台时的鼠标手势与自身合成事件；录制快捷键时本应用在前台的下一个非修饰键按下交给录制方并吞掉。
 44. [selection_monitor.h](selection_monitor.h)：声明划词监控与其委托（请求 Dart、自动模式、采集、失效、选区校验）。
-45. [shortcut_rules.cpp](shortcut_rules.cpp)：把偏好中的逻辑键名与修饰键名解析为扫描码组合并校验：至少含 Ctrl、Alt 或 Win，按键不能是 Esc，保留 Ctrl（可加 Shift）搭配 A、Z、Y、X、C、V 的文本编辑组合。
-46. [shortcut_rules.h](shortcut_rules.h)：声明快捷键用途（偏好键、标题、手势）、解析校验与相同判断。
-47. [speech_service.cpp](speech_service.cpp)：以 WinRT 语音合成朗读文字，按语言选择系统声音，同一段再次请求即停止。
-48. [speech_service.h](speech_service.h)：声明朗读开关与停止接口。
-49. [synthetic_input.cpp](synthetic_input.cpp)：发送带本应用标记的 Ctrl 组合键，先抬起仍按住的 Alt、Shift、Win，避免组合变形。
-50. [synthetic_input.h](synthetic_input.h)：声明合成按键接口。
-51. [text_encoding.cpp](text_encoding.cpp)：UTF-8 与 UTF-16 互转（无效编码返回空串），不依赖 Flutter，原生单测直接编译。
-52. [text_encoding.h](text_encoding.h)：声明编码转换函数。
-53. [text_file.cpp](text_file.cpp)：读取 UTF-8 文本文件（非 UTF-8 时报错）并以临时文件加改名原子写入。
-54. [text_file.h](text_file.h)：声明文本文件读取与原子写入接口。
-55. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
-56. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
-57. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发；输入翻译取选区与焦点矩形作锚点、汇报焦点事实（是否选区节点、文本输入、密码框），并在来源窗口内按控件视图查找值可写的非密码文本输入（最多 2000 个节点、深度 40、1 秒）。
-58. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
-59. [utils.cpp](utils.cpp)：控制台附加与命令行参数读取。
-60. [utils.h](utils.h)：声明控制台与命令行参数工具函数。
-61. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
-62. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
-63. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明、按键显示标签（特殊键用名称，其余取当前键盘布局字符的大写），并显示警告与启动失败提示。
-64. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。
+45. [selection_watcher.cpp](selection_watcher.cpp)：在后台线程订阅 UI Automation 焦点变化与来源焦点控件的文本选区变化事件，事件回到主线程通知复核；切换或停止观察时移除全部事件处理。
+46. [selection_watcher.h](selection_watcher.h)：声明选区变化观察接口。
+47. [shortcut_rules.cpp](shortcut_rules.cpp)：把偏好中的逻辑键名与修饰键名解析为扫描码组合并校验：至少含 Ctrl、Alt 或 Win，按键不能是 Esc，保留 Ctrl（可加 Shift）搭配 A、Z、Y、X、C、V 的文本编辑组合。
+48. [shortcut_rules.h](shortcut_rules.h)：声明快捷键用途（偏好键、标题、手势）、解析校验与相同判断。
+49. [speech_service.cpp](speech_service.cpp)：以 WinRT 语音合成朗读文字，按语言选择系统声音，同一段再次请求即停止。
+50. [speech_service.h](speech_service.h)：声明朗读开关与停止接口。
+51. [synthetic_input.cpp](synthetic_input.cpp)：发送带本应用标记的 Ctrl 组合键，先抬起仍按住的 Alt、Shift、Win，避免组合变形。
+52. [synthetic_input.h](synthetic_input.h)：声明合成按键接口。
+53. [text_encoding.cpp](text_encoding.cpp)：UTF-8 与 UTF-16 互转（无效编码返回空串），不依赖 Flutter，原生单测直接编译。
+54. [text_encoding.h](text_encoding.h)：声明编码转换函数。
+55. [text_file.cpp](text_file.cpp)：读取 UTF-8 文本文件（非 UTF-8 时报错）并以临时文件加改名原子写入。
+56. [text_file.h](text_file.h)：声明文本文件读取与原子写入接口。
+57. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
+58. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
+59. [uia_selection.cpp](uia_selection.cpp)：以 UI Automation（连接与事务超时 1 秒）读取前台进程焦点控件及其祖先的选中文字，未读到时于 80ms、180ms 后重试；判断密码框、选区上下文与键盘手势是否可触发；输入翻译取选区与焦点矩形作锚点、汇报焦点事实（是否选区节点、文本输入、密码框），并在来源窗口内按控件视图查找值可写的非密码文本输入（最多 2000 个节点、深度 40、1 秒）。
+60. [uia_selection.h](uia_selection.h)：声明选区读取结果与读取、密码框、键盘触发判断接口。
+61. [utils.cpp](utils.cpp)：控制台附加与命令行参数读取。
+62. [utils.h](utils.h)：声明控制台与命令行参数工具函数。
+63. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
+64. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
+65. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明、按键显示标签（特殊键用名称，其余取当前键盘布局字符的大写），并显示警告与启动失败提示。
+66. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。

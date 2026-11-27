@@ -52,7 +52,9 @@ EncodableValue OptionalText(const std::optional<std::string>& text) {
 }
 
 SelectionCapture::SelectionCapture(Delegate delegate)
-    : delegate_(std::move(delegate)), bubble_([this]() { return delegate_.dark(); }) {
+    : delegate_(std::move(delegate)),
+      bubble_([this]() { return delegate_.dark(); }),
+      watcher_([this]() { Validate(); }) {
   g_capture = this;
   monitor_ = std::make_unique<SelectionMonitor>(SelectionMonitor::Delegate{
       delegate_.request,
@@ -89,7 +91,7 @@ void SelectionCapture::Capture(const std::string& gesture) {
   }
   std::string source_name = windows_system::ApplicationDisplayName(executable);
   if (gesture == protocol::kHotkeyGesture) {
-    observed_process_ = 0;
+    StopObserving();
     Emit(gesture, process, source_name, "", nullptr, std::nullopt, {});
     return;
   }
@@ -245,7 +247,7 @@ void SelectionCapture::Finish(const Pending& pending, const Outcome& outcome) {
   }
   Emit(pending.gesture, pending.process, pending.source_name, text.value_or(""), read_failure,
        outcome.anchor, outcome.owner_id);
-  observed_process_ = pending.process;
+  Observe(pending.process);
 }
 
 void SelectionCapture::Emit(const std::string& gesture, unsigned long process,
@@ -284,7 +286,7 @@ void SelectionCapture::Emit(const std::string& gesture, unsigned long process,
 
 void SelectionCapture::Cancel(const char* event_type) {
   ++generation_;
-  observed_process_ = 0;
+  StopObserving();
   Invalidate(event_type);
 }
 
@@ -336,7 +338,7 @@ void SelectionCapture::ForegroundChanged(unsigned long process) {
   }
   foreground_process_ = process;
   ++generation_;
-  observed_process_ = 0;
+  StopObserving();
   if (source_process_ != process) {
     Invalidate(protocol::kSelectionInvalidatedEvent);
   }
@@ -361,7 +363,7 @@ void SelectionCapture::Validate() {
           return;
         }
         Invalidate(protocol::kSelectionInvalidatedEvent);
-        observed_process_ = 0;
+        StopObserving();
       });
     });
   });
@@ -497,4 +499,14 @@ void SelectionCapture::ShowInputFailure(const std::string& session_id, const std
 
 void SelectionCapture::Record(SelectionMonitor::Recorder recorder) {
   monitor_->Record(std::move(recorder));
+}
+
+void SelectionCapture::Observe(unsigned long process) {
+  observed_process_ = process;
+  watcher_.Watch(process);
+}
+
+void SelectionCapture::StopObserving() {
+  observed_process_ = 0;
+  watcher_.Stop();
 }
