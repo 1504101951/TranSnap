@@ -5,6 +5,7 @@
 #include <system_error>
 
 #include "json_codec.h"
+#include "text_file.h"
 
 namespace preferences_store {
 
@@ -43,20 +44,8 @@ bool Save(const std::filesystem::path& file,
     error = "无法创建设置目录：" + code.message();
     return false;
   }
-  auto temporary = file;
-  temporary += ".tmp";
-  {
-    std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
-    stream << json_codec::Stringify(flutter::EncodableValue(preferences));
-    stream.flush();
-    if (!stream) {
-      error = "无法写入设置文件。";
-      return false;
-    }
-  }
-  std::filesystem::rename(temporary, file, code);
-  if (code) {
-    std::filesystem::remove(temporary, code);
+  if (!text_file::WriteAtomically(
+          file, json_codec::Stringify(flutter::EncodableValue(preferences)))) {
     error = "无法保存设置文件。";
     return false;
   }

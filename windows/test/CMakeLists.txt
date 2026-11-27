@@ -19,9 +19,11 @@ add_executable(native_tests
   "json_codec_test.cpp"
   "language_detection_test.cpp"
   "preferences_store_test.cpp"
+  "text_file_test.cpp"
   "${RUNNER_DIR}/json_codec.cpp"
   "${RUNNER_DIR}/language_detection.cpp"
   "${RUNNER_DIR}/preferences_store.cpp"
+  "${RUNNER_DIR}/text_file.cpp"
   "${RUNNER_DIR}/utils.cpp"
 )
 target_include_directories(native_tests PRIVATE "${RUNNER_DIR}" "${WRAPPER_DIR}")

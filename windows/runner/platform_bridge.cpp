@@ -4,6 +4,8 @@
 #include <flutter/method_result_functions.h>
 #include <flutter/standard_method_codec.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <map>
@@ -13,9 +15,11 @@
 #include <vector>
 
 #include "credentials.h"
+#include "file_dialogs.h"
 #include "language_detection.h"
 #include "preferences_store.h"
 #include "protocol.h"
+#include "text_file.h"
 #include "windows_system.h"
 
 namespace {
@@ -273,6 +277,49 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       speech_->Stop();
     }
     result->Success();
+  } else if (method == protocol::kOpenGlossaryFile) {
+    std::string error;
+    auto file = file_dialogs::ChooseGlossaryFile(error);
+    auto text = file ? text_file::ReadUtf8(*file, error) : std::nullopt;
+    if (!error.empty()) {
+      result->Error(protocol::kSettingsFailedError, error);
+      return true;
+    }
+    if (!text) {
+      result->Success();
+      return true;
+    }
+    std::string format = file->extension().u8string();
+    format.erase(0, format.empty() ? 0 : 1);
+    std::transform(format.begin(), format.end(), format.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+    result->Success(EncodableValue(EncodableMap{
+        {EncodableValue("name"), EncodableValue(file->filename().u8string())},
+        {EncodableValue("format"), EncodableValue(format)},
+        {EncodableValue("text"), EncodableValue(*text)},
+    }));
+  } else if (method == protocol::kSaveTextFile) {
+    auto text = Get<std::string>(args, "text");
+    auto name = Get<std::string>(args, "suggestedName");
+    if (!text || !name) {
+      result->Error(protocol::kBadArgsError, "saveTextFile 需要 text/suggestedName");
+      return true;
+    }
+    std::string error;
+    auto file = file_dialogs::ChooseSaveLocation(*name, error);
+    if (!error.empty()) {
+      result->Error(protocol::kSaveFailedError, error);
+      return true;
+    }
+    if (!file) {
+      result->Success();
+      return true;
+    }
+    if (!text_file::WriteAtomically(*file, *text)) {
+      result->Error(protocol::kSaveFailedError, "无法写入文件：" + file->u8string());
+      return true;
+    }
+    result->Success(EncodableValue(file->u8string()));
   } else if (method == protocol::kHistoryChanged) {
     if (history_changed_) {
       history_changed_();

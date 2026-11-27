@@ -4,6 +4,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "auxiliary_window.cpp"
   "credentials.cpp"
+  "file_dialogs.cpp"
   "flutter_window.cpp"
   "json_codec.cpp"
   "language_detection.cpp"
@@ -11,6 +12,7 @@ add_executable(${BINARY_NAME} WIN32
   "platform_bridge.cpp"
   "preferences_store.cpp"
   "speech_service.cpp"
+  "text_file.cpp"
   "tray_icon.cpp"
   "utils.cpp"
   "win32_window.cpp"
