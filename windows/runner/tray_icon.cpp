@@ -63,6 +63,9 @@ bool TrayIcon::HandleMessage(UINT message, WPARAM wparam, LPARAM lparam) {
 
 void TrayIcon::ShowMenu() {
   HMENU menu = ::CreatePopupMenu();
+  ::AppendMenuW(menu, MF_STRING, kOpenSettings, L"设置…");
+  ::AppendMenuW(menu, MF_STRING, kOpenHistory, L"翻译历史…");
+  ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   ::AppendMenuW(menu, MF_STRING | (actions_.automatic() ? MF_UNCHECKED : MF_CHECKED),
                 kToggleAutomatic, L"仅使用快捷键");
   ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -75,7 +78,11 @@ void TrayIcon::ShowMenu() {
       window_, nullptr));
   ::PostMessageW(window_, WM_NULL, 0, 0);
   ::DestroyMenu(menu);
-  if (command == kToggleAutomatic) {
+  if (command == kOpenSettings) {
+    actions_.open_settings();
+  } else if (command == kOpenHistory) {
+    actions_.open_history();
+  } else if (command == kToggleAutomatic) {
     actions_.toggle_automatic();
   } else if (command == kQuit) {
     actions_.quit();

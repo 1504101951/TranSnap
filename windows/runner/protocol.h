@@ -20,6 +20,17 @@ inline constexpr char kAppStartFailed[] = "appStartFailed";
 inline constexpr char kGetAppearance[] = "getAppearance";
 inline constexpr char kAppearanceChanged[] = "appearanceChanged";
 inline constexpr char kToggleAutomatic[] = "toggleAutomatic";
+inline constexpr char kPreviewAppearance[] = "previewAppearance";
+inline constexpr char kSystemStatus[] = "systemStatus";
+inline constexpr char kHistoryChanged[] = "historyChanged";
+inline constexpr char kRefreshSettings[] = "refreshSettings";
+inline constexpr char kWindowStartupChannel[] = "transnap/window_startup";
+inline constexpr char kSettingsChannel[] = "transnap/settings";
+inline constexpr char kWindowReady[] = "windowReady";
+inline constexpr char kSetWindowTitle[] = "setWindowTitle";
+inline constexpr char kStartWindowDrag[] = "startWindowDrag";
+inline constexpr char kSettingsEntrypoint[] = "settingsMain";
+inline constexpr char kHistoryEntrypoint[] = "historyMain";
 
 inline constexpr char kBadArgsError[] = "bad_args";
 inline constexpr char kBadSettingsError[] = "bad_settings";
@@ -29,6 +40,7 @@ inline constexpr char kCredentialsFailedError[] = "keychain_failed";
 
 inline constexpr char kSystemLanguageKey[] = "systemLanguage";
 inline constexpr char kAutomaticKey[] = "automatic";
+inline constexpr char kLoginNeedsApprovalKey[] = "loginNeedsApproval";
 inline constexpr char kLaunchAtLoginKey[] = "launchAtLogin";
 inline constexpr char kGlassAppearanceKey[] = "glassAppearance";
 inline constexpr char kGlassOpacityKey[] = "glassOpacity";

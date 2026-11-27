@@ -247,9 +247,11 @@ class _SettingsPageState extends State<_SettingsPage>
     });
     _load();
     if (_has(PlatformCapability.appleTranslation)) _checkLanguagePacks();
-    _channel.invokeMethod<String>(MethodNames.stickerDirectory).then((path) {
-      if (mounted) setState(() => _stickerDirectory = path);
-    });
+    if (_has(PlatformCapability.screenshot)) {
+      _channel.invokeMethod<String>(MethodNames.stickerDirectory).then((path) {
+        if (mounted) setState(() => _stickerDirectory = path);
+      });
+    }
   }
 
   String? _stickerDirectory;
@@ -1186,8 +1188,8 @@ class _SettingsPageState extends State<_SettingsPage>
                                             MethodNames.downloadFontSet,
                                             set.name,
                                           ),
-                                          onCancel: () => _channel
-                                              .invokeMethod<void>(
+                                          onCancel: () =>
+                                              _channel.invokeMethod<void>(
                                                 MethodNames.cancelFontDownload,
                                               ),
                                           onUninstall: (set) => _fontRequest(

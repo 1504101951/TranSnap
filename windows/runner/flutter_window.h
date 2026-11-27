@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "auxiliary_window.h"
 #include "platform_bridge.h"
 #include "tray_icon.h"
 #include "win32_window.h"
@@ -25,6 +26,8 @@ class FlutterWindow : public Win32Window {
   flutter::DartProject project_;
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<PlatformBridge> bridge_;
+  std::unique_ptr<AuxiliaryWindow> settings_window_;
+  std::unique_ptr<AuxiliaryWindow> history_window_;
   std::unique_ptr<TrayIcon> tray_;
 };
 

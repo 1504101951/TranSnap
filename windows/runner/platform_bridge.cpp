@@ -130,11 +130,22 @@ bool PlatformBridge::Automatic() const {
   return Get<bool>(preferences_, protocol::kAutomaticKey).value_or(true);
 }
 
+void PlatformBridge::SetWindowRefreshHandlers(
+    std::function<void()> settings_changed,
+    std::function<void()> history_changed) {
+  settings_changed_ = std::move(settings_changed);
+  history_changed_ = std::move(history_changed);
+}
+
 void PlatformBridge::ToggleAutomatic() {
   platform_->InvokeMethod(
       protocol::kToggleAutomatic, nullptr,
       std::make_unique<flutter::MethodResultFunctions<EncodableValue>>(
-          nullptr,
+          [this](const EncodableValue*) {
+            if (settings_changed_) {
+              settings_changed_();
+            }
+          },
           [](const std::string& code, const std::string& message,
              const EncodableValue*) {
             windows_system::ShowWarning("设置未保存", message.empty() ? code : message);
@@ -143,6 +154,53 @@ void PlatformBridge::ToggleAutomatic() {
 }
 
 void PlatformBridge::HandlePlatform(const Call& call, Result result) {
+  if (!HandleLocal(call, result)) {
+    result->NotImplemented();
+  }
+}
+
+void PlatformBridge::RouteWindowRequest(const Call& call, Result result) {
+  if (HandleLocal(call, result)) {
+    return;
+  }
+  std::shared_ptr<flutter::MethodResult<EncodableValue>> shared(std::move(result));
+  platform_->InvokeMethod(
+      call.method_name(),
+      call.arguments() ? std::make_unique<EncodableValue>(*call.arguments())
+                       : nullptr,
+      std::make_unique<flutter::MethodResultFunctions<EncodableValue>>(
+          [shared](const EncodableValue* value) {
+            shared->Success(value ? *value : EncodableValue());
+          },
+          [shared](const std::string& code, const std::string& message,
+                   const EncodableValue* details) {
+            shared->Error(code, message, details ? *details : EncodableValue());
+          },
+          [shared]() { shared->NotImplemented(); }));
+}
+
+int PlatformBridge::AddAppearanceEngine(flutter::BinaryMessenger* messenger) {
+  int token = next_appearance_token_++;
+  auto channel = std::make_unique<flutter::MethodChannel<EncodableValue>>(
+      messenger, protocol::kAppearanceChannel,
+      &flutter::StandardMethodCodec::GetInstance());
+  channel->SetMethodCallHandler([this](const Call& call, Result result) {
+    HandleAppearance(call, std::move(result));
+  });
+  window_appearance_[token] = std::move(channel);
+  return token;
+}
+
+void PlatformBridge::RemoveAppearanceEngine(int token) {
+  auto entry = window_appearance_.find(token);
+  if (entry == window_appearance_.end()) {
+    return;
+  }
+  entry->second->SetMethodCallHandler(nullptr);
+  window_appearance_.erase(entry);
+}
+
+bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
   const std::string& method = call.method_name();
   const auto* arguments = call.arguments()
                               ? std::get_if<EncodableMap>(call.arguments())
@@ -154,7 +212,7 @@ void PlatformBridge::HandlePlatform(const Call& call, Result result) {
   } else if (method == protocol::kLoadSettings) {
     if (!preferences_error_.empty()) {
       result->Error(protocol::kBadSettingsError, preferences_error_);
-      return;
+      return true;
     }
     result->Success(EncodableValue(LoadSettings()));
   } else if (method == protocol::kApplicationSupportPath) {
@@ -162,7 +220,7 @@ void PlatformBridge::HandlePlatform(const Call& call, Result result) {
     std::filesystem::create_directories(data_directory_, code);
     if (data_directory_.empty() || code) {
       result->Error(protocol::kSettingsFailedError, "无法创建应用数据目录。");
-      return;
+      return true;
     }
     result->Success(EncodableValue(data_directory_.u8string()));
   } else if (method == protocol::kApplySettings) {
@@ -181,9 +239,23 @@ void PlatformBridge::HandlePlatform(const Call& call, Result result) {
     result->Success();
     windows_system::ShowStartFailure(
         Get<std::string>(args, "message").value_or(std::string()));
+  } else if (method == protocol::kPreviewAppearance) {
+    preview_ = args;
+    BroadcastAppearance();
+    result->Success();
+  } else if (method == protocol::kHistoryChanged) {
+    if (history_changed_) {
+      history_changed_();
+    }
+    result->Success();
+  } else if (method == protocol::kSystemStatus) {
+    result->Success(EncodableValue(EncodableMap{
+        {EncodableValue(protocol::kLoginNeedsApprovalKey), EncodableValue(false)},
+    }));
   } else {
-    result->NotImplemented();
+    return false;
   }
+  return true;
 }
 
 void PlatformBridge::HandleAppearance(const Call& call, Result result) {
@@ -275,6 +347,7 @@ void PlatformBridge::ApplySettings(const EncodableMap& arguments, Result& result
   }
   preferences_ = *settings;
   preferences_error_.clear();
+  preview_.clear();
   BroadcastAppearance();
   result->Success();
 }
@@ -316,25 +389,29 @@ void PlatformBridge::CredentialIds(const EncodableMap& arguments, Result& result
 }
 
 EncodableMap PlatformBridge::AppearanceSnapshot() const {
-  auto accent = AccentPair(Get<std::string>(preferences_, protocol::kAccentColorKey)
+  EncodableMap visual = preferences_;
+  for (const auto& [key, value] : preview_) {
+    visual[key] = value;
+  }
+  auto accent = AccentPair(Get<std::string>(visual, protocol::kAccentColorKey)
                                .value_or(protocol::kAppearanceSystem));
   int64_t system = windows_system::SystemAccent();
   return EncodableMap{
       {EncodableValue(protocol::kGlassAppearanceKey),
-       EncodableValue(Get<std::string>(preferences_, protocol::kGlassAppearanceKey)
+       EncodableValue(Get<std::string>(visual, protocol::kGlassAppearanceKey)
                           .value_or(protocol::kAppearanceSystem))},
       {EncodableValue(protocol::kGlassOpacityKey),
-       EncodableValue(Get<double>(preferences_, protocol::kGlassOpacityKey)
+       EncodableValue(Get<double>(visual, protocol::kGlassOpacityKey)
                           .value_or(protocol::kGlassOpacityFallback))},
       {EncodableValue(protocol::kAccentForegroundKey),
-       EncodableValue(Get<std::string>(preferences_, protocol::kAccentForegroundKey)
+       EncodableValue(Get<std::string>(visual, protocol::kAccentForegroundKey)
                           .value_or(protocol::kAccentForegroundAuto))},
       {EncodableValue(protocol::kAccentLightKey),
        EncodableValue(accent ? accent->first : system)},
       {EncodableValue(protocol::kAccentDarkKey),
        EncodableValue(accent ? accent->second : system)},
       {EncodableValue(protocol::kFontSetKey),
-       EncodableValue(Get<std::string>(preferences_, protocol::kFontSetKey)
+       EncodableValue(Get<std::string>(visual, protocol::kFontSetKey)
                           .value_or(protocol::kFontSetFallback))},
       {EncodableValue(protocol::kFontsDirectoryKey),
        EncodableValue((data_directory_ / protocol::kFontsDirectoryName).u8string())},
@@ -347,6 +424,11 @@ EncodableMap PlatformBridge::AppearanceSnapshot() const {
 }
 
 void PlatformBridge::BroadcastAppearance() {
+  EncodableMap snapshot = AppearanceSnapshot();
   appearance_->InvokeMethod(protocol::kAppearanceChanged,
-                            std::make_unique<EncodableValue>(AppearanceSnapshot()));
+                            std::make_unique<EncodableValue>(snapshot));
+  for (const auto& entry : window_appearance_) {
+    entry.second->InvokeMethod(protocol::kAppearanceChanged,
+                               std::make_unique<EncodableValue>(snapshot));
+  }
 }

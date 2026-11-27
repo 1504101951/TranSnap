@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "protocol.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -23,9 +24,19 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   bridge_ = std::make_unique<PlatformBridge>(
       flutter_controller_->engine()->messenger());
+  settings_window_ = std::make_unique<AuxiliaryWindow>(
+      *bridge_, AuxiliaryWindow::Options{protocol::kSettingsEntrypoint, L"设置",
+                                         760, 640, protocol::kRefreshSettings});
+  history_window_ = std::make_unique<AuxiliaryWindow>(
+      *bridge_, AuxiliaryWindow::Options{protocol::kHistoryEntrypoint, L"翻译历史",
+                                         520, 640, protocol::kHistoryChanged});
+  bridge_->SetWindowRefreshHandlers([this]() { settings_window_->Refresh(); },
+                                    [this]() { history_window_->Refresh(); });
   tray_ = std::make_unique<TrayIcon>(
       GetHandle(),
-      TrayIcon::Actions{[this]() { return bridge_->Automatic(); },
+      TrayIcon::Actions{[this]() { settings_window_->Open(); },
+                        [this]() { history_window_->Open(); },
+                        [this]() { return bridge_->Automatic(); },
                         [this]() { bridge_->ToggleAutomatic(); },
                         [this]() { ::PostMessageW(GetHandle(), WM_CLOSE, 0, 0); }});
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
@@ -36,6 +47,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   tray_ = nullptr;
+  settings_window_ = nullptr;
+  history_window_ = nullptr;
   bridge_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

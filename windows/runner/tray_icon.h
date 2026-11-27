@@ -8,6 +8,8 @@
 class TrayIcon {
  public:
   struct Actions {
+    std::function<void()> open_settings;
+    std::function<void()> open_history;
     std::function<bool()> automatic;
     std::function<void()> toggle_automatic;
     std::function<void()> quit;
@@ -21,7 +23,7 @@ class TrayIcon {
   bool HandleMessage(UINT message, WPARAM wparam, LPARAM lparam);
 
  private:
-  enum Command : UINT { kToggleAutomatic = 1, kQuit };
+  enum Command : UINT { kOpenSettings = 1, kOpenHistory, kToggleAutomatic, kQuit };
 
   void Add();
   void ShowMenu();
