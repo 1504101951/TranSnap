@@ -19,6 +19,7 @@ import 'src/history/translation_history.dart';
 import 'src/history/vocabulary.dart';
 import 'src/platform/channel_platform_bridge.dart';
 import 'src/screenshot/screenshot_app.dart';
+import 'src/selection/selection_context.dart';
 import 'src/selection/selection_session.dart';
 import 'src/selection/selection_translation_app.dart';
 import 'src/settings/app_settings.dart';
@@ -169,6 +170,9 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.cancelFontDownload:
       case MethodNames.uninstallFontSet:
         return fonts.handle(call);
+      case MethodNames.shouldCopySelection:
+      case MethodNames.acceptsCopiedSelection:
+        return handleSelectionContextRequest(call);
       case MethodNames.historyPage:
       case MethodNames.historyRecording:
       case MethodNames.setHistoryRecording:

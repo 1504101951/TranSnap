@@ -509,15 +509,13 @@ class RunnerTests: XCTestCase {
         let copied = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {
             board.clearContents()
             board.setString(selection, forType: .string)
-        }, accepts: { $0 == selection })
+        })
         XCTAssertEqual(copied, selection)
         XCTAssertEqual(board.string(forType: .string), "original clipboard")
 
         let requested = expectation(description: "copy requested")
         let pending = Task {
-            await AccessibilitySelection.readByCopyingSelection(
-                pasteboard: board, copy: { requested.fulfill() }, accepts: { $0 == selection }
-            )
+            await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: { requested.fulfill() })
         }
         await fulfillment(of: [requested], timeout: 1)
         pending.cancel()
@@ -527,23 +525,9 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(cancelled)
         XCTAssertEqual(board.string(forType: .string), "new user clipboard")
 
-        let unrelated = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {
-            board.clearContents()
-            board.setString("not the selection", forType: .string)
-        }, accepts: { $0 == selection })
-        XCTAssertNil(unrelated)
+        let unchanged = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {})
+        XCTAssertNil(unchanged)
         XCTAssertEqual(board.string(forType: .string), "new user clipboard")
-
-        let overtaken = await AccessibilitySelection.readByCopyingSelection(pasteboard: board, copy: {
-            board.clearContents()
-            board.setString(selection, forType: .string)
-        }, accepts: { _ in
-            board.clearContents()
-            board.setString("copied while reading", forType: .string)
-            return true
-        })
-        XCTAssertNil(overtaken)
-        XCTAssertEqual(board.string(forType: .string), "copied while reading")
     }
 
     @MainActor
@@ -1031,86 +1015,17 @@ class RunnerTests: XCTestCase {
         XCTAssertNil(SelectionGesture.keyboardGesture(keyCode: 123, modifiers: []))
     }
 
-    func testTextSelectionContexts() {
-        for roles in [["AXStaticText", "AXList"], ["AXWebArea"], ["AXTextArea"], []] {
-            for hasAXText in [false, true] {
-                XCTAssertFalse(TextSelectionContext.shouldCopySelection(
-                    ancestorRoles: roles, hasAXText: hasAXText, allowCopy: false
-                ))
-            }
+    func testTextSelectionContextKinds() {
+        XCTAssertEqual(TextSelectionContext.kind(ofRole: "AXWebArea"), .web)
+        XCTAssertEqual(TextSelectionContext.kind(ofRole: "AXTextArea"), .text)
+        XCTAssertEqual(TextSelectionContext.kind(ofRole: "AXCell"), .nonText)
+        XCTAssertEqual(TextSelectionContext.kind(ofRole: "AXStaticText"), .other)
+        for roles in [["AXStaticText", "AXRow", "AXOutline"], ["AXCell", "AXTable"], ["AXBrowser"], ["AXButton", "AXWebArea"]] {
+            XCTAssertFalse(TextSelectionContext.shouldReadSelectedText(context: roles.map(TextSelectionContext.kind(ofRole:))))
         }
-        for roles in [["AXStaticText", "AXRow", "AXOutline"], ["AXCell", "AXTable"], ["AXBrowser"]] {
-            XCTAssertFalse(TextSelectionContext.shouldReadSelectedText(ancestorRoles: roles))
-            XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: roles, hasAXText: false, allowCopy: true))
-            XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: roles, hasAXText: true, allowCopy: true))
+        for roles in [["AXTextArea"], ["AXStaticText", "AXWebArea"], ["AXStaticText", "AXList"], [], ["AXWebArea", "AXCell"]] {
+            XCTAssertTrue(TextSelectionContext.shouldReadSelectedText(context: roles.map(TextSelectionContext.kind(ofRole:))))
         }
-        for roles in [["AXTextArea"], ["AXStaticText", "AXWebArea"], ["AXStaticText", "AXList"]] {
-            XCTAssertTrue(TextSelectionContext.shouldReadSelectedText(ancestorRoles: roles))
-            XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: roles, hasAXText: false, allowCopy: true))
-        }
-        XCTAssertTrue(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXStaticText", "AXWebArea"], hasAXText: true, allowCopy: true))
-        XCTAssertFalse(TextSelectionContext.shouldCopySelection(ancestorRoles: ["AXTextArea"], hasAXText: true, allowCopy: true))
-        XCTAssertTrue(TextSelectionContext.shouldCopySelection(
-            ancestorRoles: ["AXGroup"],
-            hasAXText: true,
-            allowCopy: true,
-            axText: "First item.• Second item."
-        ))
-        XCTAssertFalse(TextSelectionContext.shouldCopySelection(
-            ancestorRoles: ["AXGroup"],
-            hasAXText: true,
-            allowCopy: true,
-            axText: "• First item.\n  • Second item."
-        ))
-
-        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
-            axText: "• First item.• Second item.",
-            copiedText: "First item.\nSecond item."
-        ))
-        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
-            axText: "Paragraph oneParagraph two",
-            copiedText: "Paragraph one\n\nParagraph two"
-        ))
-        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
-            axText: "• First item.",
-            copiedText: "Unrelated clipboard text"
-        ))
-        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
-            axText: "•",
-            copiedText: ""
-        ))
-        XCTAssertTrue(TextSelectionContext.matchesCopiedSelection(
-            axText: "Adding tests.已运行 1 个命令已运行 1 个命令The three new tests pass.",
-            copiedText: "Adding tests.\n已运行 1 个命令\nThe three new tests pass."
-        ))
-        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
-            axText: "Adding tests for batching, ordering, and failure in the provider.",
-            copiedText: "Adding tests."
-        ))
-        XCTAssertFalse(TextSelectionContext.matchesCopiedSelection(
-            axText: "Adding tests.",
-            copiedText: "Tests adding."
-        ))
-        XCTAssertTrue(TextSelectionContext.acceptsCopiedText(
-            ancestorRoles: ["AXStaticText", "AXGroup", "AXWebArea"],
-            axText: "Done.已运行 1 个命令已运行 1 个命令Next step.",
-            copiedText: "Done.\nRan 1 command\nNext step."
-        ))
-        XCTAssertFalse(TextSelectionContext.acceptsCopiedText(
-            ancestorRoles: ["AXStaticText", "AXWebArea"],
-            axText: "Done.",
-            copiedText: " \n "
-        ))
-        XCTAssertTrue(TextSelectionContext.acceptsCopiedText(
-            ancestorRoles: ["AXTextArea"],
-            axText: nil,
-            copiedText: "Line one\nLine two"
-        ))
-        XCTAssertFalse(TextSelectionContext.acceptsCopiedText(
-            ancestorRoles: ["AXTextArea"],
-            axText: "• First item.",
-            copiedText: "Unrelated clipboard text"
-        ))
     }
 
     @MainActor

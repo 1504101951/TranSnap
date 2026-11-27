@@ -217,6 +217,10 @@ abstract final class MethodNames {
 
   static const languageCandidates = 'languageCandidates';
 
+  static const shouldCopySelection = 'shouldCopySelection';
+
+  static const acceptsCopiedSelection = 'acceptsCopiedSelection';
+
   static const lookupDefinition = 'lookupDefinition';
 
   static const vocabularyList = 'vocabularyList';

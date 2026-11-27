@@ -68,3 +68,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 62. [font_library_test.dart](font_library_test.dart)：经本机 HTTP 服务验证字体下载的进度、校验通过后移入并切换、校验不符与下载失败的清理、取消与并发限制、卸载时保留其他组合需要的文件，启动时校验不符切回中性与残留临时文件清理，以及发布状态附带所选组合三个角色的字体文件位置。
 63. [font_set_picker_test.dart](font_set_picker_test.dart)：验证字体下拉框列出 8 套组合并按自身字体显示名称、按下载状态显示内置/已下载/缺失体积与卸载按钮，选择、下载与卸载请求，下载进度行与取消，以及下载失败时显示原因。
 64. [language_detection_test.dart](language_detection_test.dart)：验证语言判定的置信度门槛与各级回退、中文简繁改写、无置信度候选的首位处理、识别权重，以及用户语言只取已保存的语言偏好。
+65. [selection_context_test.dart](selection_context_test.dart)：验证复制兜底的触发条件、复制结果与读到文本的匹配规则、采用复制结果的条件，以及原生请求的分发。

@@ -316,6 +316,8 @@ enum AppConstants {
     static let openFileMethod = "openFile"
     static let copyImageFileMethod = "copyImageFile"
     static let languageCandidatesMethod = "languageCandidates"
+    static let shouldCopySelectionMethod = "shouldCopySelection"
+    static let acceptsCopiedSelectionMethod = "acceptsCopiedSelection"
     static let lookupDefinitionMethod = "lookupDefinition"
     static let vocabularyListMethod = "vocabularyList"
     static let saveTextFileMethod = "saveTextFile"

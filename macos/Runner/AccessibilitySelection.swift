@@ -35,24 +35,25 @@ enum AccessibilitySelection {
         guard !Task.isCancelled,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID,
               !isSecure(focusedElement(from: app)) else { return (nil, nil) }
-        let copyRoles = (result.element ?? focusedElement(from: app)).map(ancestorRoles(of:)) ?? []
-        if TextSelectionContext.shouldCopySelection(ancestorRoles: copyRoles, hasAXText: isUsable(result.text), allowCopy: allowCopy, axText: result.text),
-           let copied = await readByCopyingSelection(pasteboard: .general, copy: postCopyKey, accepts: { copied in
-               guard NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID else { return false }
-               return TextSelectionContext.acceptsCopiedText(
-                   ancestorRoles: copyRoles, axText: result.text, copiedText: copied
-               )
-           }) {
-            return (copied, result.element)
-        }
-        return result
+        let context = (result.element ?? focusedElement(from: app)).map(ancestorContext(of:)) ?? []
+        let request: [String: Any] = [
+            "context": context.map(\.rawValue),
+            "text": (result.text as Any?) ?? NSNull(),
+            "allowCopy": allowCopy,
+        ]
+        guard await TextSelectionContext.decide(AppConstants.shouldCopySelectionMethod, request), !Task.isCancelled,
+              let copied = await readByCopyingSelection(pasteboard: .general, copy: postCopyKey),
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID,
+              await TextSelectionContext.decide(AppConstants.acceptsCopiedSelectionMethod, request.merging(["copied": copied]) { _, new in new }),
+              !Task.isCancelled else { return result }
+        return (copied, result.element)
     }
 
     static func hasReadableSelection(sourcePID: pid_t, selectionElement: AXUIElement?) async -> Bool? {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID else { return false }
         let app = AXUIElementCreateApplication(sourcePID)
         guard let element = focusedElement(from: app) else { return nil }
-        guard !isSecure(element), TextSelectionContext.shouldReadSelectedText(ancestorRoles: ancestorRoles(of: element)) else { return false }
+        guard !isSecure(element), TextSelectionContext.shouldReadSelectedText(context: ancestorContext(of: element)) else { return false }
         if let selectionElement, selection(from: selectionElement) != nil { return true }
         if isUsable(readOnce(app: app).text) { return true }
         guard let selectionElement else { return nil }
@@ -72,13 +73,13 @@ enum AccessibilitySelection {
         guard AXIsProcessTrusted(), NSWorkspace.shared.frontmostApplication?.processIdentifier == sourcePID else { return false }
         let app = AXUIElementCreateApplication(sourcePID)
         guard let focused = focusedElement(from: app) else { return true }
-        return !isSecure(focused) && TextSelectionContext.shouldReadSelectedText(ancestorRoles: ancestorRoles(of: focused))
+        return !isSecure(focused) && TextSelectionContext.shouldReadSelectedText(context: ancestorContext(of: focused))
     }
 
     private static func readOnce(app: AXUIElement) -> (text: String?, element: AXUIElement?) {
         var candidates: [AXUIElement] = []
         if let focused = focusedElement(from: app) {
-            guard !isSecure(focused), TextSelectionContext.shouldReadSelectedText(ancestorRoles: ancestorRoles(of: focused)) else {
+            guard !isSecure(focused), TextSelectionContext.shouldReadSelectedText(context: ancestorContext(of: focused)) else {
                 return (nil, nil)
             }
             candidates.append(focused)
@@ -93,8 +94,7 @@ enum AccessibilitySelection {
         }
         for element in candidates {
             if isSecure(element) { return (nil, nil) }
-            let roles = ancestorRoles(of: element)
-            if !TextSelectionContext.shouldReadSelectedText(ancestorRoles: roles) {
+            if !TextSelectionContext.shouldReadSelectedText(context: ancestorContext(of: element)) {
                 continue
             }
             if let text = selection(from: element) {
@@ -102,7 +102,7 @@ enum AccessibilitySelection {
             }
         }
         if let hit = searchSelectedText(roots: candidates.filter {
-            !isSecure($0) && TextSelectionContext.shouldReadSelectedText(ancestorRoles: ancestorRoles(of: $0))
+            !isSecure($0) && TextSelectionContext.shouldReadSelectedText(context: ancestorContext(of: $0))
         }) {
             return hit
         }
@@ -168,7 +168,7 @@ enum AccessibilitySelection {
             let element = queue.removeFirst()
             seen += 1
             if isSecure(element) { continue }
-            if let nodeRole = role(of: element), TextSelectionContext.nonTextRoles.contains(nodeRole) {
+            if let nodeRole = role(of: element), TextSelectionContext.kind(ofRole: nodeRole) == .nonText {
                 continue
             }
             if let text = selection(from: element) { return (text, element) }
@@ -187,16 +187,16 @@ enum AccessibilitySelection {
         stringAttribute(element, kAXRoleAttribute as CFString)
     }
 
-    private static func ancestorRoles(of element: AXUIElement) -> [String] {
-        var roles: [String] = []
+    private static func ancestorContext(of element: AXUIElement) -> [TextSelectionContext.Kind] {
+        var context: [TextSelectionContext.Kind] = []
         var current: AXUIElement? = element
         var steps = 0
         while let node = current, steps < 128 {
-            if let role = role(of: node) { roles.append(role) }
+            if let role = role(of: node) { context.append(TextSelectionContext.kind(ofRole: role)) }
             current = axElement(attribute(node, kAXParentAttribute as CFString))
             steps += 1
         }
-        return roles
+        return context
     }
 
     static func focusIsSecure(sourcePID: pid_t) async -> Bool {
@@ -226,9 +226,7 @@ enum AccessibilitySelection {
         attribute(element, name) as? String
     }
 
-    static func readByCopyingSelection(
-        pasteboard: NSPasteboard, copy: () -> Void, accepts: (String) -> Bool
-    ) async -> String? {
+    static func readByCopyingSelection(pasteboard: NSPasteboard, copy: () -> Void) async -> String? {
         guard !Task.isCancelled else { return nil }
         let snapshot = PasteboardSnapshot.capture(pasteboard)
         let changeCount = pasteboard.changeCount
@@ -239,10 +237,9 @@ enum AccessibilitySelection {
             if pasteboard.changeCount != changeCount {
                 let copiedChangeCount = pasteboard.changeCount
                 let text = pasteboard.string(forType: .string)
-                let accepted = text.map { isUsable($0) && accepts($0) } ?? false
                 guard pasteboard.changeCount == copiedChangeCount else { return nil }
                 snapshot.restore(pasteboard)
-                guard accepted, !Task.isCancelled else { return nil }
+                guard !Task.isCancelled else { return nil }
                 return text
             }
             do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }

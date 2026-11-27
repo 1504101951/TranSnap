@@ -6,7 +6,7 @@ macOS应用生命周期、系统能力与窗口控制器。
 2. [Base.lproj/](Base.lproj/)：macOS基础语言的窗口和菜单界面资源。
 3. [Common/](Common/index.md)：Swift平台协议常量与共享工具。
 4. [Configs/](Configs/index.md)：应用标识、编译模式与警告配置。
-5. [AccessibilitySelection.swift](AccessibilitySelection.swift)：通过辅助功能及显式复制读取来源应用选中文字。
+5. [AccessibilitySelection.swift](AccessibilitySelection.swift)：通过辅助功能读取来源应用选中文字，按 Dart 的判定决定是否显式复制兜底及是否采用复制结果。
 6. [AppDelegate.swift](AppDelegate.swift)：初始化菜单栏应用、平台桥和辅助窗口并管理生命周期。
 7. [AuxiliaryWindowController.swift](AuxiliaryWindowController.swift)：管理历史和权限向导等独立Flutter窗口。
 8. [DebugProfile.entitlements](DebugProfile.entitlements)：声明调试与性能分析构建所需的系统授权能力。
@@ -24,7 +24,7 @@ macOS应用生命周期、系统能力与窗口控制器。
 20. [SelectionMonitor.swift](SelectionMonitor.swift)：监听全局选区变化并协调采集、热键和会话失效。
 21. [SettingsWindowController.swift](SettingsWindowController.swift)：管理设置Flutter窗口、配置转发和快捷键录制。
 22. [StatusBarController.swift](StatusBarController.swift)：管理菜单栏入口、菜单状态和用户操作回调。
-23. [TextSelectionContext.swift](TextSelectionContext.swift)：判断辅助功能对象是否属于允许翻译的文本上下文。
+23. [TextSelectionContext.swift](TextSelectionContext.swift)：把辅助功能角色归为文本、非文本、网页内容、其他四类，判断选区是否属于允许读取的文本上下文，并向 Dart 请求复制兜底判定。
 24. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 25. [CaptureWindowController.swift](CaptureWindowController.swift)：协调采集选区、实时阴影、统一采集悬浮条、媒体结果和系统保存面板。
 26. [MediaCaptureService.swift](MediaCaptureService.swift)：管理屏幕流、录制会话、裁剪区间、手动与自动滚动采集、导出转换及临时资源生命周期。
