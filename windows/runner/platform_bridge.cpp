@@ -20,6 +20,7 @@
 #include "preferences_store.h"
 #include "protocol.h"
 #include "text_file.h"
+#include "utils.h"
 #include "windows_system.h"
 
 namespace {
@@ -227,7 +228,7 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       result->Error(protocol::kSettingsFailedError, "无法创建应用数据目录。");
       return true;
     }
-    result->Success(EncodableValue(data_directory_.u8string()));
+    result->Success(EncodableValue(Utf8FromUtf16(data_directory_.wstring().c_str())));
   } else if (method == protocol::kApplySettings) {
     ApplySettings(args, result);
   } else if (method == protocol::kReadCredentials) {
@@ -289,12 +290,12 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       result->Success();
       return true;
     }
-    std::string format = file->extension().u8string();
+    std::string format = Utf8FromUtf16(file->extension().wstring().c_str());
     format.erase(0, format.empty() ? 0 : 1);
     std::transform(format.begin(), format.end(), format.begin(),
                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     result->Success(EncodableValue(EncodableMap{
-        {EncodableValue("name"), EncodableValue(file->filename().u8string())},
+        {EncodableValue("name"), EncodableValue(Utf8FromUtf16(file->filename().wstring().c_str()))},
         {EncodableValue("format"), EncodableValue(format)},
         {EncodableValue("text"), EncodableValue(*text)},
     }));
@@ -316,10 +317,10 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       return true;
     }
     if (!text_file::WriteAtomically(*file, *text)) {
-      result->Error(protocol::kSaveFailedError, "无法写入文件：" + file->u8string());
+      result->Error(protocol::kSaveFailedError, "无法写入文件：" + Utf8FromUtf16(file->wstring().c_str()));
       return true;
     }
-    result->Success(EncodableValue(file->u8string()));
+    result->Success(EncodableValue(Utf8FromUtf16(file->wstring().c_str())));
   } else if (method == protocol::kHistoryChanged) {
     if (history_changed_) {
       history_changed_();
@@ -491,7 +492,7 @@ EncodableMap PlatformBridge::AppearanceSnapshot() const {
        EncodableValue(Get<std::string>(visual, protocol::kFontSetKey)
                           .value_or(protocol::kFontSetFallback))},
       {EncodableValue(protocol::kFontsDirectoryKey),
-       EncodableValue((data_directory_ / protocol::kFontsDirectoryName).u8string())},
+       EncodableValue(Utf8FromUtf16((data_directory_ / protocol::kFontsDirectoryName).wstring().c_str()))},
       {EncodableValue(protocol::kFontStateKey), EncodableValue(font_state_)},
       {EncodableValue(protocol::kGlassMaterialKey),
        EncodableValue(windows_system::SupportsAcrylic()

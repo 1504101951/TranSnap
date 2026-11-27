@@ -34,6 +34,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_compile_options(${BINARY_NAME} PRIVATE /utf-8)
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)
 
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")

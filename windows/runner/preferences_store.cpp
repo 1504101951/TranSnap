@@ -6,6 +6,7 @@
 
 #include "json_codec.h"
 #include "text_file.h"
+#include "utils.h"
 
 namespace preferences_store {
 
@@ -29,7 +30,7 @@ std::optional<flutter::EncodableMap> Load(const std::filesystem::path& file,
   auto value = json_codec::Parse(buffer.str());
   const auto* map = value ? std::get_if<flutter::EncodableMap>(&*value) : nullptr;
   if (!map) {
-    error = "设置文件格式无效：" + file.u8string();
+    error = "设置文件格式无效：" + Utf8FromUtf16(file.wstring().c_str());
     return std::nullopt;
   }
   return *map;

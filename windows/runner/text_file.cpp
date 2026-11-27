@@ -14,7 +14,7 @@ std::optional<std::string> ReadUtf8(const std::filesystem::path& file,
   std::ostringstream buffer;
   buffer << stream.rdbuf();
   if (!stream) {
-    error = "无法读取文件：" + file.u8string();
+    error = "无法读取文件：" + Utf8FromUtf16(file.wstring().c_str());
     return std::nullopt;
   }
   std::string bytes = buffer.str();
