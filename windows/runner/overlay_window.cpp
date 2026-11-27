@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "tooltip_layout.h"
+#include "bubble_layout.h"
 #include "utils.h"
 #include "windows_system.h"
 
@@ -113,14 +113,14 @@ void OverlayWindow::ShowTooltip(const std::string& session_id, const std::string
   double bubble_height = std::ceil(measured.bottom - measured.top + kTooltipPaddingY * scale);
   MONITORINFO info{sizeof(info)};
   ::GetMonitorInfoW(::MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &info);
-  tooltip_layout::Rect anchor{overlay.left + x * scale, overlay.top + y * scale, width * scale,
+  bubble_layout::Rect anchor{overlay.left + x * scale, overlay.top + y * scale, width * scale,
                               height * scale};
-  tooltip_layout::Rect screen{static_cast<double>(info.rcWork.left),
+  bubble_layout::Rect screen{static_cast<double>(info.rcWork.left),
                               static_cast<double>(info.rcWork.top),
                               static_cast<double>(info.rcWork.right - info.rcWork.left),
                               static_cast<double>(info.rcWork.bottom - info.rcWork.top)};
-  tooltip_layout::Rect frame =
-      tooltip_layout::Frame(bubble_width, bubble_height, anchor, screen, prefer_above, scale);
+  bubble_layout::Rect frame =
+      bubble_layout::Frame(bubble_width, bubble_height, anchor, screen, prefer_above, scale);
   int frame_width = static_cast<int>(frame.width);
   int frame_height = static_cast<int>(frame.height);
   int diameter = static_cast<int>(Physical(kTooltipRadius * 2, scale));

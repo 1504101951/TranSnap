@@ -3,6 +3,7 @@ project(runner LANGUAGES CXX)
 
 add_executable(${BINARY_NAME} WIN32
   "auxiliary_window.cpp"
+  "bubble_layout.cpp"
   "clipboard.cpp"
   "credentials.cpp"
   "file_dialogs.cpp"
@@ -23,7 +24,6 @@ add_executable(${BINARY_NAME} WIN32
   "speech_service.cpp"
   "synthetic_input.cpp"
   "text_file.cpp"
-  "tooltip_layout.cpp"
   "tray_icon.cpp"
   "uia_selection.cpp"
   "utils.cpp"

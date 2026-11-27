@@ -16,6 +16,7 @@ set(RUNNER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../runner")
 set(WRAPPER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../flutter/ephemeral/cpp_client_wrapper/include")
 
 add_executable(native_tests
+  "bubble_layout_test.cpp"
   "json_codec_test.cpp"
   "key_names_test.cpp"
   "language_detection_test.cpp"
@@ -23,7 +24,7 @@ add_executable(native_tests
   "selection_context_test.cpp"
   "shortcut_rules_test.cpp"
   "text_file_test.cpp"
-  "tooltip_layout_test.cpp"
+  "${RUNNER_DIR}/bubble_layout.cpp"
   "${RUNNER_DIR}/json_codec.cpp"
   "${RUNNER_DIR}/key_names.cpp"
   "${RUNNER_DIR}/language_detection.cpp"
@@ -31,7 +32,6 @@ add_executable(native_tests
   "${RUNNER_DIR}/selection_context.cpp"
   "${RUNNER_DIR}/shortcut_rules.cpp"
   "${RUNNER_DIR}/text_file.cpp"
-  "${RUNNER_DIR}/tooltip_layout.cpp"
   "${RUNNER_DIR}/utils.cpp"
 )
 target_include_directories(native_tests PRIVATE "${RUNNER_DIR}" "${WRAPPER_DIR}")
