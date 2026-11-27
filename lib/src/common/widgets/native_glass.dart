@@ -2673,7 +2673,25 @@ class _NativeGlassAppState extends State<NativeGlassApp> {
       themeMode: appearance.themeMode,
       theme: NativeGlassTheme.data(Brightness.light, appearance),
       darkTheme: NativeGlassTheme.data(Brightness.dark, appearance),
-      builder: (context, child) => _GlassAppearanceScope(child: child!),
+      builder: (context, child) => _GlassAppearanceScope(
+        child: switch (appearance.material) {
+          GlassMaterials.opaque => ColoredBox(
+            color: Theme.of(context).colorScheme.surface,
+            child: child,
+          ),
+          GlassMaterials.acrylic => ColoredBox(
+            color:
+                (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.black
+                        : Colors.white)
+                    .withValues(
+                      alpha: GlassMetrics.glassTint * appearance.opacity,
+                    ),
+            child: child,
+          ),
+          _ => child!,
+        },
+      ),
       home: widget.home,
     ),
   );

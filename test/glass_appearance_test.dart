@@ -197,6 +197,44 @@ void main() {
     expect(find.byType(AppKitView), findsOneWidget);
   });
 
+  testWidgets('应用根组件按材质绘制窗口底色：不透明用阅读底色，亚克力叠加 16% 色调乘以透明度，原生不绘制', (
+    tester,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel(ChannelNames.appearance);
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      GlassAppearance.current.value = const GlassAppearance();
+    });
+    Future<Color?> rootFill(String material) async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          PreferenceKeys.glassAppearance: AppearanceModes.light,
+          PreferenceKeys.glassOpacity: 0.5,
+          AppearanceKeys.accentLight: 0xFF007AFF,
+          AppearanceKeys.accentDark: 0xFF0A84FF,
+          AppearanceKeys.glassMaterial: material,
+        },
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(const NativeGlassApp(home: Text('窗口')));
+      await tester.pumpAndSettle();
+      final boxes = tester.widgetList<ColoredBox>(
+        find.ancestor(of: find.text('窗口'), matching: find.byType(ColoredBox)),
+      );
+      return boxes.isEmpty ? null : boxes.last.color;
+    }
+
+    expect(await rootFill(GlassMaterials.opaque), const Color(0xFFF7F7F7));
+    expect(
+      await rootFill(GlassMaterials.acrylic),
+      Colors.white.withValues(alpha: 0.08),
+    );
+    expect(await rootFill(GlassMaterials.native), isNull);
+  });
+
   test('外观快照缺少系统强调色时拒绝，系统蓝时 primary 与原定值一致', () {
     expect(
       () => GlassAppearance.fromMap({

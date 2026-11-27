@@ -1,6 +1,8 @@
 #ifndef RUNNER_WINDOWS_SYSTEM_H_
 #define RUNNER_WINDOWS_SYSTEM_H_
 
+#include <windows.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -18,6 +20,8 @@ bool SetLaunchAtLogin(bool enabled, std::string& error);
 int64_t SystemAccent();
 
 bool SupportsAcrylic();
+
+void ApplyAcrylic(HWND window);
 
 void ShowWarning(const std::string& title, const std::string& message);
 

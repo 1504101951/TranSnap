@@ -75,6 +75,9 @@ bool AuxiliaryWindow::OnCreate() {
         HandleWindowRequest(call, std::move(result));
       });
   appearance_token_ = bridge_.AddAppearanceEngine(messenger);
+  if (windows_system::SupportsAcrylic()) {
+    windows_system::ApplyAcrylic(GetHandle());
+  }
   SetChildContent(controller_->view()->GetNativeWindow());
   ::SetTimer(GetHandle(), kStartupTimer, kStartupTimeoutMilliseconds, nullptr);
   return true;

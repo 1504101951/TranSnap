@@ -1,7 +1,9 @@
 #include "windows_system.h"
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <shlobj.h>
+#include <uxtheme.h>
 
 #include "protocol.h"
 #include "utils.h"
@@ -82,6 +84,14 @@ bool SupportsAcrylic() {
   version.dwOSVersionInfoSize = sizeof(version);
   return get_version && get_version(&version) == 0 &&
          version.dwBuildNumber >= protocol::kAcrylicMinimumBuild;
+}
+
+void ApplyAcrylic(HWND window) {
+  MARGINS margins = {-1, -1, -1, -1};
+  ::DwmExtendFrameIntoClientArea(window, &margins);
+  DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
+  ::DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
+                          sizeof(backdrop));
 }
 
 void ShowWarning(const std::string& title, const std::string& message) {
