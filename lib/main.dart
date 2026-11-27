@@ -26,6 +26,7 @@ import 'src/settings/permission_wizard_app.dart';
 import 'src/settings/settings_app.dart';
 import 'src/settings/service_config.dart';
 import 'src/settings/settings_controller.dart';
+import 'src/translation/language_detection.dart';
 import 'src/translation/live_region_session.dart';
 import 'src/translation/provider_selection.dart';
 import 'src/fonts/font_library.dart';
@@ -48,12 +49,16 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   final total = Stopwatch()..start();
   final stage = Stopwatch()..start();
   final capabilities = await bridge.capabilities();
+  final stored = await bridge.loadSettings();
   final initial = AppSettings.fromMap({
     PreferenceKeys.defaultServiceId: ServiceConfig.builtins(capabilities)
         .keys
         .first,
-    ...await bridge.loadSettings(),
+    ...stored,
   });
+  var userLanguages = LanguageDetection.preferred(stored);
+  Future<String?> detectLanguage(String text) =>
+      LanguageDetection.detect(text, userLanguages, bridge.languageCandidates);
   unawaited(bridge.perfMark('launch-dart-settings', stage));
   stage.reset();
   final support = await bridge.applicationSupportPath();
@@ -77,7 +82,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   final session = SelectionSession(
     provider: providerForSettings(initial, bridge),
     inputProvider: providerForInput(initial, bridge),
-    detectLanguage: bridge.detectLanguage,
+    detectLanguage: detectLanguage,
     language: initial.direction,
     inputLanguage: initial.inputDirection,
     lookupDefinition: capabilities.contains(PlatformCapability.dictionary)
@@ -86,7 +91,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   );
   final live = LiveRegionSession(
     providerFor: (settings) => providerForSettings(settings, bridge),
-    detectLanguage: bridge.detectLanguage,
+    detectLanguage: detectLanguage,
     clock: SystemLiveRegionClock(),
     onView: (view) {
       unawaited(bridge.publishLiveRegion(view.toMap()));
@@ -111,6 +116,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       session.inputProvider = providerForInput(candidate, bridge);
       session.serviceChoices = () => serviceChoices(candidate, capabilities);
       live.noteSettings(candidate);
+      userLanguages = LanguageDetection.preferred(candidate.toMap());
       unawaited(fonts.noteSelection(candidate.fontSet));
     },
   );
@@ -138,7 +144,7 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
   var screenshotGeneration = 0;
   final screenshotTranslation = LiveRegionSession(
     providerFor: (settings) => providerForSettings(settings, bridge),
-    detectLanguage: bridge.detectLanguage,
+    detectLanguage: detectLanguage,
     clock: SystemLiveRegionClock(),
     onView: (view) {
       final id = screenshotCapture;

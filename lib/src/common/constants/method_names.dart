@@ -89,8 +89,6 @@ abstract final class MethodNames {
 
   static const credentialIds = 'credentialIds';
 
-  static const detectLanguage = 'detectLanguage';
-
   static const dragOverlay = 'dragOverlay';
 
   static const escapePressed = 'escapePressed';
@@ -216,6 +214,8 @@ abstract final class MethodNames {
   static const openFile = 'openFile';
 
   static const copyImageFile = 'copyImageFile';
+
+  static const languageCandidates = 'languageCandidates';
 
   static const lookupDefinition = 'lookupDefinition';
 

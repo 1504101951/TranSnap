@@ -1,7 +1,6 @@
 import Cocoa
 import CoreImage
 import ImageIO
-import NaturalLanguage
 import UniformTypeIdentifiers
 import FlutterMacOS
 import ServiceManagement
@@ -886,10 +885,12 @@ class RunnerTests: XCTestCase {
     @MainActor
     func testDeviceLanguageDetection() {
         let bridge = MacPlatformBridge(overlay: OverlayPanelController(), selectionMonitor: SelectionMonitor())
-        bridge.handle(FlutterMethodCall(methodName: AppConstants.detectLanguageMethod, arguments: [
+        bridge.handle(FlutterMethodCall(methodName: AppConstants.languageCandidatesMethod, arguments: [
             "text": "Bonjour, cette application permet de traduire le texte sélectionné dans une autre langue sans interrompre votre travail.",
+            "hints": ["en": 20.0, "fr": 3.0],
         ])) { value in
-            XCTAssertEqual(value as? String, "fr")
+            let candidates = (value as? [String: Any])?["candidates"] as? [[String: Any]]
+            XCTAssertEqual(candidates?.first?["code"] as? String, "fr")
         }
     }
 
@@ -1254,54 +1255,18 @@ class RunnerTests: XCTestCase {
                        SelectionMonitor.HotKeyBinding(keyCode: 17, modifiers: 6144))
     }
 
-    func testLanguageDetectionPrefersUserLanguages() {
-        let user = ["zh-CN", "en"]
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("en", 0.13), ("nl", 0.11), ("id", 0.10)], text: "hello", preferred: user), "en")
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("zh-Hant", 0.80), ("zh-Hans", 0.20)], text: "你好", preferred: user), "zh-Hans")
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("zh-Hant", 0.99)], text: "這是繁體中文", preferred: user), "zh-Hant")
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("fr", 0.90)], text: "Bonjour", preferred: user), "fr")
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: user), "en")
-        XCTAssertNil(LanguageDetection.resolve(
-            hypotheses: [("pl", 0.29), ("nl", 0.09), ("ro", 0.09)], text: "ok", preferred: ["en", "fr"]))
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("en", 0.34), ("nl", 0.20), ("ro", 0.12)], text: "pot", preferred: ["zh-CN"]), "en")
-        XCTAssertEqual(LanguageDetection.resolve(
-            hypotheses: [("pt", 0.48), ("es", 0.30), ("it", 0.10)], text: "banco", preferred: ["zh-CN"]), "pt")
-        XCTAssertNil(LanguageDetection.resolve(
-            hypotheses: [("tr", 0.31), ("pl", 0.20), ("ro", 0.10)], text: "analyze", preferred: ["zh-CN", "fr", "de"]))
-    }
-
-    func testLanguageDetectionShortEnglishWithoutLatinUserLanguage() {
-        let user = ["zh-CN"]
-        for word in ["analyze", "ok", "API", "Hello", "Animation duration"] {
-            XCTAssertEqual(LanguageDetection.detect(word, preferred: user), "en", word)
-        }
-        XCTAssertEqual(LanguageDetection.detect("Bonjour", preferred: user), "fr")
-        XCTAssertEqual(LanguageDetection.detect("Danke schön", preferred: user), "de")
-    }
-
-    func testLanguageDetectionHintsFavorUserLanguages() {
-        let user = ["zh-CN", "en"]
-        XCTAssertEqual(LanguageDetection.detect("Animation duration", preferred: user), "en")
-        XCTAssertEqual(LanguageDetection.detect("Control center", preferred: user), "en")
-        XCTAssertEqual(LanguageDetection.detect("Durata animației", preferred: user), "ro")
-        XCTAssertEqual(LanguageDetection.detect("Impostazioni avanzate", preferred: user), "it")
-        XCTAssertEqual(LanguageDetection.detect("設定を開く", preferred: user), "ja")
-    }
-
-    func testLanguageDetectionHintWeights() {
-        let hints = LanguageDetection.hints(preferred: ["zh-CN", "pt-BR", "xx"])
-        XCTAssertEqual(hints[NLLanguage("zh-Hans")], AppConstants.languageDetectionUserWeight)
-        XCTAssertEqual(hints[NLLanguage("pt")], AppConstants.languageDetectionUserWeight)
-        XCTAssertEqual(hints[NLLanguage("en")], AppConstants.languageDetectionEnglishWeight)
-        XCTAssertEqual(hints[NLLanguage("ro")], AppConstants.languageDetectionBaseWeight)
-        XCTAssertNil(hints[NLLanguage("xx")])
-        XCTAssertEqual(hints.count, AppConstants.languageDetectionAll.count)
+    func testLanguageCandidatesFollowHintsAndReportUnchangedChineseScripts() {
+        let hints = ["en": 20.0, "zh-Hans": 30.0, "ro": 1.0, "it": 3.0, "ja": 3.0]
+        let english = LanguageDetection.candidates("Animation duration", hints: hints)
+        let ranked = english["candidates"] as! [[String: Any]]
+        XCTAssertEqual(ranked.first?["code"] as? String, "en")
+        let confidences = ranked.compactMap { $0["confidence"] as? Double }
+        XCTAssertEqual(confidences, confidences.sorted(by: >))
+        XCTAssertEqual(english["unchangedScripts"] as? [String], [])
+        let japanese = LanguageDetection.candidates("設定を開く", hints: hints)
+        XCTAssertEqual((japanese["candidates"] as! [[String: Any]]).first?["code"] as? String, "ja")
+        XCTAssertEqual(LanguageDetection.candidates("这是简体中文", hints: hints)["unchangedScripts"] as? [String], ["Hans"])
+        XCTAssertEqual(LanguageDetection.candidates("這是繁體中文", hints: hints)["unchangedScripts"] as? [String], ["Hant"])
     }
 
     func testScreenshotLinkAcceptsOnlyHttpLinksWithHost() {

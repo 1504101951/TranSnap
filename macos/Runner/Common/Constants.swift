@@ -118,20 +118,8 @@ enum AppConstants {
     static let gifFramesPerSecondKey = "gifFramesPerSecond"
     static let liveRecordingKey = "liveRecording"
     static let screenshotIncludesCursorKey = "screenshotIncludesCursor"
-    static let userLanguageKeys = ["primaryLanguage", "secondaryLanguage", "inputPrimaryLanguage", "inputSecondaryLanguage"]
-    static let languageDetectionConfidence = 0.5
     static let languageDetectionCandidates = 3
-    static let languageDetectionBaseWeight = 1.0
-    static let languageDetectionPopularWeight = 3.0
-    static let languageDetectionEnglishWeight = 20.0
-    static let languageDetectionUserWeight = 30.0
-    static let languageDetectionPopular = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "fr", "de", "es", "pt", "ru", "it"]
-    static let languageDetectionAll = [
-        "am", "ar", "hy", "bn", "bg", "my", "ca", "chr", "hr", "cs", "da", "nl", "en", "fi", "fr", "ka", "de", "el", "gu",
-        "he", "hi", "hu", "is", "id", "it", "ja", "kn", "kk", "km", "ko", "lo", "ms", "ml", "mr", "mn-Mong", "nb", "or",
-        "fa", "pl", "pt", "pa-Guru", "ro", "ru", "zh-Hans", "si", "sk", "es", "sv", "ta", "te", "th", "bo", "zh-Hant",
-        "tr", "uk", "ur", "vi",
-    ]
+    static let chineseScriptTransforms = [(script: "Hans", transform: "Hant-Hans"), (script: "Hant", transform: "Hans-Hant")]
     static let recordingClickEffectKey = "recordingClickEffect"
     static let recordingClickEffectEnabledKey = "recordingClickEffectEnabled"
     static let clickEffectLeftColor = NSColor(srgbRed: 0, green: 0x7A / 255.0, blue: 1, alpha: 1)
@@ -220,7 +208,6 @@ enum AppConstants {
     static let copyTextMethod = "copyText"
     static let copyFailedError = "copy_failed"
     static let credentialIdsMethod = "credentialIds"
-    static let detectLanguageMethod = "detectLanguage"
     static let dragOverlayMethod = "dragOverlay"
     static let escapePressedMethod = "escapePressed"
     static let excludedAppsKey = "excludedApps"
@@ -328,6 +315,7 @@ enum AppConstants {
     static let composeFailedError = "compose_failed"
     static let openFileMethod = "openFile"
     static let copyImageFileMethod = "copyImageFile"
+    static let languageCandidatesMethod = "languageCandidates"
     static let lookupDefinitionMethod = "lookupDefinition"
     static let vocabularyListMethod = "vocabularyList"
     static let saveTextFileMethod = "saveTextFile"

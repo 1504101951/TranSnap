@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../common/constants/platform_capabilities.dart';
+import '../translation/language_detection.dart';
 
 import 'platform_event.dart';
 
@@ -65,7 +66,10 @@ abstract interface class SpeechPort {
 }
 
 abstract interface class TextServices {
-  Future<String?> detectLanguage(String text);
+  Future<LanguageCandidates> languageCandidates(
+    String text,
+    Map<String, double> hints,
+  );
 
   Future<String?> lookupDefinition(String text);
 }

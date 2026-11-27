@@ -101,63 +101,20 @@ enum AppPreferences {
 }
 
 enum LanguageDetection {
-    static func detect(_ text: String, preferred: [String]? = nil) -> String? {
-        let preferred = preferred ?? {
-            let preferences = AppPreferences.current
-            return AppConstants.userLanguageKeys.compactMap { preferences[$0] as? String }
-        }()
+    static func candidates(_ text: String, hints: [String: Double]) -> [String: Any] {
         let recognizer = NLLanguageRecognizer()
-        recognizer.languageHints = hints(preferred: preferred)
+        recognizer.languageHints = Dictionary(uniqueKeysWithValues: hints.map { (NLLanguage(rawValue: $0.key), $0.value) })
         recognizer.processString(text)
-        let hypotheses = recognizer.languageHypotheses(withMaximum: AppConstants.languageDetectionCandidates)
-            .map { (code: $0.key.rawValue, confidence: $0.value) }
-        return resolve(hypotheses: hypotheses, text: text, preferred: preferred)
-    }
-
-    static func hints(preferred: [String]) -> [NLLanguage: Double] {
-        var weights = Dictionary(uniqueKeysWithValues: AppConstants.languageDetectionAll.map {
-            (NLLanguage(rawValue: $0), AppConstants.languageDetectionBaseWeight)
-        })
-        for code in AppConstants.languageDetectionPopular {
-            weights[NLLanguage(rawValue: code)] = AppConstants.languageDetectionPopularWeight
-        }
-        weights[.english] = AppConstants.languageDetectionEnglishWeight
-        for code in preferred {
-            let identifier = chineseScript(code).map { "zh-\($0)" } ?? Locale.Language(identifier: code).languageCode?.identifier
-            guard let identifier, AppConstants.languageDetectionAll.contains(identifier) else { continue }
-            weights[NLLanguage(rawValue: identifier)] = AppConstants.languageDetectionUserWeight
-        }
-        return weights
-    }
-
-    static func resolve(hypotheses: [(code: String, confidence: Double)], text: String, preferred: [String]) -> String? {
-        let bases = Set(preferred.compactMap { Locale.Language(identifier: $0).languageCode?.identifier })
-        let ranked = hypotheses.sorted { $0.confidence > $1.confidence }
-        guard let top = ranked.first else { return nil }
-        let chosen = top.confidence >= AppConstants.languageDetectionConfidence
-            ? top.code
-            : ranked.first { Locale.Language(identifier: $0.code).languageCode.map { bases.contains($0.identifier) } == true }?.code
-                ?? latinFallback(text: text, preferred: preferred)
-                ?? (AppConstants.languageDetectionPopular.contains(top.code) ? top.code : nil)
-        guard let chosen, Locale.Language(identifier: chosen).languageCode?.identifier == "zh" else { return chosen }
-        guard let script = preferred.lazy.compactMap(chineseScript).first else { return chosen }
-        let transform = StringTransform(script == "Hans" ? "Hant-Hans" : "Hans-Hant")
-        return text.applyingTransform(transform, reverse: false) == text ? "zh-\(script)" : chosen
-    }
-
-    private static func latinFallback(text: String, preferred: [String]) -> String? {
-        guard text.unicodeScalars.allSatisfy(\.isASCII), text.contains(where: \.isLetter) else { return nil }
-        let latin = Set(preferred.compactMap { code -> String? in
-            let language = Locale.Language(identifier: code)
-            return language.maximalIdentifier.contains("Latn") ? language.languageCode?.identifier : nil
-        })
-        return latin.count == 1 ? latin.first : nil
-    }
-
-    private static func chineseScript(_ code: String) -> String? {
-        let language = Locale.Language(identifier: code)
-        guard language.languageCode?.identifier == "zh" else { return nil }
-        return language.maximalIdentifier.contains("Hant") ? "Hant" : "Hans"
+        let ranked = recognizer.languageHypotheses(withMaximum: AppConstants.languageDetectionCandidates)
+            .sorted { $0.value > $1.value }
+        let chinese = ranked.contains { Locale.Language(identifier: $0.key.rawValue).languageCode?.identifier == "zh" }
+        let scripts = chinese ? AppConstants.chineseScriptTransforms.filter {
+            text.applyingTransform(StringTransform($0.transform), reverse: false) == text
+        }.map(\.script) : []
+        return [
+            "candidates": ranked.map { ["code": $0.key.rawValue, "confidence": $0.value] },
+            "unchangedScripts": scripts,
+        ]
     }
 }
 

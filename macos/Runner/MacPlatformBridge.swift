@@ -337,13 +337,13 @@ final class MacPlatformBridge: NSObject, FlutterStreamHandler {
                 if status == errSecSuccess || status == errSecInteractionNotAllowed { saved.append(id) }
             }
             result(saved)
-        case AppConstants.detectLanguageMethod:
-            guard let text = args["text"] as? String else {
-                result(Self.badArguments("缺少待识别文本")); return
+        case AppConstants.languageCandidatesMethod:
+            guard let text = args["text"] as? String, let hints = args["hints"] as? [String: Double] else {
+                result(Self.badArguments("缺少待识别文本或语言权重")); return
             }
             let detectStart = ContinuousClock.now
             defer { PerformanceLog.record("translate-detect", since: detectStart) }
-            result(LanguageDetection.detect(text))
+            result(LanguageDetection.candidates(text, hints: hints))
         case AppConstants.openFileMethod, AppConstants.revealFileMethod, AppConstants.copyImageFileMethod:
             guard let path = args["path"] as? String else {
                 result(Self.badArguments("缺少文件路径。")); return

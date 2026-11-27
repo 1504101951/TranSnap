@@ -1,6 +1,7 @@
 import '../common/constants/method_names.dart';
 import '../common/constants/channel_names.dart';
 import '../common/constants/platform_capabilities.dart';
+import '../translation/language_detection.dart';
 
 import 'package:flutter/services.dart';
 
@@ -203,8 +204,27 @@ class ChannelPlatformBridge
   ) => _methods.setMethodCallHandler(handler);
 
   @override
-  Future<String?> detectLanguage(String text) =>
-      _methods.invokeMethod<String>(MethodNames.detectLanguage, {'text': text});
+  Future<LanguageCandidates> languageCandidates(
+    String text,
+    Map<String, double> hints,
+  ) async {
+    final result = (await _methods.invokeMapMethod<String, Object?>(
+      MethodNames.languageCandidates,
+      {'text': text, 'hints': hints},
+    ))!;
+    return (
+      candidates: [
+        for (final candidate in result['candidates'] as List)
+          (
+            code: (candidate as Map)['code'] as String,
+            confidence: (candidate['confidence'] as num?)?.toDouble(),
+          ),
+      ],
+      unchangedScripts: (result['unchangedScripts'] as List)
+          .cast<String>()
+          .toSet(),
+    );
+  }
 
   @override
   Future<String?> lookupDefinition(String text) => _methods

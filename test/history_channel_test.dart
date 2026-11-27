@@ -12,7 +12,7 @@ import 'package:transnap/src/selection/selection_translation_app.dart';
 
 void main() {
   testWidgets('截图翻译与设置提交等待期间，历史分页和关闭记录可独立完成', (tester) async {
-    final detection = Completer<String?>();
+    final detection = Completer<Map<String, Object?>>();
     final started = Completer<void>();
     final saving = Completer<void>();
     final saveStarted = Completer<void>();
@@ -39,7 +39,7 @@ void main() {
           return null;
         case MethodNames.credentialIds:
           return <String>[];
-        case MethodNames.detectLanguage:
+        case MethodNames.languageCandidates:
           started.complete();
           return detection.future;
         default:
@@ -149,7 +149,12 @@ void main() {
     await request(MethodNames.cancelScreenshotTranslation, {
       'id': 'closed-shot',
     });
-    detection.complete('en');
+    detection.complete({
+      'candidates': [
+        {'code': 'en', 'confidence': 0.9},
+      ],
+      'unchangedScripts': <String>[],
+    });
     await translating;
     expect(history.page(), isEmpty);
   });

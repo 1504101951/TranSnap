@@ -17,3 +17,4 @@
 13. [translation_http.dart](translation_http.dart)：提供翻译请求共用的 HTTP 客户端与连接预热，复用与服务之间的连接。
 14. [glossary_file.dart](glossary_file.dart)：校验并解析 CSV/JSON 术语文件，提供导入预览、顺序合并与导出。
 15. [foreign_terms.dart](foreign_terms.dart)：按目标语言的文字提取段落中夹杂的外文片段（排除网址、版本号、代码式写法与单字），并给出每处片段的 UTF-16 起止偏移，供译文盖板定位。
+16. [language_detection.dart](language_detection.dart)：按用户语言生成识别权重，并从原生返回的候选语言中判定原文语言：首位置信度达标直接采用（无置信度按达标处理），否则依次取用户语言候选、唯一拉丁用户语言与常用语言；判定为中文时按用户首个中文的书写体系处理简繁。
