@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "platform_bridge.cpp"
   "preferences_store.cpp"
+  "speech_service.cpp"
   "tray_icon.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -32,7 +33,7 @@ target_compile_options(${BINARY_NAME} PRIVATE /utf-8)
 
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib" "elscore.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib" "elscore.lib" "windowsapp.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 add_dependencies(${BINARY_NAME} flutter_assemble)

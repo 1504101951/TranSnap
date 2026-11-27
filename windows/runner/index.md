@@ -16,7 +16,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 12. [language_detection.cpp](language_detection.cpp)：以 Win32 扩展语言服务（ELS）返回至多 3 个不带置信度的候选语言，以及简繁转换后不变的中文书写体系。
 13. [language_detection.h](language_detection.h)：声明候选语言识别接口。
 14. [main.cpp](main.cpp)：Windows 应用入口：初始化 COM、创建主窗口并运行消息循环。
-15. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、候选语言识别、历史变化通知与事件流。
+15. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、候选语言识别、朗读、历史变化通知与事件流。
 16. [platform_bridge.h](platform_bridge.h)：声明主引擎平台通道。
 17. [preferences_store.cpp](preferences_store.cpp)：读取与原子写入偏好 JSON 文件，文件缺失时为空偏好，格式错误时报错。
 18. [preferences_store.h](preferences_store.h)：声明偏好文件读写接口。
@@ -24,11 +24,13 @@ Windows 应用入口、主窗口与可执行文件资源。
 20. [resource.h](resource.h)：定义资源脚本使用的资源编号。
 21. [runner.exe.manifest](runner.exe.manifest)：声明每显示器 DPI 感知与支持的 Windows 版本。
 22. [Runner.rc](Runner.rc)：声明可执行文件的图标、版本与产品信息。
-23. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
-24. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
-25. [utils.cpp](utils.cpp)：控制台附加、命令行参数读取与 UTF-8、UTF-16 互转。
-26. [utils.h](utils.h)：声明控制台、命令行参数与编码转换工具函数。
-27. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
-28. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
-29. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言与强调色，判断并为窗口应用系统亚克力背景，读写登录时启动项，并显示警告与启动失败提示。
-30. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。
+23. [speech_service.cpp](speech_service.cpp)：以 WinRT 语音合成朗读文字，按语言选择系统声音，同一段再次请求即停止。
+24. [speech_service.h](speech_service.h)：声明朗读开关与停止接口。
+25. [tray_icon.cpp](tray_icon.cpp)：通知区域托盘图标与菜单（设置…、翻译历史…、仅使用快捷键、退出），资源管理器重启后重新添加图标。
+26. [tray_icon.h](tray_icon.h)：声明托盘图标与菜单动作。
+27. [utils.cpp](utils.cpp)：控制台附加、命令行参数读取与 UTF-8、UTF-16 互转。
+28. [utils.h](utils.h)：声明控制台、命令行参数与编码转换工具函数。
+29. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
+30. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
+31. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言与强调色，判断并为窗口应用系统亚克力背景，读写登录时启动项，并显示警告与启动失败提示。
+32. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。

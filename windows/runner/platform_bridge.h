@@ -13,6 +13,8 @@
 #include <memory>
 #include <string>
 
+#include "speech_service.h"
+
 class PlatformBridge {
  public:
   explicit PlatformBridge(flutter::BinaryMessenger* messenger);
@@ -56,6 +58,7 @@ class PlatformBridge {
   int next_appearance_token_ = 1;
   std::function<void()> settings_changed_;
   std::function<void()> history_changed_;
+  std::unique_ptr<SpeechService> speech_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> platform_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> appearance_;
   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> events_;

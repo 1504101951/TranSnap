@@ -257,6 +257,22 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       return true;
     }
     result->Success(EncodableValue(*candidates));
+  } else if (method == protocol::kToggleSpeech) {
+    auto text = Get<std::string>(args, "text");
+    auto language = Get<std::string>(args, "language");
+    if (!text || !language) {
+      result->Error(protocol::kBadArgsError, "toggleSpeech 需要 text/language");
+      return true;
+    }
+    if (!speech_) {
+      speech_ = std::make_unique<SpeechService>();
+    }
+    result->Success(EncodableValue(speech_->Toggle(*text, *language)));
+  } else if (method == protocol::kStopSpeech) {
+    if (speech_) {
+      speech_->Stop();
+    }
+    result->Success();
   } else if (method == protocol::kHistoryChanged) {
     if (history_changed_) {
       history_changed_();
