@@ -34,6 +34,7 @@ inline constexpr char kShowOverlay[] = "showOverlay";
 inline constexpr char kHideOverlay[] = "hideOverlay";
 inline constexpr char kSetOverlaySize[] = "setOverlaySize";
 inline constexpr char kDragOverlay[] = "dragOverlay";
+inline constexpr char kChooseExcludedApp[] = "chooseExcludedApp";
 inline constexpr char kOpenGlossaryFile[] = "openGlossaryFile";
 inline constexpr char kSaveTextFile[] = "saveTextFile";
 inline constexpr char kHistoryChanged[] = "historyChanged";

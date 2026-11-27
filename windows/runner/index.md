@@ -10,8 +10,8 @@ Windows 应用入口、主窗口与可执行文件资源。
 6. [CMakeLists.txt](CMakeLists.txt)：定义 Windows 可执行文件的源文件、编译选项与链接库。
 7. [credentials.cpp](credentials.cpp)：以 Windows 凭据管理器读取、保存与删除翻译服务凭据。
 8. [credentials.h](credentials.h)：声明凭据读取结果与读写接口。
-9. [file_dialogs.cpp](file_dialogs.cpp)：以系统文件对话框选择要导入的术语表（CSV、JSON）与导出保存位置，取消时不返回路径。
-10. [file_dialogs.h](file_dialogs.h)：声明术语表打开与保存位置选择接口。
+9. [file_dialogs.cpp](file_dialogs.cpp)：以系统文件对话框选择要导入的术语表（CSV、JSON）、要排除的应用程序（.exe，默认打开 Program Files）与导出保存位置，取消时不返回路径。
+10. [file_dialogs.h](file_dialogs.h)：声明术语表打开、排除应用选择与保存位置选择接口。
 11. [flutter_window.cpp](flutter_window.cpp)：以主窗口承载主引擎 Flutter 视图并作为浮层（点击不激活），启动主线程调度，创建主引擎平台通道、设置与翻译历史窗口及托盘图标并转发窗口消息。
 12. [flutter_window.h](flutter_window.h)：声明承载 Flutter 视图的主窗口。
 13. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
@@ -26,7 +26,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 22. [main_thread.h](main_thread.h)：声明主线程调度、后台执行与消息窗口接口。
 23. [overlay_window.cpp](overlay_window.cpp)：把主窗口设为不激活、置顶、不进任务栏的弹出窗口作为触发按钮与翻译卡片，在鼠标右下 8pt 处按会话显示并夹取到工作区内缩 8pt，调整尺寸保持左上角，按住左键时进入系统拖动。
 24. [overlay_window.h](overlay_window.h)：声明浮层显示、隐藏、调整尺寸、拖动与命中判断接口。
-25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、浮层显示隐藏与尺寸拖动、候选语言识别、朗读、术语表文件导入导出、历史变化通知与事件流。
+25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、浮层显示隐藏与尺寸拖动、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
 26. [platform_bridge.h](platform_bridge.h)：声明主引擎平台通道。
 27. [preferences_store.cpp](preferences_store.cpp)：读取与原子写入偏好 JSON 文件，文件缺失时为空偏好，格式错误时报错。
 28. [preferences_store.h](preferences_store.h)：声明偏好文件读写接口。

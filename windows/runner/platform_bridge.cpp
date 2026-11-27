@@ -379,6 +379,22 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
     }
     capture_->Retain(*session);
     result->Success();
+  } else if (method == protocol::kChooseExcludedApp) {
+    std::string error;
+    auto application = file_dialogs::ChooseApplication(error);
+    if (!error.empty()) {
+      result->Error(protocol::kSettingsFailedError, error);
+      return true;
+    }
+    if (!application) {
+      result->Success();
+      return true;
+    }
+    std::wstring path = application->wstring();
+    result->Success(EncodableValue(EncodableMap{
+        {EncodableValue("id"), EncodableValue(Utf8FromUtf16(path.c_str()))},
+        {EncodableValue("name"), EncodableValue(windows_system::ApplicationDisplayName(path))},
+    }));
   } else if (method == protocol::kOpenGlossaryFile) {
     std::string error;
     auto file = file_dialogs::ChooseGlossaryFile(error);
