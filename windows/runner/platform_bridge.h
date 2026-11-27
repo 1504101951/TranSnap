@@ -12,7 +12,9 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "global_hotkeys.h"
 #include "overlay_window.h"
 #include "selection_capture.h"
 #include "speech_service.h"
@@ -53,6 +55,8 @@ class PlatformBridge {
                           SelectionMonitor::Reply reply);
   bool Excluded(const std::wstring& executable) const;
   bool PrefersDark() const;
+  static bool HotkeyRequests(const flutter::EncodableMap& settings,
+                             std::vector<GlobalHotkeys::Request>& requests, std::string& error);
   void BroadcastAppearance();
 
   OverlayWindow& overlay_;
@@ -72,6 +76,7 @@ class PlatformBridge {
   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> events_;
   std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> sink_;
   std::unique_ptr<SelectionCapture> capture_;
+  std::unique_ptr<GlobalHotkeys> hotkeys_;
 };
 
 #endif

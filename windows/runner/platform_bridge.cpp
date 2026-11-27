@@ -136,6 +136,35 @@ PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger, OverlayWindo
       [this](const std::string& session_id) { overlay_.Hide(session_id); },
       [this](long x, long y) { return overlay_.Contains(x, y); },
   });
+  hotkeys_ = std::make_unique<GlobalHotkeys>(
+      [this](const std::string& gesture) { capture_->Capture(gesture); });
+}
+
+bool PlatformBridge::HotkeyRequests(const EncodableMap& settings,
+                                    std::vector<GlobalHotkeys::Request>& requests,
+                                    std::string& error) {
+  for (const auto& purpose : shortcut_rules::kPurposes) {
+    const auto* value = Find(settings, purpose.preference_key);
+    if (!value || value->IsNull()) {
+      continue;
+    }
+    const auto* map = std::get_if<EncodableMap>(value);
+    auto key = map ? Get<std::string>(*map, "key") : std::nullopt;
+    auto list = map ? Get<EncodableList>(*map, "modifiers") : std::nullopt;
+    std::vector<std::string> modifiers;
+    for (const auto& item : list ? *list : EncodableList{}) {
+      const auto* name = std::get_if<std::string>(&item);
+      modifiers.push_back(name ? *name : "");
+    }
+    std::string reason;
+    auto shortcut = key && list ? shortcut_rules::Parse(*key, modifiers, reason) : std::nullopt;
+    if (!shortcut) {
+      error = std::string("「") + purpose.title + "」" + (reason.empty() ? "格式无效。" : reason);
+      return false;
+    }
+    requests.push_back({&purpose, *shortcut});
+  }
+  return true;
 }
 
 void PlatformBridge::RequestApplication(const char* method, EncodableValue arguments,
@@ -534,6 +563,11 @@ void PlatformBridge::ApplySettings(const EncodableMap& arguments, Result& result
     requested.emplace_back(*id, map);
   }
   std::string error;
+  std::vector<GlobalHotkeys::Request> hotkey_requests;
+  if (!HotkeyRequests(*settings, hotkey_requests, error)) {
+    result->Error(protocol::kSettingsFailedError, error);
+    return;
+  }
   std::vector<std::pair<std::string, std::optional<EncodableMap>>> previous;
   for (const auto& [id, value] : requested) {
     EncodableMap existing;
@@ -561,6 +595,11 @@ void PlatformBridge::ApplySettings(const EncodableMap& arguments, Result& result
     succeeded = windows_system::SetLaunchAtLogin(*login, error);
     login_changed = succeeded;
   }
+  bool hotkeys_changed = false;
+  if (succeeded) {
+    succeeded = hotkeys_->Apply(hotkey_requests, error);
+    hotkeys_changed = succeeded;
+  }
   if (succeeded) {
     succeeded = preferences_store::Save(
         data_directory_ / protocol::kPreferencesFile, *settings, error);
@@ -576,6 +615,10 @@ void PlatformBridge::ApplySettings(const EncodableMap& arguments, Result& result
       restored = windows_system::SetLaunchAtLogin(previous_login, rollback_error) &&
                  restored;
     }
+    std::vector<GlobalHotkeys::Request> previous_hotkeys;
+    if (hotkeys_changed && HotkeyRequests(preferences_, previous_hotkeys, rollback_error)) {
+      restored = hotkeys_->Apply(previous_hotkeys, rollback_error) && restored;
+    }
     if (!restored) {
       result->Error(protocol::kRollbackFailedError,
                     "设置未保存，无法恢复部分系统设置或凭据，请检查凭据管理器与登录时启动设置。");
@@ -588,6 +631,7 @@ void PlatformBridge::ApplySettings(const EncodableMap& arguments, Result& result
   preferences_error_.clear();
   preview_.clear();
   BroadcastAppearance();
+  capture_->Cancel(protocol::kSelectionInvalidatedEvent);
   result->Success();
 }
 

@@ -33,6 +33,7 @@ class SelectionCapture {
 
   void Capture(const std::string& gesture);
   void Invalidate(const char* event_type);
+  void Cancel(const char* event_type);
   void Retain(const std::string& session_id);
   bool Hide(const std::string& session_id);
   bool IsCurrent(const std::string& session_id) const;
@@ -59,7 +60,6 @@ class SelectionCapture {
     bool keyboard_candidate;
   };
 
-  void Cancel(const char* event_type);
   void ReadText(unsigned long process, bool allow_copy, bool keyboard,
                 std::function<void(const Outcome&)> done);
   void Copy(unsigned long process, flutter::EncodableMap request, Outcome base,
