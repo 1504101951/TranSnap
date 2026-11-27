@@ -8,4 +8,4 @@
 4. [glossary.md](glossary.md)：选区翻译、截图采集与实时翻译领域术语表。
 5. [index.md](index.md)：索引本目录直接子文件和子目录的用途。
 6. [macos.md](macos.md)：macOS 运行要求、系统权限、本地固定签名与安装交付。
-7. [windows.md](windows.md)：Windows 自动构建、实测包获取与本机构建。
+7. [windows.md](windows.md)：Windows 自动构建、实测包获取、本机构建，以及运行要求、数据位置与实测要点。
