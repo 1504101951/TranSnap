@@ -36,6 +36,14 @@ class SelectionCapture {
   void Retain(const std::string& session_id);
   bool Hide(const std::string& session_id);
   bool IsCurrent(const std::string& session_id) const;
+
+  struct Outcome {
+    std::optional<std::string> text;
+    bool secure = false;
+    bool keyboard_candidate = false;
+  };
+
+  void ReadForTranslation(const std::string& session_id, std::function<void(const Outcome&)> done);
   void ForegroundChanged(unsigned long process);
 
  private:
@@ -52,7 +60,10 @@ class SelectionCapture {
   };
 
   void Cancel(const char* event_type);
-  void Copy(Pending pending, flutter::EncodableMap request, std::optional<std::string> text);
+  void ReadText(unsigned long process, bool allow_copy, bool keyboard,
+                std::function<void(const Outcome&)> done);
+  void Copy(unsigned long process, flutter::EncodableMap request, Outcome base,
+            std::function<void(const Outcome&)> done);
   void Finish(const Pending& pending, const std::optional<std::string>& text);
   void Emit(const std::string& gesture, unsigned long process, const std::string& source_name,
             const std::string& text, const char* read_failure);

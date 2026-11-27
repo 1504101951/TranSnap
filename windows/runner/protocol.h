@@ -30,6 +30,7 @@ inline constexpr char kSelectionKey[] = "selectionKey";
 inline constexpr char kShouldCopySelection[] = "shouldCopySelection";
 inline constexpr char kAcceptsCopiedSelection[] = "acceptsCopiedSelection";
 inline constexpr char kRetainOverlay[] = "retainOverlay";
+inline constexpr char kReadSelectionForTranslation[] = "readSelectionForTranslation";
 inline constexpr char kShowOverlay[] = "showOverlay";
 inline constexpr char kHideOverlay[] = "hideOverlay";
 inline constexpr char kSetOverlaySize[] = "setOverlaySize";

@@ -105,7 +105,7 @@ std::pair<double, double> LogicalPoint(long x, long y) {
   HMONITOR monitor = ::MonitorFromPoint(POINT{x, y}, MONITOR_DEFAULTTONEAREST);
   MONITORINFO info{sizeof(info)};
   ::GetMonitorInfoW(monitor, &info);
-  double scale = FlutterDesktopGetDpiForMonitor(reinterpret_cast<intptr_t>(monitor)) / 96.0;
+  double scale = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
   return {info.rcMonitor.left + (x - info.rcMonitor.left) / scale,
           info.rcMonitor.top + (y - info.rcMonitor.top) / scale};
 }
@@ -120,7 +120,7 @@ ScreenPoint PhysicalPoint(double x, double y) {
       nullptr, nullptr,
       [](HMONITOR monitor, HDC, LPRECT bounds, LPARAM data) -> BOOL {
         auto* search = reinterpret_cast<Search*>(data);
-        double scale = FlutterDesktopGetDpiForMonitor(reinterpret_cast<intptr_t>(monitor)) / 96.0;
+        double scale = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
         double right = bounds->left + (bounds->right - bounds->left) / scale;
         double bottom = bounds->top + (bounds->bottom - bounds->top) / scale;
         if (search->x < bounds->left || search->x >= right || search->y < bounds->top ||
@@ -139,7 +139,7 @@ ScreenPoint PhysicalPoint(double x, double y) {
   POINT point{std::lround(x), std::lround(y)};
   HMONITOR monitor = ::MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
   return {point.x, point.y,
-          FlutterDesktopGetDpiForMonitor(reinterpret_cast<intptr_t>(monitor)) / 96.0};
+          FlutterDesktopGetDpiForMonitor(monitor) / 96.0};
 }
 
 std::wstring ProcessImagePath(unsigned long process) {

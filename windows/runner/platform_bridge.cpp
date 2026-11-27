@@ -21,6 +21,7 @@
 #include "preferences_store.h"
 #include "protocol.h"
 #include "text_file.h"
+#include "uia_selection.h"
 #include "utils.h"
 #include "windows_system.h"
 
@@ -379,6 +380,20 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
     }
     capture_->Retain(*session);
     result->Success();
+  } else if (method == protocol::kReadSelectionForTranslation) {
+    auto session = Get<std::string>(args, "sessionId");
+    if (!session) {
+      result->Error(protocol::kBadArgsError, "读取选区需要 sessionId");
+      return true;
+    }
+    std::shared_ptr<flutter::MethodResult<EncodableValue>> shared(std::move(result));
+    capture_->ReadForTranslation(*session, [shared](const SelectionCapture::Outcome& outcome) {
+      if (outcome.secure && !uia_selection::IsUsable(outcome.text)) {
+        shared->Error(protocol::kSecureFieldFailure, "密码框中的文字不会被读取。");
+        return;
+      }
+      shared->Success(outcome.text ? EncodableValue(*outcome.text) : EncodableValue());
+    });
   } else if (method == protocol::kChooseExcludedApp) {
     std::string error;
     auto application = file_dialogs::ChooseApplication(error);

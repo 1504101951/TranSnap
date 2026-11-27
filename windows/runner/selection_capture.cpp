@@ -91,48 +91,18 @@ void SelectionCapture::Capture(const std::string& gesture) {
     Emit(gesture, process, source_name, "", nullptr);
     return;
   }
+  bool keyboard = gesture == protocol::kSelectAllGesture || gesture == protocol::kKeyboardGesture;
   std::weak_ptr<char> alive = alive_;
-  auto read = [this, alive, gesture, generation, process, source_name, explicit_gesture]() {
+  auto read = [this, alive, gesture, generation, process, source_name, explicit_gesture, keyboard]() {
     if (alive.expired() || generation_ != generation) {
       return;
     }
-    bool keyboard = gesture == protocol::kSelectAllGesture || gesture == protocol::kKeyboardGesture;
-    main_thread::Background([this, alive, gesture, generation, process, source_name,
-                             explicit_gesture, keyboard]() {
-      uia_selection::Read read = uia_selection::ReadSelection(process);
-      bool candidate = keyboard && uia_selection::PermitsKeyboardTrigger(process);
-      main_thread::Post([this, alive, gesture, generation, process, source_name, explicit_gesture,
-                         read, candidate]() {
-        if (alive.expired() || generation_ != generation) {
-          return;
-        }
-        Pending pending{gesture, generation, process, source_name, read.secure, candidate};
-        EncodableList context;
-        for (const auto& kind : read.context) {
-          context.push_back(EncodableValue(kind));
-        }
-        EncodableMap request{
-            {EncodableValue("context"), EncodableValue(context)},
-            {EncodableValue("text"), OptionalText(read.text)},
-            {EncodableValue("allowCopy"), EncodableValue(explicit_gesture)},
-        };
-        if (read.secure) {
-          Finish(pending, std::nullopt);
-          return;
-        }
-        Decide(protocol::kShouldCopySelection, request,
-               [this, alive, pending, request, text = read.text](bool copy) {
-                 if (alive.expired()) {
-                   return;
-                 }
-                 if (!copy) {
-                   Finish(pending, text);
-                   return;
-                 }
-                 Copy(pending, request, text);
-               });
-      });
-    });
+    ReadText(process, explicit_gesture, keyboard,
+             [this, gesture, generation, process, source_name](const Outcome& outcome) {
+               Finish(Pending{gesture, generation, process, source_name, outcome.secure,
+                              outcome.keyboard_candidate},
+                      outcome.text);
+             });
   };
   if (explicit_gesture) {
     read();
@@ -141,27 +111,82 @@ void SelectionCapture::Capture(const std::string& gesture) {
   main_thread::After(kSettleMilliseconds, read);
 }
 
-void SelectionCapture::Copy(Pending pending, EncodableMap request, std::optional<std::string> text) {
-  if (generation_ != pending.generation) {
+void SelectionCapture::ReadForTranslation(const std::string& session_id,
+                                          std::function<void(const Outcome&)> done) {
+  if (session_ != session_id || !source_process_) {
+    done(Outcome{});
     return;
   }
+  unsigned generation = ++generation_;
+  ReadText(source_process_, true, false,
+           [this, session_id, generation, done](const Outcome& outcome) {
+             done(generation_ == generation && session_ == session_id ? outcome : Outcome{});
+           });
+}
+
+void SelectionCapture::ReadText(unsigned long process, bool allow_copy, bool keyboard,
+                                std::function<void(const Outcome&)> done) {
+  std::weak_ptr<char> alive = alive_;
+  main_thread::Background([this, alive, process, allow_copy, keyboard, done]() {
+    uia_selection::Read read = uia_selection::ReadSelection(process);
+    bool candidate = keyboard && uia_selection::PermitsKeyboardTrigger(process);
+    main_thread::Post([this, alive, process, allow_copy, done, read, candidate]() {
+      if (alive.expired()) {
+        return;
+      }
+      Outcome base{read.text, read.secure, candidate};
+      if (read.secure) {
+        done(base);
+        return;
+      }
+      EncodableList context;
+      for (const auto& kind : read.context) {
+        context.push_back(EncodableValue(kind));
+      }
+      EncodableMap request{
+          {EncodableValue("context"), EncodableValue(context)},
+          {EncodableValue("text"), OptionalText(read.text)},
+          {EncodableValue("allowCopy"), EncodableValue(allow_copy)},
+      };
+      Decide(protocol::kShouldCopySelection, request,
+             [this, alive, process, request, base, done](bool copy) {
+               if (alive.expired()) {
+                 return;
+               }
+               if (!copy) {
+                 done(base);
+                 return;
+               }
+               Copy(process, request, base, done);
+             });
+    });
+  });
+}
+
+void SelectionCapture::Copy(unsigned long process, EncodableMap request, Outcome base,
+                            std::function<void(const Outcome&)> done) {
   std::weak_ptr<char> alive = alive_;
   clipboard::ReadCopiedText(
       []() { synthetic_input::SendControlShortcut('C'); },
-      [this, alive, pending, request, text](std::optional<std::string> copied) mutable {
+      [this, alive, process, request, base, done](std::optional<std::string> copied) mutable {
         if (alive.expired()) {
           return;
         }
-        if (!copied || uia_selection::ForegroundProcess() != pending.process) {
-          Finish(pending, text);
+        if (!copied || uia_selection::ForegroundProcess() != process) {
+          done(base);
           return;
         }
         request[EncodableValue("copied")] = EncodableValue(*copied);
         Decide(protocol::kAcceptsCopiedSelection, request,
-               [this, alive, pending, text, copied](bool accepts) {
-                 if (!alive.expired()) {
-                   Finish(pending, accepts ? copied : text);
+               [alive, base, done, copied](bool accepts) {
+                 if (alive.expired()) {
+                   return;
                  }
+                 Outcome outcome = base;
+                 if (accepts) {
+                   outcome.text = copied;
+                 }
+                 done(outcome);
                });
       });
 }

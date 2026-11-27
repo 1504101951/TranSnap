@@ -26,7 +26,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 22. [main_thread.h](main_thread.h)：声明主线程调度、后台执行与消息窗口接口。
 23. [overlay_window.cpp](overlay_window.cpp)：把主窗口设为不激活、置顶、不进任务栏的弹出窗口作为触发按钮与翻译卡片，在鼠标右下 8pt 处按会话显示并夹取到工作区内缩 8pt，调整尺寸保持左上角，按住左键时进入系统拖动。
 24. [overlay_window.h](overlay_window.h)：声明浮层显示、隐藏、调整尺寸、拖动与命中判断接口。
-25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、浮层显示隐藏与尺寸拖动、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
+25. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、快捷键翻译的选区读取（密码框报 secureField）、浮层显示隐藏与尺寸拖动、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
 26. [platform_bridge.h](platform_bridge.h)：声明主引擎平台通道。
 27. [preferences_store.cpp](preferences_store.cpp)：读取与原子写入偏好 JSON 文件，文件缺失时为空偏好，格式错误时报错。
 28. [preferences_store.h](preferences_store.h)：声明偏好文件读写接口。
@@ -34,7 +34,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 30. [resource.h](resource.h)：定义资源脚本使用的资源编号。
 31. [runner.exe.manifest](runner.exe.manifest)：声明每显示器 DPI 感知与支持的 Windows 版本。
 32. [Runner.rc](Runner.rc)：声明可执行文件的图标、版本与产品信息。
-33. [selection_capture.cpp](selection_capture.cpp)：划词采集：按手势读取来源应用选区（自动手势先等 80ms），经 Dart 决定复制兜底与是否采用复制结果，发出选区捕获与失效事件；跳过本应用与排除应用（按可执行文件路径），来源名取可执行文件的文件说明；前台应用切换、Esc 与按下鼠标使选区失效，展开卡片后保留结果。
+33. [selection_capture.cpp](selection_capture.cpp)：划词采集：按手势读取来源应用选区（自动手势先等 80ms），经 Dart 决定复制兜底与是否采用复制结果，发出选区捕获与失效事件；跳过本应用与排除应用（按可执行文件路径），来源名取可执行文件的文件说明；前台应用切换、Esc 与按下鼠标使选区失效，展开卡片后保留结果；为快捷键翻译按会话读取来源选区（允许复制兜底）。
 34. [selection_capture.h](selection_capture.h)：声明划词采集与其委托（请求 Dart、发送事件、自动模式、排除判断）。
 35. [selection_context.cpp](selection_context.cpp)：把 UI Automation 控件类型归一为文本、非文本、网页内容（Chromium、Gecko 文档）、其他四类，并按最近的文本或非文本祖先决定是否读取选中文字。
 36. [selection_context.h](selection_context.h)：声明选区上下文类别、祖先层数上限与判定接口。
