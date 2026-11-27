@@ -26,6 +26,10 @@ void ApplyAcrylic(HWND__* window);
 
 std::pair<double, double> LogicalPoint(long x, long y);
 
+std::wstring ProcessImagePath(unsigned long process);
+
+std::string ApplicationDisplayName(const std::wstring& executable);
+
 void ShowWarning(const std::string& title, const std::string& message);
 
 void ShowStartFailure(const std::string& message);

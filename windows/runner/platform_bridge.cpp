@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <cwctype>
 #include <map>
 #include <optional>
 #include <system_error>
@@ -124,6 +125,45 @@ PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger)
             sink_ = nullptr;
             return nullptr;
           }));
+  capture_ = std::make_unique<SelectionCapture>(SelectionCapture::Delegate{
+      [this](const char* method, EncodableValue arguments, SelectionMonitor::Reply reply) {
+        RequestApplication(method, std::move(arguments), std::move(reply));
+      },
+      [this](const EncodableMap& event) { Emit(event); },
+      [this]() { return Automatic(); },
+      [this](const std::wstring& executable) { return Excluded(executable); },
+  });
+}
+
+void PlatformBridge::RequestApplication(const char* method, EncodableValue arguments,
+                                        SelectionMonitor::Reply reply) {
+  auto shared = std::make_shared<SelectionMonitor::Reply>(std::move(reply));
+  platform_->InvokeMethod(
+      method, std::make_unique<EncodableValue>(std::move(arguments)),
+      std::make_unique<flutter::MethodResultFunctions<EncodableValue>>(
+          [shared](const EncodableValue* value) { (*shared)(value); },
+          [shared](const std::string&, const std::string&, const EncodableValue*) {
+            (*shared)(nullptr);
+          },
+          [shared]() { (*shared)(nullptr); }));
+}
+
+bool PlatformBridge::Excluded(const std::wstring& executable) const {
+  const auto* excluded = Find(preferences_, protocol::kExcludedAppsKey);
+  const auto* apps = excluded ? std::get_if<EncodableMap>(excluded) : nullptr;
+  if (!apps || executable.empty()) {
+    return false;
+  }
+  auto lower = [](std::wstring text) {
+    std::transform(text.begin(), text.end(), text.begin(),
+                   [](wchar_t character) { return static_cast<wchar_t>(std::towlower(character)); });
+    return text;
+  };
+  std::wstring target = lower(executable);
+  return std::any_of(apps->begin(), apps->end(), [&](const auto& entry) {
+    const auto* id = std::get_if<std::string>(&entry.first);
+    return id && lower(Utf16FromUtf8(*id)) == target;
+  });
 }
 
 void PlatformBridge::Emit(const EncodableMap& event) {
@@ -277,6 +317,14 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
     if (speech_) {
       speech_->Stop();
     }
+    result->Success();
+  } else if (method == protocol::kRetainOverlay) {
+    auto session = Get<std::string>(args, "sessionId");
+    if (!session) {
+      result->Error(protocol::kBadArgsError, "retainOverlay 需要 sessionId");
+      return true;
+    }
+    capture_->Retain(*session);
     result->Success();
   } else if (method == protocol::kOpenGlossaryFile) {
     std::string error;

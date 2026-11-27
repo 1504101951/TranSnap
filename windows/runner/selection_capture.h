@@ -1,0 +1,69 @@
+#ifndef RUNNER_SELECTION_CAPTURE_H_
+#define RUNNER_SELECTION_CAPTURE_H_
+
+#include <flutter/encodable_value.h>
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "selection_monitor.h"
+
+struct HWINEVENTHOOK__;
+
+class SelectionCapture {
+ public:
+  struct Delegate {
+    std::function<void(const char* method, flutter::EncodableValue arguments,
+                       SelectionMonitor::Reply reply)>
+        request;
+    std::function<void(const flutter::EncodableMap& event)> emit;
+    std::function<bool()> automatic;
+    std::function<bool(const std::wstring& executable)> excluded;
+  };
+
+  explicit SelectionCapture(Delegate delegate);
+  ~SelectionCapture();
+
+  SelectionCapture(const SelectionCapture&) = delete;
+  SelectionCapture& operator=(const SelectionCapture&) = delete;
+
+  void Capture(const std::string& gesture);
+  void Invalidate(const char* event_type);
+  void Retain(const std::string& session_id);
+  void ForegroundChanged(unsigned long process);
+
+ private:
+  void Validate();
+  void Decide(const char* method, flutter::EncodableMap request,
+              std::function<void(bool)> done);
+  struct Pending {
+    std::string gesture;
+    unsigned generation;
+    unsigned long process;
+    std::string source_name;
+    bool secure;
+    bool keyboard_candidate;
+  };
+
+  void Cancel(const char* event_type);
+  void Copy(Pending pending, flutter::EncodableMap request, std::optional<std::string> text);
+  void Finish(const Pending& pending, const std::optional<std::string>& text);
+  void Emit(const std::string& gesture, unsigned long process, const std::string& source_name,
+            const std::string& text, const char* read_failure);
+
+  Delegate delegate_;
+  std::unique_ptr<SelectionMonitor> monitor_;
+  HWINEVENTHOOK__* foreground_hook_ = nullptr;
+  std::shared_ptr<char> alive_ = std::make_shared<char>();
+  std::optional<std::string> session_;
+  unsigned long source_process_ = 0;
+  unsigned long observed_process_ = 0;
+  unsigned long foreground_process_ = 0;
+  bool retains_result_ = false;
+  unsigned generation_ = 0;
+  unsigned validation_ = 0;
+};
+
+#endif

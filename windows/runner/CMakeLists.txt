@@ -3,6 +3,7 @@ project(runner LANGUAGES CXX)
 
 add_executable(${BINARY_NAME} WIN32
   "auxiliary_window.cpp"
+  "clipboard.cpp"
   "credentials.cpp"
   "file_dialogs.cpp"
   "flutter_window.cpp"
@@ -10,12 +11,17 @@ add_executable(${BINARY_NAME} WIN32
   "key_names.cpp"
   "language_detection.cpp"
   "main.cpp"
+  "main_thread.cpp"
   "platform_bridge.cpp"
   "preferences_store.cpp"
+  "selection_capture.cpp"
+  "selection_context.cpp"
   "selection_monitor.cpp"
   "speech_service.cpp"
+  "synthetic_input.cpp"
   "text_file.cpp"
   "tray_icon.cpp"
+  "uia_selection.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "windows_system.cpp"
@@ -38,7 +44,7 @@ target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)
 
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib" "elscore.lib" "windowsapp.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib" "elscore.lib" "version.lib" "windowsapp.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 add_dependencies(${BINARY_NAME} flutter_assemble)

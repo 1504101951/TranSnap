@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "main_thread.h"
 #include "protocol.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -14,6 +15,7 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  main_thread::Start();
 
   RECT frame = GetClientArea();
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
@@ -53,6 +55,7 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
+  main_thread::Stop();
 
   Win32Window::OnDestroy();
 }

@@ -6,6 +6,10 @@
 #include <shlobj.h>
 #include <uxtheme.h>
 
+#include <cwchar>
+#include <iterator>
+#include <vector>
+
 #include "protocol.h"
 #include "utils.h"
 
@@ -102,6 +106,44 @@ std::pair<double, double> LogicalPoint(long x, long y) {
   double scale = FlutterDesktopGetDpiForMonitor(reinterpret_cast<intptr_t>(monitor)) / 96.0;
   return {info.rcMonitor.left + (x - info.rcMonitor.left) / scale,
           info.rcMonitor.top + (y - info.rcMonitor.top) / scale};
+}
+
+std::wstring ProcessImagePath(unsigned long process) {
+  HANDLE handle = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process);
+  if (!handle) {
+    return L"";
+  }
+  wchar_t path[MAX_PATH * 4] = {};
+  DWORD size = static_cast<DWORD>(std::size(path));
+  BOOL queried = ::QueryFullProcessImageNameW(handle, 0, path, &size);
+  ::CloseHandle(handle);
+  return queried ? std::wstring(path, size) : L"";
+}
+
+std::string ApplicationDisplayName(const std::wstring& executable) {
+  DWORD size = executable.empty() ? 0 : ::GetFileVersionInfoSizeW(executable.c_str(), nullptr);
+  std::vector<BYTE> data(size);
+  struct Translation {
+    WORD language;
+    WORD code_page;
+  };
+  Translation* translations = nullptr;
+  UINT translations_size = 0;
+  if (size && ::GetFileVersionInfoW(executable.c_str(), 0, size, data.data()) &&
+      ::VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
+                       reinterpret_cast<void**>(&translations), &translations_size) &&
+      translations_size >= sizeof(Translation)) {
+    wchar_t key[64] = {};
+    swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\FileDescription", translations->language,
+               translations->code_page);
+    wchar_t* description = nullptr;
+    UINT length = 0;
+    if (::VerQueryValueW(data.data(), key, reinterpret_cast<void**>(&description), &length) &&
+        length > 1) {
+      return Utf8FromUtf16(description);
+    }
+  }
+  return Utf8FromUtf16(std::filesystem::path(executable).stem().wstring().c_str());
 }
 
 void ShowWarning(const std::string& title, const std::string& message) {

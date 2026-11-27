@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 
+#include "selection_capture.h"
 #include "speech_service.h"
 
 class PlatformBridge {
@@ -46,6 +47,9 @@ class PlatformBridge {
   void CredentialIds(const flutter::EncodableMap& arguments, Result& result);
   flutter::EncodableMap LoadSettings() const;
   flutter::EncodableMap AppearanceSnapshot() const;
+  void RequestApplication(const char* method, flutter::EncodableValue arguments,
+                          SelectionMonitor::Reply reply);
+  bool Excluded(const std::wstring& executable) const;
   void BroadcastAppearance();
 
   std::filesystem::path data_directory_;
@@ -63,6 +67,7 @@ class PlatformBridge {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> appearance_;
   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> events_;
   std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> sink_;
+  std::unique_ptr<SelectionCapture> capture_;
 };
 
 #endif
