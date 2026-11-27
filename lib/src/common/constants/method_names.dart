@@ -223,6 +223,8 @@ abstract final class MethodNames {
 
   static const selectionKey = 'selectionKey';
 
+  static const pasteTarget = 'pasteTarget';
+
   static const acceptsCopiedSelection = 'acceptsCopiedSelection';
 
   static const lookupDefinition = 'lookupDefinition';

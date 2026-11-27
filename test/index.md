@@ -70,3 +70,4 @@ Dart业务逻辑和Flutter界面行为回归测试。
 64. [language_detection_test.dart](language_detection_test.dart)：验证语言判定的置信度门槛与各级回退、中文简繁改写、无置信度候选的首位处理、识别权重，以及用户语言只取已保存的语言偏好。
 65. [selection_context_test.dart](selection_context_test.dart)：验证复制兜底的触发条件、复制结果与读到文本的匹配规则、采用复制结果的条件，以及原生请求的分发。
 66. [selection_gestures_test.dart](selection_gestures_test.dart)：验证按下到抬起位移的 4pt 拖选边界、双击与三击判定、抬起后清除按下位置，以及全选与 Shift 搭配导航键的键盘选区手势和原生请求分发。
+67. [paste_target_test.dart](paste_target_test.dart)：验证输入翻译直接粘贴的焦点条件、需要查找输入框的情形，以及候选为 0、1、多个时的粘贴判定。

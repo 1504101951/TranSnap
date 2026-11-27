@@ -13,7 +13,7 @@
 9. [preference_keys.dart](preference_keys.dart)：集中定义应用偏好与截图工具配置的存储键。
 10. [screenshot_actions.dart](screenshot_actions.dart)：定义截图工具动作及对应的名称和图标。
 11. [screenshot_enums.dart](screenshot_enums.dart)：定义截图工具与采集目标类型、录制延时取值、对角缩放光标轴、绘制默认值和预设颜色。
-12. [selection_gesture_types.dart](selection_gesture_types.dart)：定义触发选区采集的鼠标和键盘手势标识，以及明确热键读不到文字的原因。
+12. [selection_gesture_types.dart](selection_gesture_types.dart)：定义选区手势、指针按下与抬起、选区按键逻辑键名、四类选区上下文与粘贴目标判定的协议标识，以及明确热键读不到文字的原因。
 13. [translation_phase.dart](translation_phase.dart)：定义翻译会话的业务阶段。
 
 14. [drawing_metrics.dart](drawing_metrics.dart)：集中定义调色盘、线宽、马赛克及预设色的规格数值。

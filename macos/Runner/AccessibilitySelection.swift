@@ -293,10 +293,17 @@ enum AccessibilitySelection {
 
     static func focusWritableInput(sourcePID: pid_t, selection: AXUIElement?) async -> Bool {
         let app = AXUIElementCreateApplication(sourcePID)
-        guard let focused = focusedElement(from: app) else { return true }
-        if let selection, CFEqual(selection, focused) { return true }
-        if let role = role(of: focused), AppConstants.axTextInputRoles.contains(role), !isSecure(focused) { return true }
-        guard let window = axElement(attribute(app, kAXFocusedWindowAttribute as CFString)) else { return false }
+        let focused = focusedElement(from: app)
+        let facts: [String: Any] = [
+            "hasFocus": focused != nil,
+            "focusIsSelection": focused.map { focused in selection.map { CFEqual($0, focused) } ?? false } ?? false,
+            "focusIsTextInput": focused.flatMap(role(of:)).map(AppConstants.axTextInputRoles.contains) ?? false,
+            "focusIsSecure": isSecure(focused),
+        ]
+        let action = await MacPlatformBridge.Shared.instance?.requestApplication(AppConstants.pasteTargetMethod, arguments: facts) as? String
+        if action == AppConstants.pasteTargetPaste { return true }
+        guard action == AppConstants.pasteTargetSearch,
+              let window = axElement(attribute(app, kAXFocusedWindowAttribute as CFString)) else { return false }
         var queue: [(element: AXUIElement, depth: Int)] = [(window, 0)]
         var index = 0
         var found: [AXUIElement] = []
@@ -310,8 +317,11 @@ enum AccessibilitySelection {
                   let children = attribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] else { continue }
             queue.append(contentsOf: children.map { ($0, depth + 1) })
         }
-        guard found.count == 1,
-              AXUIElementSetAttributeValue(found[0], kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else { return false }
+        let choice = await MacPlatformBridge.Shared.instance?.requestApplication(
+            AppConstants.pasteTargetMethod, arguments: facts.merging(["candidates": found.count]) { _, new in new }
+        ) as? String
+        guard choice == AppConstants.pasteTargetFocusCandidate, let target = found.first,
+              AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else { return false }
         try? await Task.sleep(for: AppConstants.inputTargetFocusDelay)
         return true
     }

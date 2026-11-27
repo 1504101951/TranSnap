@@ -6,7 +6,7 @@ macOS应用生命周期、系统能力与窗口控制器。
 2. [Base.lproj/](Base.lproj/)：macOS基础语言的窗口和菜单界面资源。
 3. [Common/](Common/index.md)：Swift平台协议常量与共享工具。
 4. [Configs/](Configs/index.md)：应用标识、编译模式与警告配置。
-5. [AccessibilitySelection.swift](AccessibilitySelection.swift)：通过辅助功能读取来源应用选中文字，按 Dart 的判定决定是否显式复制兜底及是否采用复制结果。
+5. [AccessibilitySelection.swift](AccessibilitySelection.swift)：通过辅助功能读取来源应用选中文字，按 Dart 的判定决定是否显式复制兜底及是否采用复制结果，并按 Dart 的粘贴目标判定为输入翻译查找、聚焦可写输入框后粘贴。
 6. [AppDelegate.swift](AppDelegate.swift)：初始化菜单栏应用、平台桥和辅助窗口并管理生命周期。
 7. [AuxiliaryWindowController.swift](AuxiliaryWindowController.swift)：管理历史和权限向导等独立Flutter窗口。
 8. [DebugProfile.entitlements](DebugProfile.entitlements)：声明调试与性能分析构建所需的系统授权能力。

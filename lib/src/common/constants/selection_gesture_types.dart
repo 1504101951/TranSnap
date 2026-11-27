@@ -48,3 +48,13 @@ abstract final class SelectionKeys {
     'ArrowDown',
   };
 }
+
+abstract final class PasteTargetActions {
+  static const paste = 'paste';
+
+  static const search = 'search';
+
+  static const focusCandidate = 'focusCandidate';
+
+  static const none = 'none';
+}

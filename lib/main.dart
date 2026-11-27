@@ -19,6 +19,7 @@ import 'src/history/translation_history.dart';
 import 'src/history/vocabulary.dart';
 import 'src/platform/channel_platform_bridge.dart';
 import 'src/screenshot/screenshot_app.dart';
+import 'src/selection/paste_target.dart';
 import 'src/selection/selection_context.dart';
 import 'src/selection/selection_gestures.dart';
 import 'src/selection/selection_session.dart';
@@ -175,6 +176,8 @@ Future<void> _startApplication(ChannelPlatformBridge bridge) async {
       case MethodNames.selectionPointer:
       case MethodNames.selectionKey:
         return gestures.handle(call);
+      case MethodNames.pasteTarget:
+        return PasteTarget.handle(call);
       case MethodNames.shouldCopySelection:
       case MethodNames.acceptsCopiedSelection:
         return handleSelectionContextRequest(call);
