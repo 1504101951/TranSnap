@@ -20,6 +20,8 @@ unsigned long Sequence();
 
 std::optional<std::string> Text();
 
+bool SetText(const std::string& text);
+
 void ReadCopiedText(std::function<void()> copy,
                     std::function<void(std::optional<std::string> text)> done);
 

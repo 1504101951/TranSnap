@@ -135,6 +135,7 @@ PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger, OverlayWindo
       [this](const std::wstring& executable) { return Excluded(executable); },
       [this](const std::string& session_id) { overlay_.Hide(session_id); },
       [this](long x, long y) { return overlay_.Contains(x, y); },
+      [this]() { return PrefersDark(); },
   });
   hotkeys_ = std::make_unique<GlobalHotkeys>(
       [this](const std::string& gesture) { capture_->Capture(gesture); });
@@ -452,6 +453,26 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
       }
       shared->Success(outcome.text ? EncodableValue(*outcome.text) : EncodableValue());
     });
+  } else if (method == protocol::kReplaceSelection) {
+    auto session = Get<std::string>(args, "sessionId");
+    auto text = Get<std::string>(args, "text");
+    if (!session || !text) {
+      result->Error(protocol::kBadArgsError, "替换选区需要 sessionId/text");
+      return true;
+    }
+    std::shared_ptr<flutter::MethodResult<EncodableValue>> shared(std::move(result));
+    capture_->Replace(*session, *text, [shared](std::optional<std::string> failure) {
+      shared->Success(failure ? EncodableValue(*failure) : EncodableValue());
+    });
+  } else if (method == protocol::kShowInputFailure) {
+    auto session = Get<std::string>(args, "sessionId");
+    auto message = Get<std::string>(args, "message");
+    if (!session || !message) {
+      result->Error(protocol::kBadArgsError, "showInputFailure 需要 sessionId/message");
+      return true;
+    }
+    capture_->ShowInputFailure(*session, *message);
+    result->Success();
   } else if (method == protocol::kChooseExcludedApp) {
     std::string error;
     auto application = file_dialogs::ChooseApplication(error);

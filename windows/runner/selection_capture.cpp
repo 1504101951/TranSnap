@@ -20,6 +20,7 @@ using flutter::EncodableValue;
 namespace {
 
 constexpr unsigned kSettleMilliseconds = 80;
+constexpr unsigned kPasteRestoreMilliseconds = 500;
 
 SelectionCapture* g_capture = nullptr;
 
@@ -50,7 +51,8 @@ EncodableValue OptionalText(const std::optional<std::string>& text) {
 
 }
 
-SelectionCapture::SelectionCapture(Delegate delegate) : delegate_(std::move(delegate)) {
+SelectionCapture::SelectionCapture(Delegate delegate)
+    : delegate_(std::move(delegate)), bubble_([this]() { return delegate_.dark(); }) {
   g_capture = this;
   monitor_ = std::make_unique<SelectionMonitor>(SelectionMonitor::Delegate{
       delegate_.request,
@@ -88,7 +90,7 @@ void SelectionCapture::Capture(const std::string& gesture) {
   std::string source_name = windows_system::ApplicationDisplayName(executable);
   if (gesture == protocol::kHotkeyGesture) {
     observed_process_ = 0;
-    Emit(gesture, process, source_name, "", nullptr);
+    Emit(gesture, process, source_name, "", nullptr, std::nullopt, {});
     return;
   }
   bool keyboard = gesture == protocol::kSelectAllGesture || gesture == protocol::kKeyboardGesture;
@@ -97,12 +99,13 @@ void SelectionCapture::Capture(const std::string& gesture) {
     if (alive.expired() || generation_ != generation) {
       return;
     }
-    ReadText(process, explicit_gesture, keyboard,
-             [this, gesture, generation, process, source_name](const Outcome& outcome) {
-               Finish(Pending{gesture, generation, process, source_name, outcome.secure,
-                              outcome.keyboard_candidate},
-                      outcome.text);
-             });
+    Pending pending{gesture, generation, process, source_name};
+    if (gesture == protocol::kInputHotkeyGesture) {
+      ReadInput(pending);
+      return;
+    }
+    ReadText(process, explicit_gesture, keyboard, false,
+             [this, pending](const Outcome& outcome) { Finish(pending, outcome); });
   };
   if (explicit_gesture) {
     read();
@@ -118,23 +121,57 @@ void SelectionCapture::ReadForTranslation(const std::string& session_id,
     return;
   }
   unsigned generation = ++generation_;
-  ReadText(source_process_, true, false,
+  ReadText(source_process_, true, false, false,
            [this, session_id, generation, done](const Outcome& outcome) {
              done(generation_ == generation && session_ == session_id ? outcome : Outcome{});
            });
 }
 
-void SelectionCapture::ReadText(unsigned long process, bool allow_copy, bool keyboard,
+void SelectionCapture::ReadInput(const Pending& pending) {
+  std::weak_ptr<char> alive = alive_;
+  ReadText(pending.process, true, false, true, [this, alive, pending](const Outcome& outcome) {
+    if (uia_selection::IsUsable(outcome.text) || generation_ != pending.generation) {
+      Finish(pending, outcome);
+      return;
+    }
+    main_thread::Background([this, alive, pending, outcome]() {
+      bool text_input = uia_selection::FocusIsTextInput(pending.process);
+      main_thread::Post([this, alive, pending, outcome, text_input]() {
+        if (alive.expired() || generation_ != pending.generation) {
+          return;
+        }
+        if (!text_input) {
+          Finish(pending, outcome);
+          return;
+        }
+        synthetic_input::SendControlShortcut('A');
+        main_thread::After(kSettleMilliseconds, [this, alive, pending]() {
+          if (alive.expired() || generation_ != pending.generation) {
+            return;
+          }
+          ReadText(pending.process, true, false, true,
+                   [this, pending](const Outcome& selected) { Finish(pending, selected); });
+        });
+      });
+    });
+  });
+}
+
+void SelectionCapture::ReadText(unsigned long process, bool allow_copy, bool keyboard, bool input,
                                 std::function<void(const Outcome&)> done) {
   std::weak_ptr<char> alive = alive_;
-  main_thread::Background([this, alive, process, allow_copy, keyboard, done]() {
+  main_thread::Background([this, alive, process, allow_copy, keyboard, input, done]() {
     uia_selection::Read read = uia_selection::ReadSelection(process);
     bool candidate = keyboard && uia_selection::PermitsKeyboardTrigger(process);
-    main_thread::Post([this, alive, process, allow_copy, done, read, candidate]() {
+    std::optional<bubble_layout::InputAnchor> anchor;
+    if (input) {
+      anchor = uia_selection::Anchor(process, read);
+    }
+    main_thread::Post([this, alive, process, allow_copy, done, read, candidate, anchor]() {
       if (alive.expired()) {
         return;
       }
-      Outcome base{read.text, read.secure, candidate};
+      Outcome base{read.text, read.secure, candidate, read.owner_id, anchor};
       if (read.secure) {
         done(base);
         return;
@@ -191,7 +228,8 @@ void SelectionCapture::Copy(unsigned long process, EncodableMap request, Outcome
       });
 }
 
-void SelectionCapture::Finish(const Pending& pending, const std::optional<std::string>& text) {
+void SelectionCapture::Finish(const Pending& pending, const Outcome& outcome) {
+  const std::optional<std::string>& text = outcome.text;
   bool explicit_gesture = IsExplicit(pending.gesture);
   if (generation_ != pending.generation ||
       uia_selection::ForegroundProcess() != pending.process ||
@@ -200,18 +238,21 @@ void SelectionCapture::Finish(const Pending& pending, const std::optional<std::s
   }
   bool usable = uia_selection::IsUsable(text);
   const char* read_failure =
-      explicit_gesture && !usable && pending.secure ? protocol::kSecureFieldFailure : nullptr;
-  if (!explicit_gesture && !usable && !pending.keyboard_candidate) {
+      explicit_gesture && !usable && outcome.secure ? protocol::kSecureFieldFailure : nullptr;
+  if (!explicit_gesture && !usable && !outcome.keyboard_candidate) {
     Invalidate(protocol::kSelectionInvalidatedEvent);
     return;
   }
-  Emit(pending.gesture, pending.process, pending.source_name, text.value_or(""), read_failure);
+  Emit(pending.gesture, pending.process, pending.source_name, text.value_or(""), read_failure,
+       outcome.anchor, outcome.owner_id);
   observed_process_ = pending.process;
 }
 
 void SelectionCapture::Emit(const std::string& gesture, unsigned long process,
                             const std::string& source_name, const std::string& text,
-                            const char* read_failure) {
+                            const char* read_failure,
+                            const std::optional<bubble_layout::InputAnchor>& anchor,
+                            const std::vector<int>& input_selection) {
   if (retains_result_ && !IsExplicit(gesture)) {
     return;
   }
@@ -219,6 +260,11 @@ void SelectionCapture::Emit(const std::string& gesture, unsigned long process,
   Invalidate(protocol::kSelectionInvalidatedEvent);
   session_ = NewSessionId();
   source_process_ = process;
+  input_anchor_ = anchor;
+  input_selection_ = input_selection;
+  if (anchor) {
+    bubble_.ShowProgress(*anchor);
+  }
   POINT cursor{};
   ::GetCursorPos(&cursor);
   auto [x, y] = windows_system::LogicalPoint(cursor.x, cursor.y);
@@ -246,6 +292,7 @@ void SelectionCapture::Invalidate(const char* event_type) {
   if (retains_result_ && std::strcmp(event_type, protocol::kEscapePressedEvent) != 0) {
     return;
   }
+  bubble_.CloseProgress();
   if (!session_) {
     return;
   }
@@ -275,6 +322,7 @@ bool SelectionCapture::Hide(const std::string& session_id) {
   source_process_ = 0;
   retains_result_ = false;
   delegate_.hide_overlay(session_id);
+  bubble_.CloseProgress();
   return true;
 }
 
@@ -326,4 +374,123 @@ void SelectionCapture::Decide(const char* method, EncodableMap request,
                       const auto* decided = value ? std::get_if<bool>(value) : nullptr;
                       done(decided && *decided);
                     });
+}
+
+void SelectionCapture::Replace(const std::string& session_id, const std::string& text,
+                               std::function<void(std::optional<std::string> failure)> done) {
+  if (session_ != session_id || !source_process_) {
+    done("输入已结束，未替换原文。");
+    return;
+  }
+  unsigned long process = source_process_;
+  if (uia_selection::ForegroundProcess() != process) {
+    done("来源应用已切换，未替换原文。");
+    return;
+  }
+  std::weak_ptr<char> alive = alive_;
+  std::vector<int> selection = input_selection_;
+  main_thread::Background([this, alive, process, selection, text, done]() {
+    uia_selection::PasteFacts facts = uia_selection::Facts(process, selection);
+    main_thread::Post([this, alive, process, facts, text, done]() {
+      if (alive.expired()) {
+        return;
+      }
+      if (facts.focus_is_secure) {
+        done("安全输入已开启，未替换原文。");
+        return;
+      }
+      bubble_.CloseProgress();
+      EncodableMap request{
+          {EncodableValue("hasFocus"), EncodableValue(facts.has_focus)},
+          {EncodableValue("focusIsSelection"), EncodableValue(facts.focus_is_selection)},
+          {EncodableValue("focusIsTextInput"), EncodableValue(facts.focus_is_text_input)},
+          {EncodableValue("focusIsSecure"), EncodableValue(facts.focus_is_secure)},
+      };
+      delegate_.request(
+          protocol::kPasteTarget, EncodableValue(request),
+          [this, alive, process, request, text, done](const EncodableValue* reply) {
+            const auto* action = reply ? std::get_if<std::string>(reply) : nullptr;
+            if (alive.expired()) {
+              return;
+            }
+            if (action && *action == protocol::kPasteTargetPaste) {
+              Paste(text, done);
+              return;
+            }
+            if (action && *action == protocol::kPasteTargetSearch) {
+              PasteIntoCandidate(process, request, text, done);
+              return;
+            }
+            done(protocol::kNoWritableInputMessage);
+          });
+    });
+  });
+}
+
+void SelectionCapture::PasteIntoCandidate(unsigned long process, const EncodableMap& facts,
+                                          const std::string& text,
+                                          std::function<void(std::optional<std::string>)> done) {
+  std::weak_ptr<char> alive = alive_;
+  main_thread::Background([this, alive, process, facts, text, done]() {
+    uia_selection::CandidateSearch search = uia_selection::FindWritableInputs(process);
+    main_thread::Post([this, alive, facts, text, done, search]() mutable {
+      if (alive.expired()) {
+        return;
+      }
+      facts[EncodableValue("candidates")] = EncodableValue(search.count);
+      delegate_.request(
+          protocol::kPasteTarget, EncodableValue(facts),
+          [this, alive, text, done, search](const EncodableValue* reply) {
+            const auto* action = reply ? std::get_if<std::string>(reply) : nullptr;
+            if (alive.expired()) {
+              return;
+            }
+            if (!action || *action != protocol::kPasteTargetFocusCandidate || !search.first) {
+              done(protocol::kNoWritableInputMessage);
+              return;
+            }
+            main_thread::Background([this, alive, text, done, search]() {
+              bool focused = uia_selection::Focus(search.first);
+              main_thread::Post([this, alive, text, done, focused]() {
+                if (alive.expired()) {
+                  return;
+                }
+                if (!focused) {
+                  done(protocol::kNoWritableInputMessage);
+                  return;
+                }
+                main_thread::After(kSettleMilliseconds, [this, alive, text, done]() {
+                  if (!alive.expired()) {
+                    Paste(text, done);
+                  }
+                });
+              });
+            });
+          });
+    });
+  });
+}
+
+void SelectionCapture::Paste(const std::string& text,
+                             std::function<void(std::optional<std::string>)> done) {
+  auto snapshot = std::make_shared<clipboard::Snapshot>(clipboard::Capture());
+  if (!clipboard::SetText(text)) {
+    clipboard::Restore(*snapshot);
+    done("无法写入剪贴板，未替换原文。");
+    return;
+  }
+  unsigned long written = clipboard::Sequence();
+  synthetic_input::SendControlShortcut('V');
+  main_thread::After(kPasteRestoreMilliseconds, [snapshot, written, done]() {
+    if (clipboard::Sequence() == written) {
+      clipboard::Restore(*snapshot);
+    }
+    done(std::nullopt);
+  });
+}
+
+void SelectionCapture::ShowInputFailure(const std::string& session_id, const std::string& message) {
+  if (session_ == session_id && input_anchor_) {
+    bubble_.ShowFailure(message, *input_anchor_);
+  }
 }

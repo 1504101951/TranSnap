@@ -1,6 +1,8 @@
 #ifndef RUNNER_BUBBLE_LAYOUT_H_
 #define RUNNER_BUBBLE_LAYOUT_H_
 
+#include <optional>
+
 namespace bubble_layout {
 
 struct Rect {
@@ -8,6 +10,11 @@ struct Rect {
   double top;
   double width;
   double height;
+};
+
+struct InputAnchor {
+  Rect selection;
+  std::optional<Rect> window;
 };
 
 Rect Frame(double width, double height, const Rect& anchor, const Rect& screen, bool prefer_above,

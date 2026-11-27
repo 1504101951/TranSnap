@@ -9,6 +9,7 @@ add_executable(${BINARY_NAME} WIN32
   "file_dialogs.cpp"
   "flutter_window.cpp"
   "global_hotkeys.cpp"
+  "input_bubble.cpp"
   "json_codec.cpp"
   "key_names.cpp"
   "language_detection.cpp"

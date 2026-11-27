@@ -118,6 +118,30 @@ std::optional<std::string> Text() {
   return Utf8FromUtf16(text.c_str());
 }
 
+bool SetText(const std::string& text) {
+  std::wstring wide = Utf16FromUtf8(text);
+  OpenedClipboard opened;
+  if (!opened || !::EmptyClipboard()) {
+    return false;
+  }
+  size_t bytes = (wide.size() + 1) * sizeof(wchar_t);
+  HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
+  void* locked = memory ? ::GlobalLock(memory) : nullptr;
+  if (!locked) {
+    if (memory) {
+      ::GlobalFree(memory);
+    }
+    return false;
+  }
+  std::memcpy(locked, wide.c_str(), bytes);
+  ::GlobalUnlock(memory);
+  if (!::SetClipboardData(CF_UNICODETEXT, memory)) {
+    ::GlobalFree(memory);
+    return false;
+  }
+  return true;
+}
+
 void ReadCopiedText(std::function<void()> copy,
                     std::function<void(std::optional<std::string> text)> done) {
   auto snapshot = std::make_shared<Snapshot>(Capture());
