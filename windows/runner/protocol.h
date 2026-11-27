@@ -30,6 +30,7 @@ inline constexpr char kSelectionKey[] = "selectionKey";
 inline constexpr char kShouldCopySelection[] = "shouldCopySelection";
 inline constexpr char kAcceptsCopiedSelection[] = "acceptsCopiedSelection";
 inline constexpr char kRetainOverlay[] = "retainOverlay";
+inline constexpr char kRecordShortcut[] = "recordShortcut";
 inline constexpr char kPasteTarget[] = "pasteTarget";
 inline constexpr char kReplaceSelection[] = "replaceSelection";
 inline constexpr char kShowInputFailure[] = "showInputFailure";
@@ -64,6 +65,7 @@ inline constexpr char kRollbackFailedError[] = "rollback_failed";
 inline constexpr char kCredentialsFailedError[] = "keychain_failed";
 inline constexpr char kDetectFailedError[] = "detect_failed";
 inline constexpr char kSaveFailedError[] = "save_failed";
+inline constexpr char kShortcutInvalidError[] = "shortcut_invalid";
 
 inline constexpr char kSelectionCapturedEvent[] = "selectionCaptured";
 inline constexpr char kHotkeyGesture[] = "hotkey";

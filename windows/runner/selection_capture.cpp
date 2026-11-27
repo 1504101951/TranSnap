@@ -494,3 +494,7 @@ void SelectionCapture::ShowInputFailure(const std::string& session_id, const std
     bubble_.ShowFailure(message, *input_anchor_);
   }
 }
+
+void SelectionCapture::Record(SelectionMonitor::Recorder recorder) {
+  monitor_->Record(std::move(recorder));
+}

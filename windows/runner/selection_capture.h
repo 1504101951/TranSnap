@@ -53,6 +53,7 @@ class SelectionCapture {
   void Replace(const std::string& session_id, const std::string& text,
                std::function<void(std::optional<std::string> failure)> done);
   void ShowInputFailure(const std::string& session_id, const std::string& message);
+  void Record(SelectionMonitor::Recorder recorder);
   void ForegroundChanged(unsigned long process);
 
  private:

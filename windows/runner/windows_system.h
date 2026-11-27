@@ -40,6 +40,8 @@ std::wstring ProcessImagePath(unsigned long process);
 
 std::string ApplicationDisplayName(const std::wstring& executable);
 
+std::string KeyLabel(unsigned scan_code);
+
 void ShowWarning(const std::string& title, const std::string& message);
 
 void ShowStartFailure(const std::string& message);

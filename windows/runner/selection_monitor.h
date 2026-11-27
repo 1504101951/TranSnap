@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "key_names.h"
+
 struct HHOOK__;
 
 class SelectionMonitor {
@@ -32,8 +34,11 @@ class SelectionMonitor {
   SelectionMonitor(const SelectionMonitor&) = delete;
   SelectionMonitor& operator=(const SelectionMonitor&) = delete;
 
+  using Recorder = std::function<bool(unsigned scan_code, const key_names::Modifiers& modifiers)>;
+
   void HandleMouse(bool down, long x, long y, unsigned long time);
-  void HandleKey(bool down, unsigned scan_code);
+  bool HandleKey(bool down, unsigned scan_code);
+  void Record(Recorder recorder);
 
  private:
   struct KeyEvent {
@@ -61,6 +66,7 @@ class SelectionMonitor {
   std::optional<std::pair<unsigned, std::string>> pending_key_;
   std::deque<KeyEvent> key_events_;
   bool key_request_in_flight_ = false;
+  Recorder recorder_;
 };
 
 #endif

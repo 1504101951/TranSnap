@@ -6,12 +6,14 @@
 #include <shlobj.h>
 #include <uxtheme.h>
 
+#include <cctype>
 #include <cmath>
 #include <cwchar>
 #include <optional>
 #include <iterator>
 #include <vector>
 
+#include "key_names.h"
 #include "protocol.h"
 #include "text_encoding.h"
 
@@ -187,6 +189,35 @@ std::string ApplicationDisplayName(const std::wstring& executable) {
     }
   }
   return Utf8FromUtf16(std::filesystem::path(executable).stem().wstring().c_str());
+}
+
+std::string KeyLabel(unsigned scan_code) {
+  static const std::pair<const char*, const char*> kSpecial[] = {
+      {"Enter", "Enter"},         {"NumpadEnter", "Enter"},   {"Tab", "Tab"},
+      {"Space", "Space"},         {"Backspace", "Backspace"}, {"Delete", "Delete"},
+      {"Insert", "Insert"},       {"Home", "Home"},           {"End", "End"},
+      {"PageUp", "Page Up"},      {"PageDown", "Page Down"},  {"ArrowLeft", "←"},
+      {"ArrowRight", "→"},        {"ArrowUp", "↑"},           {"ArrowDown", "↓"},
+      {"ContextMenu", "Menu"},
+  };
+  std::string name = key_names::Name(scan_code).value_or("");
+  for (const auto& [key, label] : kSpecial) {
+    if (name == key) {
+      return label;
+    }
+  }
+  if (name.size() > 1 && name[0] == 'F' && std::isdigit(static_cast<unsigned char>(name[1]))) {
+    return name;
+  }
+  unsigned extended = (scan_code & key_names::kExtended) != 0 ? 0xE000 : 0;
+  UINT virtual_key = ::MapVirtualKeyW((scan_code & 0xFF) | extended, MAPVK_VSC_TO_VK_EX);
+  wchar_t character = static_cast<wchar_t>(::MapVirtualKeyW(virtual_key, MAPVK_VK_TO_CHAR) & 0x7FFF);
+  if (!character) {
+    return name;
+  }
+  wchar_t text[2] = {character, L'\0'};
+  ::CharUpperW(text);
+  return Utf8FromUtf16(text);
 }
 
 void ShowWarning(const std::string& title, const std::string& message) {

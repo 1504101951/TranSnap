@@ -55,6 +55,7 @@ class PlatformBridge {
                           SelectionMonitor::Reply reply);
   bool Excluded(const std::wstring& executable) const;
   bool PrefersDark() const;
+  bool RecordKey(unsigned scan_code, const key_names::Modifiers& modifiers);
   static bool HotkeyRequests(const flutter::EncodableMap& settings,
                              std::vector<GlobalHotkeys::Request>& requests, std::string& error);
   void BroadcastAppearance();
@@ -77,6 +78,7 @@ class PlatformBridge {
   std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> sink_;
   std::unique_ptr<SelectionCapture> capture_;
   std::unique_ptr<GlobalHotkeys> hotkeys_;
+  std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>> recording_;
 };
 
 #endif

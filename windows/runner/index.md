@@ -32,7 +32,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 28. [main_thread.h](main_thread.h)：声明主线程调度、后台执行与消息窗口接口。
 29. [overlay_window.cpp](overlay_window.cpp)：把主窗口设为不激活、置顶、不进任务栏的弹出窗口作为触发按钮与翻译卡片，在鼠标右下 8pt 处按会话显示并夹取到工作区内缩 8pt，调整尺寸保持左上角，按住左键时进入系统拖动；悬停提示气泡为点击穿透的圆角置顶窗口，12pt 文字、左右共 16pt 与上下共 8pt 内边距，深浅色与外观设置一致，浮层显示、隐藏、调整尺寸或拖动时收起。
 30. [overlay_window.h](overlay_window.h)：声明浮层显示、隐藏、调整尺寸、拖动、命中判断与悬停提示接口。
-31. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（快捷键校验与注册、偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、快捷键翻译的选区读取（密码框报 secureField）、输入翻译的替换与失败气泡、浮层显示隐藏与尺寸拖动、浮层悬停提示、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
+31. [platform_bridge.cpp](platform_bridge.cpp)：主引擎平台通道：能力声明、设置读取与应用（快捷键录制、校验与注册、偏好文件、凭据、登录时启动及失败回滚）、凭据查询、字体状态、外观快照与预览及向所有引擎广播、附属窗口请求转发、划词采集与保留结果、快捷键翻译的选区读取（密码框报 secureField）、输入翻译的替换与失败气泡、浮层显示隐藏与尺寸拖动、浮层悬停提示、候选语言识别、朗读、术语表文件导入导出、排除应用选择（标识为可执行文件路径，名称取文件说明）、历史变化通知与事件流。
 32. [platform_bridge.h](platform_bridge.h)：声明主引擎平台通道。
 33. [preferences_store.cpp](preferences_store.cpp)：读取与原子写入偏好 JSON 文件，文件缺失时为空偏好，格式错误时报错。
 34. [preferences_store.h](preferences_store.h)：声明偏好文件读写接口。
@@ -44,7 +44,7 @@ Windows 应用入口、主窗口与可执行文件资源。
 40. [selection_capture.h](selection_capture.h)：声明划词采集与其委托（请求 Dart、发送事件、自动模式、排除判断）。
 41. [selection_context.cpp](selection_context.cpp)：把 UI Automation 控件类型归一为文本、非文本、网页内容（Chromium、Gecko 文档）、其他四类，并按最近的文本或非文本祖先决定是否读取选中文字。
 42. [selection_context.h](selection_context.h)：声明选区上下文类别、祖先层数上限与判定接口。
-43. [selection_monitor.cpp](selection_monitor.cpp)：低级鼠标与键盘钩子：左键按下与抬起附连击次数、逻辑坐标交给 Dart 判定划词手势，键盘选区键串行请求 Dart 并在同键抬起时采集；Esc 与按下鼠标使当前选区失效，忽略落在浮层内或本应用在前台时的鼠标手势与自身合成事件。
+43. [selection_monitor.cpp](selection_monitor.cpp)：低级鼠标与键盘钩子：左键按下与抬起附连击次数、逻辑坐标交给 Dart 判定划词手势，键盘选区键串行请求 Dart 并在同键抬起时采集；Esc 与按下鼠标使当前选区失效，忽略落在浮层内或本应用在前台时的鼠标手势与自身合成事件；录制快捷键时本应用在前台的下一个非修饰键按下交给录制方并吞掉。
 44. [selection_monitor.h](selection_monitor.h)：声明划词监控与其委托（请求 Dart、自动模式、采集、失效、选区校验）。
 45. [shortcut_rules.cpp](shortcut_rules.cpp)：把偏好中的逻辑键名与修饰键名解析为扫描码组合并校验：至少含 Ctrl、Alt 或 Win，按键不能是 Esc，保留 Ctrl（可加 Shift）搭配 A、Z、Y、X、C、V 的文本编辑组合。
 46. [shortcut_rules.h](shortcut_rules.h)：声明快捷键用途（偏好键、标题、手势）、解析校验与相同判断。
@@ -64,5 +64,5 @@ Windows 应用入口、主窗口与可执行文件资源。
 60. [utils.h](utils.h)：声明控制台与命令行参数工具函数。
 61. [win32_window.cpp](win32_window.cpp)：创建支持高 DPI 与深浅色标题栏的 Win32 窗口。
 62. [win32_window.h](win32_window.h)：声明 Win32 窗口基类。
-63. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明，并显示警告与启动失败提示。
+63. [windows_system.cpp](windows_system.cpp)：取得应用数据目录、系统语言、强调色与深浅色，判断并为窗口应用系统亚克力背景，在屏幕像素坐标与所在显示器的逻辑坐标间换算，读写登录时启动项，取得进程可执行文件路径与文件说明、按键显示标签（特殊键用名称，其余取当前键盘布局字符的大写），并显示警告与启动失败提示。
 64. [windows_system.h](windows_system.h)：声明 Windows 系统信息与登录时启动接口。

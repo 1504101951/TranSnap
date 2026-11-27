@@ -181,6 +181,34 @@ void PlatformBridge::RequestApplication(const char* method, EncodableValue argum
           [shared]() { (*shared)(nullptr); }));
 }
 
+bool PlatformBridge::RecordKey(unsigned scan_code, const key_names::Modifiers& modifiers) {
+  auto name = key_names::Name(scan_code);
+  if (!name || !recording_) {
+    return false;
+  }
+  auto recording = std::move(recording_);
+  if (*name == protocol::kEscapeKeyName) {
+    recording->Success();
+    return true;
+  }
+  std::vector<std::string> names = key_names::ModifierNames(modifiers);
+  std::string error;
+  if (!shortcut_rules::Parse(*name, names, error)) {
+    recording->Error(protocol::kShortcutInvalidError, error);
+    return true;
+  }
+  EncodableList list;
+  for (const auto& modifier : names) {
+    list.push_back(EncodableValue(modifier));
+  }
+  recording->Success(EncodableValue(EncodableMap{
+      {EncodableValue("key"), EncodableValue(*name)},
+      {EncodableValue("modifiers"), EncodableValue(list)},
+      {EncodableValue("label"), EncodableValue(windows_system::KeyLabel(scan_code))},
+  }));
+  return true;
+}
+
 bool PlatformBridge::PrefersDark() const {
   auto mode = Get<std::string>(AppearanceSnapshot(), protocol::kGlassAppearanceKey);
   if (mode == protocol::kAppearanceDark) {
@@ -452,6 +480,14 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
         return;
       }
       shared->Success(outcome.text ? EncodableValue(*outcome.text) : EncodableValue());
+    });
+  } else if (method == protocol::kRecordShortcut) {
+    if (recording_) {
+      recording_->Success();
+    }
+    recording_ = std::shared_ptr<flutter::MethodResult<EncodableValue>>(std::move(result));
+    capture_->Record([this](unsigned scan_code, const key_names::Modifiers& modifiers) {
+      return RecordKey(scan_code, modifiers);
     });
   } else if (method == protocol::kReplaceSelection) {
     auto session = Get<std::string>(args, "sessionId");

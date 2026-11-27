@@ -48,7 +48,9 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM data) {
   if (code == HC_ACTION && g_monitor && (down || up) &&
       event->dwExtraInfo != protocol::kSyntheticEventTag) {
     unsigned extended = (event->flags & LLKHF_EXTENDED) ? key_names::kExtended : 0;
-    g_monitor->HandleKey(down, event->scanCode | extended);
+    if (g_monitor->HandleKey(down, event->scanCode | extended)) {
+      return 1;
+    }
   }
   return CallNextHookEx(nullptr, code, message, data);
 }
@@ -117,25 +119,34 @@ void SelectionMonitor::HandleMouse(bool down, long x, long y, unsigned long time
                     });
 }
 
-void SelectionMonitor::HandleKey(bool down, unsigned scan_code) {
+void SelectionMonitor::Record(Recorder recorder) {
+  recorder_ = std::move(recorder);
+}
+
+bool SelectionMonitor::HandleKey(bool down, unsigned scan_code) {
+  if (recorder_ && down && ForegroundIsOwnProcess() && recorder_(scan_code, CurrentModifiers())) {
+    recorder_ = nullptr;
+    return true;
+  }
   bool automatic = delegate_.automatic();
   auto key = key_names::Name(scan_code);
   bool escape = key && *key == protocol::kEscapeKeyName;
   if (!automatic && down && !escape) {
-    return;
+    return false;
   }
   if (escape && down) {
     ClearPendingKey();
     delegate_.invalidate(protocol::kEscapePressedEvent);
-    return;
+    return false;
   }
   key_names::Modifiers modifiers = CurrentModifiers();
   auto name = down ? key_names::SelectionKey(scan_code, modifiers) : std::nullopt;
   if (down && !name) {
-    return;
+    return false;
   }
   key_events_.push_back({down, scan_code, name, key_names::ModifierNames(modifiers), key_generation_});
   DrainKeys();
+  return false;
 }
 
 void SelectionMonitor::ClearPendingKey() {
