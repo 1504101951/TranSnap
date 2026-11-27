@@ -13,12 +13,13 @@
 #include <memory>
 #include <string>
 
+#include "overlay_window.h"
 #include "selection_capture.h"
 #include "speech_service.h"
 
 class PlatformBridge {
  public:
-  explicit PlatformBridge(flutter::BinaryMessenger* messenger);
+  PlatformBridge(flutter::BinaryMessenger* messenger, OverlayWindow& overlay);
 
   void Emit(const flutter::EncodableMap& event);
 
@@ -41,6 +42,7 @@ class PlatformBridge {
  private:
   void HandlePlatform(const Call& call, Result result);
   bool HandleLocal(const Call& call, Result& result);
+  bool HandleOverlay(const Call& call, Result& result);
   void HandleAppearance(const Call& call, Result result);
   void ApplySettings(const flutter::EncodableMap& arguments, Result& result);
   void ReadCredentials(const flutter::EncodableMap& arguments, Result& result);
@@ -52,6 +54,7 @@ class PlatformBridge {
   bool Excluded(const std::wstring& executable) const;
   void BroadcastAppearance();
 
+  OverlayWindow& overlay_;
   std::filesystem::path data_directory_;
   flutter::EncodableMap preferences_;
   std::string preferences_error_;

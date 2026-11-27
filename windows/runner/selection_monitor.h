@@ -23,6 +23,7 @@ class SelectionMonitor {
     std::function<void(const std::string& gesture)> capture;
     std::function<void(const char* event_type)> invalidate;
     std::function<void()> validate;
+    std::function<bool(long x, long y)> ignores;
   };
 
   explicit SelectionMonitor(Delegate delegate);

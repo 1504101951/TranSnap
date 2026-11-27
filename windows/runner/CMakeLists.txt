@@ -12,6 +12,7 @@ add_executable(${BINARY_NAME} WIN32
   "language_detection.cpp"
   "main.cpp"
   "main_thread.cpp"
+  "overlay_window.cpp"
   "platform_bridge.cpp"
   "preferences_store.cpp"
   "selection_capture.cpp"

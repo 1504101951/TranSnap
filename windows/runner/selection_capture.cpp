@@ -58,6 +58,7 @@ SelectionCapture::SelectionCapture(Delegate delegate) : delegate_(std::move(dele
       [this](const std::string& gesture) { Capture(gesture); },
       [this](const char* event_type) { Cancel(event_type); },
       [this]() { Validate(); },
+      delegate_.overlay_contains,
   });
   foreground_hook_ = ::SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
                                        ForegroundProc, 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -227,6 +228,7 @@ void SelectionCapture::Invalidate(const char* event_type) {
   session_.reset();
   source_process_ = 0;
   retains_result_ = false;
+  delegate_.hide_overlay(session);
   delegate_.emit(EncodableMap{
       {EncodableValue("type"), EncodableValue(event_type)},
       {EncodableValue("sessionId"), EncodableValue(session)},
@@ -237,6 +239,22 @@ void SelectionCapture::Retain(const std::string& session_id) {
   if (session_ == session_id) {
     retains_result_ = true;
   }
+}
+
+bool SelectionCapture::Hide(const std::string& session_id) {
+  if (session_ != session_id) {
+    return false;
+  }
+  ++generation_;
+  session_.reset();
+  source_process_ = 0;
+  retains_result_ = false;
+  delegate_.hide_overlay(session_id);
+  return true;
+}
+
+bool SelectionCapture::IsCurrent(const std::string& session_id) const {
+  return session_ == session_id;
 }
 
 void SelectionCapture::ForegroundChanged(unsigned long process) {

@@ -92,8 +92,8 @@ std::optional<EncodableMap> StringMap(const EncodableValue& value) {
 
 }
 
-PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger)
-    : data_directory_(windows_system::DataDirectory()) {
+PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger, OverlayWindow& overlay)
+    : overlay_(overlay), data_directory_(windows_system::DataDirectory()) {
   auto loaded = preferences_store::Load(
       data_directory_ / protocol::kPreferencesFile, preferences_error_);
   if (loaded) {
@@ -132,6 +132,8 @@ PlatformBridge::PlatformBridge(flutter::BinaryMessenger* messenger)
       [this](const EncodableMap& event) { Emit(event); },
       [this]() { return Automatic(); },
       [this](const std::wstring& executable) { return Excluded(executable); },
+      [this](const std::string& session_id) { overlay_.Hide(session_id); },
+      [this](long x, long y) { return overlay_.Contains(x, y); },
   });
 }
 
@@ -246,6 +248,54 @@ void PlatformBridge::RemoveAppearanceEngine(int token) {
   window_appearance_.erase(entry);
 }
 
+bool PlatformBridge::HandleOverlay(const Call& call, Result& result) {
+  const std::string& method = call.method_name();
+  bool overlay_method = method == protocol::kShowOverlay || method == protocol::kHideOverlay ||
+                        method == protocol::kSetOverlaySize || method == protocol::kDragOverlay;
+  const auto* arguments = call.arguments() ? std::get_if<EncodableMap>(call.arguments()) : nullptr;
+  if (!overlay_method) {
+    return false;
+  }
+  auto session = arguments ? Get<std::string>(*arguments, "sessionId") : std::nullopt;
+  if (!session) {
+    result->Error(protocol::kBadArgsError, method + " 需要 sessionId");
+    return true;
+  }
+  if (method == protocol::kDragOverlay) {
+    overlay_.Drag(*session);
+    result->Success();
+    return true;
+  }
+  if (method == protocol::kHideOverlay) {
+    capture_->Hide(*session);
+    result->Success();
+    return true;
+  }
+  if (!capture_->IsCurrent(*session)) {
+    result->Success();
+    return true;
+  }
+  auto width = Get<double>(*arguments, "width");
+  auto height = Get<double>(*arguments, "height");
+  auto x = Get<double>(*arguments, "x");
+  auto y = Get<double>(*arguments, "y");
+  bool show = method == protocol::kShowOverlay;
+  bool valid = width && height && std::isfinite(*width) && std::isfinite(*height) &&
+               *width > 0 && *height > 0 &&
+               (!show || (x && y && std::isfinite(*x) && std::isfinite(*y)));
+  if (!valid) {
+    result->Error(protocol::kBadArgsError, "Overlay 坐标和尺寸必须有效");
+    return true;
+  }
+  if (show) {
+    overlay_.Show(*session, *x, *y, *width, *height);
+  } else {
+    overlay_.Resize(*session, *width, *height);
+  }
+  result->Success();
+  return true;
+}
+
 bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
   const std::string& method = call.method_name();
   const auto* arguments = call.arguments()
@@ -253,6 +303,9 @@ bool PlatformBridge::HandleLocal(const Call& call, Result& result) {
                               : nullptr;
   EncodableMap empty;
   const EncodableMap& args = arguments ? *arguments : empty;
+  if (HandleOverlay(call, result)) {
+    return true;
+  }
   if (method == protocol::kCapabilities) {
     result->Success(EncodableValue(EncodableList{}));
   } else if (method == protocol::kLoadSettings) {

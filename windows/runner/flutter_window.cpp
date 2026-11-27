@@ -24,8 +24,9 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  overlay_ = std::make_unique<OverlayWindow>(GetHandle());
   bridge_ = std::make_unique<PlatformBridge>(
-      flutter_controller_->engine()->messenger());
+      flutter_controller_->engine()->messenger(), *overlay_);
   settings_window_ = std::make_unique<AuxiliaryWindow>(
       *bridge_, AuxiliaryWindow::Options{protocol::kSettingsEntrypoint, L"设置",
                                          760, 640, protocol::kRefreshSettings});
@@ -52,6 +53,7 @@ void FlutterWindow::OnDestroy() {
   settings_window_ = nullptr;
   history_window_ = nullptr;
   bridge_ = nullptr;
+  overlay_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -78,6 +80,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_MOUSEACTIVATE:
+      return MA_NOACTIVATE;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

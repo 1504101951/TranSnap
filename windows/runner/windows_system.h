@@ -26,6 +26,14 @@ void ApplyAcrylic(HWND__* window);
 
 std::pair<double, double> LogicalPoint(long x, long y);
 
+struct ScreenPoint {
+  long x;
+  long y;
+  double scale;
+};
+
+ScreenPoint PhysicalPoint(double x, double y);
+
 std::wstring ProcessImagePath(unsigned long process);
 
 std::string ApplicationDisplayName(const std::wstring& executable);

@@ -79,7 +79,7 @@ void SelectionMonitor::HandleMouse(bool down, long x, long y, unsigned long time
   }
   if (down) {
     ClearPendingKey();
-    ignore_mouse_ = ForegroundIsOwnProcess();
+    ignore_mouse_ = delegate_.ignores(x, y) || ForegroundIsOwnProcess();
     bool repeated = time - last_down_time_ <= GetDoubleClickTime() &&
                     std::labs(x - last_down_x_) * 2 <= GetSystemMetrics(SM_CXDOUBLECLK) &&
                     std::labs(y - last_down_y_) * 2 <= GetSystemMetrics(SM_CYDOUBLECLK);

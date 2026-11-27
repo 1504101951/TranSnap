@@ -21,6 +21,8 @@ class SelectionCapture {
     std::function<void(const flutter::EncodableMap& event)> emit;
     std::function<bool()> automatic;
     std::function<bool(const std::wstring& executable)> excluded;
+    std::function<void(const std::string& session_id)> hide_overlay;
+    std::function<bool(long x, long y)> overlay_contains;
   };
 
   explicit SelectionCapture(Delegate delegate);
@@ -32,6 +34,8 @@ class SelectionCapture {
   void Capture(const std::string& gesture);
   void Invalidate(const char* event_type);
   void Retain(const std::string& session_id);
+  bool Hide(const std::string& session_id);
+  bool IsCurrent(const std::string& session_id) const;
   void ForegroundChanged(unsigned long process);
 
  private:
